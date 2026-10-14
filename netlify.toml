@@ -1,0 +1,31 @@
+# Static deployment of the web workbench (apps/web, phase 4): Nuxt 4 static
+# generation, no server routes. The site's primary domain is app.fugloy.dev;
+# the apex and www redirect to it until a landing page exists (see the plan's
+# "Name and hosting"). Until apps/web exists this build will fail, which is
+# the correct signal: nothing is deployable yet.
+
+[build]
+  command = "pnpm install --frozen-lockfile && pnpm --filter @fugloy/web run generate"
+  publish = "apps/web/.output/public"
+
+[build.environment]
+  NODE_VERSION = "22"
+  PNPM_VERSION = "10"
+
+[[redirects]]
+  from = "https://fugloy.dev/*"
+  to = "https://app.fugloy.dev/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "https://www.fugloy.dev/*"
+  to = "https://app.fugloy.dev/:splat"
+  status = 301
+  force = true
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
