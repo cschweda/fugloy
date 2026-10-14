@@ -120,14 +120,14 @@ export function loadBas(bytes: Uint8Array): BasProgram {
 
 /**
  * Content-based detection. A tokenized BASIC file is the program itself, so
- * beyond a valid chain with a BASIC first line it must hold at least two lines
- * and the chain must cover at least half the file: a load module whose code
- * starts with a few printable bytes and then 00 00 00 reads as a one-line
- * program otherwise.
+ * beyond a valid chain with a BASIC first line the chain must cover at least
+ * half the file: a load module whose code starts with a few printable bytes
+ * and then 00 00 00 reads as a one-line program followed by kilobytes of
+ * "debris" otherwise.
  */
 export function isBas(bytes: Uint8Array): boolean {
   const p = loadBas(bytes);
-  if (p.lines.length < 2) return false;
+  if (p.lines.length === 0) return false;
   const program = bytes.length - (p.header ? 1 : 0) - p.trailing;
   return program >= p.trailing;
 }

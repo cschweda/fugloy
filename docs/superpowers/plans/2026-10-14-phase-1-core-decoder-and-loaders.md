@@ -34,7 +34,7 @@ Inputs the spec implies but no kickoff bullet names, each pinned to a test in th
 2. A load block whose address plus length passes `$FFFF`: must wrap modulo 64K and be flagged, not throw. (Task 4)
 3. A load block that runs past end of file (truncated record), or a record type outside `01`–`10`/`1F`: must stop with a warning and count the remainder as trailing bytes, not crash. (Task 5)
 4. A `.BAS` line whose body contains a `00` before the position its next pointer implies (hidden code): the chain must still be followed by pointers and the line reported as unparsed with its address and length. (Task 7)
-5. An instruction that would extend past the end of a loaded run (last byte of a block is `CD`): the sweep must emit `DB` for the remaining bytes and not read unloaded memory. (Task 9)
+5. An instruction that would extend past the end of a loaded run (last byte of a block is `CD`): the sweep must emit `DB` for the byte it cannot complete, resume decoding at the next byte, and never read unloaded memory. (Task 9)
 
 ---
 
@@ -171,7 +171,7 @@ export const TABLES: { base: Template[]; cb: Template[]; ed: Template[]; dd: Tem
 **Generator rules** (`tables.ts`), from x=bits 7-6, y=5-3, z=2-0, p=y>>1, q=y&1:
 
 - r = [B,C,D,E,H,L,(HL),A]; rp = [BC,DE,HL,SP]; rp2 = [BC,DE,HL,AF]; cc = [NZ,Z,NC,C,PO,PE,P,M]; alu = [ADD A, ADC A, SUB, SBC A, AND, XOR, OR, CP]; rot = [RLC,RRC,RL,RR,SLA,SRA,SLL,SRL]; bli = LDI/CPI/INI/OUTI, LDD/CPD/IND/OUTD, LDIR/CPIR/INIR/OTIR, LDDR/CPDR/INDR/OTDR.
-- Unprefixed, CB, ED exactly as in the decoding document; cycles per Zilog manual (table in `tables.ts` next to each rule). Conditional forms carry `cyclesNotTaken`: JR cc 12/7, DJNZ 13/8, RET cc 11/5, CALL cc 17/10, JP cc 10/10, LDIR family 21/16.
+- Unprefixed, CB, ED exactly as in the decoding document; cycles per Zilog manual (table in `tables.ts` next to each rule). Conditional forms carry `cyclesNotTaken`: JR cc 12/7, DJNZ 13/8, RET cc 11/5, CALL cc 17/10, LDIR family 21/16. `JP cc,nn` takes 10 either way and carries none; `flow.conditional` says it is conditional.
 - ED undocumented (x=0, x=3, x=2 non-block, ED70, ED71, NEG/RETN/IM duplicates, ED77, ED7F) → `DB 0EDH,xxH`, length 2, documented=false, cycles 8 (12 for ED70/71, 14 for RETN dups).
 - DD/FD tables are produced by substituting into the unprefixed table: HL→IX, (HL)→(IX+d) (length +1, cycles per IX table), H/L→IXH/IXL only when no (HL) operand is present. Opcodes unchanged by substitution (including `EB` EX DE,HL, `76` HALT, `DD`, `FD`, `ED`) become `DB 0DDH`, length 1, cycles 4, documented=false. `CB` → DDCB table.
 - DDCB/FDCB: `DD CB d op`; z=6 forms are rot/BIT/RES/SET on (IX+d) (23/20/23 cycles); z≠6 → `DB 0DDH,0CBH,dd,opH`, length 4, documented=false.
@@ -270,7 +270,7 @@ export type CmdRecord =
   | { type: 5; offset: number; name: string } | { type: 0x1f; offset: number; text: string }
   | { type: number; offset: number; payloadLength: number };   // 04, 06..10
 export interface CmdModule { format: 'cmd'; image: MemoryImage; entry: number | null; entrySource: 'transfer'|'lowest'|'none';
-  executable: boolean; name?: string; copyright?: string; records: CmdRecord[]; trailing: number; warnings: string[] }
+  endedBy: 'transfer'|'end'|'eof'|'error'; name?: string; copyright?: string; records: CmdRecord[]; trailing: number; warnings: string[] }
 export function isCmd(bytes: Uint8Array): boolean;
 export function loadCmd(bytes: Uint8Array): CmdModule;
 ```
@@ -324,7 +324,7 @@ export function isBas(bytes: Uint8Array): boolean;
 export function loadBas(bytes: Uint8Array): BasProgram;
 ```
 
-Chain rules: optional `FF`; base = ptr(1) − size(line 1) where size is found at the first `00` after the 4-byte header, re-tried at each later `00` until the chain validates (pointers strictly increasing, in bounds, ending with `00 00`). `length` = bytes from the pointer to the end of the line as implied by the next pointer. `parsed=false` when the last byte is not `00`, a `00` occurs earlier, or an `FC`–`FF` byte appears outside a literal region. Detokenize: tokens to text, `3A 95`→`ELSE`, `3A 93 FB`→`'`, literal regions as in Task 6, non-printable bytes as `{hh}`.
+Chain rules: optional `FF`; base = ptr(1) − size(line 1) where size is found at the first `00` after the 4-byte header (no other candidate: a later `00` would sit inside line 1, which must detokenize cleanly because execution starts there); the chain must have strictly increasing pointers and line numbers, stay in bounds, and end with `00 00`. Detection (`isBas`) further requires the chain to cover at least half the file. `length` = bytes from the pointer to the end of the line as implied by the next pointer. `parsed=false` when the last byte is not `00`, a `00` occurs earlier, or an `FC`–`FF` byte appears outside a literal region. Detokenize: tokens to text, `3A 95`→`ELSE`, `3A 93 FB`→`'`, literal regions as in Task 6, non-printable bytes as `{hh}`.
 
 - [ ] **Step 1: Detokenize tests** (inverse of Task 6 cases, plus `{80}` escaping inside strings, `ok=false` for `FC` outside strings, `ok=false` for embedded `00`).
 - [ ] **Step 2: Fixtures:** the same 6-line program written from `$62C8` and `$7000` (`bas/prog-62c8.bas`, `bas/prog-7000.bas`), one with `header:false`, one with a raw hidden-code line (`bas/hidden-code.bas`: line 20 raw `C3 00 00 C9 00 3E`), one with trailing bytes. Tests: both bases decode to identical texts and line numbers; `base` equals the save address; `addr` of line N = `ptr(N-1)`, body at `+4`; image bytes at `base` equal the file bytes after the header; the hidden line is `parsed:false` with correct `addr`/`length`; `isBas` false for a .CMD fixture and for random bytes.
@@ -340,7 +340,7 @@ Chain rules: optional `FF`; base = ptr(1) − size(line 1) where size is found a
 
 ```ts
 export type Format = 'cmd' | 'bas' | 'raw';
-export function detectFormat(bytes: Uint8Array): Format;   // cmd first, then bas, else raw
+export function detectFormat(bytes: Uint8Array): Format;   // bas first (whole-file evidence), then cmd, else raw
 export interface RawModule { format: 'raw'; image: MemoryImage; entry: number }
 export function loadRaw(bytes: Uint8Array, base: number): RawModule;
 ```

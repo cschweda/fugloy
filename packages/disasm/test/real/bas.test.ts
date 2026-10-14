@@ -27,7 +27,11 @@ describe('Voyage of the Valkyrie .BAS files', () => {
       expect(line250?.parsed).toBe(true);
       expect(line250?.text).toContain('PEEK(16549)*256+PEEK(16548)+14');
       expect(line250?.text).toContain('POKE16421,195');
-      expect(p.lines.every((l) => l.addr === p.base || l.bodyAddr === l.addr + 4)).toBe(true);
+      expect(p.lines[0]!.addr).toBe(p.base);
+      for (let i = 1; i < p.lines.length; i++) {
+        const prev = p.lines[i - 1]!;
+        expect(p.lines[i]!.addr, `line ${p.lines[i]!.number} sits where line ${prev.number}'s pointer says`).toBe(bytes[prev.offset]! | (bytes[prev.offset + 1]! << 8));
+      }
       // Phase 1 flags lines by structure only; the plan counts 190 code lines, and most of them trip it.
       const unparsed = p.lines.filter((l) => !l.parsed);
       expect(unparsed.length).toBeGreaterThan(150);

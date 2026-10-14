@@ -9,7 +9,7 @@ import { loadCmd } from '../../src/cmd.js';
 import { detectFormat } from '../../src/detect.js';
 import { renderCmdListing } from '../../src/listing.js';
 import { linearSweep } from '../../src/sweep.js';
-import { readSample, skipIfMissing } from './samples.js';
+import { readSample, resolveSample, skipIfMissing } from './samples.js';
 
 interface Expected {
   runs: [number, number][];
@@ -69,7 +69,7 @@ describe('appendix load modules', () => {
 
   skipIfMissing('asylum1b.cmd')('asylum1b/1c/1d are the same 20,297 bytes relocated', () => {
     for (const f of ['asylum1b.cmd', 'asylum1c.cmd', 'asylum1d.cmd']) {
-      if (!skipIfMissing(f)) continue;
+      if (resolveSample(f) === null) continue;
       expect(loadCmd(readSample(f)).image.runs()[0]?.length, f).toBe(20297);
     }
   });

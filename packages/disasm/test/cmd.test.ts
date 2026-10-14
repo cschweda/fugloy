@@ -138,11 +138,11 @@ describe('.CMD loader rules', () => {
 
   it('stops at a truncated record with a warning and counts the remainder as trailing', () => {
     const m = fx('truncated');
-    expect(m.image.runs()).toEqual([{ start: 0x5200, end: 0x5205, length: 6 }]);
+    expect(m.image.runs()).toEqual([{ start: 0x5200, end: 0x5205, length: 6 }, { start: 0x5300, end: 0x5307, length: 8 }]);
     expect(m.endedBy).toBe('error');
     expect(m.trailing).toBe(7);
     expect(m.warnings).toEqual([
-      'truncated 01 record at offset 10: needs 18 bytes, 5 remain',
+      'truncated 01 record at offset 22: needs 18 bytes, 5 remain',
       'no transfer address record; using lowest loaded address $5200',
     ]);
   });
@@ -151,7 +151,7 @@ describe('.CMD loader rules', () => {
     const m = fx('unknown-type');
     expect(m.endedBy).toBe('error');
     expect(m.trailing).toBe(8);
-    expect(m.warnings[0]).toBe('unknown record type $7F at offset 10; stopping');
+    expect(m.warnings[0]).toBe('unknown record type $7F at offset 22; stopping');
     expect(m.entry).toBe(0x5200);
   });
 
@@ -185,5 +185,19 @@ describe('isCmd', () => {
 
   it('rejects a file whose first load record is cut short', () => {
     expect(isCmd(Uint8Array.from([0x01, 0x05, 0x00, 0x60, 0x01]))).toBe(false);
+  });
+
+  it('rejects raw code that merely starts with 01 (LD BC,nn): one load record followed by damage is not a load module', () => {
+    const raw = new Uint8Array(300);
+    for (let i = 0; i < raw.length; i++) raw[i] = (i * 37) & 0xff;
+    raw.set([0x01, 0x00, 0x00, 0x3e]);
+    expect(isCmd(raw)).toBe(false);
+    expect(isCmd(Uint8Array.from([0x01, 0x06, 0x00, 0x60, 0x3e, 0x01, 0xc9, 0x00, 0xc3, 0x00, 0x60, 0x00]))).toBe(false);
+    expect(isCmd(new CmdWriter().load(0x5200, PROGRAM).raw([0x01, 0x12, 0x00, 0x60, 0x11]).bytes())).toBe(false);
+  });
+
+  it('still accepts a damaged file once two load records precede the damage', () => {
+    expect(isCmd(CMD_FIXTURES['truncated']!())).toBe(true);
+    expect(isCmd(CMD_FIXTURES['unknown-type']!())).toBe(true);
   });
 });

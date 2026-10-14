@@ -142,17 +142,17 @@ export function loadCmd(bytes: Uint8Array): CmdModule {
 }
 
 /**
- * Content-based detection: the file starts with a well-formed known record and
- * at least one load block is read before anything goes wrong. Debris after a
- * good start is tolerated because tape-converted files carry it.
+ * Content-based detection: the file starts with a known record, at least one
+ * load block is read, and the walk ends cleanly (02, 03, or end of file on a
+ * record boundary). A walk that ends in damage is believed only once two load
+ * blocks have been read, because raw Z80 code can begin with 01 (LD BC,nn)
+ * and look like one block; tape-converted real files carry their debris after
+ * the 02 record, so they still pass.
  */
 export function isCmd(bytes: Uint8Array): boolean {
   if (bytes.length < 2 || !isKnownType(bytes[0]!)) return false;
   const mod = loadCmd(bytes);
-  const firstBad = mod.warnings.find((w) => w.startsWith('truncated') || w.startsWith('unknown'));
-  const firstLoad = mod.records.find((r) => r.type === 1);
-  if (firstLoad === undefined) return false;
-  if (firstBad === undefined) return true;
-  const badOffset = Number(/offset (\d+)/.exec(firstBad)?.[1]);
-  return firstLoad.offset < badOffset;
+  const loads = mod.records.filter((r) => r.type === 1).length;
+  if (loads === 0) return false;
+  return mod.endedBy !== 'error' || loads >= 2;
 }
