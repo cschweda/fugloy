@@ -79,6 +79,8 @@ describe('decode', () => {
     expect(d([0xc4, 0, 0]).cyclesNotTaken).toBe(10);
     expect(d([0xed, 0xb0]).cyclesNotTaken).toBe(16);
     expect(d([0x00]).cyclesNotTaken).toBeUndefined();
+    expect(d([0xc2, 0, 0]).cyclesNotTaken).toBeUndefined(); // JP cc,nn is 10 either way
+    expect(d([0xc2, 0, 0]).cycles).toBe(10);
     expect(d([0xdd, 0x7e, 0]).cycles).toBe(19);
     expect(d([0xdd, 0x36, 0, 0]).cycles).toBe(19);
     expect(d([0xdd, 0x34, 0]).cycles).toBe(23);

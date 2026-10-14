@@ -115,7 +115,7 @@ function baseEntry(op: number): Template {
       if (p === 2) return entry(0, 'JP', [ind('HL')], 4, { flow: flow('jump', false, true) });
       return entry(0, 'LD', [reg16('SP'), reg16('HL')], 6);
     case 2:
-      return entry(0, 'JP', [cond(CC[y]!), NN], 10, { notTaken: 10, flow: flow('jump', true) });
+      return entry(0, 'JP', [cond(CC[y]!), NN], 10, { flow: flow('jump', true) });
     case 3:
       switch (y) {
         case 0: return entry(0, 'JP', [NN], 10, { flow: flow('jump') });

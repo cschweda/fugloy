@@ -1,0 +1,1800 @@
+# Z80 reference: bytes | text | length | cycles[/not-taken] | flow | doc. Built by build-reference.ts; do not edit.
+# unprefixed
+00 | NOP | 1 | 4 | next | doc
+01 12 34 | LD BC,3412H | 3 | 10 | next | doc
+02 | LD (BC),A | 1 | 7 | next | doc
+03 | INC BC | 1 | 6 | next | doc
+04 | INC B | 1 | 4 | next | doc
+05 | DEC B | 1 | 4 | next | doc
+06 12 | LD B,12H | 2 | 7 | next | doc
+07 | RLCA | 1 | 4 | next | doc
+08 | EX AF,AF' | 1 | 4 | next | doc
+09 | ADD HL,BC | 1 | 11 | next | doc
+0A | LD A,(BC) | 1 | 7 | next | doc
+0B | DEC BC | 1 | 6 | next | doc
+0C | INC C | 1 | 4 | next | doc
+0D | DEC C | 1 | 4 | next | doc
+0E 12 | LD C,12H | 2 | 7 | next | doc
+0F | RRCA | 1 | 4 | next | doc
+10 12 | DJNZ 0014H | 2 | 13/8 | jump? | doc
+11 12 34 | LD DE,3412H | 3 | 10 | next | doc
+12 | LD (DE),A | 1 | 7 | next | doc
+13 | INC DE | 1 | 6 | next | doc
+14 | INC D | 1 | 4 | next | doc
+15 | DEC D | 1 | 4 | next | doc
+16 12 | LD D,12H | 2 | 7 | next | doc
+17 | RLA | 1 | 4 | next | doc
+18 12 | JR 0014H | 2 | 12 | jump | doc
+19 | ADD HL,DE | 1 | 11 | next | doc
+1A | LD A,(DE) | 1 | 7 | next | doc
+1B | DEC DE | 1 | 6 | next | doc
+1C | INC E | 1 | 4 | next | doc
+1D | DEC E | 1 | 4 | next | doc
+1E 12 | LD E,12H | 2 | 7 | next | doc
+1F | RRA | 1 | 4 | next | doc
+20 12 | JR NZ,0014H | 2 | 12/7 | jump? | doc
+21 12 34 | LD HL,3412H | 3 | 10 | next | doc
+22 12 34 | LD (3412H),HL | 3 | 16 | next | doc
+23 | INC HL | 1 | 6 | next | doc
+24 | INC H | 1 | 4 | next | doc
+25 | DEC H | 1 | 4 | next | doc
+26 12 | LD H,12H | 2 | 7 | next | doc
+27 | DAA | 1 | 4 | next | doc
+28 12 | JR Z,0014H | 2 | 12/7 | jump? | doc
+29 | ADD HL,HL | 1 | 11 | next | doc
+2A 12 34 | LD HL,(3412H) | 3 | 16 | next | doc
+2B | DEC HL | 1 | 6 | next | doc
+2C | INC L | 1 | 4 | next | doc
+2D | DEC L | 1 | 4 | next | doc
+2E 12 | LD L,12H | 2 | 7 | next | doc
+2F | CPL | 1 | 4 | next | doc
+30 12 | JR NC,0014H | 2 | 12/7 | jump? | doc
+31 12 34 | LD SP,3412H | 3 | 10 | next | doc
+32 12 34 | LD (3412H),A | 3 | 13 | next | doc
+33 | INC SP | 1 | 6 | next | doc
+34 | INC (HL) | 1 | 11 | next | doc
+35 | DEC (HL) | 1 | 11 | next | doc
+36 12 | LD (HL),12H | 2 | 10 | next | doc
+37 | SCF | 1 | 4 | next | doc
+38 12 | JR C,0014H | 2 | 12/7 | jump? | doc
+39 | ADD HL,SP | 1 | 11 | next | doc
+3A 12 34 | LD A,(3412H) | 3 | 13 | next | doc
+3B | DEC SP | 1 | 6 | next | doc
+3C | INC A | 1 | 4 | next | doc
+3D | DEC A | 1 | 4 | next | doc
+3E 12 | LD A,12H | 2 | 7 | next | doc
+3F | CCF | 1 | 4 | next | doc
+40 | LD B,B | 1 | 4 | next | doc
+41 | LD B,C | 1 | 4 | next | doc
+42 | LD B,D | 1 | 4 | next | doc
+43 | LD B,E | 1 | 4 | next | doc
+44 | LD B,H | 1 | 4 | next | doc
+45 | LD B,L | 1 | 4 | next | doc
+46 | LD B,(HL) | 1 | 7 | next | doc
+47 | LD B,A | 1 | 4 | next | doc
+48 | LD C,B | 1 | 4 | next | doc
+49 | LD C,C | 1 | 4 | next | doc
+4A | LD C,D | 1 | 4 | next | doc
+4B | LD C,E | 1 | 4 | next | doc
+4C | LD C,H | 1 | 4 | next | doc
+4D | LD C,L | 1 | 4 | next | doc
+4E | LD C,(HL) | 1 | 7 | next | doc
+4F | LD C,A | 1 | 4 | next | doc
+50 | LD D,B | 1 | 4 | next | doc
+51 | LD D,C | 1 | 4 | next | doc
+52 | LD D,D | 1 | 4 | next | doc
+53 | LD D,E | 1 | 4 | next | doc
+54 | LD D,H | 1 | 4 | next | doc
+55 | LD D,L | 1 | 4 | next | doc
+56 | LD D,(HL) | 1 | 7 | next | doc
+57 | LD D,A | 1 | 4 | next | doc
+58 | LD E,B | 1 | 4 | next | doc
+59 | LD E,C | 1 | 4 | next | doc
+5A | LD E,D | 1 | 4 | next | doc
+5B | LD E,E | 1 | 4 | next | doc
+5C | LD E,H | 1 | 4 | next | doc
+5D | LD E,L | 1 | 4 | next | doc
+5E | LD E,(HL) | 1 | 7 | next | doc
+5F | LD E,A | 1 | 4 | next | doc
+60 | LD H,B | 1 | 4 | next | doc
+61 | LD H,C | 1 | 4 | next | doc
+62 | LD H,D | 1 | 4 | next | doc
+63 | LD H,E | 1 | 4 | next | doc
+64 | LD H,H | 1 | 4 | next | doc
+65 | LD H,L | 1 | 4 | next | doc
+66 | LD H,(HL) | 1 | 7 | next | doc
+67 | LD H,A | 1 | 4 | next | doc
+68 | LD L,B | 1 | 4 | next | doc
+69 | LD L,C | 1 | 4 | next | doc
+6A | LD L,D | 1 | 4 | next | doc
+6B | LD L,E | 1 | 4 | next | doc
+6C | LD L,H | 1 | 4 | next | doc
+6D | LD L,L | 1 | 4 | next | doc
+6E | LD L,(HL) | 1 | 7 | next | doc
+6F | LD L,A | 1 | 4 | next | doc
+70 | LD (HL),B | 1 | 7 | next | doc
+71 | LD (HL),C | 1 | 7 | next | doc
+72 | LD (HL),D | 1 | 7 | next | doc
+73 | LD (HL),E | 1 | 7 | next | doc
+74 | LD (HL),H | 1 | 7 | next | doc
+75 | LD (HL),L | 1 | 7 | next | doc
+76 | HALT | 1 | 4 | halt | doc
+77 | LD (HL),A | 1 | 7 | next | doc
+78 | LD A,B | 1 | 4 | next | doc
+79 | LD A,C | 1 | 4 | next | doc
+7A | LD A,D | 1 | 4 | next | doc
+7B | LD A,E | 1 | 4 | next | doc
+7C | LD A,H | 1 | 4 | next | doc
+7D | LD A,L | 1 | 4 | next | doc
+7E | LD A,(HL) | 1 | 7 | next | doc
+7F | LD A,A | 1 | 4 | next | doc
+80 | ADD A,B | 1 | 4 | next | doc
+81 | ADD A,C | 1 | 4 | next | doc
+82 | ADD A,D | 1 | 4 | next | doc
+83 | ADD A,E | 1 | 4 | next | doc
+84 | ADD A,H | 1 | 4 | next | doc
+85 | ADD A,L | 1 | 4 | next | doc
+86 | ADD A,(HL) | 1 | 7 | next | doc
+87 | ADD A,A | 1 | 4 | next | doc
+88 | ADC A,B | 1 | 4 | next | doc
+89 | ADC A,C | 1 | 4 | next | doc
+8A | ADC A,D | 1 | 4 | next | doc
+8B | ADC A,E | 1 | 4 | next | doc
+8C | ADC A,H | 1 | 4 | next | doc
+8D | ADC A,L | 1 | 4 | next | doc
+8E | ADC A,(HL) | 1 | 7 | next | doc
+8F | ADC A,A | 1 | 4 | next | doc
+90 | SUB B | 1 | 4 | next | doc
+91 | SUB C | 1 | 4 | next | doc
+92 | SUB D | 1 | 4 | next | doc
+93 | SUB E | 1 | 4 | next | doc
+94 | SUB H | 1 | 4 | next | doc
+95 | SUB L | 1 | 4 | next | doc
+96 | SUB (HL) | 1 | 7 | next | doc
+97 | SUB A | 1 | 4 | next | doc
+98 | SBC A,B | 1 | 4 | next | doc
+99 | SBC A,C | 1 | 4 | next | doc
+9A | SBC A,D | 1 | 4 | next | doc
+9B | SBC A,E | 1 | 4 | next | doc
+9C | SBC A,H | 1 | 4 | next | doc
+9D | SBC A,L | 1 | 4 | next | doc
+9E | SBC A,(HL) | 1 | 7 | next | doc
+9F | SBC A,A | 1 | 4 | next | doc
+A0 | AND B | 1 | 4 | next | doc
+A1 | AND C | 1 | 4 | next | doc
+A2 | AND D | 1 | 4 | next | doc
+A3 | AND E | 1 | 4 | next | doc
+A4 | AND H | 1 | 4 | next | doc
+A5 | AND L | 1 | 4 | next | doc
+A6 | AND (HL) | 1 | 7 | next | doc
+A7 | AND A | 1 | 4 | next | doc
+A8 | XOR B | 1 | 4 | next | doc
+A9 | XOR C | 1 | 4 | next | doc
+AA | XOR D | 1 | 4 | next | doc
+AB | XOR E | 1 | 4 | next | doc
+AC | XOR H | 1 | 4 | next | doc
+AD | XOR L | 1 | 4 | next | doc
+AE | XOR (HL) | 1 | 7 | next | doc
+AF | XOR A | 1 | 4 | next | doc
+B0 | OR B | 1 | 4 | next | doc
+B1 | OR C | 1 | 4 | next | doc
+B2 | OR D | 1 | 4 | next | doc
+B3 | OR E | 1 | 4 | next | doc
+B4 | OR H | 1 | 4 | next | doc
+B5 | OR L | 1 | 4 | next | doc
+B6 | OR (HL) | 1 | 7 | next | doc
+B7 | OR A | 1 | 4 | next | doc
+B8 | CP B | 1 | 4 | next | doc
+B9 | CP C | 1 | 4 | next | doc
+BA | CP D | 1 | 4 | next | doc
+BB | CP E | 1 | 4 | next | doc
+BC | CP H | 1 | 4 | next | doc
+BD | CP L | 1 | 4 | next | doc
+BE | CP (HL) | 1 | 7 | next | doc
+BF | CP A | 1 | 4 | next | doc
+C0 | RET NZ | 1 | 11/5 | ret? | doc
+C1 | POP BC | 1 | 10 | next | doc
+C2 12 34 | JP NZ,3412H | 3 | 10 | jump? | doc
+C3 12 34 | JP 3412H | 3 | 10 | jump | doc
+C4 12 34 | CALL NZ,3412H | 3 | 17/10 | call? | doc
+C5 | PUSH BC | 1 | 11 | next | doc
+C6 12 | ADD A,12H | 2 | 7 | next | doc
+C7 | RST 00H | 1 | 11 | call | doc
+C8 | RET Z | 1 | 11/5 | ret? | doc
+C9 | RET | 1 | 10 | ret | doc
+CA 12 34 | JP Z,3412H | 3 | 10 | jump? | doc
+CB | prefix
+CC 12 34 | CALL Z,3412H | 3 | 17/10 | call? | doc
+CD 12 34 | CALL 3412H | 3 | 17 | call | doc
+CE 12 | ADC A,12H | 2 | 7 | next | doc
+CF | RST 08H | 1 | 11 | call | doc
+D0 | RET NC | 1 | 11/5 | ret? | doc
+D1 | POP DE | 1 | 10 | next | doc
+D2 12 34 | JP NC,3412H | 3 | 10 | jump? | doc
+D3 12 | OUT (12H),A | 2 | 11 | next | doc
+D4 12 34 | CALL NC,3412H | 3 | 17/10 | call? | doc
+D5 | PUSH DE | 1 | 11 | next | doc
+D6 12 | SUB 12H | 2 | 7 | next | doc
+D7 | RST 10H | 1 | 11 | call | doc
+D8 | RET C | 1 | 11/5 | ret? | doc
+D9 | EXX | 1 | 4 | next | doc
+DA 12 34 | JP C,3412H | 3 | 10 | jump? | doc
+DB 12 | IN A,(12H) | 2 | 11 | next | doc
+DC 12 34 | CALL C,3412H | 3 | 17/10 | call? | doc
+DD | prefix
+DE 12 | SBC A,12H | 2 | 7 | next | doc
+DF | RST 18H | 1 | 11 | call | doc
+E0 | RET PO | 1 | 11/5 | ret? | doc
+E1 | POP HL | 1 | 10 | next | doc
+E2 12 34 | JP PO,3412H | 3 | 10 | jump? | doc
+E3 | EX (SP),HL | 1 | 19 | next | doc
+E4 12 34 | CALL PO,3412H | 3 | 17/10 | call? | doc
+E5 | PUSH HL | 1 | 11 | next | doc
+E6 12 | AND 12H | 2 | 7 | next | doc
+E7 | RST 20H | 1 | 11 | call | doc
+E8 | RET PE | 1 | 11/5 | ret? | doc
+E9 | JP (HL) | 1 | 4 | jump* | doc
+EA 12 34 | JP PE,3412H | 3 | 10 | jump? | doc
+EB | EX DE,HL | 1 | 4 | next | doc
+EC 12 34 | CALL PE,3412H | 3 | 17/10 | call? | doc
+ED | prefix
+EE 12 | XOR 12H | 2 | 7 | next | doc
+EF | RST 28H | 1 | 11 | call | doc
+F0 | RET P | 1 | 11/5 | ret? | doc
+F1 | POP AF | 1 | 10 | next | doc
+F2 12 34 | JP P,3412H | 3 | 10 | jump? | doc
+F3 | DI | 1 | 4 | next | doc
+F4 12 34 | CALL P,3412H | 3 | 17/10 | call? | doc
+F5 | PUSH AF | 1 | 11 | next | doc
+F6 12 | OR 12H | 2 | 7 | next | doc
+F7 | RST 30H | 1 | 11 | call | doc
+F8 | RET M | 1 | 11/5 | ret? | doc
+F9 | LD SP,HL | 1 | 6 | next | doc
+FA 12 34 | JP M,3412H | 3 | 10 | jump? | doc
+FB | EI | 1 | 4 | next | doc
+FC 12 34 | CALL M,3412H | 3 | 17/10 | call? | doc
+FD | prefix
+FE 12 | CP 12H | 2 | 7 | next | doc
+FF | RST 38H | 1 | 11 | call | doc
+# CB
+CB 00 | RLC B | 2 | 8 | next | doc
+CB 01 | RLC C | 2 | 8 | next | doc
+CB 02 | RLC D | 2 | 8 | next | doc
+CB 03 | RLC E | 2 | 8 | next | doc
+CB 04 | RLC H | 2 | 8 | next | doc
+CB 05 | RLC L | 2 | 8 | next | doc
+CB 06 | RLC (HL) | 2 | 15 | next | doc
+CB 07 | RLC A | 2 | 8 | next | doc
+CB 08 | RRC B | 2 | 8 | next | doc
+CB 09 | RRC C | 2 | 8 | next | doc
+CB 0A | RRC D | 2 | 8 | next | doc
+CB 0B | RRC E | 2 | 8 | next | doc
+CB 0C | RRC H | 2 | 8 | next | doc
+CB 0D | RRC L | 2 | 8 | next | doc
+CB 0E | RRC (HL) | 2 | 15 | next | doc
+CB 0F | RRC A | 2 | 8 | next | doc
+CB 10 | RL B | 2 | 8 | next | doc
+CB 11 | RL C | 2 | 8 | next | doc
+CB 12 | RL D | 2 | 8 | next | doc
+CB 13 | RL E | 2 | 8 | next | doc
+CB 14 | RL H | 2 | 8 | next | doc
+CB 15 | RL L | 2 | 8 | next | doc
+CB 16 | RL (HL) | 2 | 15 | next | doc
+CB 17 | RL A | 2 | 8 | next | doc
+CB 18 | RR B | 2 | 8 | next | doc
+CB 19 | RR C | 2 | 8 | next | doc
+CB 1A | RR D | 2 | 8 | next | doc
+CB 1B | RR E | 2 | 8 | next | doc
+CB 1C | RR H | 2 | 8 | next | doc
+CB 1D | RR L | 2 | 8 | next | doc
+CB 1E | RR (HL) | 2 | 15 | next | doc
+CB 1F | RR A | 2 | 8 | next | doc
+CB 20 | SLA B | 2 | 8 | next | doc
+CB 21 | SLA C | 2 | 8 | next | doc
+CB 22 | SLA D | 2 | 8 | next | doc
+CB 23 | SLA E | 2 | 8 | next | doc
+CB 24 | SLA H | 2 | 8 | next | doc
+CB 25 | SLA L | 2 | 8 | next | doc
+CB 26 | SLA (HL) | 2 | 15 | next | doc
+CB 27 | SLA A | 2 | 8 | next | doc
+CB 28 | SRA B | 2 | 8 | next | doc
+CB 29 | SRA C | 2 | 8 | next | doc
+CB 2A | SRA D | 2 | 8 | next | doc
+CB 2B | SRA E | 2 | 8 | next | doc
+CB 2C | SRA H | 2 | 8 | next | doc
+CB 2D | SRA L | 2 | 8 | next | doc
+CB 2E | SRA (HL) | 2 | 15 | next | doc
+CB 2F | SRA A | 2 | 8 | next | doc
+CB 30 | SLL B | 2 | 8 | next | undoc
+CB 31 | SLL C | 2 | 8 | next | undoc
+CB 32 | SLL D | 2 | 8 | next | undoc
+CB 33 | SLL E | 2 | 8 | next | undoc
+CB 34 | SLL H | 2 | 8 | next | undoc
+CB 35 | SLL L | 2 | 8 | next | undoc
+CB 36 | SLL (HL) | 2 | 15 | next | undoc
+CB 37 | SLL A | 2 | 8 | next | undoc
+CB 38 | SRL B | 2 | 8 | next | doc
+CB 39 | SRL C | 2 | 8 | next | doc
+CB 3A | SRL D | 2 | 8 | next | doc
+CB 3B | SRL E | 2 | 8 | next | doc
+CB 3C | SRL H | 2 | 8 | next | doc
+CB 3D | SRL L | 2 | 8 | next | doc
+CB 3E | SRL (HL) | 2 | 15 | next | doc
+CB 3F | SRL A | 2 | 8 | next | doc
+CB 40 | BIT 0,B | 2 | 8 | next | doc
+CB 41 | BIT 0,C | 2 | 8 | next | doc
+CB 42 | BIT 0,D | 2 | 8 | next | doc
+CB 43 | BIT 0,E | 2 | 8 | next | doc
+CB 44 | BIT 0,H | 2 | 8 | next | doc
+CB 45 | BIT 0,L | 2 | 8 | next | doc
+CB 46 | BIT 0,(HL) | 2 | 12 | next | doc
+CB 47 | BIT 0,A | 2 | 8 | next | doc
+CB 48 | BIT 1,B | 2 | 8 | next | doc
+CB 49 | BIT 1,C | 2 | 8 | next | doc
+CB 4A | BIT 1,D | 2 | 8 | next | doc
+CB 4B | BIT 1,E | 2 | 8 | next | doc
+CB 4C | BIT 1,H | 2 | 8 | next | doc
+CB 4D | BIT 1,L | 2 | 8 | next | doc
+CB 4E | BIT 1,(HL) | 2 | 12 | next | doc
+CB 4F | BIT 1,A | 2 | 8 | next | doc
+CB 50 | BIT 2,B | 2 | 8 | next | doc
+CB 51 | BIT 2,C | 2 | 8 | next | doc
+CB 52 | BIT 2,D | 2 | 8 | next | doc
+CB 53 | BIT 2,E | 2 | 8 | next | doc
+CB 54 | BIT 2,H | 2 | 8 | next | doc
+CB 55 | BIT 2,L | 2 | 8 | next | doc
+CB 56 | BIT 2,(HL) | 2 | 12 | next | doc
+CB 57 | BIT 2,A | 2 | 8 | next | doc
+CB 58 | BIT 3,B | 2 | 8 | next | doc
+CB 59 | BIT 3,C | 2 | 8 | next | doc
+CB 5A | BIT 3,D | 2 | 8 | next | doc
+CB 5B | BIT 3,E | 2 | 8 | next | doc
+CB 5C | BIT 3,H | 2 | 8 | next | doc
+CB 5D | BIT 3,L | 2 | 8 | next | doc
+CB 5E | BIT 3,(HL) | 2 | 12 | next | doc
+CB 5F | BIT 3,A | 2 | 8 | next | doc
+CB 60 | BIT 4,B | 2 | 8 | next | doc
+CB 61 | BIT 4,C | 2 | 8 | next | doc
+CB 62 | BIT 4,D | 2 | 8 | next | doc
+CB 63 | BIT 4,E | 2 | 8 | next | doc
+CB 64 | BIT 4,H | 2 | 8 | next | doc
+CB 65 | BIT 4,L | 2 | 8 | next | doc
+CB 66 | BIT 4,(HL) | 2 | 12 | next | doc
+CB 67 | BIT 4,A | 2 | 8 | next | doc
+CB 68 | BIT 5,B | 2 | 8 | next | doc
+CB 69 | BIT 5,C | 2 | 8 | next | doc
+CB 6A | BIT 5,D | 2 | 8 | next | doc
+CB 6B | BIT 5,E | 2 | 8 | next | doc
+CB 6C | BIT 5,H | 2 | 8 | next | doc
+CB 6D | BIT 5,L | 2 | 8 | next | doc
+CB 6E | BIT 5,(HL) | 2 | 12 | next | doc
+CB 6F | BIT 5,A | 2 | 8 | next | doc
+CB 70 | BIT 6,B | 2 | 8 | next | doc
+CB 71 | BIT 6,C | 2 | 8 | next | doc
+CB 72 | BIT 6,D | 2 | 8 | next | doc
+CB 73 | BIT 6,E | 2 | 8 | next | doc
+CB 74 | BIT 6,H | 2 | 8 | next | doc
+CB 75 | BIT 6,L | 2 | 8 | next | doc
+CB 76 | BIT 6,(HL) | 2 | 12 | next | doc
+CB 77 | BIT 6,A | 2 | 8 | next | doc
+CB 78 | BIT 7,B | 2 | 8 | next | doc
+CB 79 | BIT 7,C | 2 | 8 | next | doc
+CB 7A | BIT 7,D | 2 | 8 | next | doc
+CB 7B | BIT 7,E | 2 | 8 | next | doc
+CB 7C | BIT 7,H | 2 | 8 | next | doc
+CB 7D | BIT 7,L | 2 | 8 | next | doc
+CB 7E | BIT 7,(HL) | 2 | 12 | next | doc
+CB 7F | BIT 7,A | 2 | 8 | next | doc
+CB 80 | RES 0,B | 2 | 8 | next | doc
+CB 81 | RES 0,C | 2 | 8 | next | doc
+CB 82 | RES 0,D | 2 | 8 | next | doc
+CB 83 | RES 0,E | 2 | 8 | next | doc
+CB 84 | RES 0,H | 2 | 8 | next | doc
+CB 85 | RES 0,L | 2 | 8 | next | doc
+CB 86 | RES 0,(HL) | 2 | 15 | next | doc
+CB 87 | RES 0,A | 2 | 8 | next | doc
+CB 88 | RES 1,B | 2 | 8 | next | doc
+CB 89 | RES 1,C | 2 | 8 | next | doc
+CB 8A | RES 1,D | 2 | 8 | next | doc
+CB 8B | RES 1,E | 2 | 8 | next | doc
+CB 8C | RES 1,H | 2 | 8 | next | doc
+CB 8D | RES 1,L | 2 | 8 | next | doc
+CB 8E | RES 1,(HL) | 2 | 15 | next | doc
+CB 8F | RES 1,A | 2 | 8 | next | doc
+CB 90 | RES 2,B | 2 | 8 | next | doc
+CB 91 | RES 2,C | 2 | 8 | next | doc
+CB 92 | RES 2,D | 2 | 8 | next | doc
+CB 93 | RES 2,E | 2 | 8 | next | doc
+CB 94 | RES 2,H | 2 | 8 | next | doc
+CB 95 | RES 2,L | 2 | 8 | next | doc
+CB 96 | RES 2,(HL) | 2 | 15 | next | doc
+CB 97 | RES 2,A | 2 | 8 | next | doc
+CB 98 | RES 3,B | 2 | 8 | next | doc
+CB 99 | RES 3,C | 2 | 8 | next | doc
+CB 9A | RES 3,D | 2 | 8 | next | doc
+CB 9B | RES 3,E | 2 | 8 | next | doc
+CB 9C | RES 3,H | 2 | 8 | next | doc
+CB 9D | RES 3,L | 2 | 8 | next | doc
+CB 9E | RES 3,(HL) | 2 | 15 | next | doc
+CB 9F | RES 3,A | 2 | 8 | next | doc
+CB A0 | RES 4,B | 2 | 8 | next | doc
+CB A1 | RES 4,C | 2 | 8 | next | doc
+CB A2 | RES 4,D | 2 | 8 | next | doc
+CB A3 | RES 4,E | 2 | 8 | next | doc
+CB A4 | RES 4,H | 2 | 8 | next | doc
+CB A5 | RES 4,L | 2 | 8 | next | doc
+CB A6 | RES 4,(HL) | 2 | 15 | next | doc
+CB A7 | RES 4,A | 2 | 8 | next | doc
+CB A8 | RES 5,B | 2 | 8 | next | doc
+CB A9 | RES 5,C | 2 | 8 | next | doc
+CB AA | RES 5,D | 2 | 8 | next | doc
+CB AB | RES 5,E | 2 | 8 | next | doc
+CB AC | RES 5,H | 2 | 8 | next | doc
+CB AD | RES 5,L | 2 | 8 | next | doc
+CB AE | RES 5,(HL) | 2 | 15 | next | doc
+CB AF | RES 5,A | 2 | 8 | next | doc
+CB B0 | RES 6,B | 2 | 8 | next | doc
+CB B1 | RES 6,C | 2 | 8 | next | doc
+CB B2 | RES 6,D | 2 | 8 | next | doc
+CB B3 | RES 6,E | 2 | 8 | next | doc
+CB B4 | RES 6,H | 2 | 8 | next | doc
+CB B5 | RES 6,L | 2 | 8 | next | doc
+CB B6 | RES 6,(HL) | 2 | 15 | next | doc
+CB B7 | RES 6,A | 2 | 8 | next | doc
+CB B8 | RES 7,B | 2 | 8 | next | doc
+CB B9 | RES 7,C | 2 | 8 | next | doc
+CB BA | RES 7,D | 2 | 8 | next | doc
+CB BB | RES 7,E | 2 | 8 | next | doc
+CB BC | RES 7,H | 2 | 8 | next | doc
+CB BD | RES 7,L | 2 | 8 | next | doc
+CB BE | RES 7,(HL) | 2 | 15 | next | doc
+CB BF | RES 7,A | 2 | 8 | next | doc
+CB C0 | SET 0,B | 2 | 8 | next | doc
+CB C1 | SET 0,C | 2 | 8 | next | doc
+CB C2 | SET 0,D | 2 | 8 | next | doc
+CB C3 | SET 0,E | 2 | 8 | next | doc
+CB C4 | SET 0,H | 2 | 8 | next | doc
+CB C5 | SET 0,L | 2 | 8 | next | doc
+CB C6 | SET 0,(HL) | 2 | 15 | next | doc
+CB C7 | SET 0,A | 2 | 8 | next | doc
+CB C8 | SET 1,B | 2 | 8 | next | doc
+CB C9 | SET 1,C | 2 | 8 | next | doc
+CB CA | SET 1,D | 2 | 8 | next | doc
+CB CB | SET 1,E | 2 | 8 | next | doc
+CB CC | SET 1,H | 2 | 8 | next | doc
+CB CD | SET 1,L | 2 | 8 | next | doc
+CB CE | SET 1,(HL) | 2 | 15 | next | doc
+CB CF | SET 1,A | 2 | 8 | next | doc
+CB D0 | SET 2,B | 2 | 8 | next | doc
+CB D1 | SET 2,C | 2 | 8 | next | doc
+CB D2 | SET 2,D | 2 | 8 | next | doc
+CB D3 | SET 2,E | 2 | 8 | next | doc
+CB D4 | SET 2,H | 2 | 8 | next | doc
+CB D5 | SET 2,L | 2 | 8 | next | doc
+CB D6 | SET 2,(HL) | 2 | 15 | next | doc
+CB D7 | SET 2,A | 2 | 8 | next | doc
+CB D8 | SET 3,B | 2 | 8 | next | doc
+CB D9 | SET 3,C | 2 | 8 | next | doc
+CB DA | SET 3,D | 2 | 8 | next | doc
+CB DB | SET 3,E | 2 | 8 | next | doc
+CB DC | SET 3,H | 2 | 8 | next | doc
+CB DD | SET 3,L | 2 | 8 | next | doc
+CB DE | SET 3,(HL) | 2 | 15 | next | doc
+CB DF | SET 3,A | 2 | 8 | next | doc
+CB E0 | SET 4,B | 2 | 8 | next | doc
+CB E1 | SET 4,C | 2 | 8 | next | doc
+CB E2 | SET 4,D | 2 | 8 | next | doc
+CB E3 | SET 4,E | 2 | 8 | next | doc
+CB E4 | SET 4,H | 2 | 8 | next | doc
+CB E5 | SET 4,L | 2 | 8 | next | doc
+CB E6 | SET 4,(HL) | 2 | 15 | next | doc
+CB E7 | SET 4,A | 2 | 8 | next | doc
+CB E8 | SET 5,B | 2 | 8 | next | doc
+CB E9 | SET 5,C | 2 | 8 | next | doc
+CB EA | SET 5,D | 2 | 8 | next | doc
+CB EB | SET 5,E | 2 | 8 | next | doc
+CB EC | SET 5,H | 2 | 8 | next | doc
+CB ED | SET 5,L | 2 | 8 | next | doc
+CB EE | SET 5,(HL) | 2 | 15 | next | doc
+CB EF | SET 5,A | 2 | 8 | next | doc
+CB F0 | SET 6,B | 2 | 8 | next | doc
+CB F1 | SET 6,C | 2 | 8 | next | doc
+CB F2 | SET 6,D | 2 | 8 | next | doc
+CB F3 | SET 6,E | 2 | 8 | next | doc
+CB F4 | SET 6,H | 2 | 8 | next | doc
+CB F5 | SET 6,L | 2 | 8 | next | doc
+CB F6 | SET 6,(HL) | 2 | 15 | next | doc
+CB F7 | SET 6,A | 2 | 8 | next | doc
+CB F8 | SET 7,B | 2 | 8 | next | doc
+CB F9 | SET 7,C | 2 | 8 | next | doc
+CB FA | SET 7,D | 2 | 8 | next | doc
+CB FB | SET 7,E | 2 | 8 | next | doc
+CB FC | SET 7,H | 2 | 8 | next | doc
+CB FD | SET 7,L | 2 | 8 | next | doc
+CB FE | SET 7,(HL) | 2 | 15 | next | doc
+CB FF | SET 7,A | 2 | 8 | next | doc
+# ED
+ED 00 | DB 0EDH,00H | 2 | 8 | next | undoc
+ED 01 | DB 0EDH,01H | 2 | 8 | next | undoc
+ED 02 | DB 0EDH,02H | 2 | 8 | next | undoc
+ED 03 | DB 0EDH,03H | 2 | 8 | next | undoc
+ED 04 | DB 0EDH,04H | 2 | 8 | next | undoc
+ED 05 | DB 0EDH,05H | 2 | 8 | next | undoc
+ED 06 | DB 0EDH,06H | 2 | 8 | next | undoc
+ED 07 | DB 0EDH,07H | 2 | 8 | next | undoc
+ED 08 | DB 0EDH,08H | 2 | 8 | next | undoc
+ED 09 | DB 0EDH,09H | 2 | 8 | next | undoc
+ED 0A | DB 0EDH,0AH | 2 | 8 | next | undoc
+ED 0B | DB 0EDH,0BH | 2 | 8 | next | undoc
+ED 0C | DB 0EDH,0CH | 2 | 8 | next | undoc
+ED 0D | DB 0EDH,0DH | 2 | 8 | next | undoc
+ED 0E | DB 0EDH,0EH | 2 | 8 | next | undoc
+ED 0F | DB 0EDH,0FH | 2 | 8 | next | undoc
+ED 10 | DB 0EDH,10H | 2 | 8 | next | undoc
+ED 11 | DB 0EDH,11H | 2 | 8 | next | undoc
+ED 12 | DB 0EDH,12H | 2 | 8 | next | undoc
+ED 13 | DB 0EDH,13H | 2 | 8 | next | undoc
+ED 14 | DB 0EDH,14H | 2 | 8 | next | undoc
+ED 15 | DB 0EDH,15H | 2 | 8 | next | undoc
+ED 16 | DB 0EDH,16H | 2 | 8 | next | undoc
+ED 17 | DB 0EDH,17H | 2 | 8 | next | undoc
+ED 18 | DB 0EDH,18H | 2 | 8 | next | undoc
+ED 19 | DB 0EDH,19H | 2 | 8 | next | undoc
+ED 1A | DB 0EDH,1AH | 2 | 8 | next | undoc
+ED 1B | DB 0EDH,1BH | 2 | 8 | next | undoc
+ED 1C | DB 0EDH,1CH | 2 | 8 | next | undoc
+ED 1D | DB 0EDH,1DH | 2 | 8 | next | undoc
+ED 1E | DB 0EDH,1EH | 2 | 8 | next | undoc
+ED 1F | DB 0EDH,1FH | 2 | 8 | next | undoc
+ED 20 | DB 0EDH,20H | 2 | 8 | next | undoc
+ED 21 | DB 0EDH,21H | 2 | 8 | next | undoc
+ED 22 | DB 0EDH,22H | 2 | 8 | next | undoc
+ED 23 | DB 0EDH,23H | 2 | 8 | next | undoc
+ED 24 | DB 0EDH,24H | 2 | 8 | next | undoc
+ED 25 | DB 0EDH,25H | 2 | 8 | next | undoc
+ED 26 | DB 0EDH,26H | 2 | 8 | next | undoc
+ED 27 | DB 0EDH,27H | 2 | 8 | next | undoc
+ED 28 | DB 0EDH,28H | 2 | 8 | next | undoc
+ED 29 | DB 0EDH,29H | 2 | 8 | next | undoc
+ED 2A | DB 0EDH,2AH | 2 | 8 | next | undoc
+ED 2B | DB 0EDH,2BH | 2 | 8 | next | undoc
+ED 2C | DB 0EDH,2CH | 2 | 8 | next | undoc
+ED 2D | DB 0EDH,2DH | 2 | 8 | next | undoc
+ED 2E | DB 0EDH,2EH | 2 | 8 | next | undoc
+ED 2F | DB 0EDH,2FH | 2 | 8 | next | undoc
+ED 30 | DB 0EDH,30H | 2 | 8 | next | undoc
+ED 31 | DB 0EDH,31H | 2 | 8 | next | undoc
+ED 32 | DB 0EDH,32H | 2 | 8 | next | undoc
+ED 33 | DB 0EDH,33H | 2 | 8 | next | undoc
+ED 34 | DB 0EDH,34H | 2 | 8 | next | undoc
+ED 35 | DB 0EDH,35H | 2 | 8 | next | undoc
+ED 36 | DB 0EDH,36H | 2 | 8 | next | undoc
+ED 37 | DB 0EDH,37H | 2 | 8 | next | undoc
+ED 38 | DB 0EDH,38H | 2 | 8 | next | undoc
+ED 39 | DB 0EDH,39H | 2 | 8 | next | undoc
+ED 3A | DB 0EDH,3AH | 2 | 8 | next | undoc
+ED 3B | DB 0EDH,3BH | 2 | 8 | next | undoc
+ED 3C | DB 0EDH,3CH | 2 | 8 | next | undoc
+ED 3D | DB 0EDH,3DH | 2 | 8 | next | undoc
+ED 3E | DB 0EDH,3EH | 2 | 8 | next | undoc
+ED 3F | DB 0EDH,3FH | 2 | 8 | next | undoc
+ED 40 | IN B,(C) | 2 | 12 | next | doc
+ED 41 | OUT (C),B | 2 | 12 | next | doc
+ED 42 | SBC HL,BC | 2 | 15 | next | doc
+ED 43 12 34 | LD (3412H),BC | 4 | 20 | next | doc
+ED 44 | NEG | 2 | 8 | next | doc
+ED 45 | RETN | 2 | 14 | ret | doc
+ED 46 | IM 0 | 2 | 8 | next | doc
+ED 47 | LD I,A | 2 | 9 | next | doc
+ED 48 | IN C,(C) | 2 | 12 | next | doc
+ED 49 | OUT (C),C | 2 | 12 | next | doc
+ED 4A | ADC HL,BC | 2 | 15 | next | doc
+ED 4B 12 34 | LD BC,(3412H) | 4 | 20 | next | doc
+ED 4C | DB 0EDH,4CH | 2 | 8 | next | undoc
+ED 4D | RETI | 2 | 14 | ret | doc
+ED 4E | DB 0EDH,4EH | 2 | 8 | next | undoc
+ED 4F | LD R,A | 2 | 9 | next | doc
+ED 50 | IN D,(C) | 2 | 12 | next | doc
+ED 51 | OUT (C),D | 2 | 12 | next | doc
+ED 52 | SBC HL,DE | 2 | 15 | next | doc
+ED 53 12 34 | LD (3412H),DE | 4 | 20 | next | doc
+ED 54 | DB 0EDH,54H | 2 | 8 | next | undoc
+ED 55 | DB 0EDH,55H | 2 | 14 | next | undoc
+ED 56 | IM 1 | 2 | 8 | next | doc
+ED 57 | LD A,I | 2 | 9 | next | doc
+ED 58 | IN E,(C) | 2 | 12 | next | doc
+ED 59 | OUT (C),E | 2 | 12 | next | doc
+ED 5A | ADC HL,DE | 2 | 15 | next | doc
+ED 5B 12 34 | LD DE,(3412H) | 4 | 20 | next | doc
+ED 5C | DB 0EDH,5CH | 2 | 8 | next | undoc
+ED 5D | DB 0EDH,5DH | 2 | 14 | next | undoc
+ED 5E | IM 2 | 2 | 8 | next | doc
+ED 5F | LD A,R | 2 | 9 | next | doc
+ED 60 | IN H,(C) | 2 | 12 | next | doc
+ED 61 | OUT (C),H | 2 | 12 | next | doc
+ED 62 | SBC HL,HL | 2 | 15 | next | doc
+ED 63 12 34 | LD (3412H),HL | 4 | 20 | next | doc
+ED 64 | DB 0EDH,64H | 2 | 8 | next | undoc
+ED 65 | DB 0EDH,65H | 2 | 14 | next | undoc
+ED 66 | DB 0EDH,66H | 2 | 8 | next | undoc
+ED 67 | RRD | 2 | 18 | next | doc
+ED 68 | IN L,(C) | 2 | 12 | next | doc
+ED 69 | OUT (C),L | 2 | 12 | next | doc
+ED 6A | ADC HL,HL | 2 | 15 | next | doc
+ED 6B 12 34 | LD HL,(3412H) | 4 | 20 | next | doc
+ED 6C | DB 0EDH,6CH | 2 | 8 | next | undoc
+ED 6D | DB 0EDH,6DH | 2 | 14 | next | undoc
+ED 6E | DB 0EDH,6EH | 2 | 8 | next | undoc
+ED 6F | RLD | 2 | 18 | next | doc
+ED 70 | DB 0EDH,70H | 2 | 12 | next | undoc
+ED 71 | DB 0EDH,71H | 2 | 12 | next | undoc
+ED 72 | SBC HL,SP | 2 | 15 | next | doc
+ED 73 12 34 | LD (3412H),SP | 4 | 20 | next | doc
+ED 74 | DB 0EDH,74H | 2 | 8 | next | undoc
+ED 75 | DB 0EDH,75H | 2 | 14 | next | undoc
+ED 76 | DB 0EDH,76H | 2 | 8 | next | undoc
+ED 77 | DB 0EDH,77H | 2 | 8 | next | undoc
+ED 78 | IN A,(C) | 2 | 12 | next | doc
+ED 79 | OUT (C),A | 2 | 12 | next | doc
+ED 7A | ADC HL,SP | 2 | 15 | next | doc
+ED 7B 12 34 | LD SP,(3412H) | 4 | 20 | next | doc
+ED 7C | DB 0EDH,7CH | 2 | 8 | next | undoc
+ED 7D | DB 0EDH,7DH | 2 | 14 | next | undoc
+ED 7E | DB 0EDH,7EH | 2 | 8 | next | undoc
+ED 7F | DB 0EDH,7FH | 2 | 8 | next | undoc
+ED 80 | DB 0EDH,80H | 2 | 8 | next | undoc
+ED 81 | DB 0EDH,81H | 2 | 8 | next | undoc
+ED 82 | DB 0EDH,82H | 2 | 8 | next | undoc
+ED 83 | DB 0EDH,83H | 2 | 8 | next | undoc
+ED 84 | DB 0EDH,84H | 2 | 8 | next | undoc
+ED 85 | DB 0EDH,85H | 2 | 8 | next | undoc
+ED 86 | DB 0EDH,86H | 2 | 8 | next | undoc
+ED 87 | DB 0EDH,87H | 2 | 8 | next | undoc
+ED 88 | DB 0EDH,88H | 2 | 8 | next | undoc
+ED 89 | DB 0EDH,89H | 2 | 8 | next | undoc
+ED 8A | DB 0EDH,8AH | 2 | 8 | next | undoc
+ED 8B | DB 0EDH,8BH | 2 | 8 | next | undoc
+ED 8C | DB 0EDH,8CH | 2 | 8 | next | undoc
+ED 8D | DB 0EDH,8DH | 2 | 8 | next | undoc
+ED 8E | DB 0EDH,8EH | 2 | 8 | next | undoc
+ED 8F | DB 0EDH,8FH | 2 | 8 | next | undoc
+ED 90 | DB 0EDH,90H | 2 | 8 | next | undoc
+ED 91 | DB 0EDH,91H | 2 | 8 | next | undoc
+ED 92 | DB 0EDH,92H | 2 | 8 | next | undoc
+ED 93 | DB 0EDH,93H | 2 | 8 | next | undoc
+ED 94 | DB 0EDH,94H | 2 | 8 | next | undoc
+ED 95 | DB 0EDH,95H | 2 | 8 | next | undoc
+ED 96 | DB 0EDH,96H | 2 | 8 | next | undoc
+ED 97 | DB 0EDH,97H | 2 | 8 | next | undoc
+ED 98 | DB 0EDH,98H | 2 | 8 | next | undoc
+ED 99 | DB 0EDH,99H | 2 | 8 | next | undoc
+ED 9A | DB 0EDH,9AH | 2 | 8 | next | undoc
+ED 9B | DB 0EDH,9BH | 2 | 8 | next | undoc
+ED 9C | DB 0EDH,9CH | 2 | 8 | next | undoc
+ED 9D | DB 0EDH,9DH | 2 | 8 | next | undoc
+ED 9E | DB 0EDH,9EH | 2 | 8 | next | undoc
+ED 9F | DB 0EDH,9FH | 2 | 8 | next | undoc
+ED A0 | LDI | 2 | 16 | next | doc
+ED A1 | CPI | 2 | 16 | next | doc
+ED A2 | INI | 2 | 16 | next | doc
+ED A3 | OUTI | 2 | 16 | next | doc
+ED A4 | DB 0EDH,0A4H | 2 | 8 | next | undoc
+ED A5 | DB 0EDH,0A5H | 2 | 8 | next | undoc
+ED A6 | DB 0EDH,0A6H | 2 | 8 | next | undoc
+ED A7 | DB 0EDH,0A7H | 2 | 8 | next | undoc
+ED A8 | LDD | 2 | 16 | next | doc
+ED A9 | CPD | 2 | 16 | next | doc
+ED AA | IND | 2 | 16 | next | doc
+ED AB | OUTD | 2 | 16 | next | doc
+ED AC | DB 0EDH,0ACH | 2 | 8 | next | undoc
+ED AD | DB 0EDH,0ADH | 2 | 8 | next | undoc
+ED AE | DB 0EDH,0AEH | 2 | 8 | next | undoc
+ED AF | DB 0EDH,0AFH | 2 | 8 | next | undoc
+ED B0 | LDIR | 2 | 21/16 | next | doc
+ED B1 | CPIR | 2 | 21/16 | next | doc
+ED B2 | INIR | 2 | 21/16 | next | doc
+ED B3 | OTIR | 2 | 21/16 | next | doc
+ED B4 | DB 0EDH,0B4H | 2 | 8 | next | undoc
+ED B5 | DB 0EDH,0B5H | 2 | 8 | next | undoc
+ED B6 | DB 0EDH,0B6H | 2 | 8 | next | undoc
+ED B7 | DB 0EDH,0B7H | 2 | 8 | next | undoc
+ED B8 | LDDR | 2 | 21/16 | next | doc
+ED B9 | CPDR | 2 | 21/16 | next | doc
+ED BA | INDR | 2 | 21/16 | next | doc
+ED BB | OTDR | 2 | 21/16 | next | doc
+ED BC | DB 0EDH,0BCH | 2 | 8 | next | undoc
+ED BD | DB 0EDH,0BDH | 2 | 8 | next | undoc
+ED BE | DB 0EDH,0BEH | 2 | 8 | next | undoc
+ED BF | DB 0EDH,0BFH | 2 | 8 | next | undoc
+ED C0 | DB 0EDH,0C0H | 2 | 8 | next | undoc
+ED C1 | DB 0EDH,0C1H | 2 | 8 | next | undoc
+ED C2 | DB 0EDH,0C2H | 2 | 8 | next | undoc
+ED C3 | DB 0EDH,0C3H | 2 | 8 | next | undoc
+ED C4 | DB 0EDH,0C4H | 2 | 8 | next | undoc
+ED C5 | DB 0EDH,0C5H | 2 | 8 | next | undoc
+ED C6 | DB 0EDH,0C6H | 2 | 8 | next | undoc
+ED C7 | DB 0EDH,0C7H | 2 | 8 | next | undoc
+ED C8 | DB 0EDH,0C8H | 2 | 8 | next | undoc
+ED C9 | DB 0EDH,0C9H | 2 | 8 | next | undoc
+ED CA | DB 0EDH,0CAH | 2 | 8 | next | undoc
+ED CB | DB 0EDH,0CBH | 2 | 8 | next | undoc
+ED CC | DB 0EDH,0CCH | 2 | 8 | next | undoc
+ED CD | DB 0EDH,0CDH | 2 | 8 | next | undoc
+ED CE | DB 0EDH,0CEH | 2 | 8 | next | undoc
+ED CF | DB 0EDH,0CFH | 2 | 8 | next | undoc
+ED D0 | DB 0EDH,0D0H | 2 | 8 | next | undoc
+ED D1 | DB 0EDH,0D1H | 2 | 8 | next | undoc
+ED D2 | DB 0EDH,0D2H | 2 | 8 | next | undoc
+ED D3 | DB 0EDH,0D3H | 2 | 8 | next | undoc
+ED D4 | DB 0EDH,0D4H | 2 | 8 | next | undoc
+ED D5 | DB 0EDH,0D5H | 2 | 8 | next | undoc
+ED D6 | DB 0EDH,0D6H | 2 | 8 | next | undoc
+ED D7 | DB 0EDH,0D7H | 2 | 8 | next | undoc
+ED D8 | DB 0EDH,0D8H | 2 | 8 | next | undoc
+ED D9 | DB 0EDH,0D9H | 2 | 8 | next | undoc
+ED DA | DB 0EDH,0DAH | 2 | 8 | next | undoc
+ED DB | DB 0EDH,0DBH | 2 | 8 | next | undoc
+ED DC | DB 0EDH,0DCH | 2 | 8 | next | undoc
+ED DD | DB 0EDH,0DDH | 2 | 8 | next | undoc
+ED DE | DB 0EDH,0DEH | 2 | 8 | next | undoc
+ED DF | DB 0EDH,0DFH | 2 | 8 | next | undoc
+ED E0 | DB 0EDH,0E0H | 2 | 8 | next | undoc
+ED E1 | DB 0EDH,0E1H | 2 | 8 | next | undoc
+ED E2 | DB 0EDH,0E2H | 2 | 8 | next | undoc
+ED E3 | DB 0EDH,0E3H | 2 | 8 | next | undoc
+ED E4 | DB 0EDH,0E4H | 2 | 8 | next | undoc
+ED E5 | DB 0EDH,0E5H | 2 | 8 | next | undoc
+ED E6 | DB 0EDH,0E6H | 2 | 8 | next | undoc
+ED E7 | DB 0EDH,0E7H | 2 | 8 | next | undoc
+ED E8 | DB 0EDH,0E8H | 2 | 8 | next | undoc
+ED E9 | DB 0EDH,0E9H | 2 | 8 | next | undoc
+ED EA | DB 0EDH,0EAH | 2 | 8 | next | undoc
+ED EB | DB 0EDH,0EBH | 2 | 8 | next | undoc
+ED EC | DB 0EDH,0ECH | 2 | 8 | next | undoc
+ED ED | DB 0EDH,0EDH | 2 | 8 | next | undoc
+ED EE | DB 0EDH,0EEH | 2 | 8 | next | undoc
+ED EF | DB 0EDH,0EFH | 2 | 8 | next | undoc
+ED F0 | DB 0EDH,0F0H | 2 | 8 | next | undoc
+ED F1 | DB 0EDH,0F1H | 2 | 8 | next | undoc
+ED F2 | DB 0EDH,0F2H | 2 | 8 | next | undoc
+ED F3 | DB 0EDH,0F3H | 2 | 8 | next | undoc
+ED F4 | DB 0EDH,0F4H | 2 | 8 | next | undoc
+ED F5 | DB 0EDH,0F5H | 2 | 8 | next | undoc
+ED F6 | DB 0EDH,0F6H | 2 | 8 | next | undoc
+ED F7 | DB 0EDH,0F7H | 2 | 8 | next | undoc
+ED F8 | DB 0EDH,0F8H | 2 | 8 | next | undoc
+ED F9 | DB 0EDH,0F9H | 2 | 8 | next | undoc
+ED FA | DB 0EDH,0FAH | 2 | 8 | next | undoc
+ED FB | DB 0EDH,0FBH | 2 | 8 | next | undoc
+ED FC | DB 0EDH,0FCH | 2 | 8 | next | undoc
+ED FD | DB 0EDH,0FDH | 2 | 8 | next | undoc
+ED FE | DB 0EDH,0FEH | 2 | 8 | next | undoc
+ED FF | DB 0EDH,0FFH | 2 | 8 | next | undoc
+# DD
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD 09 | ADD IX,BC | 2 | 15 | next | doc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD 19 | ADD IX,DE | 2 | 15 | next | doc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD 21 12 34 | LD IX,3412H | 4 | 14 | next | doc
+DD 22 12 34 | LD (3412H),IX | 4 | 20 | next | doc
+DD 23 | INC IX | 2 | 10 | next | doc
+DD 24 | INC IXH | 2 | 8 | next | undoc
+DD 25 | DEC IXH | 2 | 8 | next | undoc
+DD 26 12 | LD IXH,12H | 3 | 11 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD 29 | ADD IX,IX | 2 | 15 | next | doc
+DD 2A 12 34 | LD IX,(3412H) | 4 | 20 | next | doc
+DD 2B | DEC IX | 2 | 10 | next | doc
+DD 2C | INC IXL | 2 | 8 | next | undoc
+DD 2D | DEC IXL | 2 | 8 | next | undoc
+DD 2E 12 | LD IXL,12H | 3 | 11 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD 34 12 | INC (IX+12H) | 3 | 23 | next | doc
+DD 35 12 | DEC (IX+12H) | 3 | 23 | next | doc
+DD 36 12 34 | LD (IX+12H),34H | 4 | 19 | next | doc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD 39 | ADD IX,SP | 2 | 15 | next | doc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD 44 | LD B,IXH | 2 | 8 | next | undoc
+DD 45 | LD B,IXL | 2 | 8 | next | undoc
+DD 46 12 | LD B,(IX+12H) | 3 | 19 | next | doc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD 4C | LD C,IXH | 2 | 8 | next | undoc
+DD 4D | LD C,IXL | 2 | 8 | next | undoc
+DD 4E 12 | LD C,(IX+12H) | 3 | 19 | next | doc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD 54 | LD D,IXH | 2 | 8 | next | undoc
+DD 55 | LD D,IXL | 2 | 8 | next | undoc
+DD 56 12 | LD D,(IX+12H) | 3 | 19 | next | doc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD 5C | LD E,IXH | 2 | 8 | next | undoc
+DD 5D | LD E,IXL | 2 | 8 | next | undoc
+DD 5E 12 | LD E,(IX+12H) | 3 | 19 | next | doc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD 60 | LD IXH,B | 2 | 8 | next | undoc
+DD 61 | LD IXH,C | 2 | 8 | next | undoc
+DD 62 | LD IXH,D | 2 | 8 | next | undoc
+DD 63 | LD IXH,E | 2 | 8 | next | undoc
+DD 64 | LD IXH,IXH | 2 | 8 | next | undoc
+DD 65 | LD IXH,IXL | 2 | 8 | next | undoc
+DD 66 12 | LD H,(IX+12H) | 3 | 19 | next | doc
+DD 67 | LD IXH,A | 2 | 8 | next | undoc
+DD 68 | LD IXL,B | 2 | 8 | next | undoc
+DD 69 | LD IXL,C | 2 | 8 | next | undoc
+DD 6A | LD IXL,D | 2 | 8 | next | undoc
+DD 6B | LD IXL,E | 2 | 8 | next | undoc
+DD 6C | LD IXL,IXH | 2 | 8 | next | undoc
+DD 6D | LD IXL,IXL | 2 | 8 | next | undoc
+DD 6E 12 | LD L,(IX+12H) | 3 | 19 | next | doc
+DD 6F | LD IXL,A | 2 | 8 | next | undoc
+DD 70 12 | LD (IX+12H),B | 3 | 19 | next | doc
+DD 71 12 | LD (IX+12H),C | 3 | 19 | next | doc
+DD 72 12 | LD (IX+12H),D | 3 | 19 | next | doc
+DD 73 12 | LD (IX+12H),E | 3 | 19 | next | doc
+DD 74 12 | LD (IX+12H),H | 3 | 19 | next | doc
+DD 75 12 | LD (IX+12H),L | 3 | 19 | next | doc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD 77 12 | LD (IX+12H),A | 3 | 19 | next | doc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD 7C | LD A,IXH | 2 | 8 | next | undoc
+DD 7D | LD A,IXL | 2 | 8 | next | undoc
+DD 7E 12 | LD A,(IX+12H) | 3 | 19 | next | doc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD 84 | ADD A,IXH | 2 | 8 | next | undoc
+DD 85 | ADD A,IXL | 2 | 8 | next | undoc
+DD 86 12 | ADD A,(IX+12H) | 3 | 19 | next | doc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD 8C | ADC A,IXH | 2 | 8 | next | undoc
+DD 8D | ADC A,IXL | 2 | 8 | next | undoc
+DD 8E 12 | ADC A,(IX+12H) | 3 | 19 | next | doc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD 94 | SUB IXH | 2 | 8 | next | undoc
+DD 95 | SUB IXL | 2 | 8 | next | undoc
+DD 96 12 | SUB (IX+12H) | 3 | 19 | next | doc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD 9C | SBC A,IXH | 2 | 8 | next | undoc
+DD 9D | SBC A,IXL | 2 | 8 | next | undoc
+DD 9E 12 | SBC A,(IX+12H) | 3 | 19 | next | doc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD A4 | AND IXH | 2 | 8 | next | undoc
+DD A5 | AND IXL | 2 | 8 | next | undoc
+DD A6 12 | AND (IX+12H) | 3 | 19 | next | doc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD AC | XOR IXH | 2 | 8 | next | undoc
+DD AD | XOR IXL | 2 | 8 | next | undoc
+DD AE 12 | XOR (IX+12H) | 3 | 19 | next | doc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD B4 | OR IXH | 2 | 8 | next | undoc
+DD B5 | OR IXL | 2 | 8 | next | undoc
+DD B6 12 | OR (IX+12H) | 3 | 19 | next | doc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD BC | CP IXH | 2 | 8 | next | undoc
+DD BD | CP IXL | 2 | 8 | next | undoc
+DD BE 12 | CP (IX+12H) | 3 | 19 | next | doc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD CB | prefix
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD E1 | POP IX | 2 | 14 | next | doc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD E3 | EX (SP),IX | 2 | 23 | next | doc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD E5 | PUSH IX | 2 | 15 | next | doc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD E9 | JP (IX) | 2 | 8 | jump* | doc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD F9 | LD SP,IX | 2 | 10 | next | doc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+DD | DB 0DDH | 1 | 4 | next | undoc
+# FD
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD 09 | ADD IY,BC | 2 | 15 | next | doc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD 19 | ADD IY,DE | 2 | 15 | next | doc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD 21 12 34 | LD IY,3412H | 4 | 14 | next | doc
+FD 22 12 34 | LD (3412H),IY | 4 | 20 | next | doc
+FD 23 | INC IY | 2 | 10 | next | doc
+FD 24 | INC IYH | 2 | 8 | next | undoc
+FD 25 | DEC IYH | 2 | 8 | next | undoc
+FD 26 12 | LD IYH,12H | 3 | 11 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD 29 | ADD IY,IY | 2 | 15 | next | doc
+FD 2A 12 34 | LD IY,(3412H) | 4 | 20 | next | doc
+FD 2B | DEC IY | 2 | 10 | next | doc
+FD 2C | INC IYL | 2 | 8 | next | undoc
+FD 2D | DEC IYL | 2 | 8 | next | undoc
+FD 2E 12 | LD IYL,12H | 3 | 11 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD 34 12 | INC (IY+12H) | 3 | 23 | next | doc
+FD 35 12 | DEC (IY+12H) | 3 | 23 | next | doc
+FD 36 12 34 | LD (IY+12H),34H | 4 | 19 | next | doc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD 39 | ADD IY,SP | 2 | 15 | next | doc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD 44 | LD B,IYH | 2 | 8 | next | undoc
+FD 45 | LD B,IYL | 2 | 8 | next | undoc
+FD 46 12 | LD B,(IY+12H) | 3 | 19 | next | doc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD 4C | LD C,IYH | 2 | 8 | next | undoc
+FD 4D | LD C,IYL | 2 | 8 | next | undoc
+FD 4E 12 | LD C,(IY+12H) | 3 | 19 | next | doc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD 54 | LD D,IYH | 2 | 8 | next | undoc
+FD 55 | LD D,IYL | 2 | 8 | next | undoc
+FD 56 12 | LD D,(IY+12H) | 3 | 19 | next | doc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD 5C | LD E,IYH | 2 | 8 | next | undoc
+FD 5D | LD E,IYL | 2 | 8 | next | undoc
+FD 5E 12 | LD E,(IY+12H) | 3 | 19 | next | doc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD 60 | LD IYH,B | 2 | 8 | next | undoc
+FD 61 | LD IYH,C | 2 | 8 | next | undoc
+FD 62 | LD IYH,D | 2 | 8 | next | undoc
+FD 63 | LD IYH,E | 2 | 8 | next | undoc
+FD 64 | LD IYH,IYH | 2 | 8 | next | undoc
+FD 65 | LD IYH,IYL | 2 | 8 | next | undoc
+FD 66 12 | LD H,(IY+12H) | 3 | 19 | next | doc
+FD 67 | LD IYH,A | 2 | 8 | next | undoc
+FD 68 | LD IYL,B | 2 | 8 | next | undoc
+FD 69 | LD IYL,C | 2 | 8 | next | undoc
+FD 6A | LD IYL,D | 2 | 8 | next | undoc
+FD 6B | LD IYL,E | 2 | 8 | next | undoc
+FD 6C | LD IYL,IYH | 2 | 8 | next | undoc
+FD 6D | LD IYL,IYL | 2 | 8 | next | undoc
+FD 6E 12 | LD L,(IY+12H) | 3 | 19 | next | doc
+FD 6F | LD IYL,A | 2 | 8 | next | undoc
+FD 70 12 | LD (IY+12H),B | 3 | 19 | next | doc
+FD 71 12 | LD (IY+12H),C | 3 | 19 | next | doc
+FD 72 12 | LD (IY+12H),D | 3 | 19 | next | doc
+FD 73 12 | LD (IY+12H),E | 3 | 19 | next | doc
+FD 74 12 | LD (IY+12H),H | 3 | 19 | next | doc
+FD 75 12 | LD (IY+12H),L | 3 | 19 | next | doc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD 77 12 | LD (IY+12H),A | 3 | 19 | next | doc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD 7C | LD A,IYH | 2 | 8 | next | undoc
+FD 7D | LD A,IYL | 2 | 8 | next | undoc
+FD 7E 12 | LD A,(IY+12H) | 3 | 19 | next | doc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD 84 | ADD A,IYH | 2 | 8 | next | undoc
+FD 85 | ADD A,IYL | 2 | 8 | next | undoc
+FD 86 12 | ADD A,(IY+12H) | 3 | 19 | next | doc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD 8C | ADC A,IYH | 2 | 8 | next | undoc
+FD 8D | ADC A,IYL | 2 | 8 | next | undoc
+FD 8E 12 | ADC A,(IY+12H) | 3 | 19 | next | doc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD 94 | SUB IYH | 2 | 8 | next | undoc
+FD 95 | SUB IYL | 2 | 8 | next | undoc
+FD 96 12 | SUB (IY+12H) | 3 | 19 | next | doc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD 9C | SBC A,IYH | 2 | 8 | next | undoc
+FD 9D | SBC A,IYL | 2 | 8 | next | undoc
+FD 9E 12 | SBC A,(IY+12H) | 3 | 19 | next | doc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD A4 | AND IYH | 2 | 8 | next | undoc
+FD A5 | AND IYL | 2 | 8 | next | undoc
+FD A6 12 | AND (IY+12H) | 3 | 19 | next | doc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD AC | XOR IYH | 2 | 8 | next | undoc
+FD AD | XOR IYL | 2 | 8 | next | undoc
+FD AE 12 | XOR (IY+12H) | 3 | 19 | next | doc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD B4 | OR IYH | 2 | 8 | next | undoc
+FD B5 | OR IYL | 2 | 8 | next | undoc
+FD B6 12 | OR (IY+12H) | 3 | 19 | next | doc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD BC | CP IYH | 2 | 8 | next | undoc
+FD BD | CP IYL | 2 | 8 | next | undoc
+FD BE 12 | CP (IY+12H) | 3 | 19 | next | doc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD CB | prefix
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD E1 | POP IY | 2 | 14 | next | doc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD E3 | EX (SP),IY | 2 | 23 | next | doc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD E5 | PUSH IY | 2 | 15 | next | doc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD E9 | JP (IY) | 2 | 8 | jump* | doc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD F9 | LD SP,IY | 2 | 10 | next | doc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+FD | DB 0FDH | 1 | 4 | next | undoc
+# DDCB
+DD CB 12 00 | DB 0DDH,0CBH,12H,00H | 4 | 23 | next | undoc
+DD CB 12 01 | DB 0DDH,0CBH,12H,01H | 4 | 23 | next | undoc
+DD CB 12 02 | DB 0DDH,0CBH,12H,02H | 4 | 23 | next | undoc
+DD CB 12 03 | DB 0DDH,0CBH,12H,03H | 4 | 23 | next | undoc
+DD CB 12 04 | DB 0DDH,0CBH,12H,04H | 4 | 23 | next | undoc
+DD CB 12 05 | DB 0DDH,0CBH,12H,05H | 4 | 23 | next | undoc
+DD CB 12 06 | RLC (IX+12H) | 4 | 23 | next | doc
+DD CB 12 07 | DB 0DDH,0CBH,12H,07H | 4 | 23 | next | undoc
+DD CB 12 08 | DB 0DDH,0CBH,12H,08H | 4 | 23 | next | undoc
+DD CB 12 09 | DB 0DDH,0CBH,12H,09H | 4 | 23 | next | undoc
+DD CB 12 0A | DB 0DDH,0CBH,12H,0AH | 4 | 23 | next | undoc
+DD CB 12 0B | DB 0DDH,0CBH,12H,0BH | 4 | 23 | next | undoc
+DD CB 12 0C | DB 0DDH,0CBH,12H,0CH | 4 | 23 | next | undoc
+DD CB 12 0D | DB 0DDH,0CBH,12H,0DH | 4 | 23 | next | undoc
+DD CB 12 0E | RRC (IX+12H) | 4 | 23 | next | doc
+DD CB 12 0F | DB 0DDH,0CBH,12H,0FH | 4 | 23 | next | undoc
+DD CB 12 10 | DB 0DDH,0CBH,12H,10H | 4 | 23 | next | undoc
+DD CB 12 11 | DB 0DDH,0CBH,12H,11H | 4 | 23 | next | undoc
+DD CB 12 12 | DB 0DDH,0CBH,12H,12H | 4 | 23 | next | undoc
+DD CB 12 13 | DB 0DDH,0CBH,12H,13H | 4 | 23 | next | undoc
+DD CB 12 14 | DB 0DDH,0CBH,12H,14H | 4 | 23 | next | undoc
+DD CB 12 15 | DB 0DDH,0CBH,12H,15H | 4 | 23 | next | undoc
+DD CB 12 16 | RL (IX+12H) | 4 | 23 | next | doc
+DD CB 12 17 | DB 0DDH,0CBH,12H,17H | 4 | 23 | next | undoc
+DD CB 12 18 | DB 0DDH,0CBH,12H,18H | 4 | 23 | next | undoc
+DD CB 12 19 | DB 0DDH,0CBH,12H,19H | 4 | 23 | next | undoc
+DD CB 12 1A | DB 0DDH,0CBH,12H,1AH | 4 | 23 | next | undoc
+DD CB 12 1B | DB 0DDH,0CBH,12H,1BH | 4 | 23 | next | undoc
+DD CB 12 1C | DB 0DDH,0CBH,12H,1CH | 4 | 23 | next | undoc
+DD CB 12 1D | DB 0DDH,0CBH,12H,1DH | 4 | 23 | next | undoc
+DD CB 12 1E | RR (IX+12H) | 4 | 23 | next | doc
+DD CB 12 1F | DB 0DDH,0CBH,12H,1FH | 4 | 23 | next | undoc
+DD CB 12 20 | DB 0DDH,0CBH,12H,20H | 4 | 23 | next | undoc
+DD CB 12 21 | DB 0DDH,0CBH,12H,21H | 4 | 23 | next | undoc
+DD CB 12 22 | DB 0DDH,0CBH,12H,22H | 4 | 23 | next | undoc
+DD CB 12 23 | DB 0DDH,0CBH,12H,23H | 4 | 23 | next | undoc
+DD CB 12 24 | DB 0DDH,0CBH,12H,24H | 4 | 23 | next | undoc
+DD CB 12 25 | DB 0DDH,0CBH,12H,25H | 4 | 23 | next | undoc
+DD CB 12 26 | SLA (IX+12H) | 4 | 23 | next | doc
+DD CB 12 27 | DB 0DDH,0CBH,12H,27H | 4 | 23 | next | undoc
+DD CB 12 28 | DB 0DDH,0CBH,12H,28H | 4 | 23 | next | undoc
+DD CB 12 29 | DB 0DDH,0CBH,12H,29H | 4 | 23 | next | undoc
+DD CB 12 2A | DB 0DDH,0CBH,12H,2AH | 4 | 23 | next | undoc
+DD CB 12 2B | DB 0DDH,0CBH,12H,2BH | 4 | 23 | next | undoc
+DD CB 12 2C | DB 0DDH,0CBH,12H,2CH | 4 | 23 | next | undoc
+DD CB 12 2D | DB 0DDH,0CBH,12H,2DH | 4 | 23 | next | undoc
+DD CB 12 2E | SRA (IX+12H) | 4 | 23 | next | doc
+DD CB 12 2F | DB 0DDH,0CBH,12H,2FH | 4 | 23 | next | undoc
+DD CB 12 30 | DB 0DDH,0CBH,12H,30H | 4 | 23 | next | undoc
+DD CB 12 31 | DB 0DDH,0CBH,12H,31H | 4 | 23 | next | undoc
+DD CB 12 32 | DB 0DDH,0CBH,12H,32H | 4 | 23 | next | undoc
+DD CB 12 33 | DB 0DDH,0CBH,12H,33H | 4 | 23 | next | undoc
+DD CB 12 34 | DB 0DDH,0CBH,12H,34H | 4 | 23 | next | undoc
+DD CB 12 35 | DB 0DDH,0CBH,12H,35H | 4 | 23 | next | undoc
+DD CB 12 36 | SLL (IX+12H) | 4 | 23 | next | undoc
+DD CB 12 37 | DB 0DDH,0CBH,12H,37H | 4 | 23 | next | undoc
+DD CB 12 38 | DB 0DDH,0CBH,12H,38H | 4 | 23 | next | undoc
+DD CB 12 39 | DB 0DDH,0CBH,12H,39H | 4 | 23 | next | undoc
+DD CB 12 3A | DB 0DDH,0CBH,12H,3AH | 4 | 23 | next | undoc
+DD CB 12 3B | DB 0DDH,0CBH,12H,3BH | 4 | 23 | next | undoc
+DD CB 12 3C | DB 0DDH,0CBH,12H,3CH | 4 | 23 | next | undoc
+DD CB 12 3D | DB 0DDH,0CBH,12H,3DH | 4 | 23 | next | undoc
+DD CB 12 3E | SRL (IX+12H) | 4 | 23 | next | doc
+DD CB 12 3F | DB 0DDH,0CBH,12H,3FH | 4 | 23 | next | undoc
+DD CB 12 40 | DB 0DDH,0CBH,12H,40H | 4 | 20 | next | undoc
+DD CB 12 41 | DB 0DDH,0CBH,12H,41H | 4 | 20 | next | undoc
+DD CB 12 42 | DB 0DDH,0CBH,12H,42H | 4 | 20 | next | undoc
+DD CB 12 43 | DB 0DDH,0CBH,12H,43H | 4 | 20 | next | undoc
+DD CB 12 44 | DB 0DDH,0CBH,12H,44H | 4 | 20 | next | undoc
+DD CB 12 45 | DB 0DDH,0CBH,12H,45H | 4 | 20 | next | undoc
+DD CB 12 46 | BIT 0,(IX+12H) | 4 | 20 | next | doc
+DD CB 12 47 | DB 0DDH,0CBH,12H,47H | 4 | 20 | next | undoc
+DD CB 12 48 | DB 0DDH,0CBH,12H,48H | 4 | 20 | next | undoc
+DD CB 12 49 | DB 0DDH,0CBH,12H,49H | 4 | 20 | next | undoc
+DD CB 12 4A | DB 0DDH,0CBH,12H,4AH | 4 | 20 | next | undoc
+DD CB 12 4B | DB 0DDH,0CBH,12H,4BH | 4 | 20 | next | undoc
+DD CB 12 4C | DB 0DDH,0CBH,12H,4CH | 4 | 20 | next | undoc
+DD CB 12 4D | DB 0DDH,0CBH,12H,4DH | 4 | 20 | next | undoc
+DD CB 12 4E | BIT 1,(IX+12H) | 4 | 20 | next | doc
+DD CB 12 4F | DB 0DDH,0CBH,12H,4FH | 4 | 20 | next | undoc
+DD CB 12 50 | DB 0DDH,0CBH,12H,50H | 4 | 20 | next | undoc
+DD CB 12 51 | DB 0DDH,0CBH,12H,51H | 4 | 20 | next | undoc
+DD CB 12 52 | DB 0DDH,0CBH,12H,52H | 4 | 20 | next | undoc
+DD CB 12 53 | DB 0DDH,0CBH,12H,53H | 4 | 20 | next | undoc
+DD CB 12 54 | DB 0DDH,0CBH,12H,54H | 4 | 20 | next | undoc
+DD CB 12 55 | DB 0DDH,0CBH,12H,55H | 4 | 20 | next | undoc
+DD CB 12 56 | BIT 2,(IX+12H) | 4 | 20 | next | doc
+DD CB 12 57 | DB 0DDH,0CBH,12H,57H | 4 | 20 | next | undoc
+DD CB 12 58 | DB 0DDH,0CBH,12H,58H | 4 | 20 | next | undoc
+DD CB 12 59 | DB 0DDH,0CBH,12H,59H | 4 | 20 | next | undoc
+DD CB 12 5A | DB 0DDH,0CBH,12H,5AH | 4 | 20 | next | undoc
+DD CB 12 5B | DB 0DDH,0CBH,12H,5BH | 4 | 20 | next | undoc
+DD CB 12 5C | DB 0DDH,0CBH,12H,5CH | 4 | 20 | next | undoc
+DD CB 12 5D | DB 0DDH,0CBH,12H,5DH | 4 | 20 | next | undoc
+DD CB 12 5E | BIT 3,(IX+12H) | 4 | 20 | next | doc
+DD CB 12 5F | DB 0DDH,0CBH,12H,5FH | 4 | 20 | next | undoc
+DD CB 12 60 | DB 0DDH,0CBH,12H,60H | 4 | 20 | next | undoc
+DD CB 12 61 | DB 0DDH,0CBH,12H,61H | 4 | 20 | next | undoc
+DD CB 12 62 | DB 0DDH,0CBH,12H,62H | 4 | 20 | next | undoc
+DD CB 12 63 | DB 0DDH,0CBH,12H,63H | 4 | 20 | next | undoc
+DD CB 12 64 | DB 0DDH,0CBH,12H,64H | 4 | 20 | next | undoc
+DD CB 12 65 | DB 0DDH,0CBH,12H,65H | 4 | 20 | next | undoc
+DD CB 12 66 | BIT 4,(IX+12H) | 4 | 20 | next | doc
+DD CB 12 67 | DB 0DDH,0CBH,12H,67H | 4 | 20 | next | undoc
+DD CB 12 68 | DB 0DDH,0CBH,12H,68H | 4 | 20 | next | undoc
+DD CB 12 69 | DB 0DDH,0CBH,12H,69H | 4 | 20 | next | undoc
+DD CB 12 6A | DB 0DDH,0CBH,12H,6AH | 4 | 20 | next | undoc
+DD CB 12 6B | DB 0DDH,0CBH,12H,6BH | 4 | 20 | next | undoc
+DD CB 12 6C | DB 0DDH,0CBH,12H,6CH | 4 | 20 | next | undoc
+DD CB 12 6D | DB 0DDH,0CBH,12H,6DH | 4 | 20 | next | undoc
+DD CB 12 6E | BIT 5,(IX+12H) | 4 | 20 | next | doc
+DD CB 12 6F | DB 0DDH,0CBH,12H,6FH | 4 | 20 | next | undoc
+DD CB 12 70 | DB 0DDH,0CBH,12H,70H | 4 | 20 | next | undoc
+DD CB 12 71 | DB 0DDH,0CBH,12H,71H | 4 | 20 | next | undoc
+DD CB 12 72 | DB 0DDH,0CBH,12H,72H | 4 | 20 | next | undoc
+DD CB 12 73 | DB 0DDH,0CBH,12H,73H | 4 | 20 | next | undoc
+DD CB 12 74 | DB 0DDH,0CBH,12H,74H | 4 | 20 | next | undoc
+DD CB 12 75 | DB 0DDH,0CBH,12H,75H | 4 | 20 | next | undoc
+DD CB 12 76 | BIT 6,(IX+12H) | 4 | 20 | next | doc
+DD CB 12 77 | DB 0DDH,0CBH,12H,77H | 4 | 20 | next | undoc
+DD CB 12 78 | DB 0DDH,0CBH,12H,78H | 4 | 20 | next | undoc
+DD CB 12 79 | DB 0DDH,0CBH,12H,79H | 4 | 20 | next | undoc
+DD CB 12 7A | DB 0DDH,0CBH,12H,7AH | 4 | 20 | next | undoc
+DD CB 12 7B | DB 0DDH,0CBH,12H,7BH | 4 | 20 | next | undoc
+DD CB 12 7C | DB 0DDH,0CBH,12H,7CH | 4 | 20 | next | undoc
+DD CB 12 7D | DB 0DDH,0CBH,12H,7DH | 4 | 20 | next | undoc
+DD CB 12 7E | BIT 7,(IX+12H) | 4 | 20 | next | doc
+DD CB 12 7F | DB 0DDH,0CBH,12H,7FH | 4 | 20 | next | undoc
+DD CB 12 80 | DB 0DDH,0CBH,12H,80H | 4 | 23 | next | undoc
+DD CB 12 81 | DB 0DDH,0CBH,12H,81H | 4 | 23 | next | undoc
+DD CB 12 82 | DB 0DDH,0CBH,12H,82H | 4 | 23 | next | undoc
+DD CB 12 83 | DB 0DDH,0CBH,12H,83H | 4 | 23 | next | undoc
+DD CB 12 84 | DB 0DDH,0CBH,12H,84H | 4 | 23 | next | undoc
+DD CB 12 85 | DB 0DDH,0CBH,12H,85H | 4 | 23 | next | undoc
+DD CB 12 86 | RES 0,(IX+12H) | 4 | 23 | next | doc
+DD CB 12 87 | DB 0DDH,0CBH,12H,87H | 4 | 23 | next | undoc
+DD CB 12 88 | DB 0DDH,0CBH,12H,88H | 4 | 23 | next | undoc
+DD CB 12 89 | DB 0DDH,0CBH,12H,89H | 4 | 23 | next | undoc
+DD CB 12 8A | DB 0DDH,0CBH,12H,8AH | 4 | 23 | next | undoc
+DD CB 12 8B | DB 0DDH,0CBH,12H,8BH | 4 | 23 | next | undoc
+DD CB 12 8C | DB 0DDH,0CBH,12H,8CH | 4 | 23 | next | undoc
+DD CB 12 8D | DB 0DDH,0CBH,12H,8DH | 4 | 23 | next | undoc
+DD CB 12 8E | RES 1,(IX+12H) | 4 | 23 | next | doc
+DD CB 12 8F | DB 0DDH,0CBH,12H,8FH | 4 | 23 | next | undoc
+DD CB 12 90 | DB 0DDH,0CBH,12H,90H | 4 | 23 | next | undoc
+DD CB 12 91 | DB 0DDH,0CBH,12H,91H | 4 | 23 | next | undoc
+DD CB 12 92 | DB 0DDH,0CBH,12H,92H | 4 | 23 | next | undoc
+DD CB 12 93 | DB 0DDH,0CBH,12H,93H | 4 | 23 | next | undoc
+DD CB 12 94 | DB 0DDH,0CBH,12H,94H | 4 | 23 | next | undoc
+DD CB 12 95 | DB 0DDH,0CBH,12H,95H | 4 | 23 | next | undoc
+DD CB 12 96 | RES 2,(IX+12H) | 4 | 23 | next | doc
+DD CB 12 97 | DB 0DDH,0CBH,12H,97H | 4 | 23 | next | undoc
+DD CB 12 98 | DB 0DDH,0CBH,12H,98H | 4 | 23 | next | undoc
+DD CB 12 99 | DB 0DDH,0CBH,12H,99H | 4 | 23 | next | undoc
+DD CB 12 9A | DB 0DDH,0CBH,12H,9AH | 4 | 23 | next | undoc
+DD CB 12 9B | DB 0DDH,0CBH,12H,9BH | 4 | 23 | next | undoc
+DD CB 12 9C | DB 0DDH,0CBH,12H,9CH | 4 | 23 | next | undoc
+DD CB 12 9D | DB 0DDH,0CBH,12H,9DH | 4 | 23 | next | undoc
+DD CB 12 9E | RES 3,(IX+12H) | 4 | 23 | next | doc
+DD CB 12 9F | DB 0DDH,0CBH,12H,9FH | 4 | 23 | next | undoc
+DD CB 12 A0 | DB 0DDH,0CBH,12H,0A0H | 4 | 23 | next | undoc
+DD CB 12 A1 | DB 0DDH,0CBH,12H,0A1H | 4 | 23 | next | undoc
+DD CB 12 A2 | DB 0DDH,0CBH,12H,0A2H | 4 | 23 | next | undoc
+DD CB 12 A3 | DB 0DDH,0CBH,12H,0A3H | 4 | 23 | next | undoc
+DD CB 12 A4 | DB 0DDH,0CBH,12H,0A4H | 4 | 23 | next | undoc
+DD CB 12 A5 | DB 0DDH,0CBH,12H,0A5H | 4 | 23 | next | undoc
+DD CB 12 A6 | RES 4,(IX+12H) | 4 | 23 | next | doc
+DD CB 12 A7 | DB 0DDH,0CBH,12H,0A7H | 4 | 23 | next | undoc
+DD CB 12 A8 | DB 0DDH,0CBH,12H,0A8H | 4 | 23 | next | undoc
+DD CB 12 A9 | DB 0DDH,0CBH,12H,0A9H | 4 | 23 | next | undoc
+DD CB 12 AA | DB 0DDH,0CBH,12H,0AAH | 4 | 23 | next | undoc
+DD CB 12 AB | DB 0DDH,0CBH,12H,0ABH | 4 | 23 | next | undoc
+DD CB 12 AC | DB 0DDH,0CBH,12H,0ACH | 4 | 23 | next | undoc
+DD CB 12 AD | DB 0DDH,0CBH,12H,0ADH | 4 | 23 | next | undoc
+DD CB 12 AE | RES 5,(IX+12H) | 4 | 23 | next | doc
+DD CB 12 AF | DB 0DDH,0CBH,12H,0AFH | 4 | 23 | next | undoc
+DD CB 12 B0 | DB 0DDH,0CBH,12H,0B0H | 4 | 23 | next | undoc
+DD CB 12 B1 | DB 0DDH,0CBH,12H,0B1H | 4 | 23 | next | undoc
+DD CB 12 B2 | DB 0DDH,0CBH,12H,0B2H | 4 | 23 | next | undoc
+DD CB 12 B3 | DB 0DDH,0CBH,12H,0B3H | 4 | 23 | next | undoc
+DD CB 12 B4 | DB 0DDH,0CBH,12H,0B4H | 4 | 23 | next | undoc
+DD CB 12 B5 | DB 0DDH,0CBH,12H,0B5H | 4 | 23 | next | undoc
+DD CB 12 B6 | RES 6,(IX+12H) | 4 | 23 | next | doc
+DD CB 12 B7 | DB 0DDH,0CBH,12H,0B7H | 4 | 23 | next | undoc
+DD CB 12 B8 | DB 0DDH,0CBH,12H,0B8H | 4 | 23 | next | undoc
+DD CB 12 B9 | DB 0DDH,0CBH,12H,0B9H | 4 | 23 | next | undoc
+DD CB 12 BA | DB 0DDH,0CBH,12H,0BAH | 4 | 23 | next | undoc
+DD CB 12 BB | DB 0DDH,0CBH,12H,0BBH | 4 | 23 | next | undoc
+DD CB 12 BC | DB 0DDH,0CBH,12H,0BCH | 4 | 23 | next | undoc
+DD CB 12 BD | DB 0DDH,0CBH,12H,0BDH | 4 | 23 | next | undoc
+DD CB 12 BE | RES 7,(IX+12H) | 4 | 23 | next | doc
+DD CB 12 BF | DB 0DDH,0CBH,12H,0BFH | 4 | 23 | next | undoc
+DD CB 12 C0 | DB 0DDH,0CBH,12H,0C0H | 4 | 23 | next | undoc
+DD CB 12 C1 | DB 0DDH,0CBH,12H,0C1H | 4 | 23 | next | undoc
+DD CB 12 C2 | DB 0DDH,0CBH,12H,0C2H | 4 | 23 | next | undoc
+DD CB 12 C3 | DB 0DDH,0CBH,12H,0C3H | 4 | 23 | next | undoc
+DD CB 12 C4 | DB 0DDH,0CBH,12H,0C4H | 4 | 23 | next | undoc
+DD CB 12 C5 | DB 0DDH,0CBH,12H,0C5H | 4 | 23 | next | undoc
+DD CB 12 C6 | SET 0,(IX+12H) | 4 | 23 | next | doc
+DD CB 12 C7 | DB 0DDH,0CBH,12H,0C7H | 4 | 23 | next | undoc
+DD CB 12 C8 | DB 0DDH,0CBH,12H,0C8H | 4 | 23 | next | undoc
+DD CB 12 C9 | DB 0DDH,0CBH,12H,0C9H | 4 | 23 | next | undoc
+DD CB 12 CA | DB 0DDH,0CBH,12H,0CAH | 4 | 23 | next | undoc
+DD CB 12 CB | DB 0DDH,0CBH,12H,0CBH | 4 | 23 | next | undoc
+DD CB 12 CC | DB 0DDH,0CBH,12H,0CCH | 4 | 23 | next | undoc
+DD CB 12 CD | DB 0DDH,0CBH,12H,0CDH | 4 | 23 | next | undoc
+DD CB 12 CE | SET 1,(IX+12H) | 4 | 23 | next | doc
+DD CB 12 CF | DB 0DDH,0CBH,12H,0CFH | 4 | 23 | next | undoc
+DD CB 12 D0 | DB 0DDH,0CBH,12H,0D0H | 4 | 23 | next | undoc
+DD CB 12 D1 | DB 0DDH,0CBH,12H,0D1H | 4 | 23 | next | undoc
+DD CB 12 D2 | DB 0DDH,0CBH,12H,0D2H | 4 | 23 | next | undoc
+DD CB 12 D3 | DB 0DDH,0CBH,12H,0D3H | 4 | 23 | next | undoc
+DD CB 12 D4 | DB 0DDH,0CBH,12H,0D4H | 4 | 23 | next | undoc
+DD CB 12 D5 | DB 0DDH,0CBH,12H,0D5H | 4 | 23 | next | undoc
+DD CB 12 D6 | SET 2,(IX+12H) | 4 | 23 | next | doc
+DD CB 12 D7 | DB 0DDH,0CBH,12H,0D7H | 4 | 23 | next | undoc
+DD CB 12 D8 | DB 0DDH,0CBH,12H,0D8H | 4 | 23 | next | undoc
+DD CB 12 D9 | DB 0DDH,0CBH,12H,0D9H | 4 | 23 | next | undoc
+DD CB 12 DA | DB 0DDH,0CBH,12H,0DAH | 4 | 23 | next | undoc
+DD CB 12 DB | DB 0DDH,0CBH,12H,0DBH | 4 | 23 | next | undoc
+DD CB 12 DC | DB 0DDH,0CBH,12H,0DCH | 4 | 23 | next | undoc
+DD CB 12 DD | DB 0DDH,0CBH,12H,0DDH | 4 | 23 | next | undoc
+DD CB 12 DE | SET 3,(IX+12H) | 4 | 23 | next | doc
+DD CB 12 DF | DB 0DDH,0CBH,12H,0DFH | 4 | 23 | next | undoc
+DD CB 12 E0 | DB 0DDH,0CBH,12H,0E0H | 4 | 23 | next | undoc
+DD CB 12 E1 | DB 0DDH,0CBH,12H,0E1H | 4 | 23 | next | undoc
+DD CB 12 E2 | DB 0DDH,0CBH,12H,0E2H | 4 | 23 | next | undoc
+DD CB 12 E3 | DB 0DDH,0CBH,12H,0E3H | 4 | 23 | next | undoc
+DD CB 12 E4 | DB 0DDH,0CBH,12H,0E4H | 4 | 23 | next | undoc
+DD CB 12 E5 | DB 0DDH,0CBH,12H,0E5H | 4 | 23 | next | undoc
+DD CB 12 E6 | SET 4,(IX+12H) | 4 | 23 | next | doc
+DD CB 12 E7 | DB 0DDH,0CBH,12H,0E7H | 4 | 23 | next | undoc
+DD CB 12 E8 | DB 0DDH,0CBH,12H,0E8H | 4 | 23 | next | undoc
+DD CB 12 E9 | DB 0DDH,0CBH,12H,0E9H | 4 | 23 | next | undoc
+DD CB 12 EA | DB 0DDH,0CBH,12H,0EAH | 4 | 23 | next | undoc
+DD CB 12 EB | DB 0DDH,0CBH,12H,0EBH | 4 | 23 | next | undoc
+DD CB 12 EC | DB 0DDH,0CBH,12H,0ECH | 4 | 23 | next | undoc
+DD CB 12 ED | DB 0DDH,0CBH,12H,0EDH | 4 | 23 | next | undoc
+DD CB 12 EE | SET 5,(IX+12H) | 4 | 23 | next | doc
+DD CB 12 EF | DB 0DDH,0CBH,12H,0EFH | 4 | 23 | next | undoc
+DD CB 12 F0 | DB 0DDH,0CBH,12H,0F0H | 4 | 23 | next | undoc
+DD CB 12 F1 | DB 0DDH,0CBH,12H,0F1H | 4 | 23 | next | undoc
+DD CB 12 F2 | DB 0DDH,0CBH,12H,0F2H | 4 | 23 | next | undoc
+DD CB 12 F3 | DB 0DDH,0CBH,12H,0F3H | 4 | 23 | next | undoc
+DD CB 12 F4 | DB 0DDH,0CBH,12H,0F4H | 4 | 23 | next | undoc
+DD CB 12 F5 | DB 0DDH,0CBH,12H,0F5H | 4 | 23 | next | undoc
+DD CB 12 F6 | SET 6,(IX+12H) | 4 | 23 | next | doc
+DD CB 12 F7 | DB 0DDH,0CBH,12H,0F7H | 4 | 23 | next | undoc
+DD CB 12 F8 | DB 0DDH,0CBH,12H,0F8H | 4 | 23 | next | undoc
+DD CB 12 F9 | DB 0DDH,0CBH,12H,0F9H | 4 | 23 | next | undoc
+DD CB 12 FA | DB 0DDH,0CBH,12H,0FAH | 4 | 23 | next | undoc
+DD CB 12 FB | DB 0DDH,0CBH,12H,0FBH | 4 | 23 | next | undoc
+DD CB 12 FC | DB 0DDH,0CBH,12H,0FCH | 4 | 23 | next | undoc
+DD CB 12 FD | DB 0DDH,0CBH,12H,0FDH | 4 | 23 | next | undoc
+DD CB 12 FE | SET 7,(IX+12H) | 4 | 23 | next | doc
+DD CB 12 FF | DB 0DDH,0CBH,12H,0FFH | 4 | 23 | next | undoc
+# FDCB
+FD CB 12 00 | DB 0FDH,0CBH,12H,00H | 4 | 23 | next | undoc
+FD CB 12 01 | DB 0FDH,0CBH,12H,01H | 4 | 23 | next | undoc
+FD CB 12 02 | DB 0FDH,0CBH,12H,02H | 4 | 23 | next | undoc
+FD CB 12 03 | DB 0FDH,0CBH,12H,03H | 4 | 23 | next | undoc
+FD CB 12 04 | DB 0FDH,0CBH,12H,04H | 4 | 23 | next | undoc
+FD CB 12 05 | DB 0FDH,0CBH,12H,05H | 4 | 23 | next | undoc
+FD CB 12 06 | RLC (IY+12H) | 4 | 23 | next | doc
+FD CB 12 07 | DB 0FDH,0CBH,12H,07H | 4 | 23 | next | undoc
+FD CB 12 08 | DB 0FDH,0CBH,12H,08H | 4 | 23 | next | undoc
+FD CB 12 09 | DB 0FDH,0CBH,12H,09H | 4 | 23 | next | undoc
+FD CB 12 0A | DB 0FDH,0CBH,12H,0AH | 4 | 23 | next | undoc
+FD CB 12 0B | DB 0FDH,0CBH,12H,0BH | 4 | 23 | next | undoc
+FD CB 12 0C | DB 0FDH,0CBH,12H,0CH | 4 | 23 | next | undoc
+FD CB 12 0D | DB 0FDH,0CBH,12H,0DH | 4 | 23 | next | undoc
+FD CB 12 0E | RRC (IY+12H) | 4 | 23 | next | doc
+FD CB 12 0F | DB 0FDH,0CBH,12H,0FH | 4 | 23 | next | undoc
+FD CB 12 10 | DB 0FDH,0CBH,12H,10H | 4 | 23 | next | undoc
+FD CB 12 11 | DB 0FDH,0CBH,12H,11H | 4 | 23 | next | undoc
+FD CB 12 12 | DB 0FDH,0CBH,12H,12H | 4 | 23 | next | undoc
+FD CB 12 13 | DB 0FDH,0CBH,12H,13H | 4 | 23 | next | undoc
+FD CB 12 14 | DB 0FDH,0CBH,12H,14H | 4 | 23 | next | undoc
+FD CB 12 15 | DB 0FDH,0CBH,12H,15H | 4 | 23 | next | undoc
+FD CB 12 16 | RL (IY+12H) | 4 | 23 | next | doc
+FD CB 12 17 | DB 0FDH,0CBH,12H,17H | 4 | 23 | next | undoc
+FD CB 12 18 | DB 0FDH,0CBH,12H,18H | 4 | 23 | next | undoc
+FD CB 12 19 | DB 0FDH,0CBH,12H,19H | 4 | 23 | next | undoc
+FD CB 12 1A | DB 0FDH,0CBH,12H,1AH | 4 | 23 | next | undoc
+FD CB 12 1B | DB 0FDH,0CBH,12H,1BH | 4 | 23 | next | undoc
+FD CB 12 1C | DB 0FDH,0CBH,12H,1CH | 4 | 23 | next | undoc
+FD CB 12 1D | DB 0FDH,0CBH,12H,1DH | 4 | 23 | next | undoc
+FD CB 12 1E | RR (IY+12H) | 4 | 23 | next | doc
+FD CB 12 1F | DB 0FDH,0CBH,12H,1FH | 4 | 23 | next | undoc
+FD CB 12 20 | DB 0FDH,0CBH,12H,20H | 4 | 23 | next | undoc
+FD CB 12 21 | DB 0FDH,0CBH,12H,21H | 4 | 23 | next | undoc
+FD CB 12 22 | DB 0FDH,0CBH,12H,22H | 4 | 23 | next | undoc
+FD CB 12 23 | DB 0FDH,0CBH,12H,23H | 4 | 23 | next | undoc
+FD CB 12 24 | DB 0FDH,0CBH,12H,24H | 4 | 23 | next | undoc
+FD CB 12 25 | DB 0FDH,0CBH,12H,25H | 4 | 23 | next | undoc
+FD CB 12 26 | SLA (IY+12H) | 4 | 23 | next | doc
+FD CB 12 27 | DB 0FDH,0CBH,12H,27H | 4 | 23 | next | undoc
+FD CB 12 28 | DB 0FDH,0CBH,12H,28H | 4 | 23 | next | undoc
+FD CB 12 29 | DB 0FDH,0CBH,12H,29H | 4 | 23 | next | undoc
+FD CB 12 2A | DB 0FDH,0CBH,12H,2AH | 4 | 23 | next | undoc
+FD CB 12 2B | DB 0FDH,0CBH,12H,2BH | 4 | 23 | next | undoc
+FD CB 12 2C | DB 0FDH,0CBH,12H,2CH | 4 | 23 | next | undoc
+FD CB 12 2D | DB 0FDH,0CBH,12H,2DH | 4 | 23 | next | undoc
+FD CB 12 2E | SRA (IY+12H) | 4 | 23 | next | doc
+FD CB 12 2F | DB 0FDH,0CBH,12H,2FH | 4 | 23 | next | undoc
+FD CB 12 30 | DB 0FDH,0CBH,12H,30H | 4 | 23 | next | undoc
+FD CB 12 31 | DB 0FDH,0CBH,12H,31H | 4 | 23 | next | undoc
+FD CB 12 32 | DB 0FDH,0CBH,12H,32H | 4 | 23 | next | undoc
+FD CB 12 33 | DB 0FDH,0CBH,12H,33H | 4 | 23 | next | undoc
+FD CB 12 34 | DB 0FDH,0CBH,12H,34H | 4 | 23 | next | undoc
+FD CB 12 35 | DB 0FDH,0CBH,12H,35H | 4 | 23 | next | undoc
+FD CB 12 36 | SLL (IY+12H) | 4 | 23 | next | undoc
+FD CB 12 37 | DB 0FDH,0CBH,12H,37H | 4 | 23 | next | undoc
+FD CB 12 38 | DB 0FDH,0CBH,12H,38H | 4 | 23 | next | undoc
+FD CB 12 39 | DB 0FDH,0CBH,12H,39H | 4 | 23 | next | undoc
+FD CB 12 3A | DB 0FDH,0CBH,12H,3AH | 4 | 23 | next | undoc
+FD CB 12 3B | DB 0FDH,0CBH,12H,3BH | 4 | 23 | next | undoc
+FD CB 12 3C | DB 0FDH,0CBH,12H,3CH | 4 | 23 | next | undoc
+FD CB 12 3D | DB 0FDH,0CBH,12H,3DH | 4 | 23 | next | undoc
+FD CB 12 3E | SRL (IY+12H) | 4 | 23 | next | doc
+FD CB 12 3F | DB 0FDH,0CBH,12H,3FH | 4 | 23 | next | undoc
+FD CB 12 40 | DB 0FDH,0CBH,12H,40H | 4 | 20 | next | undoc
+FD CB 12 41 | DB 0FDH,0CBH,12H,41H | 4 | 20 | next | undoc
+FD CB 12 42 | DB 0FDH,0CBH,12H,42H | 4 | 20 | next | undoc
+FD CB 12 43 | DB 0FDH,0CBH,12H,43H | 4 | 20 | next | undoc
+FD CB 12 44 | DB 0FDH,0CBH,12H,44H | 4 | 20 | next | undoc
+FD CB 12 45 | DB 0FDH,0CBH,12H,45H | 4 | 20 | next | undoc
+FD CB 12 46 | BIT 0,(IY+12H) | 4 | 20 | next | doc
+FD CB 12 47 | DB 0FDH,0CBH,12H,47H | 4 | 20 | next | undoc
+FD CB 12 48 | DB 0FDH,0CBH,12H,48H | 4 | 20 | next | undoc
+FD CB 12 49 | DB 0FDH,0CBH,12H,49H | 4 | 20 | next | undoc
+FD CB 12 4A | DB 0FDH,0CBH,12H,4AH | 4 | 20 | next | undoc
+FD CB 12 4B | DB 0FDH,0CBH,12H,4BH | 4 | 20 | next | undoc
+FD CB 12 4C | DB 0FDH,0CBH,12H,4CH | 4 | 20 | next | undoc
+FD CB 12 4D | DB 0FDH,0CBH,12H,4DH | 4 | 20 | next | undoc
+FD CB 12 4E | BIT 1,(IY+12H) | 4 | 20 | next | doc
+FD CB 12 4F | DB 0FDH,0CBH,12H,4FH | 4 | 20 | next | undoc
+FD CB 12 50 | DB 0FDH,0CBH,12H,50H | 4 | 20 | next | undoc
+FD CB 12 51 | DB 0FDH,0CBH,12H,51H | 4 | 20 | next | undoc
+FD CB 12 52 | DB 0FDH,0CBH,12H,52H | 4 | 20 | next | undoc
+FD CB 12 53 | DB 0FDH,0CBH,12H,53H | 4 | 20 | next | undoc
+FD CB 12 54 | DB 0FDH,0CBH,12H,54H | 4 | 20 | next | undoc
+FD CB 12 55 | DB 0FDH,0CBH,12H,55H | 4 | 20 | next | undoc
+FD CB 12 56 | BIT 2,(IY+12H) | 4 | 20 | next | doc
+FD CB 12 57 | DB 0FDH,0CBH,12H,57H | 4 | 20 | next | undoc
+FD CB 12 58 | DB 0FDH,0CBH,12H,58H | 4 | 20 | next | undoc
+FD CB 12 59 | DB 0FDH,0CBH,12H,59H | 4 | 20 | next | undoc
+FD CB 12 5A | DB 0FDH,0CBH,12H,5AH | 4 | 20 | next | undoc
+FD CB 12 5B | DB 0FDH,0CBH,12H,5BH | 4 | 20 | next | undoc
+FD CB 12 5C | DB 0FDH,0CBH,12H,5CH | 4 | 20 | next | undoc
+FD CB 12 5D | DB 0FDH,0CBH,12H,5DH | 4 | 20 | next | undoc
+FD CB 12 5E | BIT 3,(IY+12H) | 4 | 20 | next | doc
+FD CB 12 5F | DB 0FDH,0CBH,12H,5FH | 4 | 20 | next | undoc
+FD CB 12 60 | DB 0FDH,0CBH,12H,60H | 4 | 20 | next | undoc
+FD CB 12 61 | DB 0FDH,0CBH,12H,61H | 4 | 20 | next | undoc
+FD CB 12 62 | DB 0FDH,0CBH,12H,62H | 4 | 20 | next | undoc
+FD CB 12 63 | DB 0FDH,0CBH,12H,63H | 4 | 20 | next | undoc
+FD CB 12 64 | DB 0FDH,0CBH,12H,64H | 4 | 20 | next | undoc
+FD CB 12 65 | DB 0FDH,0CBH,12H,65H | 4 | 20 | next | undoc
+FD CB 12 66 | BIT 4,(IY+12H) | 4 | 20 | next | doc
+FD CB 12 67 | DB 0FDH,0CBH,12H,67H | 4 | 20 | next | undoc
+FD CB 12 68 | DB 0FDH,0CBH,12H,68H | 4 | 20 | next | undoc
+FD CB 12 69 | DB 0FDH,0CBH,12H,69H | 4 | 20 | next | undoc
+FD CB 12 6A | DB 0FDH,0CBH,12H,6AH | 4 | 20 | next | undoc
+FD CB 12 6B | DB 0FDH,0CBH,12H,6BH | 4 | 20 | next | undoc
+FD CB 12 6C | DB 0FDH,0CBH,12H,6CH | 4 | 20 | next | undoc
+FD CB 12 6D | DB 0FDH,0CBH,12H,6DH | 4 | 20 | next | undoc
+FD CB 12 6E | BIT 5,(IY+12H) | 4 | 20 | next | doc
+FD CB 12 6F | DB 0FDH,0CBH,12H,6FH | 4 | 20 | next | undoc
+FD CB 12 70 | DB 0FDH,0CBH,12H,70H | 4 | 20 | next | undoc
+FD CB 12 71 | DB 0FDH,0CBH,12H,71H | 4 | 20 | next | undoc
+FD CB 12 72 | DB 0FDH,0CBH,12H,72H | 4 | 20 | next | undoc
+FD CB 12 73 | DB 0FDH,0CBH,12H,73H | 4 | 20 | next | undoc
+FD CB 12 74 | DB 0FDH,0CBH,12H,74H | 4 | 20 | next | undoc
+FD CB 12 75 | DB 0FDH,0CBH,12H,75H | 4 | 20 | next | undoc
+FD CB 12 76 | BIT 6,(IY+12H) | 4 | 20 | next | doc
+FD CB 12 77 | DB 0FDH,0CBH,12H,77H | 4 | 20 | next | undoc
+FD CB 12 78 | DB 0FDH,0CBH,12H,78H | 4 | 20 | next | undoc
+FD CB 12 79 | DB 0FDH,0CBH,12H,79H | 4 | 20 | next | undoc
+FD CB 12 7A | DB 0FDH,0CBH,12H,7AH | 4 | 20 | next | undoc
+FD CB 12 7B | DB 0FDH,0CBH,12H,7BH | 4 | 20 | next | undoc
+FD CB 12 7C | DB 0FDH,0CBH,12H,7CH | 4 | 20 | next | undoc
+FD CB 12 7D | DB 0FDH,0CBH,12H,7DH | 4 | 20 | next | undoc
+FD CB 12 7E | BIT 7,(IY+12H) | 4 | 20 | next | doc
+FD CB 12 7F | DB 0FDH,0CBH,12H,7FH | 4 | 20 | next | undoc
+FD CB 12 80 | DB 0FDH,0CBH,12H,80H | 4 | 23 | next | undoc
+FD CB 12 81 | DB 0FDH,0CBH,12H,81H | 4 | 23 | next | undoc
+FD CB 12 82 | DB 0FDH,0CBH,12H,82H | 4 | 23 | next | undoc
+FD CB 12 83 | DB 0FDH,0CBH,12H,83H | 4 | 23 | next | undoc
+FD CB 12 84 | DB 0FDH,0CBH,12H,84H | 4 | 23 | next | undoc
+FD CB 12 85 | DB 0FDH,0CBH,12H,85H | 4 | 23 | next | undoc
+FD CB 12 86 | RES 0,(IY+12H) | 4 | 23 | next | doc
+FD CB 12 87 | DB 0FDH,0CBH,12H,87H | 4 | 23 | next | undoc
+FD CB 12 88 | DB 0FDH,0CBH,12H,88H | 4 | 23 | next | undoc
+FD CB 12 89 | DB 0FDH,0CBH,12H,89H | 4 | 23 | next | undoc
+FD CB 12 8A | DB 0FDH,0CBH,12H,8AH | 4 | 23 | next | undoc
+FD CB 12 8B | DB 0FDH,0CBH,12H,8BH | 4 | 23 | next | undoc
+FD CB 12 8C | DB 0FDH,0CBH,12H,8CH | 4 | 23 | next | undoc
+FD CB 12 8D | DB 0FDH,0CBH,12H,8DH | 4 | 23 | next | undoc
+FD CB 12 8E | RES 1,(IY+12H) | 4 | 23 | next | doc
+FD CB 12 8F | DB 0FDH,0CBH,12H,8FH | 4 | 23 | next | undoc
+FD CB 12 90 | DB 0FDH,0CBH,12H,90H | 4 | 23 | next | undoc
+FD CB 12 91 | DB 0FDH,0CBH,12H,91H | 4 | 23 | next | undoc
+FD CB 12 92 | DB 0FDH,0CBH,12H,92H | 4 | 23 | next | undoc
+FD CB 12 93 | DB 0FDH,0CBH,12H,93H | 4 | 23 | next | undoc
+FD CB 12 94 | DB 0FDH,0CBH,12H,94H | 4 | 23 | next | undoc
+FD CB 12 95 | DB 0FDH,0CBH,12H,95H | 4 | 23 | next | undoc
+FD CB 12 96 | RES 2,(IY+12H) | 4 | 23 | next | doc
+FD CB 12 97 | DB 0FDH,0CBH,12H,97H | 4 | 23 | next | undoc
+FD CB 12 98 | DB 0FDH,0CBH,12H,98H | 4 | 23 | next | undoc
+FD CB 12 99 | DB 0FDH,0CBH,12H,99H | 4 | 23 | next | undoc
+FD CB 12 9A | DB 0FDH,0CBH,12H,9AH | 4 | 23 | next | undoc
+FD CB 12 9B | DB 0FDH,0CBH,12H,9BH | 4 | 23 | next | undoc
+FD CB 12 9C | DB 0FDH,0CBH,12H,9CH | 4 | 23 | next | undoc
+FD CB 12 9D | DB 0FDH,0CBH,12H,9DH | 4 | 23 | next | undoc
+FD CB 12 9E | RES 3,(IY+12H) | 4 | 23 | next | doc
+FD CB 12 9F | DB 0FDH,0CBH,12H,9FH | 4 | 23 | next | undoc
+FD CB 12 A0 | DB 0FDH,0CBH,12H,0A0H | 4 | 23 | next | undoc
+FD CB 12 A1 | DB 0FDH,0CBH,12H,0A1H | 4 | 23 | next | undoc
+FD CB 12 A2 | DB 0FDH,0CBH,12H,0A2H | 4 | 23 | next | undoc
+FD CB 12 A3 | DB 0FDH,0CBH,12H,0A3H | 4 | 23 | next | undoc
+FD CB 12 A4 | DB 0FDH,0CBH,12H,0A4H | 4 | 23 | next | undoc
+FD CB 12 A5 | DB 0FDH,0CBH,12H,0A5H | 4 | 23 | next | undoc
+FD CB 12 A6 | RES 4,(IY+12H) | 4 | 23 | next | doc
+FD CB 12 A7 | DB 0FDH,0CBH,12H,0A7H | 4 | 23 | next | undoc
+FD CB 12 A8 | DB 0FDH,0CBH,12H,0A8H | 4 | 23 | next | undoc
+FD CB 12 A9 | DB 0FDH,0CBH,12H,0A9H | 4 | 23 | next | undoc
+FD CB 12 AA | DB 0FDH,0CBH,12H,0AAH | 4 | 23 | next | undoc
+FD CB 12 AB | DB 0FDH,0CBH,12H,0ABH | 4 | 23 | next | undoc
+FD CB 12 AC | DB 0FDH,0CBH,12H,0ACH | 4 | 23 | next | undoc
+FD CB 12 AD | DB 0FDH,0CBH,12H,0ADH | 4 | 23 | next | undoc
+FD CB 12 AE | RES 5,(IY+12H) | 4 | 23 | next | doc
+FD CB 12 AF | DB 0FDH,0CBH,12H,0AFH | 4 | 23 | next | undoc
+FD CB 12 B0 | DB 0FDH,0CBH,12H,0B0H | 4 | 23 | next | undoc
+FD CB 12 B1 | DB 0FDH,0CBH,12H,0B1H | 4 | 23 | next | undoc
+FD CB 12 B2 | DB 0FDH,0CBH,12H,0B2H | 4 | 23 | next | undoc
+FD CB 12 B3 | DB 0FDH,0CBH,12H,0B3H | 4 | 23 | next | undoc
+FD CB 12 B4 | DB 0FDH,0CBH,12H,0B4H | 4 | 23 | next | undoc
+FD CB 12 B5 | DB 0FDH,0CBH,12H,0B5H | 4 | 23 | next | undoc
+FD CB 12 B6 | RES 6,(IY+12H) | 4 | 23 | next | doc
+FD CB 12 B7 | DB 0FDH,0CBH,12H,0B7H | 4 | 23 | next | undoc
+FD CB 12 B8 | DB 0FDH,0CBH,12H,0B8H | 4 | 23 | next | undoc
+FD CB 12 B9 | DB 0FDH,0CBH,12H,0B9H | 4 | 23 | next | undoc
+FD CB 12 BA | DB 0FDH,0CBH,12H,0BAH | 4 | 23 | next | undoc
+FD CB 12 BB | DB 0FDH,0CBH,12H,0BBH | 4 | 23 | next | undoc
+FD CB 12 BC | DB 0FDH,0CBH,12H,0BCH | 4 | 23 | next | undoc
+FD CB 12 BD | DB 0FDH,0CBH,12H,0BDH | 4 | 23 | next | undoc
+FD CB 12 BE | RES 7,(IY+12H) | 4 | 23 | next | doc
+FD CB 12 BF | DB 0FDH,0CBH,12H,0BFH | 4 | 23 | next | undoc
+FD CB 12 C0 | DB 0FDH,0CBH,12H,0C0H | 4 | 23 | next | undoc
+FD CB 12 C1 | DB 0FDH,0CBH,12H,0C1H | 4 | 23 | next | undoc
+FD CB 12 C2 | DB 0FDH,0CBH,12H,0C2H | 4 | 23 | next | undoc
+FD CB 12 C3 | DB 0FDH,0CBH,12H,0C3H | 4 | 23 | next | undoc
+FD CB 12 C4 | DB 0FDH,0CBH,12H,0C4H | 4 | 23 | next | undoc
+FD CB 12 C5 | DB 0FDH,0CBH,12H,0C5H | 4 | 23 | next | undoc
+FD CB 12 C6 | SET 0,(IY+12H) | 4 | 23 | next | doc
+FD CB 12 C7 | DB 0FDH,0CBH,12H,0C7H | 4 | 23 | next | undoc
+FD CB 12 C8 | DB 0FDH,0CBH,12H,0C8H | 4 | 23 | next | undoc
+FD CB 12 C9 | DB 0FDH,0CBH,12H,0C9H | 4 | 23 | next | undoc
+FD CB 12 CA | DB 0FDH,0CBH,12H,0CAH | 4 | 23 | next | undoc
+FD CB 12 CB | DB 0FDH,0CBH,12H,0CBH | 4 | 23 | next | undoc
+FD CB 12 CC | DB 0FDH,0CBH,12H,0CCH | 4 | 23 | next | undoc
+FD CB 12 CD | DB 0FDH,0CBH,12H,0CDH | 4 | 23 | next | undoc
+FD CB 12 CE | SET 1,(IY+12H) | 4 | 23 | next | doc
+FD CB 12 CF | DB 0FDH,0CBH,12H,0CFH | 4 | 23 | next | undoc
+FD CB 12 D0 | DB 0FDH,0CBH,12H,0D0H | 4 | 23 | next | undoc
+FD CB 12 D1 | DB 0FDH,0CBH,12H,0D1H | 4 | 23 | next | undoc
+FD CB 12 D2 | DB 0FDH,0CBH,12H,0D2H | 4 | 23 | next | undoc
+FD CB 12 D3 | DB 0FDH,0CBH,12H,0D3H | 4 | 23 | next | undoc
+FD CB 12 D4 | DB 0FDH,0CBH,12H,0D4H | 4 | 23 | next | undoc
+FD CB 12 D5 | DB 0FDH,0CBH,12H,0D5H | 4 | 23 | next | undoc
+FD CB 12 D6 | SET 2,(IY+12H) | 4 | 23 | next | doc
+FD CB 12 D7 | DB 0FDH,0CBH,12H,0D7H | 4 | 23 | next | undoc
+FD CB 12 D8 | DB 0FDH,0CBH,12H,0D8H | 4 | 23 | next | undoc
+FD CB 12 D9 | DB 0FDH,0CBH,12H,0D9H | 4 | 23 | next | undoc
+FD CB 12 DA | DB 0FDH,0CBH,12H,0DAH | 4 | 23 | next | undoc
+FD CB 12 DB | DB 0FDH,0CBH,12H,0DBH | 4 | 23 | next | undoc
+FD CB 12 DC | DB 0FDH,0CBH,12H,0DCH | 4 | 23 | next | undoc
+FD CB 12 DD | DB 0FDH,0CBH,12H,0DDH | 4 | 23 | next | undoc
+FD CB 12 DE | SET 3,(IY+12H) | 4 | 23 | next | doc
+FD CB 12 DF | DB 0FDH,0CBH,12H,0DFH | 4 | 23 | next | undoc
+FD CB 12 E0 | DB 0FDH,0CBH,12H,0E0H | 4 | 23 | next | undoc
+FD CB 12 E1 | DB 0FDH,0CBH,12H,0E1H | 4 | 23 | next | undoc
+FD CB 12 E2 | DB 0FDH,0CBH,12H,0E2H | 4 | 23 | next | undoc
+FD CB 12 E3 | DB 0FDH,0CBH,12H,0E3H | 4 | 23 | next | undoc
+FD CB 12 E4 | DB 0FDH,0CBH,12H,0E4H | 4 | 23 | next | undoc
+FD CB 12 E5 | DB 0FDH,0CBH,12H,0E5H | 4 | 23 | next | undoc
+FD CB 12 E6 | SET 4,(IY+12H) | 4 | 23 | next | doc
+FD CB 12 E7 | DB 0FDH,0CBH,12H,0E7H | 4 | 23 | next | undoc
+FD CB 12 E8 | DB 0FDH,0CBH,12H,0E8H | 4 | 23 | next | undoc
+FD CB 12 E9 | DB 0FDH,0CBH,12H,0E9H | 4 | 23 | next | undoc
+FD CB 12 EA | DB 0FDH,0CBH,12H,0EAH | 4 | 23 | next | undoc
+FD CB 12 EB | DB 0FDH,0CBH,12H,0EBH | 4 | 23 | next | undoc
+FD CB 12 EC | DB 0FDH,0CBH,12H,0ECH | 4 | 23 | next | undoc
+FD CB 12 ED | DB 0FDH,0CBH,12H,0EDH | 4 | 23 | next | undoc
+FD CB 12 EE | SET 5,(IY+12H) | 4 | 23 | next | doc
+FD CB 12 EF | DB 0FDH,0CBH,12H,0EFH | 4 | 23 | next | undoc
+FD CB 12 F0 | DB 0FDH,0CBH,12H,0F0H | 4 | 23 | next | undoc
+FD CB 12 F1 | DB 0FDH,0CBH,12H,0F1H | 4 | 23 | next | undoc
+FD CB 12 F2 | DB 0FDH,0CBH,12H,0F2H | 4 | 23 | next | undoc
+FD CB 12 F3 | DB 0FDH,0CBH,12H,0F3H | 4 | 23 | next | undoc
+FD CB 12 F4 | DB 0FDH,0CBH,12H,0F4H | 4 | 23 | next | undoc
+FD CB 12 F5 | DB 0FDH,0CBH,12H,0F5H | 4 | 23 | next | undoc
+FD CB 12 F6 | SET 6,(IY+12H) | 4 | 23 | next | doc
+FD CB 12 F7 | DB 0FDH,0CBH,12H,0F7H | 4 | 23 | next | undoc
+FD CB 12 F8 | DB 0FDH,0CBH,12H,0F8H | 4 | 23 | next | undoc
+FD CB 12 F9 | DB 0FDH,0CBH,12H,0F9H | 4 | 23 | next | undoc
+FD CB 12 FA | DB 0FDH,0CBH,12H,0FAH | 4 | 23 | next | undoc
+FD CB 12 FB | DB 0FDH,0CBH,12H,0FBH | 4 | 23 | next | undoc
+FD CB 12 FC | DB 0FDH,0CBH,12H,0FCH | 4 | 23 | next | undoc
+FD CB 12 FD | DB 0FDH,0CBH,12H,0FDH | 4 | 23 | next | undoc
+FD CB 12 FE | SET 7,(IY+12H) | 4 | 23 | next | doc
+FD CB 12 FF | DB 0FDH,0CBH,12H,0FFH | 4 | 23 | next | undoc
