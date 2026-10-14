@@ -15,3 +15,7 @@ export { detectFormat } from './detect.js';
 export type { Format } from './detect.js';
 export { loadRaw } from './raw.js';
 export type { RawModule } from './raw.js';
+export { linearSweep } from './sweep.js';
+export type { ListingLine, Section } from './sweep.js';
+export { formatListingLine, renderBasListing, renderCmdListing, renderRawListing } from './listing.js';
+export type { RenderOptions } from './listing.js';
