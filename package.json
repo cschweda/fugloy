@@ -1,0 +1,32 @@
+{
+  "name": "fugloy",
+  "private": true,
+  "version": "0.1.0",
+  "description": "TRS-80 Model I/III disassembler: Z80 tables, .CMD/.BAS loaders, CLI",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@10.33.4",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -b packages/z80 packages/disasm packages/cli && tsc -p tsconfig.test.json",
+    "build": "tsc -b packages/z80 packages/disasm packages/cli",
+    "clean": "rm -rf packages/*/dist",
+    "fixtures": "tsx packages/disasm/scripts/write-fixtures.ts",
+    "fugloy": "node packages/cli/bin/fugloy.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

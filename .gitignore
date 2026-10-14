@@ -1,6 +1,7 @@
 # Copyrighted sample programs and ROM images stay out of the repo.
 # Tests that need them skip when the folder is empty.
 fixtures/real/
+sample/
 *.rom
 *.ROM
 
@@ -34,3 +35,6 @@ test-results/
 
 # Claude Code local settings (keep CLAUDE.md; ignore per-machine state)
 .claude/settings.local.json
+
+# Plan execution scratch (superpowers)
+.superpowers/

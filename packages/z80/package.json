@@ -1,0 +1,19 @@
+{
+  "name": "@fugloy/z80",
+  "version": "0.1.0",
+  "description": "Generated Z80 opcode table and decoder (no I/O)",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -b"
+  }
+}

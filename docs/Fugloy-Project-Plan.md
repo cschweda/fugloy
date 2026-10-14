@@ -225,7 +225,7 @@ Total v1: roughly four to five months of spare time. Part 2 is not estimated unt
 
 ## Stack
 
-- **Core:** TypeScript, zero runtime dependencies, ESM only, built with tsup. MIT.
+- **Core:** TypeScript, zero runtime dependencies, ESM only, built with `tsc` project references (tsup was dropped during phase 1: TypeScript 7's native compiler has no JS API for tsup's `.d.ts` plugin, and a dependency-free ESM library needs no bundler). MIT.
 - **CLI:** Node, thin wrapper over the core.
 - **Web:** Nuxt 4 with Nuxt UI, pnpm, static generation, no server routes. Netlify.
 - **Tests:** Vitest; Playwright for the browser flow; zmac installed in CI. GitHub Actions.
