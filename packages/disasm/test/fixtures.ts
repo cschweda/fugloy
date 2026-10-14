@@ -46,6 +46,7 @@ export const CMD_FIXTURES: Record<string, () => Uint8Array> = {
       .bytes(),
   'truncated': () => new CmdWriter().load(0x5200, PROGRAM).raw([0x01, 0x12, 0x00, 0x60, 0x11, 0x22, 0x33]).bytes(),
   'unknown-type': () => new CmdWriter().load(0x5200, PROGRAM).raw([0x7f, 0x02, 0x00, 0x00, 0x02, 0x02, 0x00, 0x52]).bytes(),
+  'transfer-len-00': () => new CmdWriter().load(0x5200, PROGRAM).raw([0x02, 0x00, 0x03, 0x52]).bytes(),
   'wraps-ffff': () => new CmdWriter().loadRecord(0xfffe, [1, 2, 3, 4]).transfer(0xfffe).bytes(),
 };
 
@@ -67,5 +68,5 @@ export const BAS_FIXTURES: Record<string, () => Uint8Array> = {
     writeBasic([{ number: 10, text: 'GOTO 30' }, { number: 20, raw: [0xc3, 0x00, 0x00, 0xc9, 0x00, 0x3e] }, { number: 30, text: 'END' }], 0x7000),
   'bad-token': () => writeBasic([{ number: 10, text: 'CLS' }, { number: 20, raw: [0xb2, 0xfc, 0x41] }, { number: 30, text: 'END' }], 0x7000),
   'control-byte': () => writeBasic([{ number: 10, text: 'CLS' }, { number: 20, raw: [0x01, 0x41] }, { number: 30, text: 'END' }], 0x7000),
-  'trailing-bytes': () => writeBasic([{ number: 10, text: 'END' }], 0x7000, { trailing: [0xaa, 0x55, 0x00] }),
+  'trailing-bytes': () => writeBasic([{ number: 10, text: 'CLS' }, { number: 20, text: 'END' }], 0x7000, { trailing: [0xaa, 0x55, 0x00] }),
 };

@@ -75,7 +75,7 @@ describe('.BAS loader', () => {
 
   it('counts bytes after the 00 00 terminator as trailing and warns', () => {
     const p = fx('trailing-bytes');
-    expect(p.lines.length).toBe(1);
+    expect(p.lines.length).toBe(2);
     expect(p.trailing).toBe(3);
     expect(p.warnings).toEqual(['3 bytes after the program end ignored']);
   });
@@ -94,6 +94,13 @@ describe('isBas', () => {
     const broken = BAS_FIXTURES['prog-7000']!().slice();
     broken[2] = 0x90; // first pointer now points outside the file
     expect(isBas(broken)).toBe(false);
+  });
+
+  it('rejects a one-line file and a chain that covers less than half the file: too little evidence', () => {
+    expect(isBas(writeBasic([{ number: 10, text: 'END' }], 0x7000))).toBe(false);
+    const debris = writeBasic([{ number: 10, text: 'CLS' }, { number: 20, text: 'END' }], 0x7000, { trailing: new Array(100).fill(0xaa) });
+    expect(isBas(debris)).toBe(false);
+    expect(isBas(writeBasic([{ number: 10, text: 'CLS' }, { number: 20, text: 'END' }], 0x7000, { trailing: [0xaa, 0x55] }))).toBe(true);
   });
 
   it('requires line 1 to be BASIC, because execution starts there', () => {

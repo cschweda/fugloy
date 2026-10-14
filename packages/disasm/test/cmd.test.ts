@@ -67,6 +67,15 @@ describe('.CMD loader rules', () => {
     expect(m.records.find((r) => r.type === 2)).toEqual({ type: 2, offset: 10, addr: 0x5200 });
   });
 
+  it('reads the transfer address even when the 02 length byte is 00, as real files have it', () => {
+    const m = fx('transfer-len-00');
+    expect(m.entry).toBe(0x5203);
+    expect(m.entrySource).toBe('transfer');
+    expect(m.endedBy).toBe('transfer');
+    expect(m.trailing).toBe(0);
+    expect(m.warnings).toEqual(['transfer record at offset 10 has length byte 0, expected 2; address read anyway']);
+  });
+
   it('ignores bytes after the 02 record but counts them', () => {
     const m = fx('trailing-bytes');
     expect(m.trailing).toBe(10);

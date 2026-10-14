@@ -87,6 +87,7 @@ describe('renderBasListing', () => {
   it('repeats loader warnings', () => {
     const lines = renderBasListing(loadBas(BAS_FIXTURES['trailing-bytes']!())).split('\n');
     expect(lines).toContain('; warning: 3 bytes after the program end ignored');
+    expect(lines[0]).toBe('; tokenized BASIC, 2 lines, saved from $7000 to $700C, FF header, 0 unparsed');
     expect(renderBasListing(loadBas(BAS_FIXTURES['no-header']!())).split('\n')[0]).toContain('no FF header');
   });
 });

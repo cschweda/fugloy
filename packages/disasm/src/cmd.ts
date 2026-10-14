@@ -83,7 +83,9 @@ export function loadCmd(bytes: Uint8Array): CmdModule {
       break;
     }
     const lengthByte = bytes[pos + 1]!;
-    const length = type === 0x01 ? loadDataLength(lengthByte) + 2 : payloadLength(lengthByte);
+    // A transfer record is always `02 len lo hi`; DOS reads the address without
+    // consulting len, and real files carry len = 00 (ARMOUR.III), so neither do we.
+    const length = type === 0x01 ? loadDataLength(lengthByte) + 2 : type === 0x02 ? 2 : payloadLength(lengthByte);
     if (pos + 2 + length > n) {
       warnings.push(`truncated ${hex2(type)} record at offset ${offset}: needs ${length} bytes, ${n - pos - 2} remain`);
       stop('error', offset);
@@ -102,12 +104,7 @@ export function loadCmd(bytes: Uint8Array): CmdModule {
         break;
       }
       case 0x02: {
-        if (length < 2) {
-          warnings.push(`transfer record at offset ${offset} has length ${length}; no address`);
-          stop('error', offset);
-          break;
-        }
-        if (length !== 2) warnings.push(`transfer record at offset ${offset} has length ${length}, expected 2`);
+        if (lengthByte !== 2) warnings.push(`transfer record at offset ${offset} has length byte ${lengthByte}, expected 2; address read anyway`);
         const addr = payload[0]! | (payload[1]! << 8);
         records.push({ type: 2, offset, addr });
         mod.entry = addr;
