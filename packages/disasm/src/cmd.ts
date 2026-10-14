@@ -31,7 +31,9 @@ export interface CmdModule {
 
 const hex4 = (n: number): string => n.toString(16).toUpperCase().padStart(4, '0');
 const hex2 = (n: number): string => n.toString(16).toUpperCase().padStart(2, '0');
-const ascii = (bytes: Uint8Array): string => Array.from(bytes, (b) => String.fromCharCode(b)).join('');
+/** Record text as printable ASCII; anything else becomes `{hh}` so file content can never forge listing lines or terminal escapes. */
+const text = (bytes: Uint8Array): string =>
+  Array.from(bytes, (b) => (b >= 0x20 && b <= 0x7e ? String.fromCharCode(b) : `{${hex2(b)}}`)).join('').replace(/ +$/, '');
 
 const isKnownType = (t: number): boolean => (t >= 0x01 && t <= 0x10) || t === 0x1f;
 
@@ -115,15 +117,15 @@ export function loadCmd(bytes: Uint8Array): CmdModule {
         break;
       }
       case 0x05: {
-        const name = ascii(payload).replace(/[\s\0]+$/, '');
+        const name = text(payload);
         records.push({ type: 5, offset, name });
         mod.name = name;
         break;
       }
       case 0x1f: {
-        const text = ascii(payload).replace(/[\s\0]+$/, '');
-        records.push({ type: 0x1f, offset, text });
-        mod.copyright = text;
+        const copyright = text(payload);
+        records.push({ type: 0x1f, offset, text: copyright });
+        mod.copyright = copyright;
         break;
       }
       default:

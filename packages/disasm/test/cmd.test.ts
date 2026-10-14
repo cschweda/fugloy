@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { isCmd, loadCmd } from '../src/cmd.js';
 import { CMD_FIXTURES, PROGRAM, pattern } from './fixtures.js';
+import { CmdWriter } from './writers/cmd-writer.js';
 
 const fx = (name: string) => loadCmd(CMD_FIXTURES[name]!());
 
@@ -96,6 +97,18 @@ describe('.CMD loader rules', () => {
     expect(m.name).toBe('ASYLUM');
     expect(m.records[0]).toEqual({ type: 5, offset: 0, name: 'ASYLUM' });
     expect(m.entry).toBe(0x5200);
+  });
+
+  it('escapes control and high bytes in header and copyright text so they cannot forge listing lines', () => {
+    const bytes = new CmdWriter()
+      .header([0x41, 0x0a, 0x1b, 0x5b, 0x33, 0x31, 0x6d, 0x80, 0x20, 0x20])
+      .copyright([0x0d, 0x3b, 0x20, 0x66, 0x61, 0x6b, 0x65, 0x7f])
+      .load(0x5200, PROGRAM)
+      .transfer(0x5200)
+      .bytes();
+    const m = loadCmd(bytes);
+    expect(m.name).toBe('A{0A}{1B}[31m{80}');
+    expect(m.copyright).toBe('{0D}; fake{7F}');
   });
 
   it('keeps the 1F copyright text', () => {

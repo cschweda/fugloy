@@ -36,13 +36,13 @@ export class CmdWriter {
   }
 
   /** `05`: module header (program name). */
-  header(name: string): this {
-    return this.record(0x05, Array.from(name, (c) => c.charCodeAt(0)));
+  header(name: string | ArrayLike<number>): this {
+    return this.record(0x05, typeof name === 'string' ? Array.from(name, (c) => c.charCodeAt(0)) : name);
   }
 
   /** `1F`: copyright block. */
-  copyright(text: string): this {
-    return this.record(0x1f, Array.from(text, (c) => c.charCodeAt(0)));
+  copyright(text: string | ArrayLike<number>): this {
+    return this.record(0x1f, typeof text === 'string' ? Array.from(text, (c) => c.charCodeAt(0)) : text);
   }
 
   /** Any typed record: type, length byte (0 means 256), payload. */
