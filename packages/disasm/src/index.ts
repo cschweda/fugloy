@@ -6,3 +6,4 @@ export { MemoryImage } from './memory.js';
 export type { Block, Overlap, Run } from './memory.js';
 export { isCmd, loadCmd } from './cmd.js';
 export type { CmdModule, CmdRecord } from './cmd.js';
+export { TOKENS, TOKEN_BYTES } from './tokens.js';
