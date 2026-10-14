@@ -11,3 +11,7 @@ export { isBas, loadBas } from './bas.js';
 export type { BasLine, BasProgram } from './bas.js';
 export { detokenize } from './detokenize.js';
 export type { Detokenized } from './detokenize.js';
+export { detectFormat } from './detect.js';
+export type { Format } from './detect.js';
+export { loadRaw } from './raw.js';
+export type { RawModule } from './raw.js';
