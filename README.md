@@ -1,5 +1,9 @@
 # Fugløy
 
+[![CI](https://github.com/cschweda/fugloy/actions/workflows/ci.yml/badge.svg)](https://github.com/cschweda/fugloy/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/tag/cschweda/fugloy?label=release&sort=semver)](https://github.com/cschweda/fugloy/tags)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A Z80 disassembler for the TRS-80 Model I and Model III that reads `.CMD` load
 modules and tokenized `.BAS` programs directly, rebuilds the memory image the
 way the machine would, and prints a listing. The full design, phases, and the
@@ -11,9 +15,10 @@ Named after the island in *Voyage of the Valkyrie*; spelled `fugloy` in code.
 
 ## Status
 
-**Phase 1: core decoder and loaders.** Deliverable: a CLI that prints a
-linear-sweep listing of any `.CMD` or raw binary and a detokenized listing of
-any `.BAS`.
+**Current release: [v0.1.0](https://github.com/cschweda/fugloy/releases/tag/v0.1.0), phase 1: core decoder and loaders.**
+Deliverable: a CLI that prints a linear-sweep listing of any `.CMD` or raw
+binary and a detokenized listing of any `.BAS`. Every change is recorded in
+[CHANGELOG.md](CHANGELOG.md); releases are tagged `vX.Y.Z` on `main`.
 
 | Package | What it holds |
 | --- | --- |
@@ -59,6 +64,12 @@ absent.
 Addresses are `$3C00` in prose and comments and `3C00H` in emitted assembly.
 Opcode tables are generated, never hand-edited. The image is a flat
 `Uint8Array(65536)` with a parallel bitmap. See `CLAUDE.md` for the rest.
+
+## Repository
+
+Source and issues: [github.com/cschweda/fugloy](https://github.com/cschweda/fugloy).
+CI runs typecheck, tests, build, and a check that the committed synthetic
+fixtures still match their writers on every push and pull request.
 
 ## License
 

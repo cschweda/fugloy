@@ -4,7 +4,13 @@ All notable changes to Fugløy are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); until 1.0 each
 project phase lands as a minor version.
 
+Releases are tagged `vX.Y.Z` on `main`.
+
 ## [Unreleased]
+
+### Changed
+
+- README: CI badge, release pointer, repository link; changelog release links.
 
 ## [0.1.0] - 2026-10-14
 
@@ -65,3 +71,6 @@ of any `.BAS`.
 - A damaged `.CMD` (truncated record or unknown record type) is detected only
   when at least two load records precede the damage; there is no `--format`
   override yet.
+
+[Unreleased]: https://github.com/cschweda/fugloy/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/cschweda/fugloy/releases/tag/v0.1.0
