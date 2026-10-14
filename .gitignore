@@ -1,0 +1,36 @@
+# Copyrighted sample programs and ROM images stay out of the repo.
+# Tests that need them skip when the folder is empty.
+fixtures/real/
+*.rom
+*.ROM
+
+# Dependencies and build output
+node_modules/
+dist/
+.output/
+.nuxt/
+.cache/
+*.tsbuildinfo
+
+# Netlify
+.netlify/
+
+# Environment and local overrides
+.env
+.env.*
+!.env.example
+
+# Editor and OS noise
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# Test and coverage artifacts
+coverage/
+playwright-report/
+test-results/
+
+# Claude Code local settings (keep CLAUDE.md; ignore per-machine state)
+.claude/settings.local.json
