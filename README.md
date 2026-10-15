@@ -1,7 +1,10 @@
 # Fugløy
 
 [![CI](https://github.com/cschweda/fugloy/actions/workflows/ci.yml/badge.svg)](https://github.com/cschweda/fugloy/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/tag/cschweda/fugloy?label=release&sort=semver)](https://github.com/cschweda/fugloy/tags)
+[![Release](https://img.shields.io/badge/release-v0.1.0-blue)](https://github.com/cschweda/fugloy/releases/tag/v0.1.0)
+<!-- The release badge is static while the repository is private: shields.io reads GitHub's public
+     API and renders "repo not found" otherwise. Bump the version here when tagging. Once the repo is
+     public, this can become https://img.shields.io/github/v/tag/cschweda/fugloy?label=release&sort=semver -->
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A Z80 disassembler for the TRS-80 Model I and Model III that reads `.CMD` load

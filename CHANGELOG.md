@@ -48,6 +48,8 @@ MCP server stubs.
 - Project plan: the undocumented-opcode spelling question is closed (zmac's
   names, which the listing already used).
 - README: CI badge, release pointer, repository link; changelog release links.
+  The release badge is static while the repository is private, because
+  shields.io cannot read a private repo and rendered "repo not found".
 - `linkWorkspacePackages` in `pnpm-workspace.yaml`, so a semver range on a
   workspace package resolves locally the way npm workspaces would.
 
