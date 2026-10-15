@@ -28,3 +28,6 @@ export { basicBlocks, regions } from './analysis/regions.js';
 export type { BasicBlock, Region, RegionKind, Successor } from './analysis/regions.js';
 export { buildIr } from './ir.js';
 export type { Ir, Module } from './ir.js';
+export { analyze } from './pipeline.js';
+export type { Analysis, AnalyzeOptions } from './pipeline.js';
+export { renderPass1Listing } from './listing.js';
