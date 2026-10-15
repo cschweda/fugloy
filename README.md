@@ -26,13 +26,13 @@ change is recorded in [CHANGELOG.md](CHANGELOG.md); releases are tagged
 | Package | What it holds |
 | --- | --- |
 | `packages/z80` | Z80 opcode tables generated from the x/y/z/p/q decomposition (unprefixed, `CB`, `ED`, `DD`/`FD`, `DDCB`/`FDCB`) with length, operands, cycle counts, and control-flow effect; a decoder; an exhaustion test against an independently typed reference. No I/O. |
-| `packages/disasm` | 64K memory image with a load bitmap and block log, `.CMD` and `.BAS` loaders, content-based format detection, raw loader, linear sweep, plain-text listings. No Node or DOM APIs, so it runs in a browser. |
-| `packages/cli` | `fugloy <file> [--base <hex>]`, the only package that touches the file system. |
+| `packages/disasm` | 64K memory image with a load bitmap and block log, `.CMD` and `.BAS` loaders, content-based format detection, raw loader, pass 1 recursive descent, zmac emitter, JSON IR, linear sweep, plain-text listings. No Node or DOM APIs, so it runs in a browser. |
+| `packages/cli` | `fugloy <file> [--base <hex>] [--entry <hex>]... [--format listing\|zmac\|ir] [--sweep] [-o <path>]`, the only package that touches the file system. |
 | `fixtures/synthetic` | Generated fixtures, one per loader rule, written by the test suite's own `.CMD` writer and BASIC tokenizer. |
 
-Later phases add recursive descent and code/data heuristics, labels and
-per-machine symbol tables, hint files, and a static web workbench
-(`apps/web`, Nuxt 4, deployed to Netlify).
+Later phases add labels and per-machine symbol tables, hint files,
+hidden-code detection and the code/data heuristics, and a static web
+workbench (`apps/web`, Nuxt 4, deployed to Netlify).
 
 ## Requirements
 

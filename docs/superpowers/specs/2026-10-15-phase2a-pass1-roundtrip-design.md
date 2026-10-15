@@ -19,7 +19,7 @@ Prove item 2 in the test suite and in CI with the pinned zmac. This is the
 plan's kill-criterion proof ("a round-trip-clean listing of a synthetic
 fixture"), so it comes before labels, hints, or heuristics.
 
-**Done when:** every synthetic `.CMD`, `.BAS`, and raw fixture round-tripsOO
+**Done when:** every synthetic `.CMD`, `.BAS`, and raw fixture round-trips
 (bytes, bitmap, and entry point equal), all 1792 Z80 encodings round-trip
 through zmac individually, every real sample present on the machine
 round-trips, and the CLI emits listing, zmac source, and IR for any file.
@@ -102,7 +102,7 @@ export class ByteMap {
 ```ts
 export type XrefKind = 'jump' | 'cjump' | 'call' | 'ccall' | 'rst';
 export interface Xref { from: number; to: number; kind: XrefKind }
-export type DiagnosticKind = 'overlap' | 'inside-instruction' | 'in-data' | 'truncated';
+export type DiagnosticKind = 'overlap' | 'inside-instruction' | 'in-data' | 'truncated' | 'unloaded-root';
 export interface Diagnostic { kind: DiagnosticKind; addr: number; from?: number; message: string }
 export interface Pass1 {
   map: ByteMap;
@@ -113,8 +113,7 @@ export interface Pass1 {
   indirectJumps: number[];    // addresses of JP (HL)/(IX)/(IY)
   diagnostics: Diagnostic[];
 }
-export interface DescentOptions { entries?: number[] }
-export function recursiveDescent(image: MemoryImage, roots: number[], opts?: DescentOptions): Pass1;
+export function recursiveDescent(image: MemoryImage, roots: number[]): Pass1;   // roots already include user entries (see 4.7)
 ```
 
 Algorithm: a worklist seeded with the roots (deduplicated, loaded ones only;
@@ -143,19 +142,23 @@ only holds unmarked addresses, so the loop is bounded by the loaded size.
 ```ts
 export type RegionKind = 'code' | 'bytes' | 'unknown';
 export interface Region { kind: RegionKind; start: number; end: number }   // inclusive end
-export interface Block { start: number; end: number; succ: { to: number; kind: XrefKind | 'next' | 'external' }[] }
+export interface BasicBlock { start: number; end: number; succ: { to: number; kind: XrefKind | 'next' | 'external' }[] }
 export function regions(image: MemoryImage, map: ByteMap): Region[];   // within loaded runs, in address order
-export function basicBlocks(pass1: Pass1): Block[];
+export function basicBlocks(pass1: Pass1): BasicBlock[];
 ```
 
-A block starts at a root, a jump or call target, or the instruction after a
-path-ending instruction, and ends at a path-ending instruction or just before
-the next block start. Successors come from the stored instructions' flow.
+A block starts at a root, a jump or call target, or the instruction after any
+transfer (jump, call, return, halt), and ends at a transfer, just before the
+next block start, or where the instruction stream is interrupted. Successors
+come from the stored instructions' flow; `external` means the target is
+outside loaded memory, while a loaded target that is not an instruction start
+keeps its real kind and is explained by a diagnostic. (`BasicBlock`, not
+`Block`, because `Block` already names a load block.)
 
 ### 4.4 `src/emit/zmac.ts`
 
 ```ts
-export interface EmitOptions { source?: string; comments?: boolean }
+export interface EmitOptions { source?: string; addresses?: boolean }
 export function emitZmac(image: MemoryImage, pass1: Pass1, entry: number | null, opts?: EmitOptions): string;
 ```
 
@@ -175,9 +178,10 @@ Output shape:
 Rules: one `ORG` per loaded run; instruction text from `@fugloy/z80`'s
 formatter with the byte-exact exceptions of §3 rendered as `DB`; unknown and
 `Byte` bytes as `DB` rows of at most 8 bytes that never cross an instruction
-start or a run end; `END` with the entry address when there is one, bare
-`END` otherwise; a comment column is optional (`; 6000` addresses) and off by
-default because it is noise for the round trip. Tabs between columns; zmac
+start or a run end; `END` with the file's own transfer address (or the raw base) when there is
+one, bare `END` otherwise, so a module without a transfer record does not gain
+one on reassembly; an address comment column (`addresses`) is optional and off
+by default because it is noise for the round trip. Tabs between columns; zmac
 accepts upper case throughout.
 
 ### 4.5 `src/ir.ts`
@@ -206,9 +210,9 @@ shape change.
 
 ### 4.6 `src/listing.ts` (extended)
 
-`renderPass1Listing(mod, pass1, opts)`: the phase-1 column layout (`ADDR
-BYTES  TEXT`) with instruction rows from `pass1.instructions` and `DB` rows for
-everything else, a header naming the roots, reached bytes as a count and a
+`renderPass1Listing(analysis, opts)`: the phase-1 column layout (`ADDR
+BYTES  TEXT`) with instruction rows from `pass1.instructions` and `DB` rows of
+four bytes (the width of the bytes column) for everything else, a header naming the roots, reached bytes as a count and a
 percentage of loaded bytes, external targets as a count, and every
 diagnostic as a `; note:` line. The existing linear-sweep renderers remain for
 `--sweep`.
@@ -218,7 +222,8 @@ diagnostic as a `; note:` line. The existing linear-sweep renderers remain for
 ```ts
 export type Module = CmdModule | BasProgram | RawModule;
 export interface AnalyzeOptions { entries?: number[] }
-export interface Analysis { module: Module; pass1: Pass1; entry: number | null; roots: number[] }
+export interface Analysis { module: Module; pass1: Pass1; entry: number | null; roots: number[]; transfer: number | null }
+// entry: the module's root (transfer address, lowest loaded address, or raw base); transfer: what END may carry.
 export function analyze(mod: Module, opts?: AnalyzeOptions): Analysis;
 ```
 
@@ -235,7 +240,9 @@ fugloy <file> [--base <hex>] [--entry <hex>]... [--format listing|zmac|ir] [--sw
 - `--format listing` (default) prints the Pass 1 listing; for a `.BAS` file
   the detokenized listing is unchanged from phase 1.
 - `--format zmac` prints the emitter's source; `--format ir` prints JSON.
-- `--sweep` selects the phase-1 linear sweep listing instead of Pass 1.
+- `--sweep` selects the phase-1 linear sweep listing instead of Pass 1; it
+  refuses `--format zmac|ir` and `--entry` rather than ignoring them. A `.BAS`
+  file with `--entry` gets the Pass 1 listing.
 - `--entry` may repeat; values accept the same hex forms as `--base`. An
   unloaded entry is an error (exit 2).
 - `-o` writes to a file instead of stdout; everything else is unchanged.
@@ -250,7 +257,7 @@ fugloy <file> [--base <hex>] [--entry <hex>]... [--format listing|zmac|ir] [--sw
   flags the old-style C needs, found when it is first built), and installs
   the binary at `tools/zmac/zmac`. Idempotent; `pnpm zmac:install` runs it.
 - `packages/disasm/test/roundtrip/zmac.ts`: `findZmac()` (`FUGLOY_ZMAC`, then
-  `tools/zmac/zmac`), `assemble(source) → { image, entry, listing, stderr }`
+  `tools/zmac/zmac`), `assemble(source) → { module, listing }` (the loaded `CmdModule` carries the image and entry)
   (writes to a temp dir, runs zmac with output options for a `.cmd`, loads it
   with `loadCmd`), and `skipIfNoZmac()`.
 - CI: a step that installs bison, runs the script with the binary cached by

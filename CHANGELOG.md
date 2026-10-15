@@ -8,7 +8,8 @@ Releases are tagged `vX.Y.Z` on `main`.
 
 ## [Unreleased]
 
-Phase 2, sub-project A: Pass 1 and the round-trip proof.
+Phase 2, sub-project A: Pass 1 and the round-trip proof, plus the emulator and
+MCP server stubs.
 
 ### Added
 
@@ -19,25 +20,17 @@ Phase 2, sub-project A: Pass 1 and the round-trip proof.
   after `RST 08H` is data.
 - zmac emitter with absolute operands, proven byte-exact against all 1786
   non-prefix Z80 encodings under the pinned zmac; the redundant `ED 63`/`ED 6B`
-  forms are emitted as `DB`.
+  forms are emitted as `DB`; `END` carries only a transfer address the file
+  itself had.
 - Versioned JSON IR (`fugloyIr: 1`): loaded ranges, regions, basic blocks
   with successors, xrefs, externals, indirect jumps, diagnostics.
-- Pass 1 listing with reached-bytes summary and notes.
+- Pass 1 listing with a reached-bytes summary and notes.
 - CLI: `--entry <hex>` (repeatable), `--format listing|zmac|ir`, `--sweep`,
   `-o <path>`.
 - Round-trip harness: `pnpm zmac:install` builds `gp48k/zmac` at a pinned
   commit into gitignored `tools/`; tests assemble emitted source and compare
   memory images and bitmaps, never files; every synthetic fixture and every
   present real sample round-trips; CI builds zmac and requires it.
-
-### Changed
-
-- `fugloy <file>` prints the pass 1 listing for load modules and raw
-  binaries; the phase-1 linear sweep is `--sweep`. `.BAS` listings are
-  unchanged unless `--entry` names hidden code.
-- Project plan: the undocumented-opcode spelling question is closed (zmac's
-  names, which the listing already used).
-
 - `@fugloy/emu` and `@fugloy/mcp` as stub packages: ESM `package.json`, empty
   `src/index.js`, READMEs linking their specs in `docs/`, one import test
   each; `mcp` depends on `emu` by the semver range `^0.1.0`.
@@ -49,6 +42,11 @@ Phase 2, sub-project A: Pass 1 and the round-trip proof.
 
 ### Changed
 
+- `fugloy <file>` prints the pass 1 listing for load modules and raw
+  binaries; the phase-1 linear sweep is `--sweep`. `.BAS` listings are
+  unchanged unless `--entry` names hidden code.
+- Project plan: the undocumented-opcode spelling question is closed (zmac's
+  names, which the listing already used).
 - README: CI badge, release pointer, repository link; changelog release links.
 - `linkWorkspacePackages` in `pnpm-workspace.yaml`, so a semver range on a
   workspace package resolves locally the way npm workspaces would.
