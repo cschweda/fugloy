@@ -220,7 +220,7 @@ Total v1: roughly four to five months of spare time. Part 2 is not estimated unt
 
 **Open questions**
 
-- Which undocumented opcodes to emit and how to spell them (zmac's names or Zilog's). Decide in phase 2.
+- ~~Which undocumented opcodes to emit and how to spell them (zmac's names or Zilog's).~~ Decided in phase 2: only `SLL` and the IX/IY half registers (`IXH`, `IXL`, `IYH`, `IYL`) are emitted as instructions, spelled as zmac accepts them, which is also how the listing spells them; every other undocumented encoding is emitted as `DB`. The pinned zmac assembles all 1786 non-prefix encodings back to their own bytes except the redundant `ED 63`/`ED 6B` forms of `LD (nn),HL`/`LD HL,(nn)`, which it shortens and which are therefore emitted as `DB`.
 - Whether multi-file programs need a session with several images in v1, or whether annotating `@LOAD`/`@RUN` calls with their filename string is enough until Part 2. Current lean: annotate only.
 
 ## Stack

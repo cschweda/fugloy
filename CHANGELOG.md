@@ -8,7 +8,35 @@ Releases are tagged `vX.Y.Z` on `main`.
 
 ## [Unreleased]
 
+Phase 2, sub-project A: Pass 1 and the round-trip proof.
+
 ### Added
+
+- Pass 1 recursive descent (`@fugloy/disasm`): a byte-kind map parallel to
+  the image, decoded instructions, cross-references, external (ROM) targets,
+  indirect jumps, and diagnostics; paths end at returns, indirect and
+  unconditional jumps, and `HALT`; the first decode of a byte wins; the byte
+  after `RST 08H` is data.
+- zmac emitter with absolute operands, proven byte-exact against all 1786
+  non-prefix Z80 encodings under the pinned zmac; the redundant `ED 63`/`ED 6B`
+  forms are emitted as `DB`.
+- Versioned JSON IR (`fugloyIr: 1`): loaded ranges, regions, basic blocks
+  with successors, xrefs, externals, indirect jumps, diagnostics.
+- Pass 1 listing with reached-bytes summary and notes.
+- CLI: `--entry <hex>` (repeatable), `--format listing|zmac|ir`, `--sweep`,
+  `-o <path>`.
+- Round-trip harness: `pnpm zmac:install` builds `gp48k/zmac` at a pinned
+  commit into gitignored `tools/`; tests assemble emitted source and compare
+  memory images and bitmaps, never files; every synthetic fixture and every
+  present real sample round-trips; CI builds zmac and requires it.
+
+### Changed
+
+- `fugloy <file>` prints the pass 1 listing for load modules and raw
+  binaries; the phase-1 linear sweep is `--sweep`. `.BAS` listings are
+  unchanged unless `--entry` names hidden code.
+- Project plan: the undocumented-opcode spelling question is closed (zmac's
+  names, which the listing already used).
 
 - `@fugloy/emu` and `@fugloy/mcp` as stub packages: ESM `package.json`, empty
   `src/index.js`, READMEs linking their specs in `docs/`, one import test

@@ -16,9 +16,12 @@ Named after the island in *Voyage of the Valkyrie*; spelled `fugloy` in code.
 ## Status
 
 **Current release: [v0.1.0](https://github.com/cschweda/fugloy/releases/tag/v0.1.0), phase 1: core decoder and loaders.**
-Deliverable: a CLI that prints a linear-sweep listing of any `.CMD` or raw
-binary and a detokenized listing of any `.BAS`. Every change is recorded in
-[CHANGELOG.md](CHANGELOG.md); releases are tagged `vX.Y.Z` on `main`.
+**In progress: phase 2.** Pass 1 recursive descent, zmac source that
+reassembles to the identical memory image (proven against every fixture, every
+present real program, and every Z80 encoding under a pinned zmac), and a JSON
+IR are done; labels, the hint file, and hidden-code detection follow. Every
+change is recorded in [CHANGELOG.md](CHANGELOG.md); releases are tagged
+`vX.Y.Z` on `main`.
 
 | Package | What it holds |
 | --- | --- |
