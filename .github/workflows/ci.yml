@@ -20,8 +20,17 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: cache pinned zmac
+        id: zmac
+        uses: actions/cache@v4
+        with:
+          path: tools/zmac
+          key: zmac-050bbb1f9c608693d53b8827b991b5a9edc97a6b-${{ runner.os }}
+      - if: steps.zmac.outputs.cache-hit != 'true'
+        run: sudo apt-get update && sudo apt-get install -y bison
+      - run: pnpm zmac:install
       - run: pnpm typecheck
-      - run: pnpm test
+      - run: FUGLOY_REQUIRE_ZMAC=1 pnpm test
       - run: pnpm build
       - name: fixtures are in sync with their writers
         run: pnpm fixtures && git diff --exit-code -- fixtures/synthetic

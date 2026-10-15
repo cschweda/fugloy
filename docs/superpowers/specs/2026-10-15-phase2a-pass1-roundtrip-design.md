@@ -19,7 +19,7 @@ Prove item 2 in the test suite and in CI with the pinned zmac. This is the
 plan's kill-criterion proof ("a round-trip-clean listing of a synthetic
 fixture"), so it comes before labels, hints, or heuristics.
 
-**Done when:** every synthetic `.CMD`, `.BAS`, and raw fixture round-trips
+**Done when:** every synthetic `.CMD`, `.BAS`, and raw fixture round-tripsOO
 (bytes, bitmap, and entry point equal), all 1792 Z80 encodings round-trip
 through zmac individually, every real sample present on the machine
 round-trips, and the CLI emits listing, zmac source, and IR for any file.

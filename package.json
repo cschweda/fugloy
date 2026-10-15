@@ -16,7 +16,8 @@
     "build": "tsc -b packages/z80 packages/disasm packages/cli",
     "clean": "rm -rf packages/*/dist",
     "fixtures": "tsx packages/disasm/scripts/write-fixtures.ts",
-    "fugloy": "node packages/cli/bin/fugloy.js"
+    "fugloy": "node packages/cli/bin/fugloy.js",
+    "zmac:install": "bash scripts/install-zmac.sh"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

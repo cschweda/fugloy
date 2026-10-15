@@ -39,3 +39,6 @@ test-results/
 
 # Plan execution scratch (superpowers)
 .superpowers/
+
+# Pinned zmac built by scripts/install-zmac.sh
+tools/

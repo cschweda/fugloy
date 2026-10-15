@@ -43,6 +43,7 @@ pnpm test          # vitest, all packages
 pnpm typecheck     # tsc project references plus the test sources
 pnpm build         # emits packages/*/dist
 pnpm fixtures      # regenerates fixtures/synthetic from the writers
+pnpm zmac:install  # builds the pinned zmac into tools/ for the round-trip tests
 
 pnpm fugloy path/to/program.cmd          # load module: header, ORG per run, listing
 pnpm fugloy path/to/program.bas          # tokenized BASIC: detokenized listing
