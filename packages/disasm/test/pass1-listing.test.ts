@@ -22,6 +22,15 @@ describe('analyze', () => {
     expect(a.pass1.diagnostics).toEqual([{ kind: 'unloaded-root', addr: 0x9000, message: 'entry $9000 is not in loaded memory' }]);
   });
 
+  it('exposes the address END may carry: the transfer address, the raw base, or nothing', () => {
+    expect(analyze(loadCmd(CMD_FIXTURES['non-contiguous']!())).transfer).toBe(0x6000);
+    const lowest = analyze(loadCmd(CMD_FIXTURES['missing-02']!()));
+    expect(lowest.entry).toBe(0x5200); // still the root
+    expect(lowest.transfer).toBeNull(); // but the file had no transfer record
+    expect(analyze(loadRaw(Uint8Array.from([0xc9]), 0x5200)).transfer).toBe(0x5200);
+    expect(analyze(loadBas(BAS_FIXTURES['prog-62c8']!())).transfer).toBeNull();
+  });
+
   it('has no roots for a BASIC program and for a module ended by 03', () => {
     expect(analyze(loadBas(BAS_FIXTURES['prog-62c8']!())).roots).toEqual([]);
     expect(analyze(loadCmd(CMD_FIXTURES['end-03']!())).roots).toEqual([]);

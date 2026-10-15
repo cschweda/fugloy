@@ -63,6 +63,14 @@ describe('recursiveDescent', () => {
     expect(p.xrefs).toEqual([{ from: 0x6000, to: 0x0008, kind: 'rst' }]);
   });
 
+  it('leaves a byte already decoded as code alone when an RST 08H would type it as its inline parameter', () => {
+    // 6001 INC L is decoded first (root order); then 6000 RST 08H claims 6001 as its inline byte.
+    const p = recursiveDescent(image({ 0x6000: [0xcf, 0x2c, 0xc9] }), [0x6001, 0x6000]);
+    expect(starts(p)).toEqual([0x6000, 0x6001, 0x6002]);
+    expect(p.map.kind(0x6001)).toBe(Kind.Code);
+    expect(p.diagnostics).toEqual([{ kind: 'overlap', addr: 0x6000, message: 'inline byte after RST 08H at $6000 is already code at $6001' }]);
+  });
+
   it('records unloaded targets as externals, not errors', () => {
     const p = recursiveDescent(image({ 0x6000: [0xcd, 0x33, 0x00, 0xc9] }), [0x6000]);
     expect(p.externals).toEqual([0x0033]);

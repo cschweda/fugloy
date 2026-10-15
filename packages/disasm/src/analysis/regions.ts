@@ -62,6 +62,7 @@ function fallThrough(pass1: Pass1, addr: number, ins: Pass1['instructions'] exte
  */
 export function basicBlocks(pass1: Pass1): BasicBlock[] {
   const { instructions } = pass1;
+  const externals = new Set(pass1.externals);
   const addrs = [...instructions.keys()].sort((a, b) => a - b);
   const leaders = new Set<number>();
   for (const r of pass1.roots) if (instructions.has(r)) leaders.add(r);
@@ -93,7 +94,8 @@ export function basicBlocks(pass1: Pass1): BasicBlock[] {
           ins.flow.kind === 'call'
             ? ins.operands[0]?.kind === 'rst' ? 'rst' : ins.flow.conditional ? 'ccall' : 'call'
             : ins.flow.conditional ? 'cjump' : 'jump';
-        succ.push({ to: target, kind: instructions.has(target) ? kind : 'external' });
+        // A loaded target that is not an instruction start keeps its real kind; the diagnostics say why.
+        succ.push({ to: target, kind: externals.has(target) ? 'external' : kind });
       }
       if (!endsPath(ins) && instructions.has(next)) succ.push({ to: next, kind: 'next' });
       current.succ = succ;

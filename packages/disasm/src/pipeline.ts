@@ -11,8 +11,11 @@ export interface AnalyzeOptions {
 export interface Analysis {
   module: Module;
   pass1: Pass1;
+  /** The root taken from the module: its transfer address, or the lowest loaded address, or the raw base. */
   entry: number | null;
   roots: number[];
+  /** The address `END` may carry: the file's own transfer address or the raw base; null when the file had none. */
+  transfer: number | null;
 }
 
 export function analyze(mod: Module, opts: AnalyzeOptions = {}): Analysis {
@@ -20,5 +23,6 @@ export function analyze(mod: Module, opts: AnalyzeOptions = {}): Analysis {
   const roots: number[] = entry === null ? [] : [entry];
   for (const e of opts.entries ?? []) roots.push(e & 0xffff);
   const pass1 = recursiveDescent(mod.image, roots);
-  return { module: mod, pass1, entry, roots: pass1.roots };
+  const transfer = mod.format === 'cmd' ? (mod.entrySource === 'transfer' ? mod.entry : null) : mod.format === 'raw' ? mod.entry : null;
+  return { module: mod, pass1, entry, roots: pass1.roots, transfer };
 }

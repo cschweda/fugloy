@@ -147,8 +147,12 @@ export function recursiveDescent(image: MemoryImage, rootsIn: number[]): Pass1 {
       }
       if (ins.flow.kind === 'jump' && ins.flow.indirect) indirectJumps.push(addr);
       if (isRst08(ins) && image.isLoaded(next)) {
-        map.markByte(next, 1);
-        next = (next + 1) & 0xffff;
+        if (map.isCode(next)) {
+          diagnose('overlap', addr, `inline byte after RST 08H at ${$(addr)} is already code at ${$(next)}`);
+        } else {
+          map.markByte(next, 1);
+          next = (next + 1) & 0xffff;
+        }
       }
       if (endsPath(ins)) break;
       addr = next;

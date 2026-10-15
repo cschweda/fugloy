@@ -104,6 +104,14 @@ export async function run(argv: string[], io: Io): Promise<number> {
     }
     entries.push(e);
   }
+  if (values.sweep === true && format !== 'listing') {
+    io.stderr(`fugloy: --sweep applies to the listing format only, not --format ${format}\n`);
+    return 2;
+  }
+  if (values.sweep === true && entries.length > 0) {
+    io.stderr('fugloy: --entry has no effect with --sweep; drop one of them\n');
+    return 2;
+  }
 
   let bytes: Uint8Array;
   try {
@@ -140,7 +148,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
     text = renderBasListing(mod, { source });
   } else {
     const analysis = analyze(mod, { entries });
-    if (format === 'zmac') text = emitZmac(mod.image, analysis.pass1, analysis.entry, { source });
+    if (format === 'zmac') text = emitZmac(mod.image, analysis.pass1, analysis.transfer, { source });
     else if (format === 'ir') text = `${JSON.stringify(buildIr(mod, analysis.pass1, source), null, 2)}\n`;
     else text = renderPass1Listing(analysis, { source });
   }

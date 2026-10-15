@@ -142,6 +142,23 @@ describe('pass 1 flags', () => {
     expect(out).toEqual([]);
   });
 
+  it('refuses --sweep with another --format and --entry with --sweep instead of ignoring them', async () => {
+    const a = capture();
+    expect(await run([file, '--sweep', '--format', 'zmac'], a.io)).toBe(2);
+    expect(a.err.join('')).toContain('--sweep');
+    expect(a.out).toEqual([]);
+    const b = capture();
+    expect(await run([file, '--sweep', '--entry', '7000'], b.io)).toBe(2);
+    expect(b.err.join('')).toContain('--entry');
+    expect(b.out).toEqual([]);
+  });
+
+  it('emits a bare END for a load module that had no transfer record', async () => {
+    const { io, out } = capture();
+    expect(await run([`${fixtures}cmd/missing-02.cmd`, '--format', 'zmac'], io)).toBe(0);
+    expect(out.join('').trimEnd().endsWith('\tEND')).toBe(true);
+  });
+
   it('writes to a file with -o and prints nothing', async () => {
     const { io, out, files } = capture();
     expect(await run([file, '--format', 'zmac', '-o', '/tmp/out.z'], io)).toBe(0);
