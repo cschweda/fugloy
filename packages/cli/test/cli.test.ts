@@ -5,18 +5,22 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { run } from '../src/index.js';
 import type { Io } from '../src/index.js';
+import { loadBas } from '@fugloy/disasm';
+import { assemble, expectSameImage, skipIfNoZmac } from '../../disasm/test/roundtrip/zmac.js';
 
 const fixtures = fileURLToPath(new URL('../../../fixtures/synthetic/', import.meta.url));
 
-function capture(): { io: Io; out: string[]; err: string[] } {
+function capture(): { io: Io; out: string[]; err: string[]; files: Map<string, string> } {
   const out: string[] = [];
   const err: string[] = [];
+  const files = new Map<string, string>();
   const io: Io = {
     stdout: (s) => { out.push(s); },
     stderr: (s) => { err.push(s); },
     readFile: async (path) => new Uint8Array(await readFile(path)),
+    writeFile: async (path, text) => { files.set(path, text); },
   };
-  return { io, out, err };
+  return { io, out, err, files };
 }
 
 describe('fugloy CLI', () => {
@@ -78,5 +82,98 @@ describe('fugloy CLI', () => {
     const unknown = capture();
     expect(await run(['--frobnicate', 'x'], unknown.io)).toBe(2);
     expect(unknown.err.join('')).toContain('frobnicate');
+  });
+});
+
+describe('pass 1 flags', () => {
+  const file = `${fixtures}cmd/non-contiguous.cmd`;
+
+  it('prints the Pass 1 listing by default and the linear sweep with --sweep', async () => {
+    const a = capture();
+    expect(await run([file], a.io)).toBe(0);
+    expect(a.out.join('')).toContain('; pass 1: roots $6000;');
+    const b = capture();
+    expect(await run([file, '--sweep'], b.io)).toBe(0);
+    expect(b.out.join('')).not.toContain('; pass 1:');
+    expect(b.out.join('')).toContain('7000  00            NOP');
+  });
+
+  it('emits zmac source with --format zmac', async () => {
+    const { io, out } = capture();
+    expect(await run([file, '--format', 'zmac'], io)).toBe(0);
+    const text = out.join('');
+    expect(text.startsWith('; non-contiguous.cmd: Fugløy pass 1')).toBe(true);
+    expect(text).toContain('\tORG\t6000H\n\tLD\tHL,3C00H\n');
+    expect(text.trimEnd().endsWith('\tEND\t6000H')).toBe(true);
+  });
+
+  it('emits the IR as JSON with --format ir', async () => {
+    const { io, out } = capture();
+    expect(await run([file, '--format', 'ir'], io)).toBe(0);
+    const ir = JSON.parse(out.join('')) as { fugloyIr: number; entry: number; source: string };
+    expect(ir.fugloyIr).toBe(1);
+    expect(ir.entry).toBe(0x6000);
+    expect(ir.source).toBe('non-contiguous.cmd');
+  });
+
+  it('adds roots with --entry, which may repeat', async () => {
+    const { io, out } = capture();
+    expect(await run([file, '--entry', '7000', '--entry', '0x7004'], io)).toBe(0);
+    const text = out.join('');
+    expect(text).toContain('; pass 1: roots $6000, $7000, $7004;');
+    expect(text).toContain('7000  00            NOP                     ; entry');
+  });
+
+  it('rejects a malformed or unloaded --entry with exit 2 and nothing on stdout', async () => {
+    const bad = capture();
+    expect(await run([file, '--entry', 'zz'], bad.io)).toBe(2);
+    expect(bad.err.join('')).toContain('--entry');
+    expect(bad.out).toEqual([]);
+    const unloaded = capture();
+    expect(await run([file, '--entry', '9000'], unloaded.io)).toBe(2);
+    expect(unloaded.err.join('')).toContain('$9000');
+    expect(unloaded.out).toEqual([]);
+  });
+
+  it('rejects an unknown --format', async () => {
+    const { io, err, out } = capture();
+    expect(await run([file, '--format', 'pdf'], io)).toBe(2);
+    expect(err.join('')).toContain('--format');
+    expect(out).toEqual([]);
+  });
+
+  it('writes to a file with -o and prints nothing', async () => {
+    const { io, out, files } = capture();
+    expect(await run([file, '--format', 'zmac', '-o', '/tmp/out.z'], io)).toBe(0);
+    expect(out).toEqual([]);
+    expect(files.get('/tmp/out.z')).toContain('\tORG\t6000H');
+  });
+
+  it('keeps the BASIC listing for a .BAS file and emits DB rows for --format zmac', async () => {
+    const bas = `${fixtures}bas/prog-62c8.bas`;
+    const a = capture();
+    expect(await run([bas], a.io)).toBe(0);
+    expect(a.out.join('')).toContain('\n10 CLS:PRINT"VOYAGE OF THE VALKYRIE"\n');
+    const b = capture();
+    expect(await run([bas, '--format', 'zmac'], b.io)).toBe(0);
+    expect(b.out.join('')).toContain('\tORG\t62C8H\n\tDB\t');
+    expect(b.out.join('').trimEnd().endsWith('\tEND')).toBe(true);
+  });
+
+  it('runs pass 1 on a .BAS file when --entry names its hidden code', async () => {
+    const bas = `${fixtures}bas/hidden-code.bas`;
+    const { io, out } = capture();
+    expect(await run([bas, '--entry', '700D'], io)).toBe(0); // line 20's body: C3 00 00 C9 00 3E
+    const text = out.join('');
+    expect(text).toContain('; pass 1: roots $700D;');
+    expect(text).toContain('700D  C3 00 00      JP 0000H                ; entry');
+  });
+
+  skipIfNoZmac()('a .BAS file\'s zmac output assembles back to the same image', async () => {
+    const bas = `${fixtures}bas/prog-62c8.bas`;
+    const { io, out } = capture();
+    expect(await run([bas, '--format', 'zmac'], io)).toBe(0);
+    const original = loadBas(new Uint8Array(await readFile(bas)));
+    expectSameImage(assemble(out.join('')).module.image, original.image);
   });
 });

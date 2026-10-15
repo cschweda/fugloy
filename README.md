@@ -45,13 +45,20 @@ pnpm build         # emits packages/*/dist
 pnpm fixtures      # regenerates fixtures/synthetic from the writers
 pnpm zmac:install  # builds the pinned zmac into tools/ for the round-trip tests
 
-pnpm fugloy path/to/program.cmd          # load module: header, ORG per run, listing
+pnpm fugloy path/to/program.cmd          # load module: pass 1 listing (descent from the entry)
 pnpm fugloy path/to/program.bas          # tokenized BASIC: detokenized listing
 pnpm fugloy path/to/code.bin --base 5200 # raw binary at a base address (hex)
+
+pnpm fugloy game.cmd --entry 7000 --entry 7A40   # extra entry points for pass 1
+pnpm fugloy game.cmd --format zmac -o game.z     # assembler source that reassembles to the same image
+pnpm fugloy game.cmd --format ir                 # JSON: regions, basic blocks, xrefs, diagnostics
+pnpm fugloy game.cmd --sweep                     # the phase-1 linear sweep instead of pass 1
 ```
 
 The format is detected from content, never from the extension; `.III`,
-`.bad`, and `.CMD` are all load modules. Raw binaries need `--base`.
+`.bad`, and `.CMD` are all load modules. Raw binaries need `--base`. Bytes
+pass 1 does not reach are listed as `DB`; a `.BAS` file keeps its BASIC
+listing unless `--entry` names hidden code.
 
 ## Sample programs
 
