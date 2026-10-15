@@ -19,3 +19,6 @@ export { linearSweep } from './sweep.js';
 export type { ListingLine, Section } from './sweep.js';
 export { formatListingLine, renderBasListing, renderCmdListing, renderRawListing } from './listing.js';
 export type { RenderOptions } from './listing.js';
+export { ByteMap, Kind } from './analysis/map.js';
+export { endsPath, recursiveDescent, targetOf } from './analysis/descent.js';
+export type { Diagnostic, DiagnosticKind, Pass1, Xref, XrefKind } from './analysis/descent.js';
