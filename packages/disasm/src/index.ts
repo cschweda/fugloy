@@ -22,3 +22,5 @@ export type { RenderOptions } from './listing.js';
 export { ByteMap, Kind } from './analysis/map.js';
 export { endsPath, recursiveDescent, targetOf } from './analysis/descent.js';
 export type { Diagnostic, DiagnosticKind, Pass1, Xref, XrefKind } from './analysis/descent.js';
+export { BYTE_EXACT_EXCEPTIONS, emitZmac, instructionLine } from './emit/zmac.js';
+export type { EmitOptions } from './emit/zmac.js';
