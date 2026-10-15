@@ -24,3 +24,7 @@ export { endsPath, recursiveDescent, targetOf } from './analysis/descent.js';
 export type { Diagnostic, DiagnosticKind, Pass1, Xref, XrefKind } from './analysis/descent.js';
 export { BYTE_EXACT_EXCEPTIONS, emitZmac, instructionLine } from './emit/zmac.js';
 export type { EmitOptions } from './emit/zmac.js';
+export { basicBlocks, regions } from './analysis/regions.js';
+export type { BasicBlock, Region, RegionKind, Successor } from './analysis/regions.js';
+export { buildIr } from './ir.js';
+export type { Ir, Module } from './ir.js';

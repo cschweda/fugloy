@@ -1,0 +1,46 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildIr > builds a versioned IR for the non-contiguous fixture and matches the committed snapshot 1`] = `
+{
+  "blocks": [
+    {
+      "end": 24581,
+      "start": 24576,
+      "succ": [],
+    },
+  ],
+  "diagnostics": [],
+  "entry": 24576,
+  "externals": [],
+  "format": "cmd",
+  "fugloyIr": 1,
+  "indirectJumps": [],
+  "loaded": [
+    {
+      "end": 24581,
+      "start": 24576,
+    },
+    {
+      "end": 28679,
+      "start": 28672,
+    },
+  ],
+  "regions": [
+    {
+      "end": 24581,
+      "kind": "code",
+      "start": 24576,
+    },
+    {
+      "end": 28679,
+      "kind": "unknown",
+      "start": 28672,
+    },
+  ],
+  "roots": [
+    24576,
+  ],
+  "source": "non-contiguous.cmd",
+  "xrefs": [],
+}
+`;

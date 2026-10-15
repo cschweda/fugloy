@@ -65,7 +65,8 @@ export function endsPath(ins: Instruction): boolean {
   return false;
 }
 
-const isRst08 = (ins: Instruction): boolean => ins.mnemonic === 'RST' && ins.operands[0]?.kind === 'rst' && ins.operands[0].addr === 0x08;
+/** RST 08H, the ROM's syntax-check call, is followed by an inline parameter byte. */
+export const isRst08 = (ins: Instruction): boolean => ins.mnemonic === 'RST' && ins.operands[0]?.kind === 'rst' && ins.operands[0].addr === 0x08;
 
 /** Start address of the instruction that owns a Tail byte. */
 function ownerOf(map: ByteMap, addr: number): number {
