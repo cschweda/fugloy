@@ -1,0 +1,14 @@
+{
+  "name": "@fugloy/emu",
+  "version": "0.1.0",
+  "description": "Headless, deterministic TRS-80 Model I/III/4 emulator core (stub; see docs/fugloy-emu-spec.md)",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": ["src"],
+  "engines": {
+    "node": ">=22"
+  }
+}

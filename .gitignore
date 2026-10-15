@@ -4,6 +4,7 @@ fixtures/real/
 sample/
 *.rom
 *.ROM
+packages/emu/roms/
 
 # Dependencies and build output
 node_modules/

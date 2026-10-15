@@ -1,0 +1,17 @@
+{
+  "name": "@fugloy/mcp",
+  "version": "0.1.0",
+  "description": "stdio MCP server that exposes a running TRS-80 via @fugloy/emu (stub; see docs/fugloy-mcp-spec.md)",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": ["src"],
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@fugloy/emu": "^0.1.0"
+  }
+}

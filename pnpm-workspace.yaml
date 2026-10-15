@@ -1,2 +1,6 @@
 packages:
   - 'packages/*'
+
+# "@fugloy/emu": "^0.1.0" in packages/mcp resolves to the local package, as npm
+# workspaces would; when published, the same range resolves from the registry.
+linkWorkspacePackages: true

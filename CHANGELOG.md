@@ -8,9 +8,22 @@ Releases are tagged `vX.Y.Z` on `main`.
 
 ## [Unreleased]
 
+### Added
+
+- `@fugloy/emu` and `@fugloy/mcp` as stub packages: ESM `package.json`, empty
+  `src/index.js`, READMEs linking their specs in `docs/`, one import test
+  each; `mcp` depends on `emu` by the semver range `^0.1.0`.
+- `docs/label-format.md`, the label and coverage file format shared by emu,
+  mcp, and disasm, extracted from §8 of `docs/fugloy-emu-spec.md`.
+- `packages/disasm/README.md`.
+- A Roadmap in `CLAUDE.md`: disasm phase 2 (in progress), then emu phases
+  0–7, then mcp phases A–F.
+
 ### Changed
 
 - README: CI badge, release pointer, repository link; changelog release links.
+- `linkWorkspacePackages` in `pnpm-workspace.yaml`, so a semver range on a
+  workspace package resolves locally the way npm workspaces would.
 
 ## [0.1.0] - 2026-10-14
 
