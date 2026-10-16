@@ -76,7 +76,7 @@ describe('fugloy CLI', () => {
   it('prints usage with --help, and usage plus an error when no file is given', async () => {
     const help = capture();
     expect(await run(['--help'], help.io)).toBe(0);
-    expect(help.out.join('')).toContain('Usage: fugloy <file> [--base <hex>]');
+    expect(help.out.join('')).toContain('Usage: fugloy <file> [--base <hex> | --rebase <hex>]');
     const none = capture();
     expect(await run([], none.io)).toBe(2);
     expect(none.err.join('')).toContain('Usage: fugloy');
@@ -184,6 +184,37 @@ describe('pass 1 flags', () => {
     const text = out.join('');
     expect(text).toContain('; code lines: 1; entries mined: 0\n');
     expect(text).toContain('\n10 GOTO 30\n; line 20: machine code, 6 bytes at $700D\n700D  C3 00 00      JP 0000H                ; entry\n');
+  });
+
+  it('rebases a .BAS file with --rebase, names the original base, and keeps its hints matching', async () => {
+    const bas = `${fixtures}bas/prog-62c8.bas`;
+    const a = capture();
+    expect(await run([bas, '--rebase', '7000'], a.io)).toBe(0);
+    const text = a.out.join('');
+    expect(text).toContain('saved from $7000');
+    expect(text).toContain('\n; rebased from $62C8 to $7000\n');
+    const skel = capture();
+    expect(await run([bas, '--write-hints', '/virtual/p.hints'], skel.io)).toBe(0);
+    const b = capture();
+    b.files.set('/virtual/p.hints', `${skel.files.get('/virtual/p.hints')!}block 0:$0004 comment the title line\n`);
+    expect(await run([bas, '--rebase', '7000', '--hints', '/virtual/p.hints'], b.io)).toBe(0);
+    expect(b.out.join('')).toContain('1 block matched, 0 unmatched, 1 hint applied');
+  });
+
+  it('refuses --rebase on a .CMD file and with a bad address', async () => {
+    const a = capture();
+    expect(await run([`${fixtures}cmd/hint-paths.cmd`, '--rebase', '7000'], a.io)).toBe(2);
+    expect(a.err.join('')).toContain('--rebase applies to a tokenized BASIC program');
+    const b = capture();
+    expect(await run([`${fixtures}bas/prog-62c8.bas`, '--rebase', 'XYZ'], b.io)).toBe(2);
+    expect(b.err.join('')).toContain('--rebase needs a hex address');
+  });
+
+  skipIfNoZmac()('reassembles a rebased .BAS into the program saved from the new base', async () => {
+    const { io, out } = capture();
+    expect(await run([`${fixtures}bas/prog-62c8.bas`, '--rebase', '7000', '--format', 'zmac'], io)).toBe(0);
+    const saved7000 = loadBas(new Uint8Array(await readFile(`${fixtures}bas/prog-7000.bas`)));
+    expectSameImage(assemble(out.join('')).module.image, saved7000.image);
   });
 
   it('runs pass 1 on a .BAS file when --entry names its hidden code', async () => {

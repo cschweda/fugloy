@@ -38,6 +38,8 @@ export interface AnalyzeOptions {
   annotations?: Annotations;
   /** Where the annotations came from, for the listing header and the IR. */
   hints?: HintsSummary;
+  /** The base a rebased .BAS program was saved from; operands into the old range are then stale. */
+  rebasedFrom?: number;
 }
 
 export interface Analysis {
@@ -56,6 +58,8 @@ export interface Analysis {
   entries: MinedEntry[];
   /** Heuristic suggestions that change nothing until declared in a hint file. */
   proposals: Proposal[];
+  /** Set when the program was rebased: the base it was originally saved from. */
+  rebasedFrom?: number;
 }
 
 /** A .BAS program's structure under the hint annotations: a hint override wins wherever it overlaps the structure's typing. */
@@ -98,5 +102,6 @@ export function analyze(mod: Module, opts: AnalyzeOptions = {}): Analysis {
   const proposals: Proposal[] = proposeTables(mod.image, pass1, blockIdentities(mod.image));
   const analysis: Analysis = { module: mod, pass1, entry, roots: pass1.roots, transfer, annotations, symbols, entries, proposals };
   if (opts.hints !== undefined) analysis.hints = opts.hints;
+  if (opts.rebasedFrom !== undefined) analysis.rebasedFrom = opts.rebasedFrom & 0xffff;
   return analysis;
 }

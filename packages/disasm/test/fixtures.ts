@@ -136,6 +136,8 @@ export const BAS_FIXTURES: Record<string, () => Uint8Array> = {
   'no-header': () => writeBasic(SIX_LINES.slice(0, 2), 0x6500, { header: false }),
   'hidden-code': () =>
     writeBasic([{ number: 10, text: 'GOTO 30' }, { number: 20, raw: [0xc3, 0x00, 0x00, 0xc9, 0x00, 0x3e] }, { number: 30, text: 'END' }], 0x7000),
+  'hidden-code-ref': () =>
+    writeBasic([{ number: 10, text: 'GOTO 30' }, { number: 20, raw: [0x21, 0x0d, 0x70, 0xc9] }, { number: 30, text: 'END' }], 0x7000),
   'bad-token': () => writeBasic([{ number: 10, text: 'CLS' }, { number: 20, raw: [0xb2, 0xfc, 0x41] }, { number: 30, text: 'END' }], 0x7000),
   'control-byte': () => writeBasic([{ number: 10, text: 'CLS' }, { number: 20, raw: [0x01, 0x41] }, { number: 30, text: 'END' }], 0x7000),
   'trailing-bytes': () => writeBasic([{ number: 10, text: 'CLS' }, { number: 20, text: 'END' }], 0x7000, { trailing: [0xaa, 0x55, 0x00] }),

@@ -6,6 +6,7 @@
 import type { MemoryImage, Run } from '../memory.js';
 import type { HintBlock, HintFile } from './format.js';
 import { blockIdentities } from './identity.js';
+import type { IdentityNormalizer } from './identity.js';
 
 export type OverrideKind = 'bytes' | 'words' | 'string' | 'code' | 'nocode';
 
@@ -42,12 +43,13 @@ export const emptyAnnotations = (): Annotations => ({ entries: [], overrides: []
 const hex4 = (n: number): string => n.toString(16).toUpperCase().padStart(4, '0');
 const TERMINATORS = new Set([0x00, 0x0d, 0x03]);
 
-export function applyHints(file: HintFile, image: MemoryImage, programHash?: string): Applied {
+/** `normalize` is the identity normalizer the hint file was written with (basIdentityNormalizer for a .BAS). */
+export function applyHints(file: HintFile, image: MemoryImage, programHash?: string, normalize?: IdentityNormalizer): Applied {
   const warnings: string[] = [];
   if (file.program !== undefined && programHash !== undefined && file.program !== programHash) {
     warnings.push("program hash differs from the hint file's; the hints were written for another file, so blocks are matched by content");
   }
-  const identities = blockIdentities(image);
+  const identities = blockIdentities(image, normalize);
   const runs = image.runs();
   const taken = new Set<number>();
   const matched: Applied['matched'] = [];

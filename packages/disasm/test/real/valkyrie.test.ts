@@ -1,9 +1,13 @@
 /** Voyage of the Valkyrie analyzed: hidden code found, its entry mined, listed at true addresses (skips when absent). */
 import { describe, expect, it } from 'vitest';
 import { loadBas } from '../../src/bas.js';
+import { rebaseBas } from '../../src/bas-rebase.js';
+import { applyHints } from '../../src/hints/apply.js';
+import { parseHints, writeHints } from '../../src/hints/format.js';
+import { basIdentityNormalizer, blockIdentities } from '../../src/hints/identity.js';
 import { renderPass1Listing } from '../../src/listing.js';
 import { analyze } from '../../src/pipeline.js';
-import { listSamples, readSample } from './samples.js';
+import { listSamples, readSample, resolveSample } from './samples.js';
 
 const files = listSamples((n) => /^valkyr.*\.bas$/i.test(n));
 const hex4 = (n: number): string => n.toString(16).toUpperCase().padStart(4, '0');
@@ -25,4 +29,16 @@ describe('Voyage of the Valkyrie, analyzed', () => {
       expect(listing).toContain('\n250 CLS:');
     });
   }
+});
+
+it.skipIf(resolveSample('valkyri1.bas') === null)('valkyri1.bas: hints written against it apply after a rebase to $7000, and its self-references are marked stale', () => {
+  const bytes = readSample('valkyri1.bas');
+  const prog = loadBas(bytes);
+  const blocks = blockIdentities(prog.image, basIdentityNormalizer(prog)).map(({ index, length, hash }) => ({ index, length, hash }));
+  const { file } = parseHints(`${writeHints({ version: 1, blocks, hints: [] })}block 0:$000E entry\n`);
+  const rebased = loadBas(rebaseBas(bytes, 0x7000));
+  const applied = applyHints(file, rebased.image, undefined, basIdentityNormalizer(rebased));
+  expect(applied.unmatched).toEqual([]);
+  expect(applied.annotations.entries).toEqual([0x700e]);
+  expect(renderPass1Listing(analyze(rebased, { annotations: applied.annotations, rebasedFrom: prog.base }))).toMatch(/; stale: original base \$62C8/);
 });

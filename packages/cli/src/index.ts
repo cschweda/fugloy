@@ -7,8 +7,25 @@
 import { basename } from 'node:path';
 import { parseArgs } from 'node:util';
 import {
-  analyze, applyHints, blockIdentities, buildIr, detectFormat, emitZmac, emptyAnnotations, loadBas, loadCmd, loadRaw, parseHints,
-  programHash, renderBasListing, renderCmdListing, renderPass1Listing, renderRawListing, writeHints,
+  analyze,
+  applyHints,
+  basIdentityNormalizer,
+  blockIdentities,
+  buildIr,
+  detectFormat,
+  emitZmac,
+  emptyAnnotations,
+  loadBas,
+  loadCmd,
+  loadRaw,
+  parseHints,
+  programHash,
+  rebaseBas,
+  renderBasListing,
+  renderCmdListing,
+  renderPass1Listing,
+  renderRawListing,
+  writeHints,
 } from '@fugloy/disasm';
 import type { Hint, HintFile, HintsSummary, Module } from '@fugloy/disasm';
 
@@ -22,7 +39,7 @@ export interface Io {
   fileExists(path: string): Promise<boolean>;
 }
 
-export const USAGE = `Usage: fugloy <file> [--base <hex>] [--entry <hex>]... [--hints <path> | --write-hints <path>] [--format listing|zmac|ir] [--sweep] [-o <path>]
+export const USAGE = `Usage: fugloy <file> [--base <hex> | --rebase <hex>] [--entry <hex>]... [--hints <path> | --write-hints <path>] [--format listing|zmac|ir] [--sweep] [-o <path>]
 
 Prints a listing of a TRS-80 .CMD load module, raw binary, or tokenized Level
 II .BAS program. The format is detected from the file's content, never its
@@ -34,6 +51,9 @@ listing instead, with each code line disassembled at its true address.
 
   --base <hex>     load the file as a raw binary at this address (e.g. 5200,
                    0x5200) and list it from there; skips format detection
+  --rebase <hex>   treat a .BAS program as saved from this address instead:
+                   line pointers rewritten, references into the old address
+                   range marked stale; hints written before still apply
   --entry <hex>    add an entry point for pass 1; may repeat
   --hints <path>   apply a hint file: entries, code/data overrides, tables,
                    names, comments (see docs/Fugloy-Project-Plan.md, "Hint file")
@@ -62,6 +82,7 @@ const hex4 = (n: number): string => n.toString(16).toUpperCase().padStart(4, '0'
 export async function run(argv: string[], io: Io): Promise<number> {
   const options = {
     base: { type: 'string' },
+    rebase: { type: 'string' },
     entry: { type: 'string', multiple: true },
     format: { type: 'string' },
     sweep: { type: 'boolean' },
@@ -105,6 +126,15 @@ export async function run(argv: string[], io: Io): Promise<number> {
       return 2;
     }
     base = b;
+  }
+  let rebase: number | undefined;
+  if (values.rebase !== undefined) {
+    const r = parseBase(values.rebase);
+    if (r === null) {
+      io.stderr(`fugloy: --rebase needs a hex address in 0..FFFF, not "${values.rebase}"\n`);
+      return 2;
+    }
+    rebase = r;
   }
   const entries: number[] = [];
   for (const text of values.entry ?? []) {
@@ -153,6 +183,23 @@ export async function run(argv: string[], io: Io): Promise<number> {
       return 2;
     }
   }
+  let rebasedFrom: number | undefined;
+  if (rebase !== undefined) {
+    if (mod.format !== 'bas') {
+      io.stderr(`fugloy: --rebase applies to a tokenized BASIC program, and ${path} is ${mod.format === 'cmd' ? 'a .CMD load module' : 'loaded raw'}\n`);
+      return 2;
+    }
+    try {
+      bytes = rebaseBas(bytes, rebase);
+    } catch (e) {
+      io.stderr(`fugloy: --rebase ${values.rebase}: ${(e as Error).message}\n`);
+      return 2;
+    }
+    rebasedFrom = mod.base;
+    mod = loadBas(bytes);
+  }
+  // A .BAS block's identity reads its line pointers as offsets, so hints survive a rebase.
+  const normalize = mod.format === 'bas' ? basIdentityNormalizer(mod) : undefined;
   for (const e of entries) {
     if (!mod.image.isLoaded(e)) {
       io.stderr(`fugloy: --entry $${hex4(e)} is not in loaded memory\n`);
@@ -174,7 +221,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
     const file: HintFile = {
       version: 1,
       program: programHash(bytes),
-      blocks: blockIdentities(mod.image).map((b) => ({ index: b.index, length: b.length, hash: b.hash, start: b.start })),
+      blocks: blockIdentities(mod.image, normalize).map((b) => ({ index: b.index, length: b.length, hash: b.hash, start: b.start })),
       hints: hintsOut,
     };
     try {
@@ -201,7 +248,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
       for (const err of parsed.errors) io.stderr(`fugloy: ${values.hints}:${err.line}: ${err.message}\n`);
       return 2;
     }
-    const applied = applyHints(parsed.file, mod.image, programHash(bytes));
+    const applied = applyHints(parsed.file, mod.image, programHash(bytes), normalize);
     annotations = applied.annotations;
     const skipped = applied.unmatched.reduce((n, u) => n + u.hints, 0);
     hints = { source: basename(values.hints), matched: applied.matched.length, unmatched: applied.unmatched.length, applied: parsed.file.hints.length - skipped, warnings: applied.warnings };
@@ -212,9 +259,10 @@ export async function run(argv: string[], io: Io): Promise<number> {
   if (values.sweep === true && format === 'listing') {
     text = mod.format === 'cmd' ? renderCmdListing(mod, { source }) : mod.format === 'raw' ? renderRawListing(mod, { source }) : renderBasListing(mod, { source });
   } else {
-    const analysis = analyze(mod, hints === undefined ? { entries, annotations } : { entries, annotations, hints });
+    const analysis = analyze(mod, { entries, annotations, ...(hints === undefined ? {} : { hints }), ...(rebasedFrom === undefined ? {} : { rebasedFrom }) });
     // A .BAS with neither hidden code nor a planted entry lists as plain BASIC unless pass 1 was asked for.
-    const plainBasic = mod.format === 'bas' && entries.length === 0 && hints === undefined && analysis.entries.length === 0 && mod.lines.every((l) => l.parsed);
+    const plainBasic =
+      mod.format === 'bas' && entries.length === 0 && hints === undefined && rebasedFrom === undefined && analysis.entries.length === 0 && mod.lines.every((l) => l.parsed);
     if (format === 'listing' && plainBasic && mod.format === 'bas') text = renderBasListing(mod, { source });
     else if (format === 'zmac') text = emitZmac(mod.image, analysis.pass1, analysis.transfer, { source, symbols: analysis.symbols, annotations: analysis.annotations });
     else if (format === 'ir') text = `${JSON.stringify(buildIr(mod, analysis.pass1, source, analysis), null, 2)}\n`;

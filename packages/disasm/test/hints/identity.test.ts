@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { sha256Hex } from '../../src/hash.js';
+import { loadBas } from '../../src/bas.js';
+import { rebaseBas } from '../../src/bas-rebase.js';
 import { loadCmd } from '../../src/cmd.js';
-import { blockIdentities, IDENTITY_BYTES, programHash } from '../../src/hints/identity.js';
-import { pattern } from '../fixtures.js';
+import { applyHints } from '../../src/hints/apply.js';
+import { parseHints, writeHints } from '../../src/hints/format.js';
+import { basIdentityNormalizer, blockIdentities, IDENTITY_BYTES, programHash } from '../../src/hints/identity.js';
+import { BAS_FIXTURES, pattern } from '../fixtures.js';
 import { image } from '../images.js';
 import { readSample, resolveSample } from '../real/samples.js';
 
@@ -38,5 +42,27 @@ describe('blockIdentities', () => {
     const main = (f: string) => blockIdentities(loadCmd(readSample(f)).image).find((b) => b.length > 1000)!;
     const ids = ['asylum1e.cmd', 'asylum32.cmd', 'asylumd.bad'].map(main);
     expect(new Set(ids.map((b) => `${b.length}:${b.hash}`)).size).toBe(1);
+  });
+});
+
+describe('.BAS identity', () => {
+  it('is the same from any base once each line pointer is read as an offset from the base', () => {
+    const a = loadBas(BAS_FIXTURES['prog-62c8']!());
+    const b = loadBas(BAS_FIXTURES['prog-7000']!());
+    const [ia] = blockIdentities(a.image, basIdentityNormalizer(a));
+    const [ib] = blockIdentities(b.image, basIdentityNormalizer(b));
+    expect([ia!.length, ia!.hash]).toEqual([ib!.length, ib!.hash]);
+    expect(blockIdentities(a.image)[0]!.hash).not.toBe(blockIdentities(b.image)[0]!.hash);
+  });
+
+  it('lets hints written for a program apply to it rebased, with no block unmatched', () => {
+    const a = loadBas(BAS_FIXTURES['prog-62c8']!());
+    const blocks = blockIdentities(a.image, basIdentityNormalizer(a)).map(({ index, length, hash }) => ({ index, length, hash }));
+    const { file, errors } = parseHints(`${writeHints({ version: 1, blocks, hints: [] })}block 0:$0004 comment the title line\n`);
+    expect(errors).toEqual([]);
+    const b = loadBas(rebaseBas(BAS_FIXTURES['prog-62c8']!(), 0x7000));
+    const applied = applyHints(file, b.image, undefined, basIdentityNormalizer(b));
+    expect(applied.unmatched).toEqual([]);
+    expect(applied.annotations.comments.get(0x7004)).toBe('the title line');
   });
 });

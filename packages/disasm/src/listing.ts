@@ -145,6 +145,8 @@ export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {})
     ? 'no roots; use --entry <hex> or --sweep'
     : `roots ${rootList}; ${code} of ${loaded} bytes decoded as code (${pct}%)${data > 0 ? `; ${data} typed as data` : ''}; ${plural(pass1.externals.length, 'external target')}; ${plural(pass1.diagnostics.length, 'note')}`;
   const out: string[] = [mod.format === 'cmd' ? cmdHeadline(mod, opts) : mod.format === 'raw' ? rawHeadline(mod, opts) : basHeadline(mod, opts)];
+  const { rebasedFrom } = analysis;
+  if (rebasedFrom !== undefined) out.push(`; rebased from ${$(rebasedFrom)} to ${$(runs[0]?.start ?? 0)}`);
   out.push(`; pass 1: ${rootText}`);
   if (mod.format === 'bas') {
     const found = entries.filter((e) => e.addr !== null);
@@ -168,11 +170,16 @@ export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {})
   for (const w of hints?.warnings ?? []) out.push(`; warning: ${w}`);
   if (mod.format === 'cmd') out.push(...cmdDetails(mod));
   const rootSet = new Set(roots);
+  /** After a rebase, an absolute operand into the program's old range still points where the program no longer is. */
+  const inOldRange = (v: number): boolean => rebasedFrom !== undefined && v >= rebasedFrom && v < rebasedFrom + loaded;
+  const stale = (addr: number): boolean =>
+    instructions.get(addr)?.operands.some((o) => (o.kind === 'imm16' && inOldRange(o.value)) || (o.kind === 'mem' && inOldRange(o.addr))) ?? false;
   const commentFor = (addr: number): string | undefined => {
     const parts: string[] = [];
     if (rootSet.has(addr)) parts.push('entry');
     const text = annotations.comments.get(addr);
     if (text !== undefined) parts.push(text);
+    if (stale(addr)) parts.push(`stale: original base ${$(rebasedFrom!)}`);
     return parts.length === 0 ? undefined : parts.join('; ');
   };
   const regionStarts = new Set(annotations.overrides.map((o) => o.addr & 0xffff));
