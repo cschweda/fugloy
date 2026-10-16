@@ -5,7 +5,8 @@
  * the address it was saved from, and the whole program is loaded there.
  */
 import { lexLine } from './basic/lexer.js';
-import { detokenize } from './detokenize.js';
+import type { Statement } from './basic/parser.js';
+import { detokenize, parseBody } from './detokenize.js';
 import { MemoryImage } from './memory.js';
 
 export interface BasLine {
@@ -25,6 +26,8 @@ export interface BasLine {
   parsed: boolean;
   /** Why it does not parse, naming the byte offset in the body. */
   reason?: string;
+  /** Its statements in order, as the parser read them (empty when it does not parse); the entry miner reads these. */
+  statements: Statement[];
 }
 
 export interface BasProgram {
@@ -41,7 +44,7 @@ export interface BasProgram {
   warnings: string[];
 }
 
-type ChainLine = Omit<BasLine, 'text' | 'parsed' | 'reason'>;
+type ChainLine = Omit<BasLine, 'text' | 'parsed' | 'reason' | 'statements'>;
 
 interface Chain {
   base: number;
@@ -115,8 +118,11 @@ export function loadBas(bytes: Uint8Array): BasProgram {
     return prog;
   }
   const lines = chain.lines.map((l): BasLine => {
-    const d = detokenize(l.body);
-    return d.reason === undefined ? { ...l, text: d.text, parsed: d.ok } : { ...l, text: d.text, parsed: d.ok, reason: d.reason };
+    const parsed = parseBody(l.body);
+    const d = detokenize(l.body, parsed);
+    const line: BasLine = { ...l, text: d.text, parsed: d.ok, statements: parsed.statements };
+    if (d.reason !== undefined) line.reason = d.reason;
+    return line;
   });
   // Execution starts at line 1, so its bytes must read as BASIC; its grammar is judged like any other line's, so a
   // grammar gap marks one line as code instead of hiding the whole program (spec §7: parse failures never stop loading).

@@ -581,7 +581,7 @@ class Parser {
         return { kind: 'num', value: t.value };
       case 'str':
         this.pos++;
-        return { kind: 'str', value: String.fromCharCode(...t.value) };
+        return { kind: 'str', value: Array.from(t.value, (b) => String.fromCharCode(b)).join('') };
       case 'id':
         this.pos++;
         return { kind: 'var', name: t.name, subscripts: this.subscripts() };

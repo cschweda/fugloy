@@ -77,4 +77,10 @@ describe('lexLine', () => {
   it('lexes an empty body to no tokens', () => {
     expect(lexLine(new Uint8Array()).tokens).toEqual([]);
   });
+
+  it('reads a name far longer than any line without hitting a call-size limit', () => {
+    const r = lexLine(Uint8Array.from([...new Array<number>(200_000).fill(0x41), 0xd5, 0x31])); // AAAA…=1
+    expect(r.error).toBeUndefined();
+    expect(r.tokens[0]).toMatchObject({ t: 'id' });
+  });
 });

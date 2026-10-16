@@ -11,7 +11,6 @@
  * idiom with an unknown address comes back as a note with `addr: null`.
  */
 import type { BasProgram } from '../bas.js';
-import { parseLine } from './parser.js';
 import type { Expr } from './parser.js';
 
 export type AbstractValue =
@@ -159,7 +158,7 @@ export function mineEntries(prog: BasProgram): MinedEntry[] {
   for (const line of prog.lines) {
     if (!line.parsed) continue;
     const n = line.number;
-    for (const s of parseLine(line.body.subarray(0, line.body.length - 1)).statements) {
+    for (const s of line.statements) {
       if (s.kind === 'assign') {
         if (s.subscripts.length === 0) vars.set(significant(s.name), evaluate(s.expr, vars));
       } else if (s.kind === 'defusr') {

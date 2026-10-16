@@ -6,6 +6,7 @@
  * rendered whatever the verdict, so a code line still lists.
  */
 import { parseLine } from './basic/parser.js';
+import type { ParsedLine } from './basic/parser.js';
 import { TOKENS, TOKEN_APOSTROPHE, TOKEN_DATA, TOKEN_ELSE, TOKEN_FIRST, TOKEN_LAST, TOKEN_REM } from './tokens.js';
 
 export interface Detokenized {
@@ -21,17 +22,18 @@ const literal = (b: number): string => (printable(b) ? String.fromCharCode(b) : 
 
 type Mode = 'normal' | 'string' | 'rest' | 'data';
 
-/** Why a body (with its terminator) is not BASIC, or undefined when it is. */
-function verdict(body: Uint8Array): string | undefined {
+/** A body (with its terminator) parsed as BASIC: its statements, or why it is not BASIC. */
+export function parseBody(body: Uint8Array): ParsedLine {
   const n = body.length;
-  if (n === 0 || body[n - 1] !== 0) return 'no 00 terminator';
+  if (n === 0 || body[n - 1] !== 0) return { ok: false, reason: 'no 00 terminator', statements: [] };
   const inner = body.subarray(0, n - 1);
   const zero = inner.indexOf(0);
-  if (zero >= 0) return `embedded 00 at +${zero}`;
-  return parseLine(inner).reason;
+  if (zero >= 0) return { ok: false, reason: `embedded 00 at +${zero}`, statements: [] };
+  return parseLine(inner);
 }
 
-export function detokenize(body: Uint8Array): Detokenized {
+/** `parsed` is the body's parseBody result when the caller already has it, so the body is parsed once. */
+export function detokenize(body: Uint8Array, parsed: ParsedLine = parseBody(body)): Detokenized {
   let text = '';
   const n = body.length;
   const end = n > 0 && body[n - 1] === 0 ? n - 1 : n;
@@ -77,6 +79,5 @@ export function detokenize(body: Uint8Array): Detokenized {
         break;
     }
   }
-  const reason = verdict(body);
-  return reason === undefined ? { text, ok: true } : { text, ok: false, reason };
+  return parsed.reason === undefined ? { text, ok: true } : { text, ok: false, reason: parsed.reason };
 }

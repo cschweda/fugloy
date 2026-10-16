@@ -49,4 +49,12 @@ describe('mineEntries', () => {
   it('ignores code lines and pokes that plant nothing', () => {
     expect(mine([{ number: 10, text: 'POKE 15360,65:X=PEEK(14400)' }, { number: 20, raw: [0xcd, 0x8e, 0x40] }])).toEqual([]);
   });
+
+  it('mines the statements the loader parsed, without parsing each line again', () => {
+    const prog = loadBas(writeBasic([{ number: 10, text: 'DEFUSR=24576' }], 0x6a00));
+    expect(prog.lines[0]!.statements).toEqual([{ kind: 'defusr', n: 0, expr: { kind: 'num', value: 24576 } }]);
+    const body = prog.lines[0]!.body;
+    body.fill(0x20, 0, body.length - 1); // the bytes no longer say DEFUSR; the parsed statements still do
+    expect(mineEntries(prog).map((e) => e.addr)).toEqual([24576]);
+  });
 });

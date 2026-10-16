@@ -94,6 +94,11 @@ describe('parseLine', () => {
     for (const [text, reason] of cases) expect(parse(text), text).toEqual({ ok: false, reason, statements: [] });
   });
 
+  it('reads a string far longer than any line without hitting a call-size limit', () => {
+    const s = parseLine(Uint8Array.from([0x41, 0x24, 0xd5, 0x22, ...new Array<number>(200_000).fill(0x41), 0x22])).statements[0]; // A$="AAAA…"
+    expect(s?.kind === 'assign' && s.expr.kind === 'str' ? s.expr.value.length : -1).toBe(200_000);
+  });
+
   it('does not check types: a string where a number belongs still parses', () => {
     expect(parse('POKE "A",1').ok).toBe(true);
     expect(parse('X=1+"A"').ok).toBe(true);

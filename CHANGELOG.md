@@ -138,6 +138,8 @@ at its true addresses.
   repository is public), repository link; changelog release links.
 - `linkWorkspacePackages` in `pnpm-workspace.yaml`, so a semver range on a
   workspace package resolves locally the way npm workspaces would.
+- `BasLine.statements` holds each line's parsed statements, and the entry
+  miner reads them instead of parsing every line a second time.
 - A `.CMD` `03` record that whole records follow is skipped as a comment, as
   TRSDOS 2.3 and NEWDOS/80 do; only a `03` that ends the file, or one followed
   by debris, ends the load. Rear Guard's cracked copies open with one
@@ -159,6 +161,9 @@ at its true addresses.
   cover bytes that execute elsewhere.
 - `--entry` given the file address of relocated code says where that code
   runs (`use --entry 5005`) instead of "not in loaded memory".
+- The BASIC lexer and parser read a name or a string of any length; one
+  past about 125K bytes overflowed the call stack (no 64K program has one,
+  but the library takes any bytes).
 - A BASIC line that leaves `THEN` out of `IF` (`IF A PRINT`, `IF A 100`)
   parses, as the ROM's IF handler at `$2039` allows; such lines were reported
   as machine code (all 59 "code lines" in Super Star Trek were these).

@@ -47,7 +47,11 @@ export function lexLine(body: Uint8Array): LexResult {
   const tokens: Token[] = [];
   const n = body.length;
   let i = 0;
-  const ascii = (from: number, to: number): string => String.fromCharCode(...body.subarray(from, to));
+  const ascii = (from: number, to: number): string => {
+    let s = '';
+    for (let k = from; k < to; k++) s += String.fromCharCode(body[k]!);
+    return s;
+  };
   const rawTo = (end: number): void => {
     tokens.push({ t: 'raw', bytes: body.subarray(i, end), at: i });
     i = end;

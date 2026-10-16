@@ -6,7 +6,7 @@
  */
 export const Kind = { Unknown: 0, Code: 1, Tail: 2, Byte: 3, Word: 4, String: 5 } as const;
 export type Kind = (typeof Kind)[keyof typeof Kind];
-// Word and String are reserved for later sub-projects; Pass 1 uses Unknown, Code, Tail, Byte.
+// Pass 1 marks Code and Tail; hints and the .BAS structure add Byte and Word; the string heuristic adds String.
 
 const SIZE = 0x10000;
 
