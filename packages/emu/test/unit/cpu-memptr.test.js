@@ -113,6 +113,25 @@ describe('MEMPTR after jumps, calls, and returns', () => {
     }
   });
 
+  it('an accepted interrupt or NMI: the address it calls, as CALL does', () => {
+    const im1 = bare([0x00], (c) => { c.wz = STALE; c.IFF1 = true; c.interruptMode = 1; }).cpu;
+    expect(im1.interrupt()).toBe(true);
+    expect(im1.wz).toBe(0x0038);
+    const im2 = bare([0x00], (c, mem) => {
+      c.wz = STALE;
+      c.IFF1 = true;
+      c.interruptMode = 2;
+      c.registers.I = 0x80;
+      mem[0x80fe] = 0x34; // the bus reads FFH, so the vector is at 80FEH
+      mem[0x80ff] = 0x12;
+    }).cpu;
+    expect(im2.interrupt()).toBe(true);
+    expect(im2.wz).toBe(0x1234);
+    const nmi = bare([0x00], (c) => { c.wz = STALE; }).cpu;
+    nmi.nmi();
+    expect(nmi.wz).toBe(0x0066);
+  });
+
   it('RST p: p', () => {
     for (let p = 0; p < 0x40; p += 8) expect(run([0xc7 | p]).wz, hex([0xc7 | p])).toBe(p);
   });

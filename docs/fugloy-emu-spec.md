@@ -131,14 +131,15 @@ Target speed: ≥ 20× real time (≈ 40 MHz effective) in Node on a laptop. Tha
 Phase 1 also models:
 
 - **MEMPTR,** the hidden address latch that `BIT n,(HL)` shows in flags 3 and 5, by boo_boo and Vladimir Kladov's rules ("MEMPTR, esoteric register of the ZiLOG Z80 CPU"). Save states keep it.
-- **Lone prefixes.** A `DD` or `FD` before another prefix or `ED` runs as a 4-T-state step, with no interrupt taken after it.
+- **Lone prefixes.** A `DD` or `FD` before another prefix or `ED` runs as a 4-T-state step, with no maskable interrupt taken after it.
 - **The block I/O flags** of Young's §4.3.
 
 Not modeled, and invisible to ZEXALL:
 
 - `SCF` and `CCF` taking flags 3 and 5 from the previous instruction's flags (Patrik Rak's z80test);
 - the flags of a repeating block instruction interrupted mid-run;
-- IM 0 with a bus byte other than `FFH` (the Model III's bus reads `FFH`).
+- IM 0 with a bus byte other than `FFH` (the Model III's bus reads `FFH`);
+- an NMI held off after a lone prefix, as a maskable interrupt is (Young §3.6). The Model III's NMI is the disk controller's, so this waits for phase 5, which must also keep the NMI edge pending in `TRS80System` until the core accepts it.
 
 ## 5. Machine models
 
@@ -274,6 +275,7 @@ Phases 0–4 are the minimum for the MCP server to be useful. Phase 7 is what ma
 - [ ] Is the keyboard-hook injection (§6) safe for programs that replace the ROM keyboard routine with their own matrix scan? Likely needs a fallback to real matrix injection with a `mode` switch.
 - [x] License for `packages/emu`: the code is the author's own MIT (upstream `LICENSE`); trsjs.48k.ca supplied only sample games, which stayed upstream. `packages/emu/NOTICE.md` carries the upstream notice.
 - [ ] Is WebAssembly worth it for the CPU core once correct, or is JIT'd JS fast enough for 20× real time?
+- [ ] Several cores in one process run about 4× slower each (measured in phase 1: ZEXALL's `bit n` group takes 8 s on a process's first `Z80CPU` and 33 s on its fourth). `makeRegisterFile` gives every instance its own accessor closures, so every register file gets its own hidden class and the hot paths go megamorphic: 114 MHz becomes about 28 MHz, under the target in §4. The MCP server's sessions and snapshots and the differential harness will run several cores per process. Fix with a benchmark in hand (§2.6): accessors shared on a prototype, or a `Uint8Array` register file. The exerciser harness reuses one core in the meantime.
 
 ## 13. User stories for `@fugloy/mcp`
 

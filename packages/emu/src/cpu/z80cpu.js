@@ -75,7 +75,7 @@ export class Z80CPU {
     // EI enables interrupts only after the instruction that follows it;
     // counts down at the end of each executed instruction (2 -> 1 -> enable).
     this.pendingEI = 0;
-    this.afterPrefix = false; // a DD or FD the next byte made a no-op; no interrupt until it runs
+    this.afterPrefix = false; // a DD or FD the next byte made a no-op; no maskable interrupt until it runs
 
     // When true, unimplemented opcodes throw instead of executing as NOP.
     // Test harnesses use this so instruction-set gaps can't hide.
@@ -235,7 +235,7 @@ export class Z80CPU {
     this.IFF2 = false;
     this.interruptMode = 0;
     this.pendingEI = 0;
-    this.afterPrefix = false; // a DD or FD the next byte made a no-op; no interrupt until it runs
+    this.afterPrefix = false; // a DD or FD the next byte made a no-op; no maskable interrupt until it runs
     this.cycles = 0;
   }
 
@@ -309,6 +309,7 @@ export class Z80CPU {
       this.registers.PC = 0x0038;
       this.cycles += 13;
     }
+    this.wz = this.registers.PC; // MEMPTR, as for CALL
 
     return true;
   }
@@ -329,6 +330,7 @@ export class Z80CPU {
     this.writeMemory(this.registers.SP, this.registers.PC & 0xff);
 
     this.registers.PC = 0x0066;
+    this.wz = 0x0066; // MEMPTR, as for CALL
     this.cycles += 11;
   }
 
@@ -1959,7 +1961,7 @@ export class Z80CPU {
   executeDD() {
     const opcode = this.readMemory(this.registers.PC);
     // Before another prefix or ED, DD is a 4-T-state no-op: leave PC on that byte, which starts
-    // the next step, and take no interrupt before it (Young §3.6).
+    // the next step, and take no maskable interrupt before it (Young §3.6).
     if (opcode === 0xdd || opcode === 0xfd || opcode === 0xed) {
       this.afterPrefix = true;
       return 4;
@@ -1987,7 +1989,7 @@ export class Z80CPU {
   executeFD() {
     const opcode = this.readMemory(this.registers.PC);
     // Before another prefix or ED, FD is a 4-T-state no-op: leave PC on that byte, which starts
-    // the next step, and take no interrupt before it (Young §3.6).
+    // the next step, and take no maskable interrupt before it (Young §3.6).
     if (opcode === 0xdd || opcode === 0xfd || opcode === 0xed) {
       this.afterPrefix = true;
       return 4;

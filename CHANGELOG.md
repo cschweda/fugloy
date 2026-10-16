@@ -26,11 +26,13 @@ Releases are tagged `vX.Y.Z` on `main`.
   and its T-states match `@fugloy/z80` for every opcode, both ways for each
   conditional. On the way:
   - `CPL` sets flags 3 and 5.
-  - MEMPTR follows the documented rules, and save states keep it.
+  - MEMPTR follows the documented rules, interrupt entry included, and save
+    states keep it.
   - `IN F,(C)`, `OUT (C),0`, and the `NEG`, `RETN`, and `IM` duplicates exist,
     and the other undefined `ED` opcodes are 8-T-state NOPs.
   - A `DD` or `FD` before another prefix or `ED` is a 4-T-state step with no
-    interrupt after it, and one before `EX DE,HL` or `EXX` is ignored.
+    maskable interrupt after it, and one before `EX DE,HL` or `EXX` is
+    ignored.
   - The block I/O instructions set every flag.
   - `ADC`, `SBC`, `AND`, `XOR`, `OR`, and `CP` on `(HL)` take 7 T-states, not 4.
 - `examples/rear-guard/`, `examples/eliminator/`, and `examples/armored-patrol/`:
