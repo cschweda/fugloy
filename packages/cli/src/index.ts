@@ -31,7 +31,7 @@ import {
 import type { Hint, HintFile, HintsSummary, Module } from '@fugloy/disasm';
 import { colorListing } from './color.js';
 
-export const VERSION = '0.1.0';
+export const VERSION = '0.2.0';
 
 export interface Io {
   stdout(text: string): void;

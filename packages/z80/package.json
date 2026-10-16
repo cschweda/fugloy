@@ -1,6 +1,6 @@
 {
   "name": "@fugloy/z80",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Generated Z80 opcode table and decoder (no I/O)",
   "license": "MIT",
   "type": "module",

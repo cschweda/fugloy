@@ -14,8 +14,8 @@ stay in Part 2 until phase 3 is complete and the plan's kill criteria have
 been reviewed. If a task seems to need machinery from a later step, stop and
 say so.
 
-Current phase: **2 — Pass 1 and Pass 2, deliverable met** (sub-projects A–C;
-release as v0.2.0 pending). Deliverable: every synthetic fixture round-trips
+Current phase: **2 — Pass 1 and Pass 2, shipped as v0.2.0** (sub-projects
+A–C). Deliverable: every synthetic fixture round-trips
 through a pinned zmac to an identical memory image and bitmap, and Valkyrie's
 hidden code disassembles at its true addresses. Phase 1 shipped as v0.1.0.
 Next, per the Roadmap: emu phase 0.
@@ -50,11 +50,11 @@ Next, per the Roadmap: emu phase 0.
 
 ## Roadmap
 
-1. **disasm — phase 2 (deliverable met).** Pass 1 and Pass 2 per the plan:
+1. **disasm — phase 2 (shipped as v0.2.0).** Pass 1 and Pass 2 per the plan:
    recursive descent, zmac emitter and image round trip, labels, hint file,
    hidden-code detection, heuristics, rebasing, relocation. Sub-projects A
    (Pass 1 and the round-trip proof), B (labels and the hint file), C (hidden
-   code, heuristics, rebasing, relocation). Next: tag v0.2.0.
+   code, heuristics, rebasing, relocation).
 2. **emu — phases 0–7** (`docs/fugloy-emu-spec.md` §11). 0: import
    `cschweda/trs80-emulator`, strip DOM, boot to `READY` in Node. 1: Z80 core
    passes ZEXALL. 2: Model III devices and `.CMD`/`.BAS`/`.CAS` loaders.

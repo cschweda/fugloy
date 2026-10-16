@@ -1,7 +1,7 @@
 {
   "name": "fugloy",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "TRS-80 Model I/III disassembler: Z80 tables, .CMD/.BAS loaders, CLI",
   "license": "MIT",
   "type": "module",

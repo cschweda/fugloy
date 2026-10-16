@@ -8,11 +8,16 @@ Releases are tagged `vX.Y.Z` on `main`.
 
 ## [Unreleased]
 
-Phase 2, sub-projects A (Pass 1 and the round-trip proof), B (labels and the
-hint file), and C (hidden code, heuristics, rebasing, and relocation), plus
-the emulator and MCP server stubs. With C the phase 2 deliverable is met:
-every synthetic fixture round-trips, and Valkyrie's hidden code disassembles
-at its true addresses.
+## [0.2.0] - 2026-10-16
+
+Phase 2 of the plan: Pass 1 and Pass 2, built as sub-projects A (Pass 1 and
+the round-trip proof), B (labels and the hint file), and C (hidden code,
+heuristics, rebasing, and relocation), plus `--color`, the emulator and MCP
+server stubs, and the first program the repository ships, the public-domain
+*Sea Dragon*. Deliverable, met: every synthetic fixture round-trips, and
+Valkyrie's hidden code disassembles at its true addresses. `@fugloy/z80`,
+`@fugloy/disasm`, and `@fugloy/cli` are 0.2.0; the `@fugloy/emu` and
+`@fugloy/mcp` stubs keep their own 0.1.0.
 
 ### Added
 
@@ -238,5 +243,6 @@ of any `.BAS`.
   when at least two load records precede the damage; there is no `--format`
   override yet.
 
-[Unreleased]: https://github.com/cschweda/fugloy/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/cschweda/fugloy/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/cschweda/fugloy/releases/tag/v0.2.0
 [0.1.0]: https://github.com/cschweda/fugloy/releases/tag/v0.1.0

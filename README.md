@@ -135,13 +135,14 @@ Planned, per the roadmap:
 
 ## Status
 
-**Current release: [v0.1.0](https://github.com/cschweda/fugloy/releases/tag/v0.1.0)**, phase 1: core decoder and loaders.
-**Phase 2, Pass 1 and Pass 2, is complete and not yet released.** It brings
-recursive descent, zmac source that reassembles to the identical memory
-image, a JSON IR, labels, the hint file, machine code hidden in tokenized
-BASIC found by parse validity and placed at its true addresses, strings,
-jump-table and loader-stub proposals, rebasing, and relocated regions
-analyzed where they run. Next is the emulator's phase 0, booting the
+**Current release: [v0.2.0](https://github.com/cschweda/fugloy/releases/tag/v0.2.0)**, phase 2: Pass 1 and Pass 2.
+It brings recursive descent, zmac source that reassembles to the identical
+memory image, a JSON IR, labels, the hint file, machine code hidden in
+tokenized BASIC found by parse validity and placed at its true addresses,
+strings, jump-table and loader-stub proposals, rebasing, relocated regions
+analyzed where they run, colored listings, and the public-domain *Sea Dragon*
+to try it on. Phase 1, the core decoder and loaders, shipped as
+[v0.1.0](https://github.com/cschweda/fugloy/releases/tag/v0.1.0). Next is the emulator's phase 0, booting the
 TRS-80's ROM to `READY` in Node; phase 3's ROM and DOS symbol tables are not
 yet scheduled (see the roadmap in [CLAUDE.md](CLAUDE.md)). After v1, phase 5
 adds an assembler with an IDE in the workbench: write Z80 code, assemble it,
