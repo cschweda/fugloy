@@ -31,34 +31,33 @@ const DIRECTIVES = new Set(['DB', 'DW', 'DS', 'ORG', 'END', 'EQU', '.PHASE', '.D
 
 /** `5200  31 27 6F      LD SP,6F27H`: four-digit address, two spaces, up to four bytes padded to 12, two spaces, text. */
 const ROW = /^([0-9A-F]{4})  ([0-9A-F]{2}(?: [0-9A-F]{2}){0,3})( +)(\S.*)$/;
-/** Operand tokens: a quoted string (quotes doubled inside), a name (AF' included), a number, or one other character. */
-const OPERAND = /"(?:[^"]|"")*"?|[A-Za-z_.][A-Za-z0-9_.]*'?|[0-9][0-9A-Fa-f]*H?|[^]/g;
+/**
+ * Operand tokens: a string as the emitter quotes it (`'IT''S'`), a name (the
+ * apostrophe of AF' included, so it never opens a string), a number, or one
+ * other character.
+ */
+const OPERAND = /'(?:[^']|'')*'?|[A-Za-z_.][A-Za-z0-9_.]*'?|[0-9][0-9A-Fa-f]*H?|[^]/g;
 
-function operands(text: string): string {
-  return text.replace(OPERAND, (t) => {
-    if (t.startsWith('"')) return paint('string', t);
-    if (/^[0-9]/.test(t)) return paint('number', t);
-    if (/^[A-Za-z_.]/.test(t)) return paint(REGISTERS.has(t.toUpperCase()) ? 'register' : 'symbol', t);
-    return t;
-  });
+function token(t: string): string {
+  if (t.startsWith("'")) return paint('string', t);
+  if (/^[0-9]/.test(t)) return paint('number', t);
+  if (/^[A-Za-z_.]/.test(t)) return paint(REGISTERS.has(t.toUpperCase()) ? 'register' : 'symbol', t);
+  return t;
 }
 
-/** Mnemonic and operands, then a comment from the first `;` outside a quoted string. */
+const operands = (text: string): string => text.replace(OPERAND, token);
+
+/** Mnemonic and operands, then a comment from the first `;` token, which is never inside a string. */
 function rowText(text: string): string {
-  let quoted = false;
-  let cut = text.length;
-  for (let i = 0; i < text.length; i++) {
-    if (text[i] === '"') quoted = !quoted;
-    else if (text[i] === ';' && !quoted) {
-      cut = i;
-      break;
-    }
+  const space = text.indexOf(' ');
+  const mnemonic = space < 0 ? text : text.slice(0, space);
+  const rest = space < 0 ? '' : text.slice(space);
+  let out = paint(DIRECTIVES.has(mnemonic) ? 'directive' : 'mnemonic', mnemonic);
+  for (const m of rest.matchAll(OPERAND)) {
+    if (m[0] === ';') return out + paint('comment', rest.slice(m.index));
+    out += token(m[0]);
   }
-  const body = text.slice(0, cut);
-  const space = body.indexOf(' ');
-  const mnemonic = space < 0 ? body : body.slice(0, space);
-  const rest = space < 0 ? '' : body.slice(space);
-  return paint(DIRECTIVES.has(mnemonic) ? 'directive' : 'mnemonic', mnemonic) + operands(rest) + paint('comment', text.slice(cut));
+  return out;
 }
 
 function line(text: string): string {

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { analyze, formatListingLine, loadCmd, renderPass1Listing } from '@fugloy/disasm';
+import { analyze, dbItems, formatListingLine, loadCmd, loadRaw, renderPass1Listing } from '@fugloy/disasm';
 import type { ListingLine } from '@fugloy/disasm';
 import { colorListing } from '../src/color.js';
 
@@ -27,10 +27,24 @@ describe('colorListing', () => {
     expect(colorListing(row(0x0100, [0x08], "EX AF,AF'"))).toContain(`${paint('32', 'AF')},${paint('32', "AF'")}`);
   });
 
-  it('keeps a semicolon inside a quoted DB string out of the comment', () => {
-    const colored = colorListing(row(0x81e5, [0x48, 0x49, 0x3b, 0x22], 'DB "HI;"""'));
-    expect(colored).toContain(`${paint('35', 'DB')} ${paint('31', '"HI;"""')}`);
-    expect(colored).not.toContain('\x1b[90m');
+  it('colors a DB string whole, as the emitter quotes it, with a semicolon and a quote inside', () => {
+    const bytes = [0x48, 0x49, 0x3b, 0x27]; // HI;'
+    const text = `DB ${dbItems(bytes)}`; // DB 'HI;'''
+    const colored = colorListing(row(0x81e5, bytes, text, 'entry'));
+    expect(colored).toContain(`${paint('35', 'DB')} ${paint('31', "'HI;'''")}`);
+    expect(colored.endsWith(paint('90', '; entry'))).toBe(true);
+  });
+
+  it("keeps the alternate register's apostrophe from opening a string", () => {
+    const colored = colorListing(row(0x0100, [0x08], "EX AF,AF'", 'entry'));
+    expect(colored).toContain(`${paint('32', 'AF')},${paint('32', "AF'")}`);
+    expect(colored.endsWith(paint('90', '; entry'))).toBe(true);
+  });
+
+  it('colors the strings the heuristic types in a real pass 1 listing', () => {
+    const listing = renderPass1Listing(analyze(loadRaw(Uint8Array.from([0xc9, ...Array.from('HELLO WORLD', (ch) => ch.charCodeAt(0)), 0x0d]), 0x6000)));
+    expect(listing).toContain("DB 'HELL'");
+    expect(colorListing(listing)).toContain(paint('31', "'HELL'"));
   });
 
   it('colors header comments, warnings, labels, directives, and BASIC line numbers', () => {

@@ -172,7 +172,7 @@ at its true addresses.
 - The BASIC lexer and parser read a name or a string of any length; one
   past about 125K bytes overflowed the call stack (no 64K program has one,
   but the library takes any bytes).
-- A BASIC line that leaves `THEN` out of `IF` (`IF A PRINT`, `IF A 100`)
+- A BASIC line that leaves `THEN` out of `IF` (`IF A PRINT`, `IF A,100`)
   parses, as the ROM's IF handler at `$2039` allows; such lines were reported
   as machine code (all 59 "code lines" in Super Star Trek were these).
 - `fugloy` no longer crashes with an unhandled `EPIPE` when the reader of its

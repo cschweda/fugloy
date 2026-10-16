@@ -28,6 +28,13 @@ export const CMD_FIXTURES: Record<string, () => Uint8Array> = {
   'end-03': () => new CmdWriter().load(0x5200, PROGRAM).endNoTransfer().bytes(),
   // Rear Guard's cracked copies open with exactly this record; TRSDOS 2.3 and NEWDOS/80 load past it.
   'comment-03': () => new CmdWriter().record(0x03, Array.from('THE MARK OF "ZORRO"\r', (c) => c.charCodeAt(0))).load(0x5200, PROGRAM).transfer(0x5200).bytes(),
+  'comment-03-twice': () =>
+    new CmdWriter()
+      .record(0x03, Array.from('THE MARK OF "ZORRO"\r', (c) => c.charCodeAt(0)))
+      .record(0x03, Array.from('CRACKED\r', (c) => c.charCodeAt(0)))
+      .load(0x5200, PROGRAM)
+      .transfer(0x5200)
+      .bytes(),
   'end-03-debris': () => new CmdWriter().load(0x5200, PROGRAM).record(0x03, [0x0d]).raw([0x55, 0xaa, 0x00]).bytes(),
   'mover': () =>
     new CmdWriter()

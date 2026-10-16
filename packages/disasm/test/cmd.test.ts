@@ -112,6 +112,17 @@ describe('.CMD loader rules', () => {
     expect(isCmd(CMD_FIXTURES['comment-03']!())).toBe(true);
   });
 
+  it('skips 03 records in a row when more records follow them, as a crack with two tags has', () => {
+    const m = fx('comment-03-twice');
+    expect(m.records.slice(0, 2)).toEqual([
+      { type: 3, offset: 0, text: 'THE MARK OF "ZORRO"{0D}' },
+      { type: 3, offset: 22, text: 'CRACKED{0D}' },
+    ]);
+    expect(m.entry).toBe(0x5200);
+    expect(m.endedBy).toBe('transfer');
+    expect(m.warnings).toHaveLength(2);
+  });
+
   it('still ends the load at a 03 record when what follows is not whole records', () => {
     const m = fx('end-03-debris');
     expect(m.endedBy).toBe('end');

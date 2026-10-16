@@ -74,7 +74,7 @@ the bytes it came from.
   61% of the game then decodes at its running address.
 - **It proves its output.** The tests assemble Fugløy's source with a pinned
   zmac and compare every byte: every Z80 encoding, every synthetic fixture,
-  46 real programs, and the Model I Level II ROM.
+  83 real programs, and the Model I Level II ROM.
 - **It keeps your notes.** Names, comments, and code and data decisions live
   in a plain-text hint file keyed by content, so one file fits a relocated
   build of the same program, and a BASIC program after `--rebase`.

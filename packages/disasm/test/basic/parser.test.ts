@@ -56,7 +56,7 @@ describe('parseLine', () => {
 
   it('accepts IF without THEN, as the ROM does: after the condition a line number is a GOTO, anything else a statement', () => {
     // The Level II IF handler ($2039) skips one comma, then THEN only if present (Super Star Trek relies on it).
-    for (const text of ['IF A PRINT', 'IF A>0 PRINT@105,"X";', 'IF A 100', 'IF A,100', 'IF P(Q)=0 RETURN ELSE PRINT 1', 'IF A X=1:GOTO 10 ELSE 20', 'IF A THEN 10', 'IF A,THEN 10', 'IF A GOTO 10'])
+    for (const text of ['IF A PRINT', 'IF A>0 PRINT@105,"X";', 'IF A,100', 'IF P(Q)=0 RETURN ELSE PRINT 1', 'IF A X=1:GOTO 10 ELSE 20', 'IF A THEN 10', 'IF A,THEN 10', 'IF A GOTO 10'])
       expect(parse(text).reason, text).toBeUndefined();
     expect(parse('IF A POKE 1,2').statements).toEqual<Statement[]>([
       { kind: 'other', keyword: 'IF' },

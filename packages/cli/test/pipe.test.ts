@@ -25,3 +25,18 @@ it('ends quietly when the reader closes the pipe early, as `fugloy big.bin --bas
     rmSync(dir, { recursive: true, force: true });
   }
 }, 30_000);
+
+it('keeps its exit code when the reader of stderr closes early, as `fugloy x.cmd --hints h 2>&1 | head` can', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fugloy-pipe-'));
+  try {
+    const hints = join(dir, 'bad.hints');
+    writeFileSync(hints, `fugloy-hints 1\n${'not a directive\n'.repeat(20_000)}`); // 20,000 errors: far more than a pipe holds
+    const program = fileURLToPath(new URL('../../../fixtures/synthetic/cmd/small-block.cmd', import.meta.url));
+    const child = spawn(process.execPath, ['--conditions=source', '--import', 'tsx', main, program, '--hints', hints], { stdio: ['ignore', 'ignore', 'pipe'] });
+    const closed = new Promise<number | null>((resolve) => child.on('close', (code) => resolve(code)));
+    await new Promise<void>((resolve) => child.stderr.once('data', () => { child.stderr.destroy(); resolve(); }));
+    expect(await closed).toBe(2); // a hint-file error, not a crash
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}, 30_000);

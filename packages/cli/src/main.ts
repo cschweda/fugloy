@@ -6,10 +6,16 @@ process.stdout.on('error', (e: NodeJS.ErrnoException) => {
   if (e.code === 'EPIPE') process.exit(0);
   throw e;
 });
+// The same reader may hold stderr (`2>&1 | head`): stop writing to it, and keep the exit code.
+let stderrOpen = true;
+process.stderr.on('error', (e: NodeJS.ErrnoException) => {
+  if (e.code !== 'EPIPE' && e.code !== 'ERR_STREAM_DESTROYED') throw e;
+  stderrOpen = false;
+});
 
 process.exitCode = await run(process.argv.slice(2), {
   stdout: (s) => { process.stdout.write(s); },
-  stderr: (s) => { process.stderr.write(s); },
+  stderr: (s) => { if (stderrOpen) process.stderr.write(s); },
   readFile: async (path) => new Uint8Array(await readFile(path)),
   writeFile: async (path, text) => { await writeFile(path, text); },
   fileExists: async (path) => { try { await access(path); return true; } catch { return false; } },

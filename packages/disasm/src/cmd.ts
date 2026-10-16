@@ -49,13 +49,14 @@ const payloadLength = (lengthByte: number): number => (lengthByte === 0 ? 256 : 
 
 /**
  * Whether the bytes from `pos` read as whole known records, including at least one
- * `01` or `02`, up to an `02`, another `03`, or exactly the end of the file.
+ * `01` or `02`, up to an `02`, another `03` after a load, or exactly the end of the
+ * file. A `03` before any load is stepped over like the rest (a crack with two tags).
  */
 const wholeRecordsFrom = (bytes: Uint8Array, pos: number): boolean => {
   let loads = 0;
   while (pos < bytes.length) {
     const type = bytes[pos]!;
-    if (type === 0x03) return loads > 0;
+    if (type === 0x03 && loads > 0) return true;
     if (!isKnownType(type) || pos + 1 >= bytes.length) return false;
     const lengthByte = bytes[pos + 1]!;
     const length = type === 0x01 ? loadDataLength(lengthByte) + 2 : type === 0x02 ? 2 : payloadLength(lengthByte);
