@@ -14,6 +14,11 @@ const hex4 = (n: number): string => n.toString(16).toUpperCase().padStart(4, '0'
 const EVIDENCE = 'line 250: POKE 16421,195 with address program start + 14';
 
 describe('Voyage of the Valkyrie, analyzed', () => {
+  // Keeps the suite non-empty when the samples are absent, as in CI: Vitest fails an empty suite.
+  it.skipIf(files.length === 0)('has all 13 Valkyrie files to analyze', () => {
+    expect(files.length).toBe(13);
+  });
+
   for (const file of files) {
     it(`${file}: mines program start + 14 from line 250 and lists line 2 as code at its true address`, () => {
       const prog = loadBas(readSample(file));
