@@ -151,7 +151,7 @@ recorded in [CHANGELOG.md](CHANGELOG.md); releases are tagged `vX.Y.Z` on
 | --- | --- |
 | `packages/z80` | Z80 opcode tables generated from the x/y/z/p/q decomposition (unprefixed, `CB`, `ED`, `DD`/`FD`, `DDCB`/`FDCB`) with length, operands, cycle counts, and control-flow effect; a decoder; an exhaustion test against an independently typed reference. No I/O. |
 | `packages/disasm` | 64K memory image with a load bitmap and block log, `.CMD` and `.BAS` loaders, content-based format detection, raw loader, a Level II BASIC parser and entry-point miner, pass 1 recursive descent, labels, the hint file, string and proposal heuristics, rebasing, relocation, zmac emitter, JSON IR, linear sweep, plain-text listings. No Node or DOM APIs, so it runs in a browser. |
-| `packages/cli` | `fugloy <file> [--base <hex> \| --rebase <hex>] [--entry <hex>]... [--hints <path> \| --write-hints <path>] [--format listing\|zmac\|ir] [--sweep] [-o <path>]`, the only package that touches the file system. |
+| `packages/cli` | `fugloy <file> [--base <hex> \| --rebase <hex>] [--entry <hex>]... [--hints <path> \| --write-hints <path>] [--format listing\|zmac\|ir] [--sweep] [--color] [-o <path>]`, the only package that touches the file system. |
 | `packages/emu` | A stub for the headless, deterministic TRS-80 emulator; design in [docs/fugloy-emu-spec.md](docs/fugloy-emu-spec.md). |
 | `packages/mcp` | A stub for the MCP server that will let an AI assistant drive the emulator; design in [docs/fugloy-mcp-spec.md](docs/fugloy-mcp-spec.md). |
 | `fixtures/synthetic` | Generated fixtures, one `.CMD` or `.BAS` per loader rule and analysis case plus their hint files, written by the test suite's own `.CMD` writer and BASIC tokenizer. |
@@ -186,6 +186,7 @@ pnpm fugloy game.cmd --entry 7000 --entry 7A40   # extra entry points for pass 1
 pnpm fugloy game.cmd --format zmac -o game.z     # assembler source that reassembles to the same image
 pnpm fugloy game.cmd --format ir                 # JSON: regions, blocks, xrefs, symbols, proposals, relocations
 pnpm fugloy game.cmd --sweep                     # the phase-1 linear sweep instead of pass 1
+pnpm fugloy game.cmd --color                     # the listing in color on a terminal (plain when piped or with NO_COLOR)
 pnpm fugloy game.cmd --write-hints game.hints    # a hint-file skeleton to edit by hand
 pnpm fugloy game.cmd --hints game.hints          # apply names, comments, entries, code and data, tables, relocations
 ```

@@ -29,6 +29,7 @@ import {
   writeHints,
 } from '@fugloy/disasm';
 import type { Hint, HintFile, HintsSummary, Module } from '@fugloy/disasm';
+import { colorListing } from './color.js';
 
 export const VERSION = '0.1.0';
 
@@ -38,9 +39,13 @@ export interface Io {
   readFile(path: string): Promise<Uint8Array>;
   writeFile(path: string, text: string): Promise<void>;
   fileExists(path: string): Promise<boolean>;
+  /** Whether stdout is a terminal; `--color` colors only there. */
+  stdoutIsTerminal?: boolean;
+  /** The environment; a non-empty NO_COLOR turns color off. */
+  env?: Record<string, string | undefined>;
 }
 
-export const USAGE = `Usage: fugloy <file> [--base <hex> | --rebase <hex>] [--entry <hex>]... [--hints <path> | --write-hints <path>] [--format listing|zmac|ir] [--sweep] [-o <path>]
+export const USAGE = `Usage: fugloy <file> [--base <hex> | --rebase <hex>] [--entry <hex>]... [--hints <path> | --write-hints <path>] [--format listing|zmac|ir] [--sweep] [--color] [-o <path>]
 
 Prints a listing of a TRS-80 .CMD load module, raw binary, or tokenized Level
 II .BAS program. The format is detected from the file's content, never its
@@ -64,6 +69,8 @@ listing instead, with each code line disassembled at its true address.
   --format <kind>  listing (default), zmac (assembler source that reassembles
                    to the same image), or ir (JSON)
   --sweep          the phase-1 linear sweep listing instead of pass 1
+  --color          color the listing on a terminal; it stays plain when piped,
+                   written with -o, or when NO_COLOR is set
   -o <path>        write the output to a file instead of stdout
   --help           show this help
   --version        show the version
@@ -87,6 +94,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
     entry: { type: 'string', multiple: true },
     format: { type: 'string' },
     sweep: { type: 'boolean' },
+    color: { type: 'boolean' },
     hints: { type: 'string' },
     'write-hints': { type: 'string' },
     output: { type: 'string', short: 'o' },
@@ -148,6 +156,10 @@ export async function run(argv: string[], io: Io): Promise<number> {
   }
   if (values.sweep === true && format !== 'listing') {
     io.stderr(`fugloy: --sweep applies to the listing format only, not --format ${format}\n`);
+    return 2;
+  }
+  if (values.color === true && format !== 'listing') {
+    io.stderr(`fugloy: --color applies to the listing format only, not --format ${format}\n`);
     return 2;
   }
   if (values.sweep === true && entries.length > 0) {
@@ -291,6 +303,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
     }
     return 0;
   }
-  io.stdout(text);
+  const noColor = (io.env?.['NO_COLOR'] ?? '') !== '';
+  io.stdout(values.color === true && io.stdoutIsTerminal === true && !noColor ? colorListing(text) : text);
   return 0;
 }

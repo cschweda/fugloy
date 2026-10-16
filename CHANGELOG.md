@@ -16,6 +16,11 @@ at its true addresses.
 
 ### Added
 
+- `--color`: the listing in color on a terminal (addresses, bytes,
+  mnemonics, registers, numbers, labels, strings, comments, warnings). It
+  stays plain when piped, written with `-o`, or with `NO_COLOR` set; zmac
+  source and the IR are never colored, since other tools read them.
+
 - Level II BASIC lexer and parser: a line counts as BASIC only when every
   statement parses, each keyword checked against its argument shape over one
   expression grammar, Disk BASIC statements and `&H`/`&O` constants included.

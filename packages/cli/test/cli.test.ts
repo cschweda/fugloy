@@ -235,6 +235,47 @@ describe('pass 1 flags', () => {
   });
 });
 
+describe('--color', () => {
+  const file = `${fixtures}cmd/non-contiguous.cmd`;
+  const terminal = (env: Record<string, string | undefined> = {}) => {
+    const c = capture();
+    c.io.stdoutIsTerminal = true;
+    c.io.env = env;
+    return c;
+  };
+
+  it('colors the listing when stdout is a terminal', async () => {
+    const { io, out, err } = terminal();
+    expect(await run([file, '--color'], io)).toBe(0);
+    expect(out.join('')).toContain('\x1b[94mLD\x1b[0m');
+    expect(err).toEqual([]);
+  });
+
+  it('stays plain when piped, written with -o, with NO_COLOR set, or without --color', async () => {
+    const piped = capture();
+    expect(await run([file, '--color'], piped.io)).toBe(0);
+    expect(piped.out.join('')).not.toContain('\x1b[');
+    const noColor = terminal({ NO_COLOR: '1' });
+    expect(await run([file, '--color'], noColor.io)).toBe(0);
+    expect(noColor.out.join('')).not.toContain('\x1b[');
+    const toFile = terminal();
+    expect(await run([file, '--color', '-o', 'out.lst'], toFile.io)).toBe(0);
+    expect(toFile.files.get('out.lst')).not.toContain('\x1b[');
+    const unasked = terminal();
+    expect(await run([file], unasked.io)).toBe(0);
+    expect(unasked.out.join('')).not.toContain('\x1b[');
+  });
+
+  it('refuses --color with --format zmac or ir, whose output is input to other tools', async () => {
+    for (const format of ['zmac', 'ir']) {
+      const { io, out, err } = terminal();
+      expect(await run([file, '--color', '--format', format], io), format).toBe(2);
+      expect(out).toEqual([]);
+      expect(err.join('')).toContain(`--color applies to the listing format only, not --format ${format}`);
+    }
+  });
+});
+
 describe('relocate hints on the command line', () => {
   const cmd = `${fixtures}cmd/relocated-code.cmd`;
   const hintsFile = `${fixtures}hints/relocated-code.hints`;
