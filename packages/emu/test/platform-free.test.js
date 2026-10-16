@@ -16,8 +16,8 @@ it('names no browser or Node global anywhere in src', () => {
 
 it('reports an unimplemented opcode through the injected logger, not console', () => {
   const cpu = new Z80CPU();
-  const mem = new Uint8Array(0x10000);
-  mem.set([0xed, 0x00], 0); // ED 00: no ED case handles it
+  const mem = new Uint8Array(0x10000); // NOP at 0000H
+  delete cpu.opcodeHandlers[0x00]; // every Z80 opcode is implemented, so take one away
   cpu.readMemory = (a) => mem[a];
   cpu.writeMemory = (a, v) => { mem[a] = v; };
   cpu.readPort = () => 0xff;
@@ -28,7 +28,7 @@ it('reports an unimplemented opcode through the injected logger, not console', (
   const warn = vi.spyOn(console, 'warn');
   cpu.executeInstruction();
   expect(warn).not.toHaveBeenCalled();
-  expect(logged).toEqual([['warn', expect.stringContaining('0xED 0x00')]]);
+  expect(logged).toEqual([['warn', expect.stringContaining('Unimplemented opcode: 0x00')]]);
 });
 
 it('reports cassette activity through the injected logger, not console', () => {

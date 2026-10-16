@@ -176,9 +176,9 @@ describe("Strict mode", () => {
   it("throws on unimplemented opcodes instead of silently NOPing", () => {
     const { cpu, ram } = makeCpuWithRam();
     cpu.strictMode = true;
-    // 0xED 0xFF is not a documented ED opcode
-    ram[0x0000] = 0xed;
-    ram[0x0001] = 0xff;
+    // Every Z80 opcode is implemented (the undefined EDs are NOPs), so take one away: NOP
+    delete cpu.opcodeHandlers[0x00];
+    ram[0x0000] = 0x00;
 
     expect(() => cpu.executeInstruction()).toThrow(/[Uu]nimplemented/);
   });

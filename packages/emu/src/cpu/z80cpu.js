@@ -1872,8 +1872,15 @@ export class Z80CPU {
       case 0x72: // SBC HL, SP
         return this.sbcHL(this.registers.SP);
 
-      // NEG (0x44)
+      // NEG and its duplicates
       case 0x44:
+      case 0x4c:
+      case 0x54:
+      case 0x5c:
+      case 0x64:
+      case 0x6c:
+      case 0x74:
+      case 0x7c:
         return this.neg();
 
       // I/O Instructions
@@ -1883,6 +1890,7 @@ export class Z80CPU {
       case 0x58:
       case 0x60:
       case 0x68:
+      case 0x70:
       case 0x78: // IN r, (C)
         return this.inrC((opcode >> 3) & 0x07);
       case 0x41:
@@ -1891,28 +1899,41 @@ export class Z80CPU {
       case 0x59:
       case 0x61:
       case 0x69:
+      case 0x71:
       case 0x79: // OUT (C), r
         return this.outCr((opcode >> 3) & 0x07);
 
       // Return Instructions
       case 0x4d: // RETI
         return this.reti();
+      case 0x55:
+      case 0x5d:
+      case 0x65:
+      case 0x6d:
+      case 0x75:
+      case 0x7d:
       case 0x45: // RETN
         return this.retn();
 
       // Interrupt Mode
+      case 0x4e:
+      case 0x66:
+      case 0x6e:
       case 0x46: // IM 0
         this.interruptMode = 0;
         return 8;
+      case 0x76:
       case 0x56: // IM 1
         this.interruptMode = 1;
         return 8;
+      case 0x7e:
       case 0x5e: // IM 2
         this.interruptMode = 2;
         return 8;
 
+      // Every other ED opcode does nothing for 8 T-states (Young §3.3)
       default:
-        return this.reportUnimplemented(opcode, "0xED ");
+        return 8;
     }
   }
 
@@ -3052,12 +3073,7 @@ export class Z80CPU {
     const value = this.readPort(port);
 
     const regs = ["B", "C", "D", "E", "H", "L", null, "A"];
-    if (regIndex === 6) {
-      // (HL) case
-      this.writeMemory(this.HL, value);
-    } else {
-      this.registers[regs[regIndex]] = value;
-    }
+    if (regIndex !== 6) this.registers[regs[regIndex]] = value; // 6 is IN F,(C): flags only
 
     // Flag updates
     this.flagZ = value === 0;
@@ -3067,7 +3083,7 @@ export class Z80CPU {
     this.flagN = false;
     this._xy(value);
 
-    return regIndex === 6 ? 12 : 12;
+    return 12;
   }
 
   /**
@@ -3077,12 +3093,25 @@ export class Z80CPU {
     this.wz = (this.BC + 1) & 0xffff;
     const port = this.registers.C;
     const regs = ["B", "C", "D", "E", "H", "L", null, "A"];
-    const value =
-      regIndex === 6
-        ? this.readMemory(this.HL)
-        : this.registers[regs[regIndex]];
+    // 6 is OUT (C),0; an NMOS Z80, as in the Model I and III, sends 0 (CMOS parts send FFH)
+    const value = regIndex === 6 ? 0 : this.registers[regs[regIndex]];
     this.writePort(port, value);
-    return regIndex === 6 ? 12 : 12;
+    return 12;
+  }
+
+  /**
+   * Block I/O flags (Young §4.3): S, Z, 5, 3 from B after it counts down; N from bit 7 of the
+   * byte moved; H and C from the carry out of k; P/V the parity of (k AND 7) XOR B.
+   */
+  _blockIOFlags(value, k) {
+    const b = this.registers.B;
+    this.flagS = (b & 0x80) !== 0;
+    this.flagZ = b === 0;
+    this._xy(b);
+    this.flagN = (value & 0x80) !== 0;
+    this.flagH = k > 0xff;
+    this.flagC = k > 0xff;
+    this.flagPV = this.parity((k & 7) ^ b);
   }
 
   /**
@@ -3098,9 +3127,7 @@ export class Z80CPU {
     this.registers.B = (this.registers.B - 1) & 0xff;
 
     // Flag updates
-    this.flagZ = this.registers.B === 0;
-    this.flagN = (value & 0x80) !== 0;
-    this._xy(this.registers.B);
+    this._blockIOFlags(value, value + ((port + 1) & 0xff));
 
     return 16;
   }
@@ -3129,9 +3156,7 @@ export class Z80CPU {
     this.HL = (this.HL - 1) & 0xffff;
     this.registers.B = (this.registers.B - 1) & 0xff;
 
-    this.flagZ = this.registers.B === 0;
-    this.flagN = (value & 0x80) !== 0;
-    this._xy(this.registers.B);
+    this._blockIOFlags(value, value + ((port - 1) & 0xff));
 
     return 16;
   }
@@ -3159,9 +3184,7 @@ export class Z80CPU {
     this.registers.B = (this.registers.B - 1) & 0xff;
     this.wz = (this.BC + 1) & 0xffff;
 
-    this.flagZ = this.registers.B === 0;
-    this.flagN = (value & 0x80) !== 0;
-    this._xy(this.registers.B);
+    this._blockIOFlags(value, value + this.registers.L);
 
     return 16;
   }
@@ -3189,9 +3212,7 @@ export class Z80CPU {
     this.registers.B = (this.registers.B - 1) & 0xff;
     this.wz = (this.BC - 1) & 0xffff;
 
-    this.flagZ = this.registers.B === 0;
-    this.flagN = (value & 0x80) !== 0;
-    this._xy(this.registers.B);
+    this._blockIOFlags(value, value + this.registers.L);
 
     return 16;
   }
