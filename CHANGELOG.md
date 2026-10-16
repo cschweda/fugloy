@@ -20,9 +20,16 @@ Releases are tagged `vX.Y.Z` on `main`.
   `READY` in Node, the same way twice. 348 upstream tests came along, 23 of
   them needing the ROM; the renderer, sound, UI, and every ROM, disk, and
   program file stayed upstream.
+- `examples/rear-guard/`, `examples/eliminator/`, and `examples/armored-patrol/`:
+  three more of the Westmoreland and Gilman games released into the public
+  domain in 1995, beside Sea Dragon, each with a README saying what every
+  build is; the real-program tests run on them in CI too. Builds that carry
+  someone else's code or credit stay out.
 
 ### Fixed
 
+- `@fugloy/emu`'s `fromBase64` accepts whitespace and the URL-safe alphabet
+  again, as upstream's decoder did.
 - `fugloy` no longer crashes when the reader of its output goes away and the
   write fails with `ENOTCONN` or `ECONNRESET` instead of `EPIPE`, as Node's
   piped stdio can on macOS; 0.2.0's fix caught only `EPIPE`.
