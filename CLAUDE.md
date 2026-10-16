@@ -65,7 +65,8 @@ Next, per the Roadmap: emu phase 0.
    publish. A starts after emu phase 0; B and C need emu phase 3.
 
 The plan's phases 3 (symbol tables) and 4 (web workbench) are not yet placed
-in this sequence. When phase 4 builds the site, it gets a "technical details"
+in this sequence, nor is phase 5 (assembler and IDE, after v1; it needs phases
+3 and 4 and emu phases 2–3). When phase 4 builds the site, it gets a "technical details"
 page carrying the interactive explainer of how Fugløy was built (dark,
 infographic, many examples, written for a curious student or retro
 enthusiast; requested 2026-10-16). Its source is

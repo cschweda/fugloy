@@ -138,6 +138,10 @@ at its true addresses.
   repository is public), repository link; changelog release links.
 - `linkWorkspacePackages` in `pnpm-workspace.yaml`, so a semver range on a
   workspace package resolves locally the way npm workspaces would.
+- Project plan: phase 5, an assembler with an IDE in the workbench, after
+  v1; Part 2's public bundles gather on an arcade page, starting with the
+  Westmoreland and Gilman games released into the public domain in 1995; the
+  `LDDR`/`JP (HL)` mover shape is a deferred idea.
 - `BasLine.statements` holds each line's parsed statements, and the entry
   miner reads them instead of parsing every line a second time.
 - A `.CMD` `03` record that whole records follow is skipped as a comment, as

@@ -143,7 +143,9 @@ BASIC found by parse validity and placed at its true addresses, strings,
 jump-table and loader-stub proposals, rebasing, and relocated regions
 analyzed where they run. Next is the emulator's phase 0, booting the
 TRS-80's ROM to `READY` in Node; phase 3's ROM and DOS symbol tables are not
-yet scheduled (see the roadmap in [CLAUDE.md](CLAUDE.md)). Every change is
+yet scheduled (see the roadmap in [CLAUDE.md](CLAUDE.md)). After v1, phase 5
+adds an assembler with an IDE in the workbench: write Z80 code, assemble it,
+and run it on an emulated Model I or Model III. Every change is
 recorded in [CHANGELOG.md](CHANGELOG.md); releases are tagged `vX.Y.Z` on
 `main`.
 
