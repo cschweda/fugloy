@@ -51,6 +51,8 @@ export type { AbstractValue, MinedEntry } from './basic/entries.js';
 export { basStructure, codeLineLabel } from './basic/structure.js';
 export type { BasStructure } from './basic/structure.js';
 export { findStrings, proposeTables } from './analysis/heuristics.js';
+export { proposeMovers } from './analysis/movers.js';
+export type { MoverProposal } from './analysis/movers.js';
 export type { TableProposal } from './analysis/heuristics.js';
 export { dbItems, dbString } from './emit/strings.js';
 export { rebaseBas } from './bas-rebase.js';

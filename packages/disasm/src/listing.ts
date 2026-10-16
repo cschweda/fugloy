@@ -168,7 +168,11 @@ export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {})
   }
   for (const d of pass1.diagnostics) out.push(`; note: ${d.message}`);
   for (const p of analysis.proposals) {
-    out.push(`; proposed table at ${$(p.addr)}, ${p.count} entries, all in code; declare with: ${p.hint}`);
+    if (p.kind === 'table') out.push(`; proposed table at ${$(p.addr)}, ${p.count} entries, all in code; declare with: ${p.hint}`);
+    else {
+      out.push(`; proposed move: LDIR at ${$(p.ldir)} copies ${$(p.src)}-${$(p.src + p.length - 1)} to ${$(p.dst)}-${$(p.dst + p.length - 1)}; declare with:`);
+      for (const h of p.hints) out.push(`;   ${h}`);
+    }
   }
   for (const w of hints?.warnings ?? []) out.push(`; warning: ${w}`);
   if (mod.format === 'cmd') out.push(...cmdDetails(mod));

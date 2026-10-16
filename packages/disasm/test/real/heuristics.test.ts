@@ -20,7 +20,7 @@ it.skipIf(resolveSample('pirate.cmd') === null)("types Pirate's Adventure's mess
 });
 
 it.skipIf(resolveSample('seadrg06.cmd') === null)("proposes Sea Dragon's jump tables, each with the hint line that declares it", () => {
-  const a = analyze(loadCmd(readSample('seadrg06.cmd')));
-  expect(a.proposals.length).toBeGreaterThanOrEqual(10);
-  for (const p of a.proposals) expect(p.hint).toMatch(/^block \d+:\$[0-9A-F]{4} table \d+ 2$/);
+  const tables = analyze(loadCmd(readSample('seadrg06.cmd'))).proposals.flatMap((p) => (p.kind === 'table' ? [p.hint] : []));
+  expect(tables.length).toBeGreaterThanOrEqual(10);
+  for (const hint of tables) expect(hint).toMatch(/^block \d+:\$[0-9A-F]{4} table \d+ 2$/);
 });

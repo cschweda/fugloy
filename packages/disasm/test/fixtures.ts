@@ -26,6 +26,12 @@ export const CMD_FIXTURES: Record<string, () => Uint8Array> = {
   'non-contiguous': () => new CmdWriter().load(0x6000, PROGRAM).load(0x7000, pattern(8)).transfer(0x6000).bytes(),
   'missing-02': () => new CmdWriter().load(0x7000, pattern(8)).load(0x5200, PROGRAM).bytes(),
   'end-03': () => new CmdWriter().load(0x5200, PROGRAM).endNoTransfer().bytes(),
+  'mover': () =>
+    new CmdWriter()
+      .load(0x7000, [0xcd, 0x08, 0x50, 0x18, 0x02, 0x00, 0x00, 0xc9, 0x3e, 0x01, 0xc9, ...new Array<number>(0x40 - 11).fill(0x00)]) // runs at $5000
+      .load(0x7040, [0x21, 0x00, 0x70, 0x11, 0x00, 0x50, 0x01, 0x40, 0x00, 0xed, 0xb0, 0xc3, 0x00, 0x50]) // LD HL,7000H / LD DE,5000H / LD BC,0040H / LDIR / JP 5000H
+      .transfer(0x7040)
+      .bytes(),
   'relocated-code': () =>
     new CmdWriter()
       .load(0x8000, [0xcd, 0x08, 0x50, 0x18, 0x02, 0x00, 0x00, 0xc9, 0x3e, 0x01, 0xc9]) // at $5000: CALL 5008H / JR 5007H / 2 bytes / RET / LD A,1 / RET

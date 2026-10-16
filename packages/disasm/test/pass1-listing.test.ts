@@ -246,3 +246,10 @@ describe('a relocated region in the listing', () => {
     expect(text).toContain(['', '        ORG 8100H', row('8100', '21 00 80', 'LD HL,8000H', 'entry')].join('\n'));
   });
 });
+
+describe('mover proposals in the listing', () => {
+  it('name the LDIR, the move, and the hint lines that declare it', () => {
+    const text = renderPass1Listing(analyze(loadCmd(CMD_FIXTURES['mover']!())));
+    expect(text).toContain('\n; proposed move: LDIR at $7049 copies $7000-$703F to $5000-$503F; declare with:\n;   block 0:$0000 relocate $5000 $0040\n;   block 0:$0000 entry\n');
+  });
+});

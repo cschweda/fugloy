@@ -8,6 +8,8 @@ import type { Pass1 } from './analysis/descent.js';
 import { findStrings, proposeTables } from './analysis/heuristics.js';
 import type { TableProposal } from './analysis/heuristics.js';
 import { Kind } from './analysis/map.js';
+import { proposeMovers } from './analysis/movers.js';
+import type { MoverProposal } from './analysis/movers.js';
 import { analysisSpace } from './analysis/relocate.js';
 import type { AnalysisSpace } from './analysis/relocate.js';
 import { synthesizeSymbols } from './analysis/symbols.js';
@@ -22,7 +24,7 @@ import { blockIdentities } from './hints/identity.js';
 import type { Module } from './ir.js';
 
 /** A heuristic suggestion: reported with the hint line that would declare it, never applied. */
-export type Proposal = TableProposal;
+export type Proposal = TableProposal | MoverProposal;
 
 /** How a hint file applied to this image, for headers and the IR. */
 export interface HintsSummary {
@@ -105,7 +107,8 @@ export function analyze(mod: Module, opts: AnalyzeOptions = {}): Analysis {
   // Symbols name references, not byte kinds, so they come first and bound the strings typed after descent.
   const symbols = synthesizeSymbols(pass1, annotations, space.image);
   for (const s of findStrings(space.image, pass1.map, new Set(symbols.list().map((x) => x.addr)))) pass1.map.mark(s.addr, s.length, Kind.String);
-  const proposals: Proposal[] = proposeTables(space.image, pass1, blockIdentities(mod.image), space.toFile);
+  const identities = blockIdentities(mod.image);
+  const proposals: Proposal[] = [...proposeTables(space.image, pass1, identities, space.toFile), ...proposeMovers(mod.image, pass1, identities, space.relocations)];
   const analysis: Analysis = { module: mod, pass1, entry, roots: pass1.roots, transfer, annotations, symbols, entries, proposals, space };
   if (opts.hints !== undefined) analysis.hints = opts.hints;
   if (opts.rebasedFrom !== undefined) analysis.rebasedFrom = opts.rebasedFrom & 0xffff;
