@@ -330,9 +330,10 @@ and a jump that lands inside such a line says which line and which hint.
 
 ## Getting ROMs and programs
 
-Fugløy ships no ROMs. It ships one program, *Sea Dragon*, which is public
-domain, in [`examples/sea-dragon/`](examples/sea-dragon/); for everything
-else, bring your own. The disassembler itself needs no ROM; only the ROM
+Fugløy ships no ROMs. It ships four games by Wayne Westmoreland and Terry
+Gilman that are public domain, in [`examples/`](examples/): *Sea Dragon*,
+*Rear Guard*, *Eliminator*, and *Armored Patrol*; for everything else, bring
+your own. The disassembler itself needs no ROM; only the ROM
 smoke test and the emulator do. The emulator's tests read the ROM paths from
 the file `$FUGLOY_CONFIG` names, else `fugloy.mcp.json` at the repository root
 (copy `fugloy.mcp.example.json`), else `~/.config/fugloy/fugloy.mcp.json`.
@@ -360,13 +361,15 @@ Without one they skip; a config that names a missing ROM fails them.
 
 ## Sample programs
 
-Sea Dragon, in `examples/`, is committed, so the real-program tests run on
-it everywhere, CI included. The other programs and the ROM images the tests
-use stay out of the repo: Asylum, Volcano Hunter, Voyage of the Valkyrie,
-Armored Patrol, Space Warp, Pirate's Adventure, Voodoo Castle, Deathmaze
-5000, Rear Guard, Eliminator, Planetfall, Penetrator, Super Nova, Crazy
-Painter, Crush, Crumble & Chomp, Super Star Trek, and Sea Dragon's build 05,
-whose loader is Zeta Microcomputer Software's. Tests that need them look in
+The four public-domain games in `examples/` are committed, so the
+real-program tests run on them everywhere, CI included; each folder's README
+says what every build is. The other programs and the ROM images the tests use
+stay out of the repo: Asylum, Volcano Hunter, Voyage of the Valkyrie, Space
+Warp, Pirate's Adventure, Voodoo Castle, Deathmaze 5000, Planetfall,
+Penetrator, Super Nova, Crazy Painter, Crush, Crumble & Chomp, Super Star
+Trek, and the builds of the public-domain games that carry someone else's
+code or credit (Sea Dragon's build 05, an Eliminator build re-badged to
+another author, the Model 4 launcher for Armored Patrol). Tests that need them look in
 `sample/` or `fixtures/real/`, both gitignored, and skip when the files are
 absent, so the suite passes on a fresh clone.
 

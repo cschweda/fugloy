@@ -7,9 +7,10 @@ Gilman, into the public domain: "I hereby release them into the public domain,
 do with them as you please"
 ([trs-80.org](http://www.trs-80.org/games-by-wayne-westmoreland-and-terry-gilman.html)).
 
-That is why it is the one program this repository ships, so anyone can try
-Fugløy on a real game. For everything else, bring your own (see "Getting ROMs
-and programs" in the [main README](../../README.md)). The title screen still
+That is why it ships with this repository, beside three more games from the
+same release (Rear Guard, Eliminator, and Armored Patrol, in `examples/`), so
+anyone can try Fugløy on real games. For everything else, bring your own (see
+"Getting ROMs and programs" in the [main README](../../README.md)). The title screen still
 reads "(C) Copyright 1982", as the original did.
 
 ## The files
