@@ -142,9 +142,11 @@ tokenized BASIC found by parse validity and placed at its true addresses,
 strings, jump-table and loader-stub proposals, rebasing, relocated regions
 analyzed where they run, colored listings, and the public-domain *Sea Dragon*
 to try it on. Phase 1, the core decoder and loaders, shipped as
-[v0.1.0](https://github.com/cschweda/fugloy/releases/tag/v0.1.0). Next is the emulator's phase 0, booting the
-TRS-80's ROM to `READY` in Node; phase 3's ROM and DOS symbol tables are not
-yet scheduled (see the roadmap in [CLAUDE.md](CLAUDE.md)). After v1, phase 5
+[v0.1.0](https://github.com/cschweda/fugloy/releases/tag/v0.1.0). The emulator's phase 0 is done: the core of
+[trs80-emulator](https://github.com/cschweda/trs80-emulator) lives in
+`packages/emu`, free of the DOM, and boots the Model III ROM to `READY` in
+Node. Next is its phase 1, a Z80 core that passes ZEXALL; phase 3's ROM and
+DOS symbol tables are not yet scheduled (see the roadmap in [CLAUDE.md](CLAUDE.md)). After v1, phase 5
 adds an assembler with an IDE in the workbench: write Z80 code, assemble it,
 and run it on an emulated Model I or Model III. Every change is
 recorded in [CHANGELOG.md](CHANGELOG.md); releases are tagged `vX.Y.Z` on
@@ -155,7 +157,7 @@ recorded in [CHANGELOG.md](CHANGELOG.md); releases are tagged `vX.Y.Z` on
 | `packages/z80` | Z80 opcode tables generated from the x/y/z/p/q decomposition (unprefixed, `CB`, `ED`, `DD`/`FD`, `DDCB`/`FDCB`) with length, operands, cycle counts, and control-flow effect; a decoder; an exhaustion test against an independently typed reference. No I/O. |
 | `packages/disasm` | 64K memory image with a load bitmap and block log, `.CMD` and `.BAS` loaders, content-based format detection, raw loader, a Level II BASIC parser and entry-point miner, pass 1 recursive descent, labels, the hint file, string and proposal heuristics, rebasing, relocation, zmac emitter, JSON IR, linear sweep, plain-text listings. No Node or DOM APIs, so it runs in a browser. |
 | `packages/cli` | `fugloy <file> [--base <hex> \| --rebase <hex>] [--entry <hex>]... [--hints <path> \| --write-hints <path>] [--format listing\|zmac\|ir] [--sweep] [--color] [-o <path>]`, the only package that touches the file system. |
-| `packages/emu` | A stub for the headless, deterministic TRS-80 emulator; design in [docs/fugloy-emu-spec.md](docs/fugloy-emu-spec.md). |
+| `packages/emu` | The headless, deterministic TRS-80 Model III emulator core from trs80-emulator: Z80 CPU, memory map, I/O, keyboard, cassette, disk controller, save states. No DOM; boots the ROM to `READY` in Node. Design in [docs/fugloy-emu-spec.md](docs/fugloy-emu-spec.md). |
 | `packages/mcp` | A stub for the MCP server that will let an AI assistant drive the emulator; design in [docs/fugloy-mcp-spec.md](docs/fugloy-mcp-spec.md). |
 | `fixtures/synthetic` | Generated fixtures, one `.CMD` or `.BAS` per loader rule and analysis case plus their hint files, written by the test suite's own `.CMD` writer and BASIC tokenizer. |
 | `fixtures/hints` | Hint files for real programs; `asylum16.hints` carries Asylum's generated relocate lines. |
@@ -331,7 +333,9 @@ and a jump that lands inside such a line says which line and which hint.
 Fugløy ships no ROMs. It ships one program, *Sea Dragon*, which is public
 domain, in [`examples/sea-dragon/`](examples/sea-dragon/); for everything
 else, bring your own. The disassembler itself needs no ROM; only the ROM
-smoke test and the planned emulator do.
+smoke test and the emulator do. The emulator's tests read the ROM paths from
+`fugloy.mcp.json` at the repository root (copy `fugloy.mcp.example.json`), and
+skip without it.
 
 - **ROMs.** The [kiwisincebirth/TRS-80-ROMS](https://github.com/kiwisincebirth/TRS-80-ROMS)
   repository holds Model I Level II and Model III ROM images in its

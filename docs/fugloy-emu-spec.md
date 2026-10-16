@@ -27,7 +27,7 @@
 - The MCP protocol layer (`@fugloy/mcp` wraps this)
 - Recompilation to JS (Fugløy's job; the core supplies ground truth)
 
-The existing `cschweda/trs80-emulator` (derived from trsjs.48k.ca) becomes `packages/emu` once DOM dependencies are removed. Successor, not rewrite.
+The existing `cschweda/trs80-emulator`, the author's own MIT code, became `packages/emu` in phase 0, from commit `11612849` (v1.6.0). It is not derived from trsjs.48k.ca: George Phillips's site supplied some of its sample games, not code. Successor, not rewrite.
 
 ## 2. Design principles
 
@@ -59,6 +59,8 @@ fugloy/
   apps/
     workbench/      app.fugloy.dev, depends on emu + disasm
 ```
+
+Phase 0 kept upstream's file names inside these folders (`cpu/z80cpu.js`, `machine/{memory,io,trs80-system}.js`, `devices/…`, `loaders/{cas-format,cmd-format}.js`, `debug/state.js`); phase 1 may split the CPU into the files named above.
 
 ### Public API (sketch)
 
@@ -256,7 +258,7 @@ Phases 0–4 are the minimum for the MCP server to be useful. Phase 7 is what ma
 - [ ] Video RAM access timing: the Model I shows "snow" on CPU access during display and the Model III/4 insert wait states. Model neither in v1 (timing error only matters for cycle-exact demos), but record the decision so the differential harness can exclude it.
 - [ ] Does the §8 `(map, page)` keying hold up once Model 4 is real, or should coverage be over physical RAM addresses with a map table?
 - [ ] Is the keyboard-hook injection (§6) safe for programs that replace the ROM keyboard routine with their own matrix scan? Likely needs a fallback to real matrix injection with a `mode` switch.
-- [ ] License for `packages/emu` given its trsjs.48k.ca ancestry — confirm that project's terms before publishing to npm.
+- [x] License for `packages/emu`: the code is the author's own MIT (upstream `LICENSE`); trsjs.48k.ca supplied only sample games, which stayed upstream. `packages/emu/NOTICE.md` carries the upstream notice.
 - [ ] Is WebAssembly worth it for the CPU core once correct, or is JIT'd JS fast enough for 20× real time?
 
 ## 13. User stories for `@fugloy/mcp`

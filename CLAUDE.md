@@ -14,11 +14,11 @@ stay in Part 2 until phase 3 is complete and the plan's kill criteria have
 been reviewed. If a task seems to need machinery from a later step, stop and
 say so.
 
-Current phase: **2 — Pass 1 and Pass 2, shipped as v0.2.0** (sub-projects
-A–C). Deliverable: every synthetic fixture round-trips
-through a pinned zmac to an identical memory image and bitmap, and Valkyrie's
-hidden code disassembles at its true addresses. Phase 1 shipped as v0.1.0.
-Next, per the Roadmap: emu phase 0.
+Current phase: **emu phase 0 done** — the trs80-emulator core lives in
+`packages/emu`, runs in an empty `node:vm` context, and boots the Model III ROM
+named in `fugloy.mcp.json` to `READY` in Node. Next, per the Roadmap: emu
+phase 1 (the Z80 core passes ZEXALL). Disassembler phase 2 shipped as v0.2.0,
+phase 1 as v0.1.0.
 
 ## Stack and layout
 
@@ -32,8 +32,9 @@ Next, per the Roadmap: emu phase 0.
   The emu spec calls this folder `apps/workbench`; settle the name before
   phase 4 creates it.
 - `packages/emu` — headless, deterministic TRS-80 emulator core, plain
-  JavaScript ESM, no DOM, no Node APIs. Spec: `docs/fugloy-emu-spec.md`. A
-  stub until its phase 0.
+  JavaScript ESM, no DOM, no Node APIs. Spec: `docs/fugloy-emu-spec.md`.
+  Extracted from `cschweda/trs80-emulator` in its phase 0 (`NOTICE.md`); tests
+  that need a ROM read its path from the gitignored `fugloy.mcp.json`.
 - `packages/mcp` — stdio MCP server over emu. Spec: `docs/fugloy-mcp-spec.md`.
   Depends on emu by semver (`^0.1.0`), resolved to the local package by
   `linkWorkspacePackages` in `pnpm-workspace.yaml`. A stub until emu boots.
@@ -59,8 +60,8 @@ Next, per the Roadmap: emu phase 0.
    `cschweda/trs80-emulator`, strip DOM, boot to `READY` in Node. 1: Z80 core
    passes ZEXALL. 2: Model III devices and `.CMD`/`.BAS`/`.CAS` loaders.
    3: debugger API, coverage, the label file. 4: `@fugloy/mcp` v0.1. 5: FDC
-   and disk images. 6: Model I, then Model 4. 7: differential harness. Starts
-   when disasm phase 2 is stable.
+   and disk images. 6: Model I, then Model 4. 7: differential harness. Phase 0
+   is done; phase 1 is next.
 3. **mcp — phases A–F** (`docs/fugloy-mcp-spec.md` §11). A: lifecycle,
    execution, and inspection tools. B: break, watch, trace, callers, disasm.
    C: labels, coverage, sidecar file. D: snapshots, diff, search, callees.

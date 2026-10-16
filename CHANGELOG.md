@@ -8,6 +8,19 @@ Releases are tagged `vX.Y.Z` on `main`.
 
 ## [Unreleased]
 
+### Added
+
+- `@fugloy/emu`, emu phase 0: the core of `cschweda/trs80-emulator` (v1.6.0)
+  — Z80 CPU, Model III memory map and I/O, keyboard matrix, cassette, WD1793
+  disk controller, disk images, printer, `.CAS`/`.CMD` formats, save states —
+  as plain ESM with no DOM. An injected logger replaces `console` and a
+  built-in base64 replaces `Buffer`/`atob`/`btoa`. A check links and runs the
+  package in an empty `node:vm` context, as the spec requires. The Model III
+  ROM named in `fugloy.mcp.json` (see `fugloy.mcp.example.json`) boots to
+  `READY` in Node, the same way twice. 348 upstream tests came along, 23 of
+  them needing the ROM; the renderer, sound, UI, and every ROM, disk, and
+  program file stayed upstream.
+
 ### Fixed
 
 - `fugloy` no longer crashes when the reader of its output goes away and the
