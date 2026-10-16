@@ -3,7 +3,9 @@ import { recursiveDescent } from '../src/analysis/descent.js';
 import { loadCmd } from '../src/cmd.js';
 import { buildIr } from '../src/ir.js';
 import { loadRaw } from '../src/raw.js';
-import { CMD_FIXTURES } from './fixtures.js';
+import { applyHints } from '../src/hints/apply.js';
+import { analyze } from '../src/pipeline.js';
+import { CMD_FIXTURES, HINT_FIXTURES } from './fixtures.js';
 
 describe('buildIr', () => {
   it('builds a versioned IR for the non-contiguous fixture and matches the committed snapshot', () => {
@@ -18,6 +20,18 @@ describe('buildIr', () => {
     expect(ir.regions).toEqual([{ kind: 'code', start: 0x6000, end: 0x6005 }, { kind: 'unknown', start: 0x7000, end: 0x7007 }]);
     expect(ir.blocks).toEqual([{ start: 0x6000, end: 0x6005, succ: [] }]);
     expect(JSON.parse(JSON.stringify(ir))).toMatchSnapshot();
+  });
+
+  it('carries symbols and the hint summary', () => {
+    const mod = loadCmd(CMD_FIXTURES['hint-paths']!());
+    const applied = applyHints(HINT_FIXTURES['hint-paths']!(), mod.image);
+    const a = analyze(mod, { annotations: applied.annotations, hints: { source: 'hint-paths.hints', matched: 1, unmatched: 0, applied: 11, warnings: [] } });
+    const ir = buildIr(mod, a.pass1, 'hint-paths.cmd', a);
+    expect(ir.symbols.map((s) => `${s.name}:${s.kind}:${s.source}`)).toContain('PRINT:sub:user');
+    expect(ir.symbols.map((s) => s.name)).toContain('DATA_6040');
+    expect(ir.hints).toEqual({ source: 'hint-paths.hints', matched: 1, unmatched: 0, applied: 11, warnings: [] });
+    expect(buildIr(mod, a.pass1).symbols).toEqual([]);
+    expect(buildIr(mod, a.pass1).hints).toBeUndefined();
   });
 
   it('carries diagnostics, externals, xrefs, and indirect jumps for a raw image', () => {

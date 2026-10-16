@@ -2,7 +2,7 @@
 fugloy-hints 1
 program sha256 3f96010c552e7213d2c2f087ab91330f4f62747b5b88c66ff785fc697223b4f6
 block 0 length $005B hash 346b19b103b96ff1    # start $6000
-block 0:$0000 comment entry: call PRINT then dispatch through the table
+block 0:$0000 comment call PRINT, then dispatch through the table
 block 0:$0001 name MIDCALL
 block 0:$001C nocode
 block 0:$0020 name PRINT

@@ -4,7 +4,8 @@ import { loadCmd } from '../src/cmd.js';
 import { renderPass1Listing } from '../src/listing.js';
 import { analyze } from '../src/pipeline.js';
 import { loadRaw } from '../src/raw.js';
-import { BAS_FIXTURES, CMD_FIXTURES } from './fixtures.js';
+import { applyHints } from '../src/hints/apply.js';
+import { BAS_FIXTURES, CMD_FIXTURES, HINT_FIXTURES } from './fixtures.js';
 
 const cmd = (name: string, entries?: number[]) =>
   renderPass1Listing(analyze(loadCmd(CMD_FIXTURES[name]!()), entries === undefined ? {} : { entries }), { source: `${name}.cmd` });
@@ -85,6 +86,56 @@ describe('renderPass1Listing', () => {
     const mod = loadRaw(Uint8Array.from([0xcd, 0x33, 0x00, 0x18, 0xfc]), 0x6000); // CALL 0033 ; JR 6001
     const lines = renderPass1Listing(analyze(mod), { source: 'x.bin' }).split('\n');
     expect(lines[1]).toBe('; pass 1: roots $6000; 5 of 5 bytes reached (100%); 1 external target; 1 note');
-    expect(lines[2]).toBe('; note: target $6001 is inside the instruction at $6000');
+    // The jump target inside the instruction gets a synthesized symbol, emitted as EQU in source; the listing says so.
+    expect(lines[2]).toBe('; symbol L6001 = $6001 (inside the instruction at $6000)');
+    expect(lines[3]).toBe('; note: target $6001 is inside the instruction at $6000');
+  });
+});
+
+describe('renderPass1Listing with hints and symbols', () => {
+  const listing = () => {
+    const mod = loadCmd(CMD_FIXTURES['hint-paths']!());
+    const applied = applyHints(HINT_FIXTURES['hint-paths']!(), mod.image);
+    const a = analyze(mod, {
+      annotations: applied.annotations,
+      hints: { source: 'hint-paths.hints', matched: applied.matched.length, unmatched: applied.unmatched.length, applied: 11, warnings: applied.warnings },
+    });
+    return renderPass1Listing(a, { source: 'hint-paths.cmd' }).split('\n');
+  };
+
+  it('summarises the hint file and lists symbols that sit inside instructions', () => {
+    const lines = listing();
+    expect(lines).toContain('; hints: hint-paths.hints: 1 block matched, 0 unmatched, 11 hints applied');
+    expect(lines).toContain('; symbol MIDCALL = $6001 (inside the instruction at $6000)');
+  });
+
+  it('prints label lines before their rows and symbol names in operands', () => {
+    const lines = listing();
+    const i = lines.indexOf('PRINT:');
+    expect(i).toBeGreaterThan(0);
+    expect(lines[i + 1]).toBe('6020  3E 41         LD A,41H');
+    expect(lines).toContain('6000  CD 20 60      CALL PRINT              ; entry; call PRINT, then dispatch through the table');
+    expect(lines).toContain('6003  21 40 60      LD HL,DATA_6040');
+    expect(lines).toContain('6006  3A 50 60      LD A,(FLAGS)');
+  });
+
+  it('shows words and tables as DW rows and splits data rows at symbols and kind changes', () => {
+    const lines = listing();
+    expect(lines).toContain('DISPATCH:');
+    expect(lines).toContain('6030  19 60 1B 60   DW L6019,L601B');
+    expect(lines).toContain('6040  34 12 78 56   DW 1234H,5678H');
+    expect(lines).toContain('6044  BB AA         DW 0AABBH');
+    expect(lines).toContain('FLAGS:');
+    expect(lines).toContain('6050  01 02 03 04   DB 01H,02H,03H,04H');
+    expect(lines).toContain('6054  48 45 4C 4C   DB 48H,45H,4CH,4CH');
+    expect(lines).toContain('605A  FF            DB 0FFH');
+  });
+
+  it('repeats apply warnings in the header', () => {
+    const mod = loadCmd(CMD_FIXTURES['hint-paths']!());
+    const a = analyze(mod, { hints: { source: 'x.hints', matched: 0, unmatched: 1, applied: 0, warnings: ['hint block 0 (length $0001, hash 0000000000000000) has no matching run; 2 hints skipped'] } });
+    const lines = renderPass1Listing(a).split('\n');
+    expect(lines).toContain('; hints: x.hints: 0 blocks matched, 1 unmatched, 0 hints applied');
+    expect(lines).toContain('; warning: hint block 0 (length $0001, hash 0000000000000000) has no matching run; 2 hints skipped');
   });
 });

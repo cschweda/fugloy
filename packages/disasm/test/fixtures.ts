@@ -104,7 +104,7 @@ export const HINT_FIXTURES: Record<string, () => HintFile> = {
       program: programHash(bytes),
       blocks,
       hints: [
-        h(0x0000, 'comment', { text: 'entry: call PRINT then dispatch through the table' }),
+        h(0x0000, 'comment', { text: 'call PRINT, then dispatch through the table' }),
         h(0x0001, 'name', { name: 'MIDCALL' }),
         h(0x001c, 'nocode'),
         h(0x0020, 'name', { name: 'PRINT' }),

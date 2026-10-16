@@ -2,7 +2,8 @@
  * Plain-text listings for the CLI and the tests. Addresses are `$XXXX` in
  * comments and `XXXXH` in assembly, per the project conventions.
  */
-import { formatInstruction as formatInstructionText, hex4, hexByte, hexWord } from '@fugloy/z80';
+import { hex4, hexByte, hexWord } from '@fugloy/z80';
+import { renderInstruction } from './emit/operands.js';
 import { Kind } from './analysis/map.js';
 import type { BasProgram } from './bas.js';
 import type { CmdModule } from './cmd.js';
@@ -112,47 +113,75 @@ export function renderRawListing(mod: RawModule, opts: RenderOptions = {}): stri
 }
 
 /**
- * The Pass 1 listing: instruction rows where descent reached, DB rows of up
- * to four bytes elsewhere (four keeps the bytes column aligned), `; entry` on
- * every root, and a header that says how much was reached.
+ * The Pass 1 listing: instruction rows where descent reached, data rows of up
+ * to four bytes elsewhere (four keeps the bytes column aligned), label lines
+ * before rows that have a symbol, symbol names in operands, hint comments,
+ * `; entry` on every root, and a header that says how much was reached and
+ * how the hint file applied.
  */
 export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {}): string {
-  const { module: mod, pass1, roots } = analysis;
+  const { module: mod, pass1, roots, symbols, annotations, hints } = analysis;
   const { image } = mod;
+  const { map, instructions } = pass1;
   const runs = image.runs();
   const loaded = runs.reduce((n, r) => n + r.length, 0);
   let reached = 0;
-  for (const run of runs) for (let a = run.start; a <= run.end; a++) if (pass1.map.kind(a) !== Kind.Unknown) reached++;
+  for (const run of runs) for (let a = run.start; a <= run.end; a++) if (map.kind(a) !== Kind.Unknown) reached++;
   const pct = loaded === 0 ? 0 : Math.round((reached / loaded) * 100);
   const rootText = roots.length === 0 ? 'no roots; use --entry <hex> or --sweep' : `roots ${roots.map($).join(', ')}; ${reached} of ${loaded} bytes reached (${pct}%); ${plural(pass1.externals.length, 'external target')}; ${plural(pass1.diagnostics.length, 'note')}`;
   const out: string[] = [mod.format === 'cmd' ? cmdHeadline(mod, opts) : mod.format === 'raw' ? rawHeadline(mod, opts) : basHeadline(mod, opts)];
   out.push(`; pass 1: ${rootText}`);
+  if (hints !== undefined) {
+    out.push(`; hints: ${hints.source === undefined ? '' : `${hints.source}: `}${plural(hints.matched, 'block')} matched, ${hints.unmatched} unmatched, ${plural(hints.applied, 'hint')} applied`);
+  }
+  for (const s of symbols.list()) {
+    if (map.kind(s.addr) !== Kind.Tail) continue;
+    let owner = s.addr;
+    while (!map.isStart(owner) && owner > s.addr - 4) owner--;
+    out.push(`; symbol ${s.name} = ${$(s.addr)} (inside the instruction at ${$(owner)})`);
+  }
   for (const d of pass1.diagnostics) out.push(`; note: ${d.message}`);
+  for (const w of hints?.warnings ?? []) out.push(`; warning: ${w}`);
   if (mod.format === 'cmd') out.push(...cmdDetails(mod));
   const rootSet = new Set(roots);
+  const commentFor = (addr: number): string | undefined => {
+    const parts: string[] = [];
+    if (rootSet.has(addr)) parts.push('entry');
+    const text = annotations.comments.get(addr);
+    if (text !== undefined) parts.push(text);
+    return parts.length === 0 ? undefined : parts.join('; ');
+  };
+  const startsRow = (addr: number): boolean => symbols.has(addr) || annotations.comments.has(addr) || instructions.has(addr);
   for (const run of runs) {
     out.push('', `        ORG ${hexWord(run.start)}`);
     let addr = run.start;
-    let pending: number[] = [];
-    let pendingStart = addr;
-    const flush = (): void => {
-      if (pending.length > 0) out.push(formatListingLine({ addr: pendingStart, bytes: pending, text: `DB ${pending.map(hexByte).join(',')}` } as ListingLine));
-      pending = [];
-    };
     while (addr <= run.end) {
-      const ins = pass1.instructions.get(addr);
+      const symbol = symbols.get(addr);
+      if (symbol !== undefined && map.kind(addr) !== Kind.Tail) out.push(`${symbol.name}:`);
+      const ins = instructions.get(addr);
       if (ins !== undefined) {
-        flush();
-        out.push(formatListingLine({ addr, bytes: ins.bytes, text: formatInstructionText(ins), ins }, rootSet.has(addr) ? 'entry' : undefined));
+        out.push(formatListingLine({ addr, bytes: ins.bytes, text: renderInstruction(ins, symbols), ins }, commentFor(addr)));
         addr += ins.length;
-      } else {
-        if (pending.length === 0) pendingStart = addr;
-        pending.push(image.bytes[addr]!);
-        if (pending.length === 4) flush();
-        addr++;
+        continue;
       }
+      const kind = map.kind(addr);
+      let n = 1;
+      while (addr + n <= run.end && n < 4 && !startsRow(addr + n) && map.kind(addr + n) === kind) n++;
+      let text: string;
+      if (kind === Kind.Word && n >= 2) {
+        if (n % 2 === 1) n--;
+        const words: string[] = [];
+        for (let i = 0; i < n; i += 2) {
+          const value = image.bytes[addr + i]! | (image.bytes[addr + i + 1]! << 8);
+          words.push(symbols.get(value)?.name ?? hexWord(value));
+        }
+        text = `DW ${words.join(',')}`;
+      } else {
+        text = `DB ${Array.from(image.bytes.subarray(addr, addr + n), hexByte).join(',')}`;
+      }
+      out.push(formatListingLine({ addr, bytes: Array.from(image.bytes.subarray(addr, addr + n)), text } as ListingLine, commentFor(addr)));
+      addr += n;
     }
-    flush();
   }
   return `${out.join('\n')}\n`;
 }

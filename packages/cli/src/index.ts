@@ -7,10 +7,10 @@
 import { basename } from 'node:path';
 import { parseArgs } from 'node:util';
 import {
-  analyze, buildIr, detectFormat, emitZmac, loadBas, loadCmd, loadRaw,
-  renderBasListing, renderCmdListing, renderPass1Listing, renderRawListing,
+  analyze, applyHints, blockIdentities, buildIr, detectFormat, emitZmac, emptyAnnotations, loadBas, loadCmd, loadRaw, parseHints,
+  programHash, renderBasListing, renderCmdListing, renderPass1Listing, renderRawListing, writeHints,
 } from '@fugloy/disasm';
-import type { Module } from '@fugloy/disasm';
+import type { Hint, HintFile, HintsSummary, Module } from '@fugloy/disasm';
 
 export const VERSION = '0.1.0';
 
@@ -19,9 +19,10 @@ export interface Io {
   stderr(text: string): void;
   readFile(path: string): Promise<Uint8Array>;
   writeFile(path: string, text: string): Promise<void>;
+  fileExists(path: string): Promise<boolean>;
 }
 
-export const USAGE = `Usage: fugloy <file> [--base <hex>] [--entry <hex>]... [--format listing|zmac|ir] [--sweep] [-o <path>]
+export const USAGE = `Usage: fugloy <file> [--base <hex>] [--entry <hex>]... [--hints <path> | --write-hints <path>] [--format listing|zmac|ir] [--sweep] [-o <path>]
 
 Prints a listing of a TRS-80 .CMD load module, raw binary, or tokenized Level
 II .BAS program. The format is detected from the file's content, never its
@@ -31,6 +32,11 @@ descent from the entry point, with everything it did not reach shown as DB.
   --base <hex>     load the file as a raw binary at this address (e.g. 5200,
                    0x5200) and list it from there; skips format detection
   --entry <hex>    add an entry point for pass 1; may repeat
+  --hints <path>   apply a hint file: entries, code/data overrides, tables,
+                   names, comments (see docs/Fugloy-Project-Plan.md, "Hint file")
+  --write-hints <path>
+                   write a hint-file skeleton for this program (identities and
+                   any --entry addresses) and exit; refuses to overwrite
   --format <kind>  listing (default), zmac (assembler source that reassembles
                    to the same image), or ir (JSON)
   --sweep          the phase-1 linear sweep listing instead of pass 1
@@ -56,6 +62,8 @@ export async function run(argv: string[], io: Io): Promise<number> {
     entry: { type: 'string', multiple: true },
     format: { type: 'string' },
     sweep: { type: 'boolean' },
+    hints: { type: 'string' },
+    'write-hints': { type: 'string' },
     output: { type: 'string', short: 'o' },
     help: { type: 'boolean' },
     version: { type: 'boolean' },
@@ -112,6 +120,14 @@ export async function run(argv: string[], io: Io): Promise<number> {
     io.stderr('fugloy: --entry has no effect with --sweep; drop one of them\n');
     return 2;
   }
+  if (values.sweep === true && values.hints !== undefined) {
+    io.stderr('fugloy: --hints has no effect with --sweep; drop one of them\n');
+    return 2;
+  }
+  if (values.hints !== undefined && values['write-hints'] !== undefined) {
+    io.stderr('fugloy: use either --hints or --write-hints, not both\n');
+    return 2;
+  }
 
   let bytes: Uint8Array;
   try {
@@ -141,15 +157,63 @@ export async function run(argv: string[], io: Io): Promise<number> {
     }
   }
 
+  const writeTo = values['write-hints'];
+  if (writeTo !== undefined) {
+    if (await io.fileExists(writeTo)) {
+      io.stderr(`fugloy: ${writeTo} exists; choose another name\n`);
+      return 2;
+    }
+    const runs = mod.image.runs();
+    const hintsOut: Hint[] = entries.map((e) => {
+      const i = runs.findIndex((r) => e >= r.start && e <= r.end);
+      return { block: i, offset: e - runs[i]!.start, directive: 'entry', line: 0 };
+    });
+    const file: HintFile = {
+      version: 1,
+      program: programHash(bytes),
+      blocks: blockIdentities(mod.image).map((b) => ({ index: b.index, length: b.length, hash: b.hash, start: b.start })),
+      hints: hintsOut,
+    };
+    try {
+      await io.writeFile(writeTo, writeHints(file));
+    } catch (e) {
+      io.stderr(`fugloy: cannot write ${writeTo}: ${(e as Error).message}\n`);
+      return 1;
+    }
+    return 0;
+  }
+
+  let annotations = emptyAnnotations();
+  let hints: HintsSummary | undefined;
+  if (values.hints !== undefined) {
+    let hintText: string;
+    try {
+      hintText = new TextDecoder().decode(await io.readFile(values.hints));
+    } catch (e) {
+      io.stderr(`fugloy: cannot read ${values.hints}: ${(e as Error).message}\n`);
+      return 1;
+    }
+    const parsed = parseHints(hintText);
+    if (parsed.errors.length > 0) {
+      for (const err of parsed.errors) io.stderr(`fugloy: ${values.hints}:${err.line}: ${err.message}\n`);
+      return 2;
+    }
+    const applied = applyHints(parsed.file, mod.image, programHash(bytes));
+    annotations = applied.annotations;
+    const skipped = applied.unmatched.reduce((n, u) => n + u.hints, 0);
+    hints = { source: basename(values.hints), matched: applied.matched.length, unmatched: applied.unmatched.length, applied: parsed.file.hints.length - skipped, warnings: applied.warnings };
+    if (format !== 'listing') for (const w of applied.warnings) io.stderr(`fugloy: warning: ${w}\n`);
+  }
+
   let text: string;
   if (values.sweep === true && format === 'listing') {
     text = mod.format === 'cmd' ? renderCmdListing(mod, { source }) : mod.format === 'raw' ? renderRawListing(mod, { source }) : renderBasListing(mod, { source });
   } else if (format === 'listing' && mod.format === 'bas' && entries.length === 0) {
     text = renderBasListing(mod, { source });
   } else {
-    const analysis = analyze(mod, { entries });
-    if (format === 'zmac') text = emitZmac(mod.image, analysis.pass1, analysis.transfer, { source });
-    else if (format === 'ir') text = `${JSON.stringify(buildIr(mod, analysis.pass1, source), null, 2)}\n`;
+    const analysis = analyze(mod, hints === undefined ? { entries, annotations } : { entries, annotations, hints });
+    if (format === 'zmac') text = emitZmac(mod.image, analysis.pass1, analysis.transfer, { source, symbols: analysis.symbols, annotations });
+    else if (format === 'ir') text = `${JSON.stringify(buildIr(mod, analysis.pass1, source, analysis), null, 2)}\n`;
     else text = renderPass1Listing(analysis, { source });
   }
 

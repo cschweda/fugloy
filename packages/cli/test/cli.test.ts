@@ -10,15 +10,16 @@ import { assemble, expectSameImage, skipIfNoZmac } from '../../disasm/test/round
 
 const fixtures = fileURLToPath(new URL('../../../fixtures/synthetic/', import.meta.url));
 
-function capture(): { io: Io; out: string[]; err: string[]; files: Map<string, string> } {
+function capture(existing: string[] = []): { io: Io; out: string[]; err: string[]; files: Map<string, string> } {
   const out: string[] = [];
   const err: string[] = [];
   const files = new Map<string, string>();
   const io: Io = {
     stdout: (s) => { out.push(s); },
     stderr: (s) => { err.push(s); },
-    readFile: async (path) => new Uint8Array(await readFile(path)),
+    readFile: async (path) => (files.has(path) ? new TextEncoder().encode(files.get(path)!) : new Uint8Array(await readFile(path))),
     writeFile: async (path, text) => { files.set(path, text); },
+    fileExists: async (path) => existing.includes(path) || files.has(path),
   };
   return { io, out, err, files };
 }
@@ -192,5 +193,74 @@ describe('pass 1 flags', () => {
     expect(await run([bas, '--format', 'zmac'], io)).toBe(0);
     const original = loadBas(new Uint8Array(await readFile(bas)));
     expectSameImage(assemble(out.join('')).module.image, original.image);
+  });
+});
+
+describe('hint flags', () => {
+  const file = `${fixtures}cmd/hint-paths.cmd`;
+  const hints = `${fixtures}hints/hint-paths.hints`;
+
+  it('applies --hints and shows labels, comments, and the hint summary', async () => {
+    const { io, out } = capture();
+    expect(await run([file, '--hints', hints], io)).toBe(0);
+    const text = out.join('');
+    expect(text).toContain('; hints: hint-paths.hints: 1 block matched, 0 unmatched, 11 hints applied\n');
+    expect(text).toContain('PRINT:\n6020  3E 41         LD A,41H\n');
+    expect(text).toContain('DW L6019,L601B');
+  });
+
+  it('carries hints into zmac and IR output', async () => {
+    const z = capture();
+    expect(await run([file, '--hints', hints, '--format', 'zmac'], z.io)).toBe(0);
+    expect(z.out.join('')).toContain('PRINT:\n\tLD\tA,41H\n');
+    const i = capture();
+    expect(await run([file, '--hints', hints, '--format', 'ir'], i.io)).toBe(0);
+    const ir = JSON.parse(i.out.join('')) as { symbols: { name: string }[]; hints: { applied: number } };
+    expect(ir.symbols.map((s) => s.name)).toContain('DISPATCH');
+    expect(ir.hints.applied).toBe(11);
+  });
+
+  it('reports every hint parse error with its line and exits 2', async () => {
+    const { io, err, out, files } = capture();
+    files.set('/virtual/bad.hints', 'fugloy-hints 1\nblock 0 length $5B hash 0123456789abcdef\nblock 0:$1 frob\nblock 0:$2 bytes\n');
+    expect(await run([file, '--hints', '/virtual/bad.hints'], io)).toBe(2);
+    expect(err.join('')).toContain('fugloy: /virtual/bad.hints:3: unknown directive "frob"\n');
+    expect(err.join('')).toContain('fugloy: /virtual/bad.hints:4: bytes needs a length\n');
+    expect(out).toEqual([]);
+  });
+
+  it('warns on stderr about unmatched blocks when the output is not a listing', async () => {
+    const { io, err, out, files } = capture();
+    files.set('/virtual/other.hints', 'fugloy-hints 1\nblock 0 length $5B hash 0000000000000000\nblock 0:$0 entry\n');
+    expect(await run([file, '--hints', '/virtual/other.hints', '--format', 'zmac'], io)).toBe(0);
+    expect(err.join('')).toContain('hint block 0');
+    expect(out.join('')).toContain('\tORG\t6000H');
+  });
+
+  it('writes a hint skeleton with --write-hints and prints nothing', async () => {
+    const { io, out, files } = capture();
+    expect(await run([file, '--entry', '6019', '--write-hints', '/virtual/new.hints'], io)).toBe(0);
+    expect(out).toEqual([]);
+    const text = files.get('/virtual/new.hints')!;
+    expect(text.startsWith('# Fugløy hints.')).toBe(true);
+    expect(text).toContain('fugloy-hints 1\nprogram sha256 ');
+    expect(text).toContain('block 0 length $005B hash ');
+    expect(text).toContain('    # start $6000\n');
+    expect(text).toContain('block 0:$0019 entry\n');
+  });
+
+  it('refuses to overwrite an existing hint file', async () => {
+    const { io, err } = capture(['/virtual/taken.hints']);
+    expect(await run([file, '--write-hints', '/virtual/taken.hints'], io)).toBe(2);
+    expect(err.join('')).toContain('exists');
+  });
+
+  it('refuses --sweep with --hints, and --hints with --write-hints', async () => {
+    const a = capture();
+    expect(await run([file, '--sweep', '--hints', hints], a.io)).toBe(2);
+    expect(a.err.join('')).toContain('--hints');
+    const b = capture();
+    expect(await run([file, '--hints', hints, '--write-hints', '/virtual/x.hints'], b.io)).toBe(2);
+    expect(b.err.join('')).toContain('--write-hints');
   });
 });

@@ -41,6 +41,7 @@ exports[`buildIr > builds a versioned IR for the non-contiguous fixture and matc
     24576,
   ],
   "source": "non-contiguous.cmd",
+  "symbols": [],
   "xrefs": [],
 }
 `;

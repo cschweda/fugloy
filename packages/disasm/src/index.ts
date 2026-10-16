@@ -41,3 +41,4 @@ export type { Annotations, Applied, Override, OverrideKind, TableHint } from './
 export { dataReference, SymbolTable, synthesizeSymbols } from './analysis/symbols.js';
 export type { Symbol, SymbolKind } from './analysis/symbols.js';
 export { renderInstruction, renderOperands } from './emit/operands.js';
+export type { HintsSummary } from './pipeline.js';

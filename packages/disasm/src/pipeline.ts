@@ -7,11 +7,22 @@ import { emptyAnnotations } from './hints/apply.js';
 import type { Annotations } from './hints/apply.js';
 import type { Module } from './ir.js';
 
+/** How a hint file applied to this image, for headers and the IR. */
+export interface HintsSummary {
+  source?: string;
+  matched: number;
+  unmatched: number;
+  applied: number;
+  warnings: string[];
+}
+
 export interface AnalyzeOptions {
   /** Extra entry points (`--entry`). */
   entries?: number[];
   /** Hint-file decisions, already matched to this image. */
   annotations?: Annotations;
+  /** Where the annotations came from, for the listing header and the IR. */
+  hints?: HintsSummary;
 }
 
 export interface Analysis {
@@ -25,6 +36,7 @@ export interface Analysis {
   annotations: Annotations;
   /** Pass 2: names for referenced addresses, user names on top. */
   symbols: SymbolTable;
+  hints?: HintsSummary;
 }
 
 /** Roots in order: module entry, --entry addresses, hint entries, code hints; tables add theirs inside descent. */
@@ -38,5 +50,7 @@ export function analyze(mod: Module, opts: AnalyzeOptions = {}): Analysis {
   const pass1 = recursiveDescent(mod.image, roots, annotations);
   const transfer = mod.format === 'cmd' ? (mod.entrySource === 'transfer' ? mod.entry : null) : mod.format === 'raw' ? mod.entry : null;
   const symbols = synthesizeSymbols(pass1, annotations, mod.image);
-  return { module: mod, pass1, entry, roots: pass1.roots, transfer, annotations, symbols };
+  const analysis: Analysis = { module: mod, pass1, entry, roots: pass1.roots, transfer, annotations, symbols };
+  if (opts.hints !== undefined) analysis.hints = opts.hints;
+  return analysis;
 }

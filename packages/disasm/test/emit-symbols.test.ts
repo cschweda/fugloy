@@ -93,7 +93,7 @@ describe('emitZmac with symbols', () => {
     const a = analyze(mod, { annotations: applied.annotations });
     const text = emitZmac(mod.image, a.pass1, a.transfer, { source: 'hint-paths.cmd', symbols: a.symbols, annotations: a.annotations });
     expect(text).toContain('MIDCALL\tEQU\t6001H\n');
-    expect(text).toContain('\tCALL\tPRINT\t; entry: call PRINT then dispatch through the table\n');
+    expect(text).toContain('\tCALL\tPRINT\t; call PRINT, then dispatch through the table\n');
     expect(text).toContain('\tLD\tHL,DATA_6040\n');
     expect(text).toContain('\tLD\tA,(FLAGS)\n\tLD\t(FLAGS),A\n\tLD\tHL,DISPATCH\n');
     expect(text).toContain('L6019:\n\tJR\tL6019\nL601B:\n\tRET\n');
