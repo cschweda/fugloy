@@ -143,6 +143,9 @@ at its true addresses.
 
 ### Fixed
 
+- A BASIC line that leaves `THEN` out of `IF` (`IF A PRINT`, `IF A 100`)
+  parses, as the ROM's IF handler at `$2039` allows; such lines were reported
+  as machine code (all 59 "code lines" in Super Star Trek were these).
 - `fugloy` no longer crashes with an unhandled `EPIPE` when the reader of its
   output stops early (`fugloy game.cmd | head`); it ends quietly.
 

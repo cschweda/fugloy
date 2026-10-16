@@ -54,6 +54,16 @@ describe('parseLine', () => {
     expect(parseLine(new Uint8Array())).toEqual({ ok: true, statements: [] });
   });
 
+  it('accepts IF without THEN, as the ROM does: after the condition a line number is a GOTO, anything else a statement', () => {
+    // The Level II IF handler ($2039) skips one comma, then THEN only if present (Super Star Trek relies on it).
+    for (const text of ['IF A PRINT', 'IF A>0 PRINT@105,"X";', 'IF A 100', 'IF A,100', 'IF P(Q)=0 RETURN ELSE PRINT 1', 'IF A X=1:GOTO 10 ELSE 20', 'IF A THEN 10', 'IF A,THEN 10', 'IF A GOTO 10'])
+      expect(parse(text).reason, text).toBeUndefined();
+    expect(parse('IF A POKE 1,2').statements).toEqual<Statement[]>([
+      { kind: 'other', keyword: 'IF' },
+      { kind: 'poke', addr: num(1), value: num(2) },
+    ]);
+  });
+
   it('rejects code whose bytes happen to spell keywords', () => {
     expect(raw(0xcd, 0x50, 0x41, 0xc9)).toEqual({ ok: false, reason: 'unexpected + at +0', statements: [] }); // CALL 4150H / RET
     expect(raw(0xc3, 0x41, 0x42).reason).toBe('unexpected ERR at +0'); // JP 4241H
@@ -73,7 +83,7 @@ describe('parseLine', () => {
       ['A=FOR', 'unexpected FOR at +2'],
       ['THEN', 'unexpected THEN at +0'],
       ['"X"', 'unexpected string at +0'],
-      ['IF A PRINT', 'expected THEN or GOTO at +4'],
+      ['IF', 'expected expression at +1'],
       ['ON X PRINT', 'expected GOTO or GOSUB at +4'],
       ['DEF X', 'expected FN or USR at +2'],
       ['LINE PRINT', 'expected INPUT at +2'],

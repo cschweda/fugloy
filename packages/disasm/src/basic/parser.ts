@@ -382,14 +382,11 @@ class Parser {
 
   private ifRest(): void {
     this.expr();
-    if (this.atPunct(',')) this.pos++; // the ROM's IF skips one comma before THEN or GOTO
-    if (this.atKw('THEN')) {
-      this.pos++;
-      this.branch();
-    } else if (this.atKw('GOTO')) {
-      this.pos++;
-      this.lineNumber();
-    } else this.expected('THEN or GOTO');
+    // The ROM's IF ($2039) skips one comma, then THEN only if present: a line number
+    // after that is a GOTO, anything else a statement (IF A GOTO 10 is the GOTO statement).
+    if (this.atPunct(',')) this.pos++;
+    if (this.atKw('THEN')) this.pos++;
+    this.branch();
     if (this.atKw('ELSE')) {
       this.pos++;
       this.branch();

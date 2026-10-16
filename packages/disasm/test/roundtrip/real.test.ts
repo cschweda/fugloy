@@ -19,7 +19,7 @@ const CMD_FILES = [
   ...Array.from({ length: 13 }, (_, i) => `crzpnt${String(i + 1).padStart(2, '0')}.cmd`),
 ];
 
-/** BASIC programs beyond Valkyrie, with hidden code (Star Trek) or without; MONSTER names two dumps, and the first found is used. */
+/** BASIC programs beyond Valkyrie, none with code in its lines (Star Trek loads its USR routines from startrek.obj); MONSTER names two dumps, and the first found is used. */
 const BAS_FILES = ['startrek.ins', 'startrek.mch', 'MONSTER', 'elimzap.bas', 'elimzap3.bas'];
 
 /** Runs only when both zmac (required under FUGLOY_REQUIRE_ZMAC=1) and the file are present. */

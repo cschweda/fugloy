@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { loadBas } from '../../src/bas.js';
 import { detectFormat } from '../../src/detect.js';
 import { renderBasListing } from '../../src/listing.js';
-import { listSamples, readSample } from './samples.js';
+import { listSamples, readSample, skipIfMissing } from './samples.js';
 
 const files = listSamples((n) => /^valkyr.*\.bas$/i.test(n));
 
@@ -40,4 +40,13 @@ describe('Voyage of the Valkyrie .BAS files', () => {
       expect(renderBasListing(p, { source: file })).toContain('\n1 GOTO248\n');
     });
   }
+});
+
+describe('Super Star Trek v4.2', () => {
+  skipIfMissing('startrek.mch')('leaves THEN out of IF, as the ROM allows, and every line parses as BASIC', () => {
+    const p = loadBas(readSample('startrek.mch'));
+    expect(p.lines.length).toBe(321);
+    expect(p.lines.find((l) => l.number === 160)?.text).toContain('IFDA>0 PRINT@105');
+    expect(p.lines.filter((l) => !l.parsed).map((l) => l.number)).toEqual([]);
+  });
 });
