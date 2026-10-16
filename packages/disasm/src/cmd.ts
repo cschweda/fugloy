@@ -7,7 +7,8 @@ import { MemoryImage } from './memory.js';
 export type CmdRecord =
   | { type: 1; offset: number; lengthByte: number; addr: number; dataLength: number; block: number }
   | { type: 2; offset: number; addr: number }
-  | { type: 3; offset: number }
+  /** `text` is set when the record was skipped as a comment because more records follow it. */
+  | { type: 3; offset: number; text?: string }
   | { type: 5; offset: number; name: string }
   | { type: 0x1f; offset: number; text: string }
   /** PDS / ISAM / patch records (`04`, `06`–`10`): parsed for length, skipped, logged. */
@@ -46,6 +47,26 @@ const loadDataLength = (lengthByte: number): number => {
 /** Payload bytes in any other typed record: 0 means 256. */
 const payloadLength = (lengthByte: number): number => (lengthByte === 0 ? 256 : lengthByte);
 
+/**
+ * Whether the bytes from `pos` read as whole known records, including at least one
+ * `01` or `02`, up to an `02`, another `03`, or exactly the end of the file.
+ */
+const wholeRecordsFrom = (bytes: Uint8Array, pos: number): boolean => {
+  let loads = 0;
+  while (pos < bytes.length) {
+    const type = bytes[pos]!;
+    if (type === 0x03) return loads > 0;
+    if (!isKnownType(type) || pos + 1 >= bytes.length) return false;
+    const lengthByte = bytes[pos + 1]!;
+    const length = type === 0x01 ? loadDataLength(lengthByte) + 2 : type === 0x02 ? 2 : payloadLength(lengthByte);
+    if (pos + 2 + length > bytes.length) return false;
+    if (type === 0x01 || type === 0x02) loads++;
+    if (type === 0x02) return true;
+    pos += 2 + length;
+  }
+  return loads > 0;
+};
+
 export function loadCmd(bytes: Uint8Array): CmdModule {
   const image = new MemoryImage();
   const records: CmdRecord[] = [];
@@ -69,11 +90,20 @@ export function loadCmd(bytes: Uint8Array): CmdModule {
       break;
     }
     if (type === 0x03) {
-      // End of load, no transfer address. Its length byte and payload are skipped when
-      // present, but a file that simply ends here is not an error.
+      const after = pos + 1 < n ? Math.min(n, pos + 2 + payloadLength(bytes[pos + 1]!)) : n;
+      // TRSDOS 2.3 and NEWDOS/80 load past a 03 that more records follow (Rear Guard's
+      // cracked copies open with one), so it is a comment there.
+      if (after < n && wholeRecordsFrom(bytes, after)) {
+        const comment = text(bytes.subarray(pos + 2, after));
+        records.push({ type: 3, offset, text: comment });
+        warnings.push(`03 record at offset ${offset} skipped as a comment, as TRSDOS 2.3 and NEWDOS/80 do when more records follow: ${comment}`);
+        pos = after;
+        continue;
+      }
+      // Otherwise it ends the load with no transfer address. Its length byte and payload
+      // are skipped when present, but a file that simply ends here is not an error.
       records.push({ type: 3, offset });
       warnings.push('03 record: end of load with no transfer address; not directly executable');
-      const after = pos + 1 < n ? Math.min(n, pos + 2 + payloadLength(bytes[pos + 1]!)) : n;
       stop('end', after);
       break;
     }

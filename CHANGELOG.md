@@ -133,6 +133,13 @@ at its true addresses.
   repository is public), repository link; changelog release links.
 - `linkWorkspacePackages` in `pnpm-workspace.yaml`, so a semver range on a
   workspace package resolves locally the way npm workspaces would.
+- A `.CMD` `03` record that whole records follow is skipped as a comment, as
+  TRSDOS 2.3 and NEWDOS/80 do; only a `03` that ends the file, or one followed
+  by debris, ends the load. Rear Guard's cracked copies open with one
+  (`THE MARK OF "ZORRO"`) and were rejected before.
+- New real samples in the round-trip tests: Rear Guard, Eliminator,
+  Planetfall, Penetrator, Super Nova, Crazy Painter, and the BASIC programs
+  of Super Star Trek, Crush, Crumble & Chomp, and Eliminator's patchers.
 
 ## [0.1.0] - 2026-10-14
 

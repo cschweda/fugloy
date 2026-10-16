@@ -101,6 +101,26 @@ describe('.CMD loader rules', () => {
     expect(m.warnings).toEqual(['03 record: end of load with no transfer address; not directly executable']);
   });
 
+  it('skips a 03 record that more records follow, as TRSDOS 2.3 and NEWDOS/80 do', () => {
+    const m = fx('comment-03');
+    expect(m.records[0]).toEqual({ type: 3, offset: 0, text: 'THE MARK OF "ZORRO"{0D}' });
+    expect(m.entry).toBe(0x5200);
+    expect(m.entrySource).toBe('transfer');
+    expect(m.endedBy).toBe('transfer');
+    expect(Array.from(m.image.bytes.subarray(0x5200, 0x5206))).toEqual(PROGRAM);
+    expect(m.warnings).toEqual(['03 record at offset 0 skipped as a comment, as TRSDOS 2.3 and NEWDOS/80 do when more records follow: THE MARK OF "ZORRO"{0D}']);
+    expect(isCmd(CMD_FIXTURES['comment-03']!())).toBe(true);
+  });
+
+  it('still ends the load at a 03 record when what follows is not whole records', () => {
+    const m = fx('end-03-debris');
+    expect(m.endedBy).toBe('end');
+    expect(m.entry).toBeNull();
+    expect(m.trailing).toBe(3);
+    expect(m.records.at(-1)).toEqual({ type: 3, offset: 10 });
+    expect(m.warnings).toEqual(['03 record: end of load with no transfer address; not directly executable']);
+  });
+
   it('keeps the 05 module header name for the listing', () => {
     const m = fx('header-05');
     expect(m.name).toBe('ASYLUM');

@@ -13,7 +13,14 @@ const CMD_FILES = [
   'spcwarp1.cmd', 'spcwarp2.cmd', 'spcwarp3.cmd',
   ...Array.from({ length: 11 }, (_, i) => `seadrg${String(i + 1).padStart(2, '0')}.cmd`),
   'pirate.cmd', 'dthmz5k1.cmd', 'dthmz5k2.cmd', 'sa04118a.cmd', 'sa04118b.cmd',
+  ...Array.from({ length: 7 }, (_, i) => `reargrd${i + 1}.cmd`),
+  ...Array.from('abcdefgh', (c) => `elimin8${c}.cmd`), 'elimin2.bad',
+  'planetf.cmd', 'PENETR.CMD', 'supnov3a.cmd',
+  ...Array.from({ length: 13 }, (_, i) => `crzpnt${String(i + 1).padStart(2, '0')}.cmd`),
 ];
+
+/** BASIC programs beyond Valkyrie, with hidden code (Star Trek) or without; MONSTER names two dumps, and the first found is used. */
+const BAS_FILES = ['startrek.ins', 'startrek.mch', 'MONSTER', 'elimzap.bas', 'elimzap3.bas'];
 
 /** Runs only when both zmac (required under FUGLOY_REQUIRE_ZMAC=1) and the file are present. */
 const when = (file: string): typeof it | typeof it.skip => {
@@ -40,5 +47,13 @@ for (const file of listSamples((n) => /^valkyr.*\.bas$/i.test(n))) {
     const source = emitZmac(prog.image, a.pass1, a.transfer, { source: file, symbols: a.symbols, annotations: a.annotations });
     expect(source).toMatch(/^[A-Z][A-Z0-9_]*:$/m);
     expectSameImage(assemble(source).module.image, prog.image);
+  });
+}
+
+for (const file of BAS_FILES) {
+  when(file)(`${file}: zmac reproduces the BASIC program's image`, () => {
+    const prog = loadBas(readSample(file));
+    const a = analyze(prog);
+    expectSameImage(assemble(emitZmac(prog.image, a.pass1, a.transfer, { source: file, symbols: a.symbols, annotations: a.annotations })).module.image, prog.image);
   });
 }

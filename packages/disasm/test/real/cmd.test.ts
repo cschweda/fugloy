@@ -34,6 +34,9 @@ const EXPECTED: Record<string, Expected> = {
   'volcano.cmd': { runs: [[0x3c00, 0x4005], [0x52e9, 0x9142]], entry: 0x9134 },
   'GO.CMD': { runs: [[0xf000, 0xf0bd]], entry: 0xf000 },
   'ARMOUR.III': { runs: [[0x8000, 0xb8ff]], entry: 0xb801, overlaps: [[0xb801, 0xb80f]] },
+  // Both open with a 03 record (`THE MARK OF "ZORRO"`) that TRSDOS 2.3 and NEWDOS/80 load past.
+  'reargrd1.cmd': { runs: [[0x8000, 0xbf86]], entry: 0xa000, trailing: 347 },
+  'reargrd3.cmd': { runs: [[0x8000, 0xbf86]], entry: 0xa000, trailing: 219 },
 };
 
 const hex = (n: number): string => n.toString(16).toUpperCase().padStart(4, '0');
@@ -65,6 +68,17 @@ describe('appendix load modules', () => {
     const m = loadCmd(readSample('GO.CMD'));
     expect(m.image.runs()[0]?.length).toBe(190);
     expect(m.image.isLoaded(0xf0b9)).toBe(true);
+  });
+
+  skipIfMissing('reargrd1.cmd')('Rear Guard 1 and 3 load past their leading 03 record to the same image as Rear Guard 7', () => {
+    const seven = loadCmd(readSample('reargrd7.cmd'));
+    for (const f of ['reargrd1.cmd', 'reargrd3.cmd']) {
+      const m = loadCmd(readSample(f));
+      expect(m.records[0], f).toMatchObject({ type: 3, offset: 0, text: 'THE MARK OF "ZORRO"{0D}' });
+      expect(Array.from(m.image.bytes), f).toEqual(Array.from(seven.image.bytes));
+      expect(Array.from(m.image.loaded), f).toEqual(Array.from(seven.image.loaded));
+      expect(m.entry, f).toBe(seven.entry);
+    }
   });
 
   skipIfMissing('asylum1b.cmd')('asylum1b/1c/1d are the same 20,297 bytes relocated', () => {

@@ -94,7 +94,7 @@ The loader walks the record stream and writes each load block into a 64K `Uint8A
 | --- | --- | --- |
 | `01` | Load block: length, 2-byte address, data | Write at address; mark bitmap; log the block |
 | `02` | Transfer address | Save as entry point; stop |
-| `03` | End of load, no entry | Stop; mark as not directly executable |
+| `03` | End of load, no entry; a comment when records follow | Last record: stop; mark as not directly executable. Followed by whole records: skip it and keep loading |
 | `05` | Module header (name) | Save for the listing header |
 | `1F` | Copyright block | Save; emit as a comment |
 | `04`, `06`–`10` | PDS / ISAM / patch records | Parse length, skip, log |
@@ -105,6 +105,7 @@ Rules the loader follows, each backed by a sample file in the appendix:
 - Blocks may overlap. A later block overwrites an earlier one; the loader logs both extents so the listing can mark the range "patched at load time." **The overwritten bytes are gone from the image and are not recoverable by reassembly.** This is why the round-trip test compares images, not files.
 - Blocks may be out of order or non-contiguous. Each run of loaded bytes becomes its own `ORG`.
 - Bytes after the `02` record are ignored (tape-conversion debris is common).
+- A `03` record followed by whole records is a comment, not the end: TRSDOS 2.3 and NEWDOS/80 load past it, and Rear Guard's cracked copies open with one. Only a `03` that ends the file, or one followed by debris, ends the load.
 - A missing `02` is normal for overlays; the tool falls back to the lowest loaded address and says so.
 - Format is detected from content, not extension (`.III`, `.bad`, and `.CMD` are all load modules).
 - Raw binaries load at a user-supplied base address.
@@ -299,5 +300,6 @@ Reported facts from phase 2, measured on the samples; the table above keeps its 
 - Voyage of the Valkyrie: 13 `.bas` files, not 14; exactly lines 2–247 are code, 182 lines, not 190; valkyri9 is saved from `$6F3B`.
 - asylum16 is a self-relocating loader: the stub at `$8000` interprets a record stream at `$80DD` (`<` n dest copies n bytes, `x` addr jumps) that moves the game down to `$42F3`–`$7FF6` and jumps to `$43AE`, an address never in the loaded image. Its 123 records become `relocate` hints (`fixtures/hints/asylum16.hints`), and the game then decodes at its runtime address.
 - asylum1a, asylum32, asylumd, Deathmaze 5000, Pirate's Adventure, Voodoo Castle, Space Warp, Sea Dragon 01–05, and Armored Patrol start with an LDIR mover stub that loads the game high and copies it down, so pass 1 alone reaches under 1% of them; the mover proposals, once applied, reach 19–68%.
+- reargrd1.cmd and reargrd3.cmd (Rear Guard, Wayne Westmoreland and Terry Gilman, 1982) open with a `03` record holding a cracker's tag, `THE MARK OF "ZORRO"`, then 65 `01` records and an `02` to `$A000`. The note filed with them (Ira Goldklang) says both ran under TRSDOS and NEWDOS/80 on a Model I and NEWDOS/80 on a Model III, so the `03` rule above changed from "always ends the load". Both load the same image as reargrd7.cmd, which has no such record.
 
 Level II BASIC tokens, bytes `80`–`FB` in order: END FOR RESET SET CLS CMD RANDOM NEXT DATA INPUT DIM READ LET GOTO RUN IF RESTORE GOSUB RETURN REM STOP ELSE TRON TROFF DEFSTR DEFINT DEFSNG DEFDBL LINE EDIT ERROR RESUME OUT ON OPEN FIELD GET PUT CLOSE LOAD MERGE NAME KILL LSET RSET SAVE SYSTEM LPRINT DEF POKE PRINT CONT LIST LLIST DELETE AUTO CLEAR CLOAD CSAVE NEW TAB( TO FN USING VARPTR USR ERL ERR STRING$ INSTR POINT TIME$ MEM INKEY$ THEN NOT STEP + - * / ^ AND OR > = < SGN INT ABS FRE INP POS SQR RND LOG EXP COS SIN TAN ATN PEEK CVI CVS CVD EOF LOC LOF MKI$ MKS$ MKD$ CINT CSNG CDBL FIX LEN STR$ VAL ASC CHR$ LEFT$ RIGHT$ MID$ '
