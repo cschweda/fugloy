@@ -19,6 +19,8 @@ import { pulsesToBytes } from "./cassette-tape.js";
 
 export class CassetteSystem {
   constructor() {
+    // Where load and save notes go; a no-op unless the host sets one.
+    this.log = () => {};
     this.motorOn = false;
     this.playing = false;
     this.recording = false;
@@ -154,13 +156,13 @@ export class CassetteSystem {
     this.tapePosition = 0;
     this.tapeLength = this.tapeData.length;
 
-    console.log(`Cassette loaded: ${this.tapeLength} bytes`);
+    this.log("info", `Cassette loaded: ${this.tapeLength} bytes`);
     return true;
   }
 
   simulateCLoad(memory, targetAddress = 0x4200) {
     if (!this.tapeData) {
-      console.error("No tape loaded");
+      this.log("error", "No tape loaded");
       return false;
     }
 
@@ -168,7 +170,7 @@ export class CassetteSystem {
       memory.writeByte(targetAddress + i, this.tapeData[i]);
     }
 
-    console.log(
+    this.log("info", 
       `CLOAD: ${this.tapeLength} bytes at 0x${targetAddress.toString(16)}`
     );
 
@@ -189,7 +191,7 @@ export class CassetteSystem {
     this.tapePosition = 0;
     this.tapeLength = length;
 
-    console.log(`CSAVE: ${length} bytes from 0x${startAddress.toString(16)}`);
+    this.log("info", `CSAVE: ${length} bytes from 0x${startAddress.toString(16)}`);
 
     if (this.onSaveComplete) {
       this.onSaveComplete(this.tapeData);

@@ -15,28 +15,35 @@ import { DiskImage } from "../devices/disk-image.js";
 export const STATE_VERSION = 1;
 export const STATE_MACHINE = "trs80-model3";
 
-// Base64 helpers that work in both the browser and Node (vitest)
+// Base64 without platform APIs, so the core runs anywhere (spec §2.1).
+const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
 export function toBase64(bytes) {
-  if (typeof Buffer !== "undefined") {
-    return Buffer.from(bytes).toString("base64");
+  let text = "";
+  for (let i = 0; i < bytes.length; i += 3) {
+    const n = (bytes[i] << 16) | ((bytes[i + 1] ?? 0) << 8) | (bytes[i + 2] ?? 0);
+    text += B64[(n >> 18) & 63] + B64[(n >> 12) & 63];
+    text += i + 1 < bytes.length ? B64[(n >> 6) & 63] : "=";
+    text += i + 2 < bytes.length ? B64[n & 63] : "=";
   }
-  let binary = "";
-  const CHUNK = 0x8000;
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
-  }
-  return btoa(binary);
+  return text;
 }
 
 export function fromBase64(text) {
-  if (typeof Buffer !== "undefined") {
-    const buf = Buffer.from(text, "base64");
-    return new Uint8Array(buf.buffer, buf.byteOffset, buf.length);
-  }
-  const binary = atob(text);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
+  const clean = text.replace(/=+$/, "");
+  const bytes = new Uint8Array(Math.floor((clean.length * 3) / 4));
+  let bits = 0;
+  let value = 0;
+  let out = 0;
+  for (const ch of clean) {
+    const v = B64.indexOf(ch);
+    if (v < 0) throw new Error(`not base64: ${JSON.stringify(ch)}`);
+    value = (value << 6) | v;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      bytes[out++] = (value >> bits) & 0xff;
+    }
   }
   return bytes;
 }

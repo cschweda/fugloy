@@ -21,11 +21,15 @@ export const RTC_HZ = 30;
 export const RTC_INTERVAL_TSTATES = CPU_CLOCK_HZ / RTC_HZ; // 67,584
 
 export class TRS80System {
-  constructor({ romData }) {
+  constructor({ romData, log }) {
     this.memory = new MemorySystem();
     this.io = new IOSystem();
     this.keyboard = new KeyboardMatrix();
     this.cpu = new Z80CPU();
+    if (log !== undefined) {
+      this.cpu.log = log;
+      this.io.cassette.log = log;
+    }
 
     this.memory.keyboard = this.keyboard;
 
