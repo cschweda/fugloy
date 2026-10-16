@@ -31,3 +31,6 @@ export type { Ir, Module } from './ir.js';
 export { analyze } from './pipeline.js';
 export type { Analysis, AnalyzeOptions } from './pipeline.js';
 export { renderPass1Listing } from './listing.js';
+export { sha256, sha256Hex } from './hash.js';
+export { blockIdentities, IDENTITY_BYTES, programHash } from './hints/identity.js';
+export type { BlockIdentity } from './hints/identity.js';
