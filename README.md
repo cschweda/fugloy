@@ -83,6 +83,56 @@ The roadmap adds a headless emulator and an MCP server next, so that what a
 program does at run time can confirm and extend what the static analysis
 finds.
 
+## User stories
+
+What people come to Fugløy for, and how each one is done today.
+
+- **As a fan who grew up with a TRS-80 game,** I want to read its machine
+  code as labeled assembly, so that I can see how it really worked.
+  *Today:* `pnpm fugloy game.cmd` lists it, with the jumps, calls, and data
+  references inside the program named.
+- **As someone studying a BASIC game,** I want the machine code hidden in its
+  lines shown at the addresses it occupies, so that I can follow what the
+  BASIC hands off to. *Today:* `pnpm fugloy game.bas` parses every line,
+  disassembles the ones that cannot be BASIC, and finds the entry point the
+  BASIC plants when it uses one of the common idioms.
+- **As a preservationist,** I want a disassembly I can trust byte for byte,
+  so that an annotated or repaired copy can be rebuilt exactly. *Today:*
+  `--format zmac` writes source that the test suite reassembles and compares
+  with the original, for every fixture and every sample program present.
+- **As a reverse engineer working over many evenings,** I want my names,
+  comments, and code-or-data decisions kept in a file I can commit, so that
+  nothing I learn is lost and the same notes fit other builds of the program.
+  *Today:* hint files are plain text keyed by content; one file fits Asylum
+  1b, 1c, and 1d.
+- **As someone taking apart a game that moves itself,** I want its code
+  analyzed at the addresses where it runs, so that the listing matches what
+  the CPU executes. *Today:* `relocate` hints, and proposals with the exact
+  hint lines for the common copy-then-jump loaders.
+- **As a modder,** I want to change the assembly and rebuild the program, so
+  that I can fix a bug or make a variant. *Today:* the zmac source
+  reassembles as it stands, labels and relocated regions included, so your
+  edits start from a faithful copy.
+- **As a tool builder,** I want the analysis as data, so that I can build my
+  own views on it. *Today:* `--format ir` writes JSON with regions, basic
+  blocks, cross-references, symbols, proposals, and relocations, and the core
+  library is written to run in a browser.
+- **As a teacher,** I want real examples of how 1980 software fit BASIC and
+  machine code into 48K, so that students can see the tricks for themselves.
+  *Today:* the listings show tokenized BASIC, hidden code, and self-moving
+  loaders next to the bytes they came from.
+
+Planned, per the roadmap:
+
+- **As someone checking what really runs,** I want to run the program and see
+  which bytes execute, so that the listing can be confirmed against the real
+  thing. *Planned:* the headless emulator in `packages/emu`.
+- **As a reader of a listing,** I want ROM and DOS calls named, so that
+  `CALL 0033H` reads as showing a character. *Planned:* phase 3's symbol
+  tables.
+- **As someone without a terminal,** I want to explore and annotate a listing
+  in the browser. *Planned:* phase 4's web workbench.
+
 ## Status
 
 **Current release: [v0.1.0](https://github.com/cschweda/fugloy/releases/tag/v0.1.0)**, phase 1: core decoder and loaders.
