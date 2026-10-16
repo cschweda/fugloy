@@ -434,6 +434,7 @@ export class Z80CPU {
     this.opcodeHandlers[0xc3] = () => {
       const low = this.readMemory(this.registers.PC);
       const high = this.readMemory((this.registers.PC + 1) & 0xffff);
+      this.wz = (high << 8) | low;
       this.registers.PC = (high << 8) | low;
       return 10;
     };
@@ -442,6 +443,7 @@ export class Z80CPU {
     this.opcodeHandlers[0xca] = () => {
       const low = this.readMemory(this.registers.PC);
       const high = this.readMemory((this.registers.PC + 1) & 0xffff);
+      this.wz = (high << 8) | low;
       this.registers.PC = (this.registers.PC + 2) & 0xffff;
 
       if (this.flagZ) {
@@ -454,6 +456,7 @@ export class Z80CPU {
     this.opcodeHandlers[0xc2] = () => {
       const low = this.readMemory(this.registers.PC);
       const high = this.readMemory((this.registers.PC + 1) & 0xffff);
+      this.wz = (high << 8) | low;
       this.registers.PC = (this.registers.PC + 2) & 0xffff;
 
       if (!this.flagZ) {
@@ -476,6 +479,7 @@ export class Z80CPU {
       const high = this.readMemory((this.registers.SP + 1) & 0xffff);
       this.registers.SP = (this.registers.SP + 2) & 0xffff;
       this.registers.PC = (high << 8) | low;
+      this.wz = this.registers.PC;
       return 10;
     };
 
@@ -484,6 +488,7 @@ export class Z80CPU {
       const low = this.readMemory(this.registers.PC);
       const high = this.readMemory((this.registers.PC + 1) & 0xffff);
       const targetAddr = (high << 8) | low;
+      this.wz = targetAddr;
       this.registers.PC = (this.registers.PC + 2) & 0xffff;
 
       // Push return address (little-endian)
@@ -625,6 +630,7 @@ export class Z80CPU {
       const high = this.readMemory((this.registers.PC + 1) & 0xffff);
       this.registers.PC = (this.registers.PC + 2) & 0xffff;
       const addr = (high << 8) | low;
+      this.wz = (addr + 1) & 0xffff;
       this.writeMemory(addr, this.registers.L);
       this.writeMemory((addr + 1) & 0xffff, this.registers.H);
       return 16;
@@ -636,6 +642,7 @@ export class Z80CPU {
       const high = this.readMemory((this.registers.PC + 1) & 0xffff);
       this.registers.PC = (this.registers.PC + 2) & 0xffff;
       const addr = (high << 8) | low;
+      this.wz = (addr + 1) & 0xffff;
       this.registers.L = this.readMemory(addr);
       this.registers.H = this.readMemory((addr + 1) & 0xffff);
       return 16;
@@ -694,6 +701,7 @@ export class Z80CPU {
     // OUT (n), A
     this.opcodeHandlers[0xd3] = () => {
       const port = this.readMemory(this.registers.PC);
+      this.wz = (this.registers.A << 8) | ((port + 1) & 0xff);
       this.registers.PC = (this.registers.PC + 1) & 0xffff;
       this.writePort(port, this.registers.A);
       return 11;
@@ -702,6 +710,7 @@ export class Z80CPU {
     // IN A, (n)
     this.opcodeHandlers[0xdb] = () => {
       const port = this.readMemory(this.registers.PC);
+      this.wz = (((this.registers.A << 8) | port) + 1) & 0xffff;
       this.registers.PC = (this.registers.PC + 1) & 0xffff;
       this.registers.A = this.readPort(port);
       return 11;
@@ -939,6 +948,7 @@ export class Z80CPU {
     this.opcodeHandlers[0xda] = () => {
       const low = this.readMemory(this.registers.PC);
       const high = this.readMemory((this.registers.PC + 1) & 0xffff);
+      this.wz = (high << 8) | low;
       this.registers.PC = (this.registers.PC + 2) & 0xffff;
       if (this.flagC) {
         this.registers.PC = (high << 8) | low;
@@ -950,6 +960,7 @@ export class Z80CPU {
     this.opcodeHandlers[0xd2] = () => {
       const low = this.readMemory(this.registers.PC);
       const high = this.readMemory((this.registers.PC + 1) & 0xffff);
+      this.wz = (high << 8) | low;
       this.registers.PC = (this.registers.PC + 2) & 0xffff;
       if (!this.flagC) {
         this.registers.PC = (high << 8) | low;
@@ -961,6 +972,7 @@ export class Z80CPU {
     this.opcodeHandlers[0xf2] = () => {
       const low = this.readMemory(this.registers.PC);
       const high = this.readMemory((this.registers.PC + 1) & 0xffff);
+      this.wz = (high << 8) | low;
       this.registers.PC = (this.registers.PC + 2) & 0xffff;
       if (!this.flagS) {
         this.registers.PC = (high << 8) | low;
@@ -972,6 +984,7 @@ export class Z80CPU {
     this.opcodeHandlers[0xfa] = () => {
       const low = this.readMemory(this.registers.PC);
       const high = this.readMemory((this.registers.PC + 1) & 0xffff);
+      this.wz = (high << 8) | low;
       this.registers.PC = (this.registers.PC + 2) & 0xffff;
       if (this.flagS) {
         this.registers.PC = (high << 8) | low;
@@ -983,6 +996,7 @@ export class Z80CPU {
     this.opcodeHandlers[0xe2] = () => {
       const low = this.readMemory(this.registers.PC);
       const high = this.readMemory((this.registers.PC + 1) & 0xffff);
+      this.wz = (high << 8) | low;
       this.registers.PC = (this.registers.PC + 2) & 0xffff;
       if (!this.flagPV) {
         this.registers.PC = (high << 8) | low;
@@ -994,6 +1008,7 @@ export class Z80CPU {
     this.opcodeHandlers[0xea] = () => {
       const low = this.readMemory(this.registers.PC);
       const high = this.readMemory((this.registers.PC + 1) & 0xffff);
+      this.wz = (high << 8) | low;
       this.registers.PC = (this.registers.PC + 2) & 0xffff;
       if (this.flagPV) {
         this.registers.PC = (high << 8) | low;
@@ -1013,6 +1028,7 @@ export class Z80CPU {
       this.registers.PC = (this.registers.PC + 1) & 0xffff;
       const signedOffset = offset & 0x80 ? offset - 256 : offset;
       this.registers.PC = (this.registers.PC + signedOffset) & 0xffff;
+      this.wz = this.registers.PC;
       return 12;
     };
 
@@ -1023,6 +1039,7 @@ export class Z80CPU {
       if (this.flagZ) {
         const signedOffset = offset & 0x80 ? offset - 256 : offset;
         this.registers.PC = (this.registers.PC + signedOffset) & 0xffff;
+        this.wz = this.registers.PC;
         return 12;
       }
       return 7;
@@ -1035,6 +1052,7 @@ export class Z80CPU {
       if (!this.flagZ) {
         const signedOffset = offset & 0x80 ? offset - 256 : offset;
         this.registers.PC = (this.registers.PC + signedOffset) & 0xffff;
+        this.wz = this.registers.PC;
         return 12;
       }
       return 7;
@@ -1047,6 +1065,7 @@ export class Z80CPU {
       if (this.flagC) {
         const signedOffset = offset & 0x80 ? offset - 256 : offset;
         this.registers.PC = (this.registers.PC + signedOffset) & 0xffff;
+        this.wz = this.registers.PC;
         return 12;
       }
       return 7;
@@ -1059,6 +1078,7 @@ export class Z80CPU {
       if (!this.flagC) {
         const signedOffset = offset & 0x80 ? offset - 256 : offset;
         this.registers.PC = (this.registers.PC + signedOffset) & 0xffff;
+        this.wz = this.registers.PC;
         return 12;
       }
       return 7;
@@ -1072,6 +1092,7 @@ export class Z80CPU {
       if (this.registers.B !== 0) {
         const signedOffset = offset & 0x80 ? offset - 256 : offset;
         this.registers.PC = (this.registers.PC + signedOffset) & 0xffff;
+        this.wz = this.registers.PC;
         return 13;
       }
       return 8;
@@ -1084,6 +1105,7 @@ export class Z80CPU {
         const high = this.readMemory((this.registers.SP + 1) & 0xffff);
         this.registers.SP = (this.registers.SP + 2) & 0xffff;
         this.registers.PC = (high << 8) | low;
+        this.wz = this.registers.PC;
         return 11;
       }
       return 5;
@@ -1096,6 +1118,7 @@ export class Z80CPU {
         const high = this.readMemory((this.registers.SP + 1) & 0xffff);
         this.registers.SP = (this.registers.SP + 2) & 0xffff;
         this.registers.PC = (high << 8) | low;
+        this.wz = this.registers.PC;
         return 11;
       }
       return 5;
@@ -1108,6 +1131,7 @@ export class Z80CPU {
         const high = this.readMemory((this.registers.SP + 1) & 0xffff);
         this.registers.SP = (this.registers.SP + 2) & 0xffff;
         this.registers.PC = (high << 8) | low;
+        this.wz = this.registers.PC;
         return 11;
       }
       return 5;
@@ -1120,6 +1144,7 @@ export class Z80CPU {
         const high = this.readMemory((this.registers.SP + 1) & 0xffff);
         this.registers.SP = (this.registers.SP + 2) & 0xffff;
         this.registers.PC = (high << 8) | low;
+        this.wz = this.registers.PC;
         return 11;
       }
       return 5;
@@ -1132,6 +1157,7 @@ export class Z80CPU {
         const high = this.readMemory((this.registers.SP + 1) & 0xffff);
         this.registers.SP = (this.registers.SP + 2) & 0xffff;
         this.registers.PC = (high << 8) | low;
+        this.wz = this.registers.PC;
         return 11;
       }
       return 5;
@@ -1144,6 +1170,7 @@ export class Z80CPU {
         const high = this.readMemory((this.registers.SP + 1) & 0xffff);
         this.registers.SP = (this.registers.SP + 2) & 0xffff;
         this.registers.PC = (high << 8) | low;
+        this.wz = this.registers.PC;
         return 11;
       }
       return 5;
@@ -1156,6 +1183,7 @@ export class Z80CPU {
         const high = this.readMemory((this.registers.SP + 1) & 0xffff);
         this.registers.SP = (this.registers.SP + 2) & 0xffff;
         this.registers.PC = (high << 8) | low;
+        this.wz = this.registers.PC;
         return 11;
       }
       return 5;
@@ -1168,6 +1196,7 @@ export class Z80CPU {
         const high = this.readMemory((this.registers.SP + 1) & 0xffff);
         this.registers.SP = (this.registers.SP + 2) & 0xffff;
         this.registers.PC = (high << 8) | low;
+        this.wz = this.registers.PC;
         return 11;
       }
       return 5;
@@ -1177,6 +1206,7 @@ export class Z80CPU {
     this.opcodeHandlers[0xcc] = () => {
       const low = this.readMemory(this.registers.PC);
       const high = this.readMemory((this.registers.PC + 1) & 0xffff);
+      this.wz = (high << 8) | low;
       this.registers.PC = (this.registers.PC + 2) & 0xffff;
       if (this.flagZ) {
         this.registers.SP = (this.registers.SP - 1) & 0xffff;
@@ -1193,6 +1223,7 @@ export class Z80CPU {
     this.opcodeHandlers[0xc4] = () => {
       const low = this.readMemory(this.registers.PC);
       const high = this.readMemory((this.registers.PC + 1) & 0xffff);
+      this.wz = (high << 8) | low;
       this.registers.PC = (this.registers.PC + 2) & 0xffff;
       if (!this.flagZ) {
         this.registers.SP = (this.registers.SP - 1) & 0xffff;
@@ -1209,6 +1240,7 @@ export class Z80CPU {
     this.opcodeHandlers[0xdc] = () => {
       const low = this.readMemory(this.registers.PC);
       const high = this.readMemory((this.registers.PC + 1) & 0xffff);
+      this.wz = (high << 8) | low;
       this.registers.PC = (this.registers.PC + 2) & 0xffff;
       if (this.flagC) {
         this.registers.SP = (this.registers.SP - 1) & 0xffff;
@@ -1225,6 +1257,7 @@ export class Z80CPU {
     this.opcodeHandlers[0xd4] = () => {
       const low = this.readMemory(this.registers.PC);
       const high = this.readMemory((this.registers.PC + 1) & 0xffff);
+      this.wz = (high << 8) | low;
       this.registers.PC = (this.registers.PC + 2) & 0xffff;
       if (!this.flagC) {
         this.registers.SP = (this.registers.SP - 1) & 0xffff;
@@ -1241,6 +1274,7 @@ export class Z80CPU {
     this.opcodeHandlers[0xf4] = () => {
       const low = this.readMemory(this.registers.PC);
       const high = this.readMemory((this.registers.PC + 1) & 0xffff);
+      this.wz = (high << 8) | low;
       this.registers.PC = (this.registers.PC + 2) & 0xffff;
       if (!this.flagS) {
         this.registers.SP = (this.registers.SP - 1) & 0xffff;
@@ -1257,6 +1291,7 @@ export class Z80CPU {
     this.opcodeHandlers[0xfc] = () => {
       const low = this.readMemory(this.registers.PC);
       const high = this.readMemory((this.registers.PC + 1) & 0xffff);
+      this.wz = (high << 8) | low;
       this.registers.PC = (this.registers.PC + 2) & 0xffff;
       if (this.flagS) {
         this.registers.SP = (this.registers.SP - 1) & 0xffff;
@@ -1273,6 +1308,7 @@ export class Z80CPU {
     this.opcodeHandlers[0xe4] = () => {
       const low = this.readMemory(this.registers.PC);
       const high = this.readMemory((this.registers.PC + 1) & 0xffff);
+      this.wz = (high << 8) | low;
       this.registers.PC = (this.registers.PC + 2) & 0xffff;
       if (!this.flagPV) {
         this.registers.SP = (this.registers.SP - 1) & 0xffff;
@@ -1289,6 +1325,7 @@ export class Z80CPU {
     this.opcodeHandlers[0xec] = () => {
       const low = this.readMemory(this.registers.PC);
       const high = this.readMemory((this.registers.PC + 1) & 0xffff);
+      this.wz = (high << 8) | low;
       this.registers.PC = (this.registers.PC + 2) & 0xffff;
       if (this.flagPV) {
         this.registers.SP = (this.registers.SP - 1) & 0xffff;
@@ -1311,6 +1348,7 @@ export class Z80CPU {
         this.registers.SP = (this.registers.SP - 1) & 0xffff;
         this.writeMemory(this.registers.SP, this.registers.PC & 0xff);
         this.registers.PC = addr;
+        this.wz = addr;
         return 11;
       };
     }
@@ -1463,6 +1501,7 @@ export class Z80CPU {
       this.writeMemory(this.registers.SP, this.registers.L);
       this.writeMemory((this.registers.SP + 1) & 0xffff, this.registers.H);
       this.HL = temp;
+      this.wz = temp;
       return 19;
     };
 
@@ -2459,6 +2498,7 @@ export class Z80CPU {
         const high = this.readMemory((this.registers.PC + 1) & 0xffff);
         this.registers.PC = (this.registers.PC + 2) & 0xffff;
         const addr = (high << 8) | low;
+        this.wz = (addr + 1) & 0xffff;
         const regLow = isIX ? this.registers.IXL : this.registers.IYL;
         const regHigh = isIX ? this.registers.IXH : this.registers.IYH;
         this.writeMemory(addr, regLow);
@@ -2472,6 +2512,7 @@ export class Z80CPU {
         const high = this.readMemory((this.registers.PC + 1) & 0xffff);
         this.registers.PC = (this.registers.PC + 2) & 0xffff;
         const addr = (high << 8) | low;
+        this.wz = (addr + 1) & 0xffff;
         const regLow = this.readMemory(addr);
         const regHigh = this.readMemory((addr + 1) & 0xffff);
         if (isIX) {
@@ -2501,7 +2542,7 @@ export class Z80CPU {
         const indexedAddr = () => {
           const disp = this.readMemory(this.registers.PC);
           this.registers.PC = (this.registers.PC + 1) & 0xffff;
-          return (indexReg + (disp & 0x80 ? disp - 256 : disp)) & 0xffff;
+          return (this.wz = (indexReg + (disp & 0x80 ? disp - 256 : disp)) & 0xffff);
         };
         const regNames = ["B", "C", "D", "E", "H", "L", null, "A"];
 
@@ -2703,6 +2744,7 @@ export class Z80CPU {
     if (this.BC !== 0) {
       // Repeat: decrement PC by 2 to re-execute instruction
       this.registers.PC = (this.registers.PC - 2) & 0xffff;
+      this.wz = (this.registers.PC + 1) & 0xffff;
       return cycles + 5; // Extra cycles for repeat
     }
     return cycles;
@@ -2736,6 +2778,7 @@ export class Z80CPU {
     const cycles = this.ldd();
     if (this.BC !== 0) {
       this.registers.PC = (this.registers.PC - 2) & 0xffff;
+      this.wz = (this.registers.PC + 1) & 0xffff;
       return cycles + 5;
     }
     return cycles;
@@ -2775,6 +2818,7 @@ export class Z80CPU {
     const cycles = this.cpi();
     if (this.BC !== 0 && !this.flagZ) {
       this.registers.PC = (this.registers.PC - 2) & 0xffff;
+      this.wz = (this.registers.PC + 1) & 0xffff;
       return cycles + 5;
     }
     return cycles;
@@ -2812,6 +2856,7 @@ export class Z80CPU {
     const cycles = this.cpd();
     if (this.BC !== 0 && !this.flagZ) {
       this.registers.PC = (this.registers.PC - 2) & 0xffff;
+      this.wz = (this.registers.PC + 1) & 0xffff;
       return cycles + 5;
     }
     return cycles;
@@ -2826,6 +2871,7 @@ export class Z80CPU {
     const high = this.readMemory((this.registers.PC + 1) & 0xffff);
     this.registers.PC = (this.registers.PC + 2) & 0xffff;
     const addr = (high << 8) | low;
+    this.wz = (addr + 1) & 0xffff;
     const valueLow = this.readMemory(addr);
     const valueHigh = this.readMemory((addr + 1) & 0xffff);
     this.BC = (valueHigh << 8) | valueLow;
@@ -2840,6 +2886,7 @@ export class Z80CPU {
     const high = this.readMemory((this.registers.PC + 1) & 0xffff);
     this.registers.PC = (this.registers.PC + 2) & 0xffff;
     const addr = (high << 8) | low;
+    this.wz = (addr + 1) & 0xffff;
     const valueLow = this.readMemory(addr);
     const valueHigh = this.readMemory((addr + 1) & 0xffff);
     this.DE = (valueHigh << 8) | valueLow;
@@ -2854,6 +2901,7 @@ export class Z80CPU {
     const high = this.readMemory((this.registers.PC + 1) & 0xffff);
     this.registers.PC = (this.registers.PC + 2) & 0xffff;
     const addr = (high << 8) | low;
+    this.wz = (addr + 1) & 0xffff;
     const valueLow = this.readMemory(addr);
     const valueHigh = this.readMemory((addr + 1) & 0xffff);
     this.HL = (valueHigh << 8) | valueLow;
@@ -2868,6 +2916,7 @@ export class Z80CPU {
     const high = this.readMemory((this.registers.PC + 1) & 0xffff);
     this.registers.PC = (this.registers.PC + 2) & 0xffff;
     const addr = (high << 8) | low;
+    this.wz = (addr + 1) & 0xffff;
     const valueLow = this.readMemory(addr);
     const valueHigh = this.readMemory((addr + 1) & 0xffff);
     this.registers.SP = (valueHigh << 8) | valueLow;
@@ -2882,6 +2931,7 @@ export class Z80CPU {
     const high = this.readMemory((this.registers.PC + 1) & 0xffff);
     this.registers.PC = (this.registers.PC + 2) & 0xffff;
     const addr = (high << 8) | low;
+    this.wz = (addr + 1) & 0xffff;
     this.writeMemory(addr, this.registers.C);
     this.writeMemory((addr + 1) & 0xffff, this.registers.B);
     return 20;
@@ -2895,6 +2945,7 @@ export class Z80CPU {
     const high = this.readMemory((this.registers.PC + 1) & 0xffff);
     this.registers.PC = (this.registers.PC + 2) & 0xffff;
     const addr = (high << 8) | low;
+    this.wz = (addr + 1) & 0xffff;
     this.writeMemory(addr, this.registers.E);
     this.writeMemory((addr + 1) & 0xffff, this.registers.D);
     return 20;
@@ -2908,6 +2959,7 @@ export class Z80CPU {
     const high = this.readMemory((this.registers.PC + 1) & 0xffff);
     this.registers.PC = (this.registers.PC + 2) & 0xffff;
     const addr = (high << 8) | low;
+    this.wz = (addr + 1) & 0xffff;
     this.writeMemory(addr, this.registers.L);
     this.writeMemory((addr + 1) & 0xffff, this.registers.H);
     return 20;
@@ -2921,6 +2973,7 @@ export class Z80CPU {
     const high = this.readMemory((this.registers.PC + 1) & 0xffff);
     this.registers.PC = (this.registers.PC + 2) & 0xffff;
     const addr = (high << 8) | low;
+    this.wz = (addr + 1) & 0xffff;
     this.writeMemory(addr, this.registers.SP & 0xff);
     this.writeMemory((addr + 1) & 0xffff, (this.registers.SP >> 8) & 0xff);
     return 20;
@@ -2994,6 +3047,7 @@ export class Z80CPU {
    * Register mapping: 0=B, 1=C, 2=D, 3=E, 4=H, 5=L, 6=(HL), 7=A
    */
   inrC(regIndex) {
+    this.wz = (this.BC + 1) & 0xffff;
     const port = this.registers.C;
     const value = this.readPort(port);
 
@@ -3020,6 +3074,7 @@ export class Z80CPU {
    * OUT (C), r - Output register to port C
    */
   outCr(regIndex) {
+    this.wz = (this.BC + 1) & 0xffff;
     const port = this.registers.C;
     const regs = ["B", "C", "D", "E", "H", "L", null, "A"];
     const value =
@@ -3035,6 +3090,7 @@ export class Z80CPU {
    * Inputs from port C to (HL), increments HL, decrements B
    */
   ini() {
+    this.wz = (this.BC + 1) & 0xffff;
     const port = this.registers.C;
     const value = this.readPort(port);
     this.writeMemory(this.HL, value);
@@ -3066,6 +3122,7 @@ export class Z80CPU {
    * IND - Input and Decrement
    */
   ind() {
+    this.wz = (this.BC - 1) & 0xffff;
     const port = this.registers.C;
     const value = this.readPort(port);
     this.writeMemory(this.HL, value);
@@ -3100,6 +3157,7 @@ export class Z80CPU {
     this.writePort(port, value);
     this.HL = (this.HL + 1) & 0xffff;
     this.registers.B = (this.registers.B - 1) & 0xff;
+    this.wz = (this.BC + 1) & 0xffff;
 
     this.flagZ = this.registers.B === 0;
     this.flagN = (value & 0x80) !== 0;
@@ -3129,6 +3187,7 @@ export class Z80CPU {
     this.writePort(port, value);
     this.HL = (this.HL - 1) & 0xffff;
     this.registers.B = (this.registers.B - 1) & 0xff;
+    this.wz = (this.BC - 1) & 0xffff;
 
     this.flagZ = this.registers.B === 0;
     this.flagN = (value & 0x80) !== 0;
@@ -3159,6 +3218,7 @@ export class Z80CPU {
     const high = this.readMemory((this.registers.SP + 1) & 0xffff);
     this.registers.SP = (this.registers.SP + 2) & 0xffff;
     this.registers.PC = (high << 8) | low;
+    this.wz = this.registers.PC;
     // IFF2 is copied to IFF1 on RETI
     this.IFF1 = this.IFF2;
     return 14;
@@ -3173,6 +3233,7 @@ export class Z80CPU {
     const high = this.readMemory((this.registers.SP + 1) & 0xffff);
     this.registers.SP = (this.registers.SP + 2) & 0xffff;
     this.registers.PC = (high << 8) | low;
+    this.wz = this.registers.PC;
     // IFF2 is copied to IFF1 on RETN
     this.IFF1 = this.IFF2;
     return 14;
