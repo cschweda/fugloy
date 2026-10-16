@@ -242,11 +242,27 @@ footer .wrap { padding-block: 32px 56px; color: var(--dim); font-size: 0.86rem; 
 .listing .row-hot { background: color-mix(in srgb, var(--signal) 14%, transparent); border-radius: 4px; }
 .syntaxkey { display: flex; flex-wrap: wrap; gap: 6px 12px; font: 0.7rem var(--f-mono); }
 .syntaxkey span { display: inline-flex; gap: 6px; align-items: center; }
+
+/* Why it's new, and Part 2 */
+.newgrid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.newcard { background: var(--deck); border: 1px solid var(--rule); border-radius: 16px; padding: 18px; display: grid; gap: 8px; align-content: start; color: inherit; text-decoration: none; }
+.newcard:hover, .newcard:focus-visible { border-color: var(--signal); }
+.newcard .go { font: 600 0.72rem var(--f-mono); color: var(--signal); }
+.kindrows { display: grid; gap: 14px; }
+.kindrows > div { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 14px; align-items: baseline; }
+@media (max-width: 560px) { .kindrows > div { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
+.status { font: 600 0.62rem var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; justify-self: start; }
+.status.done { background: color-mix(in srgb, var(--ok) 20%, transparent); color: var(--ok); }
+.status.next { background: color-mix(in srgb, var(--signal) 20%, transparent); color: var(--signal); }
+.status.plan { background: color-mix(in srgb, var(--dim) 20%, transparent); color: var(--dim); }
+.node.faded { opacity: 0.38; }
+.rules { margin: 0; padding-left: 18px; display: grid; gap: 8px; }
 </style>
 <nav class="rail" aria-label="Sections">
   <div class="wrap">
     <a class="brand" href="#top">FUGLØY</a>
     <div class="chips" id="chips">
+      <a class="chip" href="#new">Why it's new</a>
       <a class="chip" href="#machine">Machine</a>
       <a class="chip" href="#cmd">.CMD files</a>
       <a class="chip" href="#basic">BASIC</a>
@@ -258,6 +274,7 @@ footer .wrap { padding-block: 32px 56px; color: var(--dim); font-size: 0.86rem; 
       <a class="chip" href="#proof">Proof</a>
       <a class="chip" href="#hints">Hints</a>
       <a class="chip" href="#build">How it was built</a>
+      <a class="chip" href="#beyond">Beyond</a>
       <a class="chip" href="#next">Next</a>
     </div>
   </div>
@@ -283,6 +300,25 @@ footer .wrap { padding-block: 32px 56px; color: var(--dim); font-size: 0.86rem; 
     </figure>
   </div>
 </header>
+
+<section class="cart" id="new">
+  <div class="wrap">
+    <div class="copy">
+      <p class="eyebrow">Why it's new</p>
+      <h2>A disassembler that knows its machine</h2>
+      <p class="lede">First and foremost, Fugløy is a Z80 disassembler built for one machine: the TRS-80 Model I and Model III. Around that core it adds what the machine's software needs, and it proves every result.</p>
+    </div>
+    <div class="panel">
+      <div class="row" style="justify-content:space-between">
+        <span class="panel-title">What each kind of tool is built for</span>
+        <div class="seg" id="kindView" role="group" aria-label="Kind of tool"><button type="button" aria-pressed="false" data-v="emu">An emulator</button><button type="button" aria-pressed="false" data-v="dis">A general disassembler</button><button type="button" aria-pressed="true" data-v="fug">Fugløy</button></div>
+      </div>
+      <div id="kindOut" aria-live="polite"></div>
+    </div>
+    <div class="newgrid" id="newgrid"></div>
+    <p class="dim">Fugløy's point is doing all of this together, for one machine, and proving the result.</p>
+  </div>
+</section>
 
 <section class="cart" id="machine">
   <div class="wrap">
@@ -575,6 +611,38 @@ footer .wrap { padding-block: 32px 56px; color: var(--dim); font-size: 0.86rem; 
   </div>
 </section>
 
+<section class="cart" id="beyond">
+  <div class="wrap">
+    <div class="copy">
+      <p class="eyebrow">Part 2 · planned, not built</p>
+      <h2>From listing to a game that runs anywhere</h2>
+      <p class="lede">The disassembler comes first. The listing it produces is also the first step of a longer plan: recompile a game into readable TypeScript and ship it as one file that plays in any modern browser, with no original binary or ROM image inside.</p>
+    </div>
+    <div class="row" style="justify-content:space-between">
+      <span class="panel-title">The pipeline</span>
+      <div class="seg" id="beyondView" role="group" aria-label="Show"><button type="button" aria-pressed="true" data-v="plan">The whole plan</button><button type="button" aria-pressed="false" data-v="today">What exists today</button></div>
+    </div>
+    <div class="pipe" id="beyondPipe"></div>
+    <div class="split">
+      <div class="copy">
+        <h3>How it would work</h3>
+        <p>The game's own logic becomes TypeScript functions, named by Fugløy's labels, with no Z80 instructions decoded while it runs. A small runtime plays the machine around it: video memory at $3C00 drawn on a canvas, the keyboard matrix at $3800, the ROM routines the game calls, cassette-port sound, and the 30 Hz heartbeat.</p>
+        <p>Every frame is checked against the emulator. The same keystrokes, at the same cycle, go to the original and to the translation, and their screens are compared; the first difference names the block that is wrong.</p>
+        <p class="dim">The plan targets the browser: one HTML file, or an ES module with a &lt;trs80-game&gt; element. Because the output is plain TypeScript, a Node build that draws the screen in a terminal would be a natural extension, but it is not part of the plan yet.</p>
+      </div>
+      <div class="panel">
+        <span class="panel-title">Bring your own</span>
+        <ul class="rules">
+          <li>Fugløy ships no ROMs and no programs. You supply the TRS-80 ROM and the .CMD and .BAS files you want to work on.</li>
+          <li>Everything happens on your own machine: the listing, the hint files, and any game built from them stay with you.</li>
+        </ul>
+        <span class="panel-title">When</span>
+        <p class="dim">After phase 3's ROM and DOS names exist and the plan's kill criteria have been reviewed. The emulator comes first, because it is the oracle every translation is checked against.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section class="cart" id="next">
   <div class="wrap">
     <div class="copy">
@@ -586,7 +654,7 @@ footer .wrap { padding-block: 32px 56px; color: var(--dim); font-size: 0.86rem; 
       <div><span class="eyebrow">Emulator</span><h3>Watch it run</h3><p class="dim">A headless TRS-80 that records which bytes really execute, feeding that back into the listing.</p></div>
       <div><span class="eyebrow">MCP server</span><h3>An assistant at the keyboard</h3><p class="dim">Lets an AI assistant drive the emulator: break, step, trace, and label.</p></div>
       <div><span class="eyebrow">Phase 4</span><h3>The workbench</h3><p class="dim">A web app for exploring and annotating listings in the browser. This page moves there as its technical details.</p></div>
-      <div><span class="eyebrow">Part 2</span><h3>Recompilation</h3><p class="dim">Translating Z80 into TypeScript that runs anywhere, for programs whose owners allow it.</p></div>
+      <div><span class="eyebrow">Part 2</span><h3>Recompilation</h3><p class="dim">Translating a game from your own collection into TypeScript that plays in any browser. <a href="#beyond">How it would work</a>.</p></div>
     </div>
   </div>
 </section>
@@ -594,7 +662,7 @@ footer .wrap { padding-block: 32px 56px; color: var(--dim); font-size: 0.86rem; 
 <footer>
   <div class="wrap">
     <p>Fugløy is MIT-licensed: <a href="https://github.com/cschweda/fugloy">github.com/cschweda/fugloy</a>.</p>
-    <p>The games named here are still under copyright. They are never committed or redistributed, and this page quotes only a few bytes of them to show the analysis.</p>
+    <p>Fugløy ships no ROMs and no programs: you bring your own. The games named here are the ones it was tested on, and this page shows only a few of their bytes.</p>
   </div>
 </footer>
 <script>
@@ -1255,6 +1323,43 @@ function renderOp() {
   $('#opNote').textContent = opNote(op);
 }
 renderOp();
+
+/* ---------- Why it's new ---------- */
+const KINDS = {
+  emu: [['Built to', 'Run the program on a simulated TRS-80.'], ['You get', 'The program, running, and a debugger that shows each instruction as it executes.'], ['Left to you', 'Turning what you watched into a listing you can keep, edit, and rebuild.']],
+  dis: [['Built to', 'Decode Z80 instructions for any Z80 system.'], ['You get', 'Instructions from a raw dump, decoded from wherever you point it.'], ['Left to you', 'The TRS-80’s file formats, its BASIC, code that moves itself, telling data from code, and checking the result.']],
+  fug: [['Built to', 'Read TRS-80 programs the way the machine stored them.'], ['You get', 'A labeled listing, source that rebuilds the identical bytes, and notes that outlast any one build.'], ['Left to you', 'What the code means. Phase 3 will name the ROM and DOS calls for you.']],
+};
+seg('kindView', (v) => {
+  const out = $('#kindOut');
+  out.textContent = '';
+  const rows = h('div', { class: 'kindrows' });
+  KINDS[v].forEach(([k, t]) => rows.append(h('div', null, h('span', { class: 'eyebrow', text: k }), h('p', { text: t }))));
+  out.append(rows);
+});
+[
+  ['Grammar, not guesswork', 'It finds machine code hiding in BASIC by parsing every line the way BASIC would: 182 of Valkyrie’s 257 lines.', '#grammar'],
+  ['It reads BASIC’s own math', 'It works through the PEEK and POKE arithmetic to find where the BASIC jumps into the code.', '#pointer'],
+  ['Proof, not trust', 'Every result is assembled again by a real assembler and compared with the original, byte for byte.', '#proof'],
+  ['Code where it runs', 'Games that copy themselves before running are analyzed at the address they run at.', '#moving'],
+  ['Notes that survive', 'Hint files are keyed by content, so they fit relocated builds and rebased BASIC.', '#hints'],
+  ['Suggestions, never surprises', 'Jump tables and loader stubs arrive as exact hint lines that you choose to apply.', '#moving'],
+].forEach(([t, d, href]) => $('#newgrid').append(h('a', { class: 'newcard', href }, h('h3', { text: t }), h('p', { class: 'dim', text: d }), h('span', { class: 'go', text: 'See how →' }))));
+
+/* ---------- Beyond disassembly ---------- */
+const STAGES = [
+  ['Disassembler', 'Labeled source that rebuilds the identical bytes.', 'done', 'Built · phases 1–2'],
+  ['ROM and DOS names', 'Every ROM and DOS call named, per machine, with sources.', 'plan', 'Phase 3'],
+  ['Emulator', 'A headless TRS-80, and the oracle for everything after it.', 'next', 'Next · emu phase 0'],
+  ['Recompiler', 'The game’s logic as readable TypeScript functions.', 'plan', 'Part 2'],
+  ['Runtime', 'Screen, keyboard, ROM routines, sound, and the 30 Hz heartbeat.', 'plan', 'Part 2'],
+  ['Bundler', 'One HTML file or ES module, with no original binary or ROM inside.', 'plan', 'Part 2'],
+];
+seg('beyondView', (v) => {
+  const pipe = $('#beyondPipe');
+  pipe.textContent = '';
+  STAGES.forEach(([t, d, s, label]) => pipe.append(h('div', { class: `node${v === 'today' && s !== 'done' ? ' faded' : ''}` }, h('span', { class: `status ${s}`, text: label }), h('b', { text: t }), h('span', { text: d }))));
+});
 
 /* ---------- Rail: mark the section in view ---------- */
 const chips = $$('#chips .chip');
