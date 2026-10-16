@@ -40,6 +40,11 @@ Releases are tagged `vX.Y.Z` on `main`.
   domain in 1995, beside Sea Dragon, each with a README saying what every
   build is; the real-program tests run on them in CI too. Builds that carry
   someone else's code or credit stay out.
+- A social card at the top of the README, for the site's `og:image` too:
+  `docs/images/og-image.svg`, and `og-image.png` at 1200×630. It is dark,
+  in the explainer's palette, its text outlined so it looks the same
+  everywhere (Inter and JetBrains Mono, both SIL OFL 1.1), and its listing is
+  Fugløy's own output.
 
 ### Fixed
 

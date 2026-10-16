@@ -76,7 +76,12 @@ in this sequence, nor is phase 5 (assembler and IDE, after v1; it needs phases
 page carrying the interactive explainer of how Fugløy was built (dark,
 infographic, many examples, written for a curious student or retro
 enthusiast; requested 2026-10-16). Its source is
-`docs/technical-details/inside-fugloy.html`.
+`docs/technical-details/inside-fugloy.html`. The site also ships full SEO
+(requested 2026-10-16): a title and description on every page, canonical
+URLs on `app.fugloy.dev`, Open Graph and Twitter card tags whose image is
+the social card `docs/images/og-image.png` (1200×630, at an absolute URL,
+with alt text), favicons from the card's ø tile, `robots.txt`,
+`sitemap.xml`, and JSON-LD. The card's source is `docs/images/og-image.svg`.
 
 ## Conventions
 

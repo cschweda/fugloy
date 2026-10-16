@@ -1,8 +1,17 @@
+<p align="center">
+  <a href="docs/images/og-image.png"><img src="docs/images/og-image.svg" alt="Fugløy: a Z80 disassembler for the TRS-80. Disassemble, label, reassemble, byte for byte. Beside it, Fugløy's own pass 1 listing of a short Model III routine." width="100%"></a>
+</p>
+
 # Fugløy
 
 [![CI](https://github.com/cschweda/fugloy/actions/workflows/ci.yml/badge.svg)](https://github.com/cschweda/fugloy/actions/workflows/ci.yml)
+[![Z80 exercisers](https://github.com/cschweda/fugloy/actions/workflows/exerciser.yml/badge.svg)](https://github.com/cschweda/fugloy/actions/workflows/exerciser.yml)
 [![Release](https://img.shields.io/github/v/tag/cschweda/fugloy?label=release&sort=semver&style=flat)](https://github.com/cschweda/fugloy/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![TRS-80](https://img.shields.io/badge/TRS--80-Model%20I%20%C2%B7%20Model%20III-ffb547.svg)](#what-is-it)
+[![zmac](https://img.shields.io/badge/zmac-round%20trip-62e3d4.svg)](https://github.com/gp48k/zmac)
+[![Node](https://img.shields.io/badge/node-%E2%89%A522-339933.svg)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6.svg)](https://www.typescriptlang.org)
 
 **A TRS-80 disassembler that reads programs the way the machine stored them,
 finds the code, and proves that its output rebuilds the original byte for
