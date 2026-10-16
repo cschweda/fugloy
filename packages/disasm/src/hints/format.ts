@@ -24,7 +24,8 @@ export type Directive =
   | { directive: 'nocode' }
   | { directive: 'table'; count: number; width: number }
   | { directive: 'name'; name: string }
-  | { directive: 'comment'; text: string };
+  | { directive: 'comment'; text: string }
+  | { directive: 'relocate'; addr: number; length: number };
 
 export type Hint = Directive & { block: number; offset: number; line: number };
 
@@ -204,6 +205,18 @@ export function parseHints(text: string): { file: HintFile; errors: HintError[] 
         hints.push({ ...base, directive: 'name', name });
         break;
       }
+      case 'relocate': {
+        if (args[0] === undefined || args[1] === undefined) { fail('relocate needs an address and a length'); break; }
+        if (!noExtra(2)) break;
+        const addr = parseNumber(args[0]);
+        const length = parseNumber(args[1]);
+        if (addr === null) { fail(`bad number "${args[0]}"`); break; }
+        if (length === null) { fail(`bad number "${args[1]}"`); break; }
+        if (length < 1) { fail('relocate needs a length of at least 1'); break; }
+        if (addr + length > 0x10000) { fail(`relocate destination $${hex4(addr)} plus ${length} bytes runs past $FFFF`); break; }
+        hints.push({ ...base, directive: 'relocate', addr, length });
+        break;
+      }
       case 'comment': {
         const at = raw.indexOf('comment');
         hints.push({ ...base, directive: 'comment', text: raw.slice(at + 'comment'.length).trim() });
@@ -228,6 +241,7 @@ function directiveText(h: Hint): string {
     case 'bytes': return `bytes ${num(h.length)}`;
     case 'words': return `words ${num(h.length)}`;
     case 'table': return `table ${h.count} ${h.width}`;
+    case 'relocate': return `relocate ${num(h.addr)} ${num(h.length)}`;
     case 'name': return `name ${h.name}`;
     case 'comment': return `comment ${h.text}`;
   }

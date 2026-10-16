@@ -145,3 +145,19 @@ describe('isValidName', () => {
     expect(isValidName('tilo')).toBe(false);
   });
 });
+
+describe('the relocate directive', () => {
+  it('parses an address and a length, and writes them back', () => {
+    const f = ok(`${HEAD}block 0:$0000 relocate $5000 $000B\n`);
+    expect(f.hints.map(({ line: _line, ...h }) => h)).toEqual([{ block: 0, offset: 0, directive: 'relocate', addr: 0x5000, length: 0x0b }]);
+    expect(writeHints(f)).toContain('\nblock 0:$0000 relocate $5000 $000B\n');
+  });
+
+  it('reports a relocate missing a number, with a bad one, of length zero, or past $FFFF', () => {
+    const messages = (line: string) => parseHints(`${HEAD}${line}\n`).errors.map((e) => e.message);
+    expect(messages('block 0:$0000 relocate $5000')).toEqual(['relocate needs an address and a length']);
+    expect(messages('block 0:$0000 relocate $5000 xyz')).toEqual(['bad number "xyz"']);
+    expect(messages('block 0:$0000 relocate $5000 0')).toEqual(['relocate needs a length of at least 1']);
+    expect(messages('block 0:$0000 relocate $FFF0 $20')).toEqual(['relocate destination $FFF0 plus 32 bytes runs past $FFFF']);
+  });
+});

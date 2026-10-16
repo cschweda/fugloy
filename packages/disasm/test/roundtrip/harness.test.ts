@@ -33,3 +33,9 @@ test('assembles quoted DB rows byte for byte: doubled quotes, semicolons, backsl
   expect(Array.from(module.image.bytes.subarray(0x7000, 0x7000 + bytes.length))).toEqual(bytes);
   expect(module.image.runs()).toEqual([{ start: 0x7000, end: 0x7000 + bytes.length - 1, length: bytes.length }]);
 });
+
+test('.PHASE gives labels their runtime values and JR its runtime offset while the bytes stay at the ORG', () => {
+  const { module } = assemble('\tORG\t8000H\n\t.PHASE\t5000H\nL5000:\tJR\tL5004\n\tNOP\n\tNOP\nL5004:\tJP\tL5000\n\t.DEPHASE\n\tDW\tL5000\n\tEND\n');
+  expect(Array.from(module.image.bytes.subarray(0x8000, 0x8009))).toEqual([0x18, 0x02, 0x00, 0x00, 0xc3, 0x00, 0x50, 0x00, 0x50]);
+  expect(module.image.runs()).toEqual([{ start: 0x8000, end: 0x8008, length: 9 }]);
+});

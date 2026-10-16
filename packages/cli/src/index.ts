@@ -7,6 +7,7 @@
 import { basename } from 'node:path';
 import { parseArgs } from 'node:util';
 import {
+  analysisSpace,
   analyze,
   applyHints,
   basIdentityNormalizer,
@@ -200,15 +201,14 @@ export async function run(argv: string[], io: Io): Promise<number> {
   }
   // A .BAS block's identity reads its line pointers as offsets, so hints survive a rebase.
   const normalize = mod.format === 'bas' ? basIdentityNormalizer(mod) : undefined;
-  for (const e of entries) {
-    if (!mod.image.isLoaded(e)) {
-      io.stderr(`fugloy: --entry $${hex4(e)} is not in loaded memory\n`);
-      return 2;
-    }
-  }
-
   const writeTo = values['write-hints'];
   if (writeTo !== undefined) {
+    for (const e of entries) {
+      if (!mod.image.isLoaded(e)) {
+        io.stderr(`fugloy: --entry $${hex4(e)} is not in loaded memory\n`);
+        return 2;
+      }
+    }
     if (await io.fileExists(writeTo)) {
       io.stderr(`fugloy: ${writeTo} exists; choose another name\n`);
       return 2;
@@ -249,10 +249,23 @@ export async function run(argv: string[], io: Io): Promise<number> {
       return 2;
     }
     const applied = applyHints(parsed.file, mod.image, programHash(bytes), normalize);
+    if (applied.errors.length > 0) {
+      for (const err of applied.errors) io.stderr(`fugloy: ${values.hints}: ${err}\n`);
+      return 2;
+    }
     annotations = applied.annotations;
     const skipped = applied.unmatched.reduce((n, u) => n + u.hints, 0);
     hints = { source: basename(values.hints), matched: applied.matched.length, unmatched: applied.unmatched.length, applied: parsed.file.hints.length - skipped, warnings: applied.warnings };
     if (format !== 'listing') for (const w of applied.warnings) io.stderr(`fugloy: warning: ${w}\n`);
+  }
+
+  // An entry may name a runtime address that a relocate hint created.
+  const runtime = analysisSpace(mod.image, annotations.relocations).space.image;
+  for (const e of entries) {
+    if (!runtime.isLoaded(e)) {
+      io.stderr(`fugloy: --entry $${hex4(e)} is not in loaded memory\n`);
+      return 2;
+    }
   }
 
   let text: string;
@@ -264,7 +277,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
     const plainBasic =
       mod.format === 'bas' && entries.length === 0 && hints === undefined && rebasedFrom === undefined && analysis.entries.length === 0 && mod.lines.every((l) => l.parsed);
     if (format === 'listing' && plainBasic && mod.format === 'bas') text = renderBasListing(mod, { source });
-    else if (format === 'zmac') text = emitZmac(mod.image, analysis.pass1, analysis.transfer, { source, symbols: analysis.symbols, annotations: analysis.annotations });
+    else if (format === 'zmac') text = emitZmac(mod.image, analysis.pass1, analysis.transfer, { source, symbols: analysis.symbols, annotations: analysis.annotations, space: analysis.space });
     else if (format === 'ir') text = `${JSON.stringify(buildIr(mod, analysis.pass1, source, analysis), null, 2)}\n`;
     else text = renderPass1Listing(analysis, { source });
   }

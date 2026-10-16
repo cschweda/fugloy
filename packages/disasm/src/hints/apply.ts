@@ -5,6 +5,8 @@
  */
 import type { MemoryImage, Run } from '../memory.js';
 import type { HintBlock, HintFile } from './format.js';
+import { analysisSpace } from '../analysis/relocate.js';
+import type { Relocation } from '../analysis/relocate.js';
 import { blockIdentities } from './identity.js';
 import type { IdentityNormalizer } from './identity.js';
 
@@ -29,6 +31,8 @@ export interface Annotations {
   tables: TableHint[];
   names: Map<number, string>;
   comments: Map<number, string>;
+  /** Regions that execute elsewhere; every other address here is already a runtime address. */
+  relocations: Relocation[];
 }
 
 export interface Applied {
@@ -36,9 +40,11 @@ export interface Applied {
   matched: { block: HintBlock; run: Run }[];
   unmatched: { block: HintBlock; hints: number }[];
   warnings: string[];
+  /** Hints that cannot apply at all (a relocation that would overwrite memory): the CLI exits 2. */
+  errors: string[];
 }
 
-export const emptyAnnotations = (): Annotations => ({ entries: [], overrides: [], tables: [], names: new Map(), comments: new Map() });
+export const emptyAnnotations = (): Annotations => ({ entries: [], overrides: [], tables: [], names: new Map(), comments: new Map(), relocations: [] });
 
 const hex4 = (n: number): string => n.toString(16).toUpperCase().padStart(4, '0');
 const TERMINATORS = new Set([0x00, 0x0d, 0x03]);
@@ -69,12 +75,25 @@ export function applyHints(file: HintFile, image: MemoryImage, programHash?: str
     runOf.set(block.index, run);
   }
 
-  const annotations = emptyAnnotations();
+  // Relocations first: every other hint names a file offset and lands at that byte's runtime address.
+  const relocations: Relocation[] = [];
   for (const hint of file.hints) {
     const run = runOf.get(hint.block);
-    if (run === undefined) continue;
-    const addr = (run.start + hint.offset) & 0xffff;
-    const room = run.end - addr + 1;
+    if (hint.directive !== 'relocate' || run === undefined) continue;
+    relocations.push({ fileAddr: (run.start + hint.offset) & 0xffff, length: hint.length, runAddr: hint.addr });
+  }
+  const { space, errors } = analysisSpace(image, relocations);
+  const annotations = emptyAnnotations();
+  annotations.relocations = space.relocations;
+  for (const hint of file.hints) {
+    const run = runOf.get(hint.block);
+    if (run === undefined || hint.directive === 'relocate') continue;
+    const fileAddr = (run.start + hint.offset) & 0xffff;
+    // A hint inside a relocated source stays inside it.
+    const moved = space.relocations.find((r) => fileAddr >= r.fileAddr && fileAddr < r.fileAddr + r.length);
+    const last = moved === undefined ? run.end : moved.fileAddr + moved.length - 1;
+    const room = last - fileAddr + 1;
+    const addr = space.toRun(fileAddr) ?? fileAddr;
     const clip = (length: number, what: string): number => {
       if (length <= room) return length;
       warnings.push(`${what} at ${hint.block}:$${hex4(hint.offset)} runs past the end of the run; clipped to $${hex4(room)} bytes`);
@@ -98,8 +117,8 @@ export function applyHints(file: HintFile, image: MemoryImage, programHash?: str
         let length = hint.length;
         if (length === undefined) {
           length = room;
-          for (let a = addr; a <= run.end; a++) {
-            if (TERMINATORS.has(image.bytes[a]!)) { length = a - addr + 1; break; }
+          for (let a = fileAddr; a <= last; a++) {
+            if (TERMINATORS.has(image.bytes[a]!)) { length = a - fileAddr + 1; break; }
           }
         }
         annotations.overrides.push({ addr, kind: 'string', length: clip(length, 'string') });
@@ -123,5 +142,5 @@ export function applyHints(file: HintFile, image: MemoryImage, programHash?: str
         break;
     }
   }
-  return { annotations, matched, unmatched, warnings };
+  return { annotations, matched, unmatched, warnings, errors };
 }

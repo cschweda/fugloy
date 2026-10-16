@@ -1,0 +1,8 @@
+# Fugløy hints. Numbers: $hex or decimal. Offsets are relative to a block.
+fugloy-hints 1
+program sha256 82814488119a6939986ae60b061ecc47e606e96effe4947e05864af1cf01d80a
+block 0 length $000B hash efbb32b4b3fecb24    # start $8000
+block 1 length $000E hash 02ba47638a53d330    # start $8100
+block 0:$0000 relocate $5000 $000B
+block 0:$0003 comment skip the padding
+block 0:$0008 name SETONE

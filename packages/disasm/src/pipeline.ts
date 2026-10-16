@@ -8,6 +8,8 @@ import type { Pass1 } from './analysis/descent.js';
 import { findStrings, proposeTables } from './analysis/heuristics.js';
 import type { TableProposal } from './analysis/heuristics.js';
 import { Kind } from './analysis/map.js';
+import { analysisSpace } from './analysis/relocate.js';
+import type { AnalysisSpace } from './analysis/relocate.js';
 import { synthesizeSymbols } from './analysis/symbols.js';
 import type { SymbolTable } from './analysis/symbols.js';
 import type { BasProgram } from './bas.js';
@@ -60,6 +62,8 @@ export interface Analysis {
   proposals: Proposal[];
   /** Set when the program was rebased: the base it was originally saved from. */
   rebasedFrom?: number;
+  /** The image Pass 1 ran on: the file image with each relocated region at its runtime address. */
+  space: AnalysisSpace;
 }
 
 /** A .BAS program's structure under the hint annotations: a hint override wins wherever it overlaps the structure's typing. */
@@ -94,13 +98,15 @@ export function analyze(mod: Module, opts: AnalyzeOptions = {}): Analysis {
   for (const o of hints.overrides) if (o.kind === 'code') roots.push(o.addr);
   for (const m of entries) if (m.addr !== null) roots.push(m.addr);
   roots.push(...(basic?.candidates ?? []));
-  const pass1 = recursiveDescent(mod.image, roots, annotations);
+  // Relocations were validated when the hints applied; here they only place the bytes.
+  const { space } = analysisSpace(mod.image, annotations.relocations);
+  const pass1 = recursiveDescent(space.image, roots, annotations);
   const transfer = mod.format === 'cmd' ? (mod.entrySource === 'transfer' ? mod.entry : null) : mod.format === 'raw' ? mod.entry : null;
   // Symbols name references, not byte kinds, so they come first and bound the strings typed after descent.
-  const symbols = synthesizeSymbols(pass1, annotations, mod.image);
-  for (const s of findStrings(mod.image, pass1.map, new Set(symbols.list().map((x) => x.addr)))) pass1.map.mark(s.addr, s.length, Kind.String);
-  const proposals: Proposal[] = proposeTables(mod.image, pass1, blockIdentities(mod.image));
-  const analysis: Analysis = { module: mod, pass1, entry, roots: pass1.roots, transfer, annotations, symbols, entries, proposals };
+  const symbols = synthesizeSymbols(pass1, annotations, space.image);
+  for (const s of findStrings(space.image, pass1.map, new Set(symbols.list().map((x) => x.addr)))) pass1.map.mark(s.addr, s.length, Kind.String);
+  const proposals: Proposal[] = proposeTables(space.image, pass1, blockIdentities(mod.image), space.toFile);
+  const analysis: Analysis = { module: mod, pass1, entry, roots: pass1.roots, transfer, annotations, symbols, entries, proposals, space };
   if (opts.hints !== undefined) analysis.hints = opts.hints;
   if (opts.rebasedFrom !== undefined) analysis.rebasedFrom = opts.rebasedFrom & 0xffff;
   return analysis;

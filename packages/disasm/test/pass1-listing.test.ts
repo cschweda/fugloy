@@ -235,3 +235,14 @@ describe('strings and proposals', () => {
     expect(renderPass1Listing(a)).toContain('\n; proposed table at $700A, 3 entries, all in code; declare with: block 0:$000A table 3 2\n');
   });
 });
+
+describe('a relocated region in the listing', () => {
+  it('appears at its runtime addresses under a header naming both ranges', () => {
+    const mod = loadCmd(CMD_FIXTURES['relocated-code']!());
+    const a = analyze(mod, { annotations: applyHints(HINT_FIXTURES['relocated-code']!(), mod.image).annotations });
+    const text = renderPass1Listing(a, { source: 'relocated-code.cmd' });
+    expect(text).toContain(['        ORG 8000H', '; relocated: file $8000-$800A executes at $5000-$500A', 'L5000:', row('5000', 'CD 08 50', 'CALL SETONE')].join('\n'));
+    expect(text).toContain(row('5003', '18 02', 'JR L5007', 'skip the padding'));
+    expect(text).toContain(['', '        ORG 8100H', row('8100', '21 00 80', 'LD HL,8000H', 'entry')].join('\n'));
+  });
+});

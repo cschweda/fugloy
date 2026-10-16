@@ -54,5 +54,7 @@ export { findStrings, proposeTables } from './analysis/heuristics.js';
 export type { TableProposal } from './analysis/heuristics.js';
 export { dbItems, dbString } from './emit/strings.js';
 export { rebaseBas } from './bas-rebase.js';
+export { analysisSpace, filePieces } from './analysis/relocate.js';
+export type { AnalysisSpace, FilePiece, Relocation } from './analysis/relocate.js';
 export { basIdentityNormalizer } from './hints/identity.js';
 export type { IdentityNormalizer } from './hints/identity.js';

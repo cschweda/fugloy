@@ -8,6 +8,7 @@ import { Kind } from './analysis/map.js';
 import type { BasProgram } from './bas.js';
 import { codeLineLabel } from './basic/structure.js';
 import { dbItems } from './emit/strings.js';
+import { filePieces } from './analysis/relocate.js';
 import type { CmdModule } from './cmd.js';
 import type { MemoryImage } from './memory.js';
 import type { RawModule } from './raw.js';
@@ -125,14 +126,16 @@ export function renderRawListing(mod: RawModule, opts: RenderOptions = {}): stri
 const MAX_ROOTS = 8;
 
 export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {}): string {
-  const { module: mod, pass1, roots, symbols, annotations, hints, entries } = analysis;
+  const { module: mod, pass1, roots, symbols, annotations, hints, entries, space } = analysis;
   const { image } = mod;
   const { map, instructions } = pass1;
+  /** Bytes at runtime addresses; the file image itself when nothing is relocated. */
+  const view = space.image;
   const runs = image.runs();
   const loaded = runs.reduce((n, r) => n + r.length, 0);
   let code = 0;
   let data = 0;
-  for (const run of runs) {
+  for (const run of view.runs()) {
     for (let a = run.start; a <= run.end; a++) {
       const k = map.kind(a);
       if (k === Kind.Code || k === Kind.Tail) code++;
@@ -184,14 +187,14 @@ export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {})
   };
   const regionStarts = new Set(annotations.overrides.map((o) => o.addr & 0xffff));
   const startsRow = (addr: number): boolean => symbols.has(addr) || annotations.comments.has(addr) || instructions.has(addr) || regionStarts.has(addr);
-  /** Rows for [from, to]: label lines, instructions, and data rows of up to four bytes. */
+  /** Rows for runtime addresses [from, to]: label lines, instructions, and data rows of up to four bytes. */
   const rows = (from: number, to: number): void => {
     let addr = from;
     while (addr <= to) {
       const symbol = symbols.get(addr);
       if (symbol !== undefined && map.kind(addr) !== Kind.Tail) out.push(`${symbol.name}:`);
       const ins = instructions.get(addr);
-      if (ins !== undefined) {
+      if (ins !== undefined && addr + ins.length - 1 <= to) {
         out.push(formatListingLine({ addr, bytes: ins.bytes, text: renderInstruction(ins, symbols), ins }, commentFor(addr)));
         addr += ins.length;
         continue;
@@ -204,16 +207,16 @@ export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {})
         if (n % 2 === 1) n--;
         const words: string[] = [];
         for (let i = 0; i < n; i += 2) {
-          const value = image.bytes[addr + i]! | (image.bytes[addr + i + 1]! << 8);
+          const value = view.bytes[addr + i]! | (view.bytes[addr + i + 1]! << 8);
           words.push(symbols.get(value)?.name ?? hexWord(value));
         }
         text = `DW ${words.join(',')}`;
       } else if (kind === Kind.String) {
-        text = `DB ${dbItems(image.bytes.subarray(addr, addr + n))}`;
+        text = `DB ${dbItems(view.bytes.subarray(addr, addr + n))}`;
       } else {
-        text = `DB ${Array.from(image.bytes.subarray(addr, addr + n), hexByte).join(',')}`;
+        text = `DB ${Array.from(view.bytes.subarray(addr, addr + n), hexByte).join(',')}`;
       }
-      out.push(formatListingLine({ addr, bytes: Array.from(image.bytes.subarray(addr, addr + n)), text } as ListingLine, commentFor(addr)));
+      out.push(formatListingLine({ addr, bytes: Array.from(view.bytes.subarray(addr, addr + n)), text } as ListingLine, commentFor(addr)));
       addr += n;
     }
   };
@@ -238,7 +241,15 @@ export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {})
   } else {
     for (const run of runs) {
       out.push('', `        ORG ${hexWord(run.start)}`);
-      rows(run.start, run.end);
+      for (const piece of filePieces(run, space.relocations)) {
+        if (piece.runAddr === null) {
+          rows(piece.start, piece.end);
+          continue;
+        }
+        const last = piece.runAddr + piece.end - piece.start;
+        out.push(`; relocated: file ${$(piece.start)}-${$(piece.end)} executes at ${$(piece.runAddr)}-${$(last)}`);
+        rows(piece.runAddr, last);
+      }
     }
   }
   return `${out.join('\n')}\n`;

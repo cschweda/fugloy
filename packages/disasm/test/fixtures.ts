@@ -26,6 +26,12 @@ export const CMD_FIXTURES: Record<string, () => Uint8Array> = {
   'non-contiguous': () => new CmdWriter().load(0x6000, PROGRAM).load(0x7000, pattern(8)).transfer(0x6000).bytes(),
   'missing-02': () => new CmdWriter().load(0x7000, pattern(8)).load(0x5200, PROGRAM).bytes(),
   'end-03': () => new CmdWriter().load(0x5200, PROGRAM).endNoTransfer().bytes(),
+  'relocated-code': () =>
+    new CmdWriter()
+      .load(0x8000, [0xcd, 0x08, 0x50, 0x18, 0x02, 0x00, 0x00, 0xc9, 0x3e, 0x01, 0xc9]) // at $5000: CALL 5008H / JR 5007H / 2 bytes / RET / LD A,1 / RET
+      .load(0x8100, [0x21, 0x00, 0x80, 0x11, 0x00, 0x50, 0x01, 0x0b, 0x00, 0xed, 0xb0, 0xc3, 0x00, 0x50]) // LD HL,8000H / LD DE,5000H / LD BC,000BH / LDIR / JP 5000H
+      .transfer(0x8100)
+      .bytes(),
   'trailing-bytes': () => new CmdWriter().load(0x5200, PROGRAM).transfer(0x5200).raw([0x00, 0x01, 0x02, 0xff, 0x55, 0xaa, 0x00, 0x00, 0x03, 0x1f]).bytes(),
   'header-05': () => new CmdWriter().header('ASYLUM').load(0x5200, PROGRAM).transfer(0x5200).bytes(),
   'copyright-1f': () => new CmdWriter().copyright('(C) 1981 MED SYSTEMS').load(0x5200, PROGRAM).transfer(0x5200).bytes(),
@@ -115,6 +121,21 @@ export const HINT_FIXTURES: Record<string, () => HintFile> = {
         h(0x0050, 'name', { name: 'FLAGS' }),
         h(0x0054, 'string'),
         h(0x005a, 'words', { length: 1 }),
+      ],
+    };
+  },
+  'relocated-code': () => {
+    const bytes = CMD_FIXTURES['relocated-code']!();
+    const mod = loadCmd(bytes);
+    const blocks = blockIdentities(mod.image).map((b) => ({ index: b.index, length: b.length, hash: b.hash, start: b.start }));
+    return {
+      version: 1,
+      program: programHash(bytes),
+      blocks,
+      hints: [
+        { block: 0, offset: 0x0000, directive: 'relocate', addr: 0x5000, length: 0x000b, line: 0 },
+        { block: 0, offset: 0x0003, directive: 'comment', text: 'skip the padding', line: 0 },
+        { block: 0, offset: 0x0008, directive: 'name', name: 'SETONE', line: 0 },
       ],
     };
   },

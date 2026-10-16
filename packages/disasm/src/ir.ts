@@ -6,6 +6,7 @@
 import type { Diagnostic, Pass1, Xref } from './analysis/descent.js';
 import type { Symbol } from './analysis/symbols.js';
 import type { MinedEntry } from './basic/entries.js';
+import type { Relocation } from './analysis/relocate.js';
 import { basicBlocks, regions } from './analysis/regions.js';
 import type { BasicBlock, Region } from './analysis/regions.js';
 import type { BasProgram } from './bas.js';
@@ -34,10 +35,12 @@ export interface Ir {
   symbols: Symbol[];
   /** Heuristic suggestions with their hint lines; none are applied. */
   proposals: Proposal[];
+  /** Regions that execute elsewhere; `regions` and every address but `loaded` are runtime addresses. */
+  relocations: Relocation[];
   hints?: HintsSummary;
 }
 
-export function buildIr(mod: Module, pass1: Pass1, source?: string, analysis?: Pick<Analysis, 'symbols' | 'hints' | 'entries' | 'proposals'>): Ir {
+export function buildIr(mod: Module, pass1: Pass1, source?: string, analysis?: Pick<Analysis, 'symbols' | 'hints' | 'entries' | 'proposals' | 'space'>): Ir {
   return {
     fugloyIr: 1,
     ...(source === undefined ? {} : { source }),
@@ -46,7 +49,7 @@ export function buildIr(mod: Module, pass1: Pass1, source?: string, analysis?: P
     roots: pass1.roots,
     entries: analysis?.entries ?? [],
     loaded: mod.image.runs().map((r) => ({ start: r.start, end: r.end })),
-    regions: regions(mod.image, pass1.map),
+    regions: regions(analysis?.space.image ?? mod.image, pass1.map),
     blocks: basicBlocks(pass1),
     xrefs: pass1.xrefs,
     externals: pass1.externals,
@@ -54,6 +57,7 @@ export function buildIr(mod: Module, pass1: Pass1, source?: string, analysis?: P
     diagnostics: pass1.diagnostics,
     symbols: analysis?.symbols.list() ?? [],
     proposals: analysis?.proposals ?? [],
+    relocations: analysis?.space.relocations ?? [],
     ...(analysis?.hints === undefined ? {} : { hints: analysis.hints }),
   };
 }

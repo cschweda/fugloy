@@ -4,6 +4,7 @@ import { loadCmd } from '../src/cmd.js';
 import { buildIr } from '../src/ir.js';
 import { loadRaw } from '../src/raw.js';
 import { applyHints } from '../src/hints/apply.js';
+import { HINT_FIXTURES as HINTS } from './fixtures.js';
 import { analyze } from '../src/pipeline.js';
 import { loadBas } from '../src/bas.js';
 import { CMD_FIXTURES, HINT_FIXTURES } from './fixtures.js';
@@ -63,5 +64,16 @@ describe('buildIr proposals', () => {
     const mod = loadRaw(Uint8Array.from([0xc9, 0xc9, 0xc9, 0, 0, 0, 0, 0, 0, 0, 0x00, 0x70, 0x01, 0x70, 0x02, 0x70, 0x00, 0x00]), 0x7000);
     const a = analyze(mod, { entries: [0x7001, 0x7002] });
     expect(buildIr(mod, a.pass1, 't.bin', a).proposals).toEqual([{ kind: 'table', addr: 0x700a, count: 3, hint: 'block 0:$000A table 3 2' }]);
+  });
+});
+
+describe('buildIr with relocations', () => {
+  it('carries the relocations, keeps the file runs as loaded, and describes regions at runtime addresses', () => {
+    const mod = loadCmd(CMD_FIXTURES['relocated-code']!());
+    const a = analyze(mod, { annotations: applyHints(HINTS['relocated-code']!(), mod.image).annotations });
+    const ir = buildIr(mod, a.pass1, 'r.cmd', a);
+    expect(ir.relocations).toEqual([{ fileAddr: 0x8000, length: 0x0b, runAddr: 0x5000 }]);
+    expect(ir.loaded).toEqual([{ start: 0x8000, end: 0x800a }, { start: 0x8100, end: 0x810d }]);
+    expect(ir.regions[0]!.start).toBe(0x5000);
   });
 });

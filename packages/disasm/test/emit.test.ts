@@ -5,6 +5,9 @@ import { loadBas } from '../src/bas.js';
 import { emitZmac, instructionLine } from '../src/emit/zmac.js';
 import { analyze } from '../src/pipeline.js';
 import { loadRaw } from '../src/raw.js';
+import { loadCmd } from '../src/cmd.js';
+import { applyHints } from '../src/hints/apply.js';
+import { CMD_FIXTURES, HINT_FIXTURES } from './fixtures.js';
 import { BAS_FIXTURES } from './fixtures.js';
 import { image } from './images.js';
 
@@ -109,5 +112,35 @@ describe('emitZmac with strings', () => {
     const mod = loadRaw(Uint8Array.from([0x21, 0x04, 0x70, 0xc9, ...text("IT'S HI"), 0x0d]), 0x7000);
     const a = analyze(mod);
     expect(emitZmac(mod.image, a.pass1, a.transfer, { symbols: a.symbols, annotations: a.annotations })).toContain("\tRET\nDATA_7004:\n\tDB\t'IT''S HI',0DH\n");
+  });
+});
+
+describe('emitZmac with a relocated region', () => {
+  it('wraps the region in .PHASE at its runtime address, with labels and operands at runtime values', () => {
+    const mod = loadCmd(CMD_FIXTURES['relocated-code']!());
+    const a = analyze(mod, { annotations: applyHints(HINT_FIXTURES['relocated-code']!(), mod.image).annotations });
+    expect(emitZmac(mod.image, a.pass1, a.transfer, { source: 'relocated-code.cmd', symbols: a.symbols, annotations: a.annotations, space: a.space })).toBe([
+      '; relocated-code.cmd: Fugløy pass 1, 2 runs, 25 bytes, entry 8100H',
+      '\tORG\t8000H',
+      '\t.PHASE\t5000H',
+      'L5000:',
+      '\tCALL\tSETONE',
+      '\tJR\tL5007\t; skip the padding',
+      '\tDB\t00H,00H',
+      'L5007:',
+      '\tRET',
+      'SETONE:',
+      '\tLD\tA,01H',
+      '\tRET',
+      '\t.DEPHASE',
+      '\tORG\t8100H',
+      '\tLD\tHL,8000H',
+      '\tLD\tDE,L5000',
+      '\tLD\tBC,000BH',
+      '\tLDIR',
+      '\tJP\tL5000',
+      '\tEND\t8100H',
+      '',
+    ].join('\n'));
   });
 });

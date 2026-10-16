@@ -39,6 +39,7 @@ exports[`buildIr > builds a versioned IR for the non-contiguous fixture and matc
       "start": 28672,
     },
   ],
+  "relocations": [],
   "roots": [
     24576,
   ],

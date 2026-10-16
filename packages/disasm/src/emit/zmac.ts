@@ -11,6 +11,8 @@ import { hexByte, hexWord } from '@fugloy/z80';
 import { dbString } from './strings.js';
 import type { Instruction } from '@fugloy/z80';
 import type { Pass1 } from '../analysis/descent.js';
+import { filePieces } from '../analysis/relocate.js';
+import type { AnalysisSpace } from '../analysis/relocate.js';
 import { Kind } from '../analysis/map.js';
 import type { SymbolTable } from '../analysis/symbols.js';
 import { emptyAnnotations } from '../hints/apply.js';
@@ -34,6 +36,8 @@ export interface EmitOptions {
   symbols?: SymbolTable;
   /** Hint comments appended to the row at their address. */
   annotations?: Annotations;
+  /** The analysis space, when regions were relocated: they are emitted under .PHASE at their runtime addresses. */
+  space?: AnalysisSpace;
 }
 
 const hex2 = (n: number): string => n.toString(16).toUpperCase().padStart(2, '0');
@@ -52,6 +56,9 @@ export function emitZmac(image: MemoryImage, pass1: Pass1, entry: number | null,
   const { symbols } = opts;
   const annotations = opts.annotations ?? emptyAnnotations();
   const { map, instructions } = pass1;
+  /** Bytes at runtime addresses: the analysis space when there is one, else the file image itself. */
+  const view = opts.space?.image ?? image;
+  const relocations = opts.space?.relocations ?? [];
   const runs = image.runs();
   const loaded = runs.reduce((n, r) => n + r.length, 0);
   const out: string[] = [
@@ -68,45 +75,59 @@ export function emitZmac(image: MemoryImage, pass1: Pass1, entry: number | null,
   const startsRow = (addr: number): boolean =>
     (symbols?.has(addr) ?? false) || annotations.comments.has(addr) || instructions.has(addr) || regionStarts.has(addr);
 
-  for (const run of runs) {
-    out.push(`\tORG\t${hexWord(run.start)}`);
-    let addr = run.start;
-    while (addr <= run.end) {
+  /** Rows for runtime addresses [from, to]. An instruction that does not end by `to` is written as bytes: its rest lies elsewhere in the file. */
+  const rows = (from: number, to: number): void => {
+    let addr = from;
+    while (addr <= to) {
       const symbol = symbols?.get(addr);
       if (symbol !== undefined && map.kind(addr) !== Kind.Tail) out.push(`${symbol.name}:`);
       const ins = instructions.get(addr);
-      if (ins !== undefined) {
+      if (ins !== undefined && addr + ins.length - 1 <= to) {
         const line = instructionLine(ins, symbols);
         out.push(withComment(addr, opts.addresses === true ? `${line}\t; ${hexWord(addr)}` : line));
         addr += ins.length;
         continue;
       }
-      // A data row: same kind throughout, cut at symbols, comments, instructions, typed-region starts, and the run end.
+      // A data row: same kind throughout, cut at symbols, comments, instructions, typed-region starts, and `to`.
       const kind = map.kind(addr);
       if (kind === Kind.String) {
         let n = 1;
-        while (addr + n <= run.end && !startsRow(addr + n) && map.kind(addr + n) === Kind.String) n++;
-        const [first, ...rest] = dbString(image.bytes.subarray(addr, addr + n)).split('\n');
+        while (addr + n <= to && !startsRow(addr + n) && map.kind(addr + n) === Kind.String) n++;
+        const [first, ...rest] = dbString(view.bytes.subarray(addr, addr + n)).split('\n');
         out.push(withComment(addr, first!), ...rest);
         addr += n;
         continue;
       }
       let n = 1;
-      while (addr + n <= run.end && n < ROW_BYTES && !startsRow(addr + n) && map.kind(addr + n) === kind) n++;
+      while (addr + n <= to && n < ROW_BYTES && !startsRow(addr + n) && map.kind(addr + n) === kind) n++;
       let line: string;
       if (kind === Kind.Word && n >= 2) {
         if (n % 2 === 1) n--;
         const words: string[] = [];
         for (let i = 0; i < n; i += 2) {
-          const value = image.bytes[addr + i]! | (image.bytes[addr + i + 1]! << 8);
+          const value = view.bytes[addr + i]! | (view.bytes[addr + i + 1]! << 8);
           words.push(symbols?.get(value)?.name ?? hexWord(value));
         }
         line = `\tDW\t${words.join(',')}`;
       } else {
-        line = dbRow(Array.from(image.bytes.subarray(addr, addr + n)));
+        line = dbRow(Array.from(view.bytes.subarray(addr, addr + n)));
       }
       out.push(withComment(addr, line));
       addr += n;
+    }
+  };
+
+  // Walk the file image, so every byte assembles where it loads; a relocated piece is written at its runtime address under .PHASE.
+  for (const run of runs) {
+    out.push(`\tORG\t${hexWord(run.start)}`);
+    for (const piece of filePieces(run, relocations)) {
+      if (piece.runAddr === null) {
+        rows(piece.start, piece.end);
+        continue;
+      }
+      out.push(`\t.PHASE\t${hexWord(piece.runAddr)}`);
+      rows(piece.runAddr, piece.runAddr + piece.end - piece.start);
+      out.push('\t.DEPHASE');
     }
   }
   out.push(entry === null ? '\tEND' : `\tEND\t${hexWord(entry)}`);

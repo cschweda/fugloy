@@ -3,7 +3,8 @@ import { applyHints, emptyAnnotations } from '../../src/hints/apply.js';
 import type { HintFile } from '../../src/hints/format.js';
 import { blockIdentities } from '../../src/hints/identity.js';
 import type { MemoryImage } from '../../src/memory.js';
-import { pattern } from '../fixtures.js';
+import { loadCmd } from '../../src/cmd.js';
+import { CMD_FIXTURES, HINT_FIXTURES, pattern } from '../fixtures.js';
 import { image } from '../images.js';
 
 /** A hint file whose block lines come from `source` (as --write-hints would produce) plus the given hints. */
@@ -90,6 +91,26 @@ describe('applyHints', () => {
   });
 
   it('starts from empty annotations', () => {
-    expect(emptyAnnotations()).toEqual({ entries: [], overrides: [], tables: [], names: new Map(), comments: new Map() });
+    expect(emptyAnnotations()).toEqual({ entries: [], overrides: [], tables: [], names: new Map(), comments: new Map(), relocations: [] });
+  });
+});
+
+describe('relocate hints', () => {
+  it('apply first, so every other hint is read at its runtime address', () => {
+    const mod = loadCmd(CMD_FIXTURES['relocated-code']!());
+    const applied = applyHints(HINT_FIXTURES['relocated-code']!(), mod.image);
+    expect(applied.errors).toEqual([]);
+    expect(applied.annotations.relocations).toEqual([{ fileAddr: 0x8000, length: 0x0b, runAddr: 0x5000 }]);
+    expect(applied.annotations.names.get(0x5008)).toBe('SETONE');
+    expect(applied.annotations.comments.get(0x5003)).toBe('skip the padding');
+  });
+
+  it('report a relocation that cannot apply as an error and drop it', () => {
+    const mod = loadCmd(CMD_FIXTURES['relocated-code']!());
+    const file = HINT_FIXTURES['relocated-code']!();
+    file.hints = [{ block: 0, offset: 0, line: 0, directive: 'relocate', addr: 0x8105, length: 0x0b }];
+    const applied = applyHints(file, mod.image);
+    expect(applied.errors).toEqual(['relocate at $8000: the destination $8105-$810F overlaps loaded memory at $8105']);
+    expect(applied.annotations.relocations).toEqual([]);
   });
 });

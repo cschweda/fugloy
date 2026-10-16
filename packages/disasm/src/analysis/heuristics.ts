@@ -58,7 +58,8 @@ export function findStrings(image: MemoryImage, map: ByteMap, stops: ReadonlySet
 }
 
 /** Three or more consecutive little-endian words in untyped memory, each the address of a decoded instruction. */
-export function proposeTables(image: MemoryImage, pass1: Pass1, identities: BlockIdentity[]): TableProposal[] {
+/** `toFile` maps a runtime address back to the file, so a proposal inside a relocated region names its file offset. */
+export function proposeTables(image: MemoryImage, pass1: Pass1, identities: BlockIdentity[], toFile: (runAddr: number) => number | null = (a) => a): TableProposal[] {
   const { map, instructions } = pass1;
   const proposals: TableProposal[] = [];
   const free = (a: number): boolean => map.kind(a) === Kind.Unknown;
@@ -72,8 +73,9 @@ export function proposeTables(image: MemoryImage, pass1: Pass1, identities: Bloc
         a++;
         continue;
       }
-      const block = identities.find((b) => a >= b.start && a < b.start + b.length);
-      if (block !== undefined) proposals.push({ kind: 'table', addr: a, count, hint: `block ${block.index}:$${hex4(a - block.start)} table ${count} 2` });
+      const fileAddr = toFile(a) ?? a;
+      const block = identities.find((b) => fileAddr >= b.start && fileAddr < b.start + b.length);
+      if (block !== undefined) proposals.push({ kind: 'table', addr: a, count, hint: `block ${block.index}:$${hex4(fileAddr - block.start)} table ${count} 2` });
       a += 2 * count;
     }
   }

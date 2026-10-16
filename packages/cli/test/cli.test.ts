@@ -235,6 +235,29 @@ describe('pass 1 flags', () => {
   });
 });
 
+describe('relocate hints on the command line', () => {
+  const cmd = `${fixtures}cmd/relocated-code.cmd`;
+  const hintsFile = `${fixtures}hints/relocated-code.hints`;
+
+  it('emit the relocated region with .PHASE and accept --entry at a runtime address', async () => {
+    const a = capture();
+    expect(await run([cmd, '--hints', hintsFile, '--format', 'zmac'], a.io)).toBe(0);
+    expect(a.out.join('')).toContain('\tORG\t8000H\n\t.PHASE\t5000H\nL5000:\n');
+    const b = capture();
+    expect(await run([cmd, '--hints', hintsFile, '--entry', '5005'], b.io)).toBe(0);
+    expect(b.out.join('')).toContain('; pass 1: roots $8100, $5005;');
+  });
+
+  it('refuse a relocate that would overwrite loaded memory, with exit 2', async () => {
+    const skel = capture();
+    expect(await run([cmd, '--write-hints', '/virtual/r.hints'], skel.io)).toBe(0);
+    const b = capture();
+    b.files.set('/virtual/r.hints', `${skel.files.get('/virtual/r.hints')!}block 0:$0000 relocate $8105 $000B\n`);
+    expect(await run([cmd, '--hints', '/virtual/r.hints'], b.io)).toBe(2);
+    expect(b.err.join('')).toContain('relocate at $8000: the destination $8105-$810F overlaps loaded memory at $8105');
+  });
+});
+
 describe('hint flags', () => {
   const file = `${fixtures}cmd/hint-paths.cmd`;
   const hints = `${fixtures}hints/hint-paths.hints`;
