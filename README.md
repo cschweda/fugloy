@@ -145,7 +145,9 @@ to try it on. Phase 1, the core decoder and loaders, shipped as
 [v0.1.0](https://github.com/cschweda/fugloy/releases/tag/v0.1.0). The emulator's phase 0 is done: the core of
 [trs80-emulator](https://github.com/cschweda/trs80-emulator) lives in
 `packages/emu`, free of the DOM, and boots the Model III ROM to `READY` in
-Node. Next is its phase 1, a Z80 core that passes ZEXALL; phase 3's ROM and
+Node; its phase 1 hardened the Z80 core, which now passes the ZEXDOC and
+ZEXALL instruction exercisers. Next is its phase 2, the Model III devices and
+program loaders; phase 3's ROM and
 DOS symbol tables are not yet scheduled (see the roadmap in [CLAUDE.md](CLAUDE.md)). After v1, phase 5
 adds an assembler with an IDE in the workbench: write Z80 code, assemble it,
 and run it on an emulated Model I or Model III. Every change is

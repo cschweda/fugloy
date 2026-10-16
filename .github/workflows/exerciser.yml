@@ -1,0 +1,27 @@
+name: Z80 exercisers
+
+on:
+  push:
+    branches: [main]
+    paths: ['packages/emu/**', 'scripts/install-zex.sh', '.github/workflows/exerciser.yml']
+  pull_request:
+    paths: ['packages/emu/**', 'scripts/install-zex.sh', '.github/workflows/exerciser.yml']
+  schedule:
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+
+jobs:
+  zex:
+    name: ZEXDOC and ZEXALL, group by group
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm zex:install
+      - run: FUGLOY_ZEX=1 FUGLOY_REQUIRE_ZEX=1 pnpm vitest run packages/emu/test/exerciser

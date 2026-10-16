@@ -14,11 +14,11 @@ stay in Part 2 until phase 3 is complete and the plan's kill criteria have
 been reviewed. If a task seems to need machinery from a later step, stop and
 say so.
 
-Current phase: **emu phase 0 done** — the trs80-emulator core lives in
-`packages/emu`, runs in an empty `node:vm` context, and boots the Model III ROM
-named in `fugloy.mcp.json` to `READY` in Node. Next, per the Roadmap: emu
-phase 1 (the Z80 core passes ZEXALL). Disassembler phase 2 shipped as v0.2.0,
-phase 1 as v0.1.0.
+Current phase: **emu phase 1 done** — the Z80 core in `packages/emu` passes
+ZEXDOC and ZEXALL, all 67 groups each (`pnpm zex:install`, then `FUGLOY_ZEX=1`),
+and its T-states match `@fugloy/z80` for every opcode. Next, per the Roadmap:
+emu phase 2 (Model III devices and the `.CMD`/`.BAS`/`.CAS` loaders).
+Disassembler phase 2 shipped as v0.2.0, phase 1 as v0.1.0.
 
 ## Stack and layout
 
@@ -62,8 +62,8 @@ phase 1 as v0.1.0.
    `cschweda/trs80-emulator`, strip DOM, boot to `READY` in Node. 1: Z80 core
    passes ZEXALL. 2: Model III devices and `.CMD`/`.BAS`/`.CAS` loaders.
    3: debugger API, coverage, the label file. 4: `@fugloy/mcp` v0.1. 5: FDC
-   and disk images. 6: Model I, then Model 4. 7: differential harness. Phase 0
-   is done; phase 1 is next.
+   and disk images. 6: Model I, then Model 4. 7: differential harness. Phases 0
+   and 1 are done; phase 2 is next.
 3. **mcp — phases A–F** (`docs/fugloy-mcp-spec.md` §11). A: lifecycle,
    execution, and inspection tools. B: break, watch, trace, callers, disasm.
    C: labels, coverage, sidecar file. D: snapshots, diff, search, callees.

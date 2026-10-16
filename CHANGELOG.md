@@ -20,6 +20,19 @@ Releases are tagged `vX.Y.Z` on `main`.
   `READY` in Node, the same way twice. 348 upstream tests came along, 23 of
   them needing the ROM; the renderer, sound, UI, and every ROM, disk, and
   program file stayed upstream.
+- `@fugloy/emu`, emu phase 1: the Z80 core passes ZEXDOC and ZEXALL, all 67
+  groups each, run one Vitest test per group through a CP/M harness
+  (`pnpm zex:install`, then `FUGLOY_ZEX=1`; CI runs them in `exerciser.yml`),
+  and its T-states match `@fugloy/z80` for every opcode, both ways for each
+  conditional. On the way:
+  - `CPL` sets flags 3 and 5.
+  - MEMPTR follows the documented rules, and save states keep it.
+  - `IN F,(C)`, `OUT (C),0`, and the `NEG`, `RETN`, and `IM` duplicates exist,
+    and the other undefined `ED` opcodes are 8-T-state NOPs.
+  - A `DD` or `FD` before another prefix or `ED` is a 4-T-state step with no
+    interrupt after it, and one before `EX DE,HL` or `EXX` is ignored.
+  - The block I/O instructions set every flag.
+  - `ADC`, `SBC`, `AND`, `XOR`, `OR`, and `CP` on `(HL)` take 7 T-states, not 4.
 - `examples/rear-guard/`, `examples/eliminator/`, and `examples/armored-patrol/`:
   three more of the Westmoreland and Gilman games released into the public
   domain in 1995, beside Sea Dragon, each with a README saying what every

@@ -124,9 +124,21 @@ Everything on `m.debug` is optional and costs nothing when unused.
 | Interrupts | IM 0/1/2, NMI, `EI` one-instruction delay, `HALT` wakes on interrupt |
 | R register | Increments per M1 cycle (some copy protection reads it) |
 | Memory refresh | Not modeled |
-| Decode | Table-driven; one function per opcode in a 256-entry array, with `CB`/`DD`/`ED`/`FD`/`DDCB`/`FDCB` sub-tables |
+| Decode | Unprefixed opcodes from a 256-entry array of handlers; `CB`, `ED`, `DD`/`FD`, and `DDCB`/`FDCB` through switch statements. Sub-tables wait for a benchmark that needs them (§2.6): phase 1 measured about 114 MHz effective in Node, nearly 3× the target below |
 
 Target speed: ≥ 20× real time (≈ 40 MHz effective) in Node on a laptop. That makes a 2-minute game session a 6-second trace run.
+
+Phase 1 also models:
+
+- **MEMPTR,** the hidden address latch that `BIT n,(HL)` shows in flags 3 and 5, by boo_boo and Vladimir Kladov's rules ("MEMPTR, esoteric register of the ZiLOG Z80 CPU"). Save states keep it.
+- **Lone prefixes.** A `DD` or `FD` before another prefix or `ED` runs as a 4-T-state step, with no interrupt taken after it.
+- **The block I/O flags** of Young's §4.3.
+
+Not modeled, and invisible to ZEXALL:
+
+- `SCF` and `CCF` taking flags 3 and 5 from the previous instruction's flags (Patrik Rak's z80test);
+- the flags of a repeating block instruction interrupted mid-run;
+- IM 0 with a bus byte other than `FFH` (the Model III's bus reads `FFH`).
 
 ## 5. Machine models
 
@@ -236,6 +248,8 @@ Guardrails: `trace` and `peek` cap at 4 KB of output per call; `run` caps at 10 
 | Debugger | Scripted session: load, break, watch, type, check screen | Deterministic hit log, byte-identical across runs |
 | Differential | Run a program in `emu` and the same program in trs80gp or sdltrs via its own trace; compare PC+regs per instruction | Zero divergence over the session (this test is also the Fugløy verification harness, pointed at the recompiled JS instead) |
 | Determinism | Run the same scripted session twice; compare final snapshots | Byte-identical |
+
+The exercisers are GPL-2.0 and never committed. `pnpm zex:install` fetches them, pinned and hash-checked, into `tools/zex/`. `FUGLOY_ZEX=1` runs them as one Vitest test per group, and `.github/workflows/exerciser.yml` runs them in CI when `packages/emu` changes, and weekly. The timing check is `packages/emu/test/unit/cpu-timing.test.js`, against `@fugloy/z80`'s table.
 
 ## 11. Phased build plan
 

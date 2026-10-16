@@ -29,8 +29,9 @@ jobs:
       - if: steps.zmac.outputs.cache-hit != 'true'
         run: sudo apt-get update && sudo apt-get install -y bison
       - run: pnpm zmac:install
+      - run: pnpm zex:install
       - run: pnpm typecheck
-      - run: FUGLOY_REQUIRE_ZMAC=1 pnpm test
+      - run: FUGLOY_REQUIRE_ZMAC=1 FUGLOY_REQUIRE_ZEX=1 pnpm test
       - run: pnpm build
       - name: fixtures are in sync with their writers
         run: pnpm fixtures && git diff --exit-code -- fixtures/synthetic

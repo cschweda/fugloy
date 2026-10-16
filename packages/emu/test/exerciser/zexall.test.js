@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { runZexGroup, ZEX_TIMEOUT, zexBinary, zexGroups } from '../zex.js';
 
-// ZEXALL checks every flag, bits 3 and 5 too. The full run takes about 7 minutes, so it waits for FUGLOY_ZEX=1.
+// ZEXALL checks every flag, bits 3 and 5 too. The full run takes about 5 minutes, so it waits for FUGLOY_ZEX=1.
 const program = process.env.FUGLOY_ZEX === '1' ? zexBinary('zexall.com') : null;
 const groups = program === null ? [] : zexGroups(program);
 
