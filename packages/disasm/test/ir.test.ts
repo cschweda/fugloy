@@ -5,7 +5,9 @@ import { buildIr } from '../src/ir.js';
 import { loadRaw } from '../src/raw.js';
 import { applyHints } from '../src/hints/apply.js';
 import { analyze } from '../src/pipeline.js';
+import { loadBas } from '../src/bas.js';
 import { CMD_FIXTURES, HINT_FIXTURES } from './fixtures.js';
+import { writeBasic } from './writers/basic-tokenizer.js';
 
 describe('buildIr', () => {
   it('builds a versioned IR for the non-contiguous fixture and matches the committed snapshot', () => {
@@ -43,5 +45,15 @@ describe('buildIr', () => {
     expect(ir.xrefs).toEqual([{ from: 0x5200, to: 0x0033, kind: 'call' }]);
     expect(ir.indirectJumps).toEqual([0x5203]);
     expect(ir.diagnostics.map((d) => d.kind)).toEqual(['inside-instruction']);
+  });
+});
+
+describe('buildIr for a .BAS program', () => {
+  it('carries the mined entries with their evidence, and none for a load module', () => {
+    const prog = loadBas(writeBasic([{ number: 10, text: 'END' }, { number: 20, text: 'DEFUSR=28672' }], 0x7000));
+    const a = analyze(prog);
+    expect(buildIr(prog, a.pass1, 'p.bas', a).entries).toEqual([{ addr: 0x7000, evidence: 'line 20: DEFUSR0 = $7000', line: 20 }]);
+    const mod = loadCmd(CMD_FIXTURES['non-contiguous']!());
+    expect(buildIr(mod, analyze(mod).pass1, 'x.cmd', analyze(mod)).entries).toEqual([]);
   });
 });

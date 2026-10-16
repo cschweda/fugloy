@@ -23,7 +23,7 @@ for (const [name, make] of Object.entries(CMD_FIXTURES)) {
 }
 
 for (const [name, make] of Object.entries(BAS_FIXTURES)) {
-  test(`bas/${name} round-trips as DB with a bare END`, () => {
+  test(`bas/${name} round-trips with its lines typed, its code decoded, and a bare END`, () => {
     const prog = loadBas(make());
     const a = analyze(prog);
     const source = emitZmac(prog.image, a.pass1, a.transfer, { source: name, symbols: a.symbols, annotations: a.annotations });

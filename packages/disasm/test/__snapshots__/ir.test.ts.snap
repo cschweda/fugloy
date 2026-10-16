@@ -10,6 +10,7 @@ exports[`buildIr > builds a versioned IR for the non-contiguous fixture and matc
     },
   ],
   "diagnostics": [],
+  "entries": [],
   "entry": 24576,
   "externals": [],
   "format": "cmd",

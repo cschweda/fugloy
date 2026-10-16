@@ -30,9 +30,12 @@ for (const file of CMD_FILES) {
 }
 
 for (const file of listSamples((n) => /^valkyr.*\.bas$/i.test(n))) {
-  when(file)(`${file}: emitted as DB, zmac reproduces the image`, () => {
+  when(file)(`${file}: hidden code decoded at its true addresses, with labels, zmac reproduces the image`, () => {
     const prog = loadBas(readSample(file));
     const a = analyze(prog);
-    expectSameImage(assemble(emitZmac(prog.image, a.pass1, a.transfer, { source: file, symbols: a.symbols, annotations: a.annotations })).module.image, prog.image);
+    expect(a.pass1.instructions.size).toBeGreaterThan(0);
+    const source = emitZmac(prog.image, a.pass1, a.transfer, { source: file, symbols: a.symbols, annotations: a.annotations });
+    expect(source).toMatch(/^[A-Z][A-Z0-9_]*:$/m);
+    expectSameImage(assemble(source).module.image, prog.image);
   });
 }

@@ -5,6 +5,7 @@
  */
 import type { Diagnostic, Pass1, Xref } from './analysis/descent.js';
 import type { Symbol } from './analysis/symbols.js';
+import type { MinedEntry } from './basic/entries.js';
 import { basicBlocks, regions } from './analysis/regions.js';
 import type { BasicBlock, Region } from './analysis/regions.js';
 import type { BasProgram } from './bas.js';
@@ -20,6 +21,8 @@ export interface Ir {
   format: 'cmd' | 'bas' | 'raw';
   entry: number | null;
   roots: number[];
+  /** Entry points mined from a .BAS program's text, with evidence; empty for other formats. */
+  entries: MinedEntry[];
   loaded: { start: number; end: number }[];
   regions: Region[];
   blocks: BasicBlock[];
@@ -32,13 +35,14 @@ export interface Ir {
   hints?: HintsSummary;
 }
 
-export function buildIr(mod: Module, pass1: Pass1, source?: string, analysis?: Pick<Analysis, 'symbols' | 'hints'>): Ir {
+export function buildIr(mod: Module, pass1: Pass1, source?: string, analysis?: Pick<Analysis, 'symbols' | 'hints' | 'entries'>): Ir {
   return {
     fugloyIr: 1,
     ...(source === undefined ? {} : { source }),
     format: mod.format,
     entry: mod.format === 'bas' ? null : mod.entry,
     roots: pass1.roots,
+    entries: analysis?.entries ?? [],
     loaded: mod.image.runs().map((r) => ({ start: r.start, end: r.end })),
     regions: regions(mod.image, pass1.map),
     blocks: basicBlocks(pass1),

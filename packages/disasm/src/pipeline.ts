@@ -1,10 +1,18 @@
-/** Loader output to Pass 1: the roots are the module's entry plus any user entries. */
+/**
+ * Loader output to Pass 1: the roots are the module's entry plus any user
+ * entries; a .BAS program also brings its structure (typed headers, bodies,
+ * and terminators), the entries its text plants, and its code lines.
+ */
 import { recursiveDescent } from './analysis/descent.js';
 import type { Pass1 } from './analysis/descent.js';
 import { synthesizeSymbols } from './analysis/symbols.js';
 import type { SymbolTable } from './analysis/symbols.js';
+import type { BasProgram } from './bas.js';
+import { mineEntries } from './basic/entries.js';
+import type { MinedEntry } from './basic/entries.js';
+import { basStructure, codeLineLabel } from './basic/structure.js';
 import { emptyAnnotations } from './hints/apply.js';
-import type { Annotations } from './hints/apply.js';
+import type { Annotations, Override } from './hints/apply.js';
 import type { Module } from './ir.js';
 
 /** How a hint file applied to this image, for headers and the IR. */
@@ -37,20 +45,46 @@ export interface Analysis {
   /** Pass 2: names for referenced addresses, user names on top. */
   symbols: SymbolTable;
   hints?: HintsSummary;
+  /** Entry points a .BAS program's text plants, with evidence (null address when unresolved); empty for other formats. */
+  entries: MinedEntry[];
 }
 
-/** Roots in order: module entry, --entry addresses, hint entries, code hints; tables add theirs inside descent. */
+/** A .BAS program's structure under the hint annotations: a hint override wins wherever it overlaps the structure's typing. */
+function withStructure(prog: BasProgram, hints: Annotations): { annotations: Annotations; candidates: number[] } {
+  const structure = basStructure(prog);
+  const claimed = (o: Override): boolean =>
+    hints.overrides.some((h) => h.kind !== 'nocode' && h.addr < o.addr + o.length && o.addr < h.addr + Math.max(h.length, 1));
+  const comments = new Map<number, string>();
+  for (const line of prog.lines) if (!line.parsed) comments.set(line.addr, codeLineLabel(line));
+  for (const [addr, text] of structure.texts) comments.set(addr, text);
+  for (const [addr, text] of hints.comments) comments.set(addr, text);
+  return {
+    annotations: { ...hints, overrides: [...structure.annotations.overrides.filter((o) => !claimed(o)), ...hints.overrides], comments },
+    candidates: structure.annotations.entries,
+  };
+}
+
+/**
+ * Roots in order: module entry, --entry addresses, hint entries, code hints,
+ * then for a .BAS the mined entries and each code line's body start, so the
+ * strongest evidence decodes first; tables add theirs inside descent.
+ */
 export function analyze(mod: Module, opts: AnalyzeOptions = {}): Analysis {
-  const annotations = opts.annotations ?? emptyAnnotations();
+  const hints = opts.annotations ?? emptyAnnotations();
+  const basic = mod.format === 'bas' ? withStructure(mod, hints) : null;
+  const annotations = basic?.annotations ?? hints;
+  const entries = mod.format === 'bas' ? mineEntries(mod) : [];
   const entry = mod.format === 'bas' ? null : mod.entry;
   const roots: number[] = entry === null ? [] : [entry];
   for (const e of opts.entries ?? []) roots.push(e & 0xffff);
-  roots.push(...annotations.entries);
-  for (const o of annotations.overrides) if (o.kind === 'code') roots.push(o.addr);
+  roots.push(...hints.entries);
+  for (const o of hints.overrides) if (o.kind === 'code') roots.push(o.addr);
+  for (const m of entries) if (m.addr !== null) roots.push(m.addr);
+  roots.push(...(basic?.candidates ?? []));
   const pass1 = recursiveDescent(mod.image, roots, annotations);
   const transfer = mod.format === 'cmd' ? (mod.entrySource === 'transfer' ? mod.entry : null) : mod.format === 'raw' ? mod.entry : null;
   const symbols = synthesizeSymbols(pass1, annotations, mod.image);
-  const analysis: Analysis = { module: mod, pass1, entry, roots: pass1.roots, transfer, annotations, symbols };
+  const analysis: Analysis = { module: mod, pass1, entry, roots: pass1.roots, transfer, annotations, symbols, entries };
   if (opts.hints !== undefined) analysis.hints = opts.hints;
   return analysis;
 }

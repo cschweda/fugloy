@@ -63,7 +63,9 @@ export function emitZmac(image: MemoryImage, pass1: Pass1, entry: number | null,
     const text = annotations.comments.get(addr);
     return text === undefined ? line : `${line}\t; ${text}`;
   };
-  const startsRow = (addr: number): boolean => (symbols?.has(addr) ?? false) || annotations.comments.has(addr) || instructions.has(addr);
+  const regionStarts = new Set(annotations.overrides.map((o) => o.addr & 0xffff));
+  const startsRow = (addr: number): boolean =>
+    (symbols?.has(addr) ?? false) || annotations.comments.has(addr) || instructions.has(addr) || regionStarts.has(addr);
 
   for (const run of runs) {
     out.push(`\tORG\t${hexWord(run.start)}`);
@@ -78,7 +80,7 @@ export function emitZmac(image: MemoryImage, pass1: Pass1, entry: number | null,
         addr += ins.length;
         continue;
       }
-      // A data row: same kind throughout, cut at symbols, comments, instructions, and the run end.
+      // A data row: same kind throughout, cut at symbols, comments, instructions, typed-region starts, and the run end.
       const kind = map.kind(addr);
       let n = 1;
       while (addr + n <= run.end && n < ROW_BYTES && !startsRow(addr + n) && map.kind(addr + n) === kind) n++;

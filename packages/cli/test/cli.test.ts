@@ -174,8 +174,16 @@ describe('pass 1 flags', () => {
     expect(a.out.join('')).toContain('\n10 CLS:PRINT"VOYAGE OF THE VALKYRIE"\n');
     const b = capture();
     expect(await run([bas, '--format', 'zmac'], b.io)).toBe(0);
-    expect(b.out.join('')).toContain('\tORG\t62C8H\n\tDB\t');
+    expect(b.out.join('')).toContain('\tORG\t62C8H\n\tDW\t62E8H,000AH\n\tDB\t84H,3AH,0B2H,22H,56H,4FH,59H,41H\t; 10 CLS:PRINT"VOYAGE OF THE VALKYRIE"\n');
     expect(b.out.join('').trimEnd().endsWith('\tEND')).toBe(true);
+  });
+
+  it('lists a .BAS file with hidden code through pass 1 by default', async () => {
+    const { io, out } = capture();
+    expect(await run([`${fixtures}bas/hidden-code.bas`], io)).toBe(0);
+    const text = out.join('');
+    expect(text).toContain('; code lines: 1; entries mined: 0\n');
+    expect(text).toContain('\n10 GOTO 30\n; line 20: machine code, 6 bytes at $700D\n700D  C3 00 00      JP 0000H                ; entry\n');
   });
 
   it('runs pass 1 on a .BAS file when --entry names its hidden code', async () => {

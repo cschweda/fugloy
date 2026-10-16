@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { decodeAt } from '@fugloy/z80';
 import { recursiveDescent } from '../src/analysis/descent.js';
+import { loadBas } from '../src/bas.js';
 import { emitZmac, instructionLine } from '../src/emit/zmac.js';
+import { analyze } from '../src/pipeline.js';
+import { BAS_FIXTURES } from './fixtures.js';
 import { image } from './images.js';
 
 describe('emitZmac', () => {
@@ -64,5 +67,37 @@ describe('emitZmac', () => {
     const img = image({ 0x6000: [0x21, 0x00, 0x3c, 0xc9] });
     const p = recursiveDescent(img, [0x6000]);
     expect(emitZmac(img, p, 0x6000)).toBe(emitZmac(img, p, 0x6000));
+  });
+});
+
+describe('emitZmac on a .BAS program', () => {
+  const emit = (name: string) => {
+    const prog = loadBas(BAS_FIXTURES[name]!());
+    const a = analyze(prog);
+    return emitZmac(prog.image, a.pass1, a.transfer, { source: name, symbols: a.symbols, annotations: a.annotations });
+  };
+
+  it('emits each line as its DW header, its body, and its 00, with BASIC text and code lines named in comments', () => {
+    expect(emit('hidden-code')).toBe([
+      '; hidden-code: Fugløy pass 1, 1 run, 28 bytes, no entry',
+      '\tORG\t7000H',
+      '\tDW\t7009H,000AH',
+      '\tDB\t8DH,20H,33H,30H\t; 10 GOTO 30',
+      '\tDB\t00H',
+      '\tDW\t7014H,0014H\t; line 20: machine code, 6 bytes at $700D',
+      '\tJP\t0000H',
+      '\tDB\t0C9H,00H,3EH',
+      '\tDB\t00H',
+      '\tDW\t701AH,001EH',
+      '\tDB\t80H\t; 30 END',
+      '\tDB\t00H',
+      '\tDW\t0000H',
+      '\tEND',
+      '',
+    ].join('\n'));
+  });
+
+  it('puts a long BASIC line\'s text on the first DB row of its body', () => {
+    expect(emit('prog-62c8')).toContain('\tORG\t62C8H\n\tDW\t62E8H,000AH\n\tDB\t84H,3AH,0B2H,22H,56H,4FH,59H,41H\t; 10 CLS:PRINT"VOYAGE OF THE VALKYRIE"\n');
   });
 });

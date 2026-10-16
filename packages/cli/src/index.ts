@@ -28,6 +28,9 @@ Prints a listing of a TRS-80 .CMD load module, raw binary, or tokenized Level
 II .BAS program. The format is detected from the file's content, never its
 extension. Load modules and raw binaries get a pass 1 listing: recursive
 descent from the entry point, with everything it did not reach shown as DB.
+A .BAS program lists as BASIC; one with machine code hidden in its lines, or
+an entry its text plants (DEFUSR, the USR vector, a poked JP), gets the pass 1
+listing instead, with each code line disassembled at its true address.
 
   --base <hex>     load the file as a raw binary at this address (e.g. 5200,
                    0x5200) and list it from there; skips format detection
@@ -208,11 +211,12 @@ export async function run(argv: string[], io: Io): Promise<number> {
   let text: string;
   if (values.sweep === true && format === 'listing') {
     text = mod.format === 'cmd' ? renderCmdListing(mod, { source }) : mod.format === 'raw' ? renderRawListing(mod, { source }) : renderBasListing(mod, { source });
-  } else if (format === 'listing' && mod.format === 'bas' && entries.length === 0 && hints === undefined) {
-    text = renderBasListing(mod, { source });
   } else {
     const analysis = analyze(mod, hints === undefined ? { entries, annotations } : { entries, annotations, hints });
-    if (format === 'zmac') text = emitZmac(mod.image, analysis.pass1, analysis.transfer, { source, symbols: analysis.symbols, annotations });
+    // A .BAS with neither hidden code nor a planted entry lists as plain BASIC unless pass 1 was asked for.
+    const plainBasic = mod.format === 'bas' && entries.length === 0 && hints === undefined && analysis.entries.length === 0 && mod.lines.every((l) => l.parsed);
+    if (format === 'listing' && plainBasic && mod.format === 'bas') text = renderBasListing(mod, { source });
+    else if (format === 'zmac') text = emitZmac(mod.image, analysis.pass1, analysis.transfer, { source, symbols: analysis.symbols, annotations: analysis.annotations });
     else if (format === 'ir') text = `${JSON.stringify(buildIr(mod, analysis.pass1, source, analysis), null, 2)}\n`;
     else text = renderPass1Listing(analysis, { source });
   }

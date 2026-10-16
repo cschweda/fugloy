@@ -6,6 +6,7 @@ import { hex4, hexByte, hexWord } from '@fugloy/z80';
 import { renderInstruction } from './emit/operands.js';
 import { Kind } from './analysis/map.js';
 import type { BasProgram } from './bas.js';
+import { codeLineLabel } from './basic/structure.js';
 import type { CmdModule } from './cmd.js';
 import type { MemoryImage } from './memory.js';
 import type { RawModule } from './raw.js';
@@ -119,8 +120,11 @@ export function renderRawListing(mod: RawModule, opts: RenderOptions = {}): stri
  * `; entry` on every root, and a header that says how much was reached and
  * how the hint file applied.
  */
+/** Roots named in the pass 1 header before the rest are counted. */
+const MAX_ROOTS = 8;
+
 export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {}): string {
-  const { module: mod, pass1, roots, symbols, annotations, hints } = analysis;
+  const { module: mod, pass1, roots, symbols, annotations, hints, entries } = analysis;
   const { image } = mod;
   const { map, instructions } = pass1;
   const runs = image.runs();
@@ -135,11 +139,18 @@ export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {})
     }
   }
   const pct = loaded === 0 ? 0 : Math.round((code / loaded) * 100);
+  const rootList = roots.length <= MAX_ROOTS ? roots.map($).join(', ') : `${roots.slice(0, MAX_ROOTS).map($).join(', ')} and ${roots.length - MAX_ROOTS} more`;
   const rootText = roots.length === 0
     ? 'no roots; use --entry <hex> or --sweep'
-    : `roots ${roots.map($).join(', ')}; ${code} of ${loaded} bytes decoded as code (${pct}%)${data > 0 ? `; ${data} typed as data` : ''}; ${plural(pass1.externals.length, 'external target')}; ${plural(pass1.diagnostics.length, 'note')}`;
+    : `roots ${rootList}; ${code} of ${loaded} bytes decoded as code (${pct}%)${data > 0 ? `; ${data} typed as data` : ''}; ${plural(pass1.externals.length, 'external target')}; ${plural(pass1.diagnostics.length, 'note')}`;
   const out: string[] = [mod.format === 'cmd' ? cmdHeadline(mod, opts) : mod.format === 'raw' ? rawHeadline(mod, opts) : basHeadline(mod, opts)];
   out.push(`; pass 1: ${rootText}`);
+  if (mod.format === 'bas') {
+    const found = entries.filter((e) => e.addr !== null);
+    out.push(`; code lines: ${mod.lines.filter((l) => !l.parsed).length}; entries mined: ${found.length}`);
+    for (const e of found) out.push(`; entry ${$(e.addr!)} (${e.evidence})`);
+    for (const e of entries) if (e.addr === null) out.push(`; note: ${e.evidence}`);
+  }
   if (hints !== undefined) {
     out.push(`; hints: ${hints.source === undefined ? '' : `${hints.source}: `}${plural(hints.matched, 'block')} matched, ${hints.unmatched} unmatched, ${plural(hints.applied, 'hint')} applied`);
   }
@@ -160,11 +171,12 @@ export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {})
     if (text !== undefined) parts.push(text);
     return parts.length === 0 ? undefined : parts.join('; ');
   };
-  const startsRow = (addr: number): boolean => symbols.has(addr) || annotations.comments.has(addr) || instructions.has(addr);
-  for (const run of runs) {
-    out.push('', `        ORG ${hexWord(run.start)}`);
-    let addr = run.start;
-    while (addr <= run.end) {
+  const regionStarts = new Set(annotations.overrides.map((o) => o.addr & 0xffff));
+  const startsRow = (addr: number): boolean => symbols.has(addr) || annotations.comments.has(addr) || instructions.has(addr) || regionStarts.has(addr);
+  /** Rows for [from, to]: label lines, instructions, and data rows of up to four bytes. */
+  const rows = (from: number, to: number): void => {
+    let addr = from;
+    while (addr <= to) {
       const symbol = symbols.get(addr);
       if (symbol !== undefined && map.kind(addr) !== Kind.Tail) out.push(`${symbol.name}:`);
       const ins = instructions.get(addr);
@@ -175,7 +187,7 @@ export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {})
       }
       const kind = map.kind(addr);
       let n = 1;
-      while (addr + n <= run.end && n < 4 && !startsRow(addr + n) && map.kind(addr + n) === kind) n++;
+      while (addr + n <= to && n < 4 && !startsRow(addr + n) && map.kind(addr + n) === kind) n++;
       let text: string;
       if (kind === Kind.Word && n >= 2) {
         if (n % 2 === 1) n--;
@@ -190,6 +202,30 @@ export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {})
       }
       out.push(formatListingLine({ addr, bytes: Array.from(image.bytes.subarray(addr, addr + n)), text } as ListingLine, commentFor(addr)));
       addr += n;
+    }
+  };
+  if (mod.format === 'bas') {
+    // A BASIC line reads as its text; a code line as rows at its true addresses. Symbols the rows do not show are named.
+    out.push('');
+    for (const line of mod.lines) {
+      const n = line.body.length;
+      const last = line.bodyAddr + (n > 0 && line.body[n - 1] === 0 ? n - 1 : n) - 1;
+      const shown = line.parsed ? null : { from: line.bodyAddr, to: last };
+      if (shown === null) out.push(line.text === '' ? `${line.number}` : `${line.number} ${line.text}`);
+      else {
+        out.push(`; ${codeLineLabel(line)}`);
+        rows(shown.from, shown.to);
+      }
+      for (const s of symbols.list()) {
+        if (s.addr < line.addr || s.addr >= line.addr + line.length) continue;
+        if (shown !== null && s.addr >= shown.from && s.addr <= shown.to) continue;
+        out.push(`; symbol ${s.name} = ${$(s.addr)} (in line ${line.number})`);
+      }
+    }
+  } else {
+    for (const run of runs) {
+      out.push('', `        ORG ${hexWord(run.start)}`);
+      rows(run.start, run.end);
     }
   }
   return `${out.join('\n')}\n`;

@@ -5,7 +5,7 @@
  * code line's body start is a root, and descent decides what inside it is
  * code. The 00 00 end marker is typed as one word.
  */
-import type { BasProgram } from '../bas.js';
+import type { BasLine, BasProgram } from '../bas.js';
 import { emptyAnnotations } from '../hints/apply.js';
 import type { Annotations } from '../hints/apply.js';
 
@@ -13,6 +13,15 @@ export interface BasStructure {
   annotations: Annotations;
   /** Body address → `N text` for every line that parses as BASIC. */
   texts: Map<number, string>;
+}
+
+const hex4 = (n: number): string => n.toString(16).toUpperCase().padStart(4, '0');
+
+/** `line N: machine code, K bytes at $XXXX`, counting the code bytes without the terminator. */
+export function codeLineLabel(line: BasLine): string {
+  const n = line.body.length;
+  const k = n > 0 && line.body[n - 1] === 0 ? n - 1 : n;
+  return `line ${line.number}: machine code, ${k} byte${k === 1 ? '' : 's'} at $${hex4(line.bodyAddr)}`;
 }
 
 export function basStructure(prog: BasProgram): BasStructure {

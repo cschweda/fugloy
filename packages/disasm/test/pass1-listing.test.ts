@@ -4,8 +4,10 @@ import { loadCmd } from '../src/cmd.js';
 import { renderPass1Listing } from '../src/listing.js';
 import { analyze } from '../src/pipeline.js';
 import { loadRaw } from '../src/raw.js';
-import { applyHints } from '../src/hints/apply.js';
+import { Kind } from '../src/analysis/map.js';
+import { applyHints, emptyAnnotations } from '../src/hints/apply.js';
 import { BAS_FIXTURES, CMD_FIXTURES, HINT_FIXTURES } from './fixtures.js';
+import { writeBasic } from './writers/basic-tokenizer.js';
 
 const cmd = (name: string, entries?: number[]) =>
   renderPass1Listing(analyze(loadCmd(CMD_FIXTURES[name]!()), entries === undefined ? {} : { entries }), { source: `${name}.cmd` });
@@ -143,5 +145,63 @@ describe('renderPass1Listing with hints and symbols', () => {
     const lines = renderPass1Listing(a).split('\n');
     expect(lines).toContain('; hints: x.hints: 0 blocks matched, 1 unmatched, 0 hints applied');
     expect(lines).toContain('; warning: hint block 0 (length $0001, hash 0000000000000000) has no matching run; 2 hints skipped');
+  });
+});
+
+const LINE_250 = 'CLS:Q0=PEEK(16549)*256+PEEK(16548)+14:Q1=INT(Q0/256):Q0=Q0-Q1*256:POKE16422,Q0:POKE16423,Q1:POKE16421,195';
+/** Valkyrie in miniature: line 1 jumps past line 2, whose body is LD B,H / LD A,C / RET, and line 250 plants a JP to program start + 14. */
+const planted = () =>
+  loadBas(writeBasic([{ number: 1, text: 'GOTO250' }, { number: 2, raw: [0x44, 0x79, 0xc9] }, { number: 250, text: LINE_250 }], 0x7000));
+/** One listing row, in formatListingLine's columns. */
+const row = (addr: string, bytes: string, text: string, comment?: string): string => {
+  const body = `${addr}  ${bytes.padEnd(12)}  ${text}`;
+  return comment === undefined ? body : `${body.padEnd(44)}; ${comment}`;
+};
+
+describe('analyze on a .BAS program', () => {
+  it('roots each code line at its body start, decodes it, and keeps BASIC text typed with its line as a comment', () => {
+    const a = analyze(loadBas(BAS_FIXTURES['hidden-code']!()));
+    expect(a.roots).toEqual([0x700d]);
+    expect(a.entries).toEqual([]);
+    expect([...a.pass1.instructions.keys()]).toEqual([0x700d]);
+    expect(a.pass1.map.kind(0x7004)).toBe(Kind.Byte);
+    expect(a.annotations.comments.get(0x7004)).toBe('10 GOTO 30');
+    expect(a.annotations.comments.get(0x7009)).toBe('line 20: machine code, 6 bytes at $700D');
+  });
+
+  it('roots mined entries before the body starts of code lines', () => {
+    const a = analyze(planted());
+    expect(a.entries).toEqual([{ addr: 0x700e, evidence: 'line 250: POKE 16421,195 with address program start + 14', line: 250 }]);
+    expect(a.roots).toEqual([0x700e, 0x700d]);
+    expect([...a.pass1.instructions.keys()].sort((x, y) => x - y)).toEqual([0x700d, 0x700e, 0x700f]);
+  });
+
+  it('lets hints win over the structure: bytes over a code line, code over a BASIC line', () => {
+    const prog = loadBas(BAS_FIXTURES['hidden-code']!());
+    const asData = analyze(prog, { annotations: { ...emptyAnnotations(), overrides: [{ addr: 0x700d, kind: 'bytes', length: 6 }] } });
+    expect(asData.pass1.instructions.size).toBe(0);
+    const asCode = analyze(prog, { annotations: { ...emptyAnnotations(), overrides: [{ addr: 0x7004, kind: 'code', length: 4 }] } });
+    expect(asCode.pass1.instructions.has(0x7004)).toBe(true);
+  });
+});
+
+describe('renderPass1Listing on a .BAS program', () => {
+  it('prints BASIC lines as text and each code line as rows at its true addresses', () => {
+    const text = renderPass1Listing(analyze(loadBas(BAS_FIXTURES['hidden-code']!())), { source: 'hidden-code.bas' });
+    expect(text).toContain('; code lines: 1; entries mined: 0\n');
+    expect(text).toContain(['', '10 GOTO 30', '; line 20: machine code, 6 bytes at $700D', row('700D', 'C3 00 00', 'JP 0000H', 'entry'), row('7010', 'C9 00 3E', 'DB 0C9H,00H,3EH'), '30 END', ''].join('\n'));
+  });
+
+  it('names each mined entry with its evidence in the header', () => {
+    const text = renderPass1Listing(analyze(planted()));
+    expect(text).toContain('; pass 1: roots $700E, $700D;');
+    expect(text).toContain('; code lines: 1; entries mined: 1\n; entry $700E (line 250: POKE 16421,195 with address program start + 14)\n');
+    expect(text).toContain(['1 GOTO250', '; line 2: machine code, 3 bytes at $700D', row('700D', '44', 'LD B,H', 'entry'), row('700E', '79', 'LD A,C', 'entry'), row('700F', 'C9', 'RET'), `250 ${LINE_250}`].join('\n'));
+  });
+
+  it('shortens a long root list', () => {
+    const lines = [{ number: 1, text: 'END' }, ...Array.from({ length: 10 }, (_, i) => ({ number: i + 2, raw: [0xc9] }))];
+    const text = renderPass1Listing(analyze(loadBas(writeBasic(lines, 0x7000))));
+    expect(text).toContain('; pass 1: roots $700A, $7010, $7016, $701C, $7022, $7028, $702E, $7034 and 2 more;');
   });
 });
