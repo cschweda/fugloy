@@ -125,10 +125,19 @@ export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {})
   const { map, instructions } = pass1;
   const runs = image.runs();
   const loaded = runs.reduce((n, r) => n + r.length, 0);
-  let reached = 0;
-  for (const run of runs) for (let a = run.start; a <= run.end; a++) if (map.kind(a) !== Kind.Unknown) reached++;
-  const pct = loaded === 0 ? 0 : Math.round((reached / loaded) * 100);
-  const rootText = roots.length === 0 ? 'no roots; use --entry <hex> or --sweep' : `roots ${roots.map($).join(', ')}; ${reached} of ${loaded} bytes reached (${pct}%); ${plural(pass1.externals.length, 'external target')}; ${plural(pass1.diagnostics.length, 'note')}`;
+  let code = 0;
+  let data = 0;
+  for (const run of runs) {
+    for (let a = run.start; a <= run.end; a++) {
+      const k = map.kind(a);
+      if (k === Kind.Code || k === Kind.Tail) code++;
+      else if (k !== Kind.Unknown) data++;
+    }
+  }
+  const pct = loaded === 0 ? 0 : Math.round((code / loaded) * 100);
+  const rootText = roots.length === 0
+    ? 'no roots; use --entry <hex> or --sweep'
+    : `roots ${roots.map($).join(', ')}; ${code} of ${loaded} bytes decoded as code (${pct}%)${data > 0 ? `; ${data} typed as data` : ''}; ${plural(pass1.externals.length, 'external target')}; ${plural(pass1.diagnostics.length, 'note')}`;
   const out: string[] = [mod.format === 'cmd' ? cmdHeadline(mod, opts) : mod.format === 'raw' ? rawHeadline(mod, opts) : basHeadline(mod, opts)];
   out.push(`; pass 1: ${rootText}`);
   if (hints !== undefined) {

@@ -1,0 +1,26 @@
+# Fugløy hints for asylum16.cmd (Asylum, 16K build). Hand-written; identities from `fugloy --write-hints`.
+# Numbers: $hex or decimal. Offsets are relative to block 0, which loads at $8000.
+#
+# What the entry stub does, read from the pass 1 listing:
+#   $8000  DI, SP, copy 54 bytes from $807C to $4000 and 39 bytes from $80B5 to $4080 (RAM variables),
+#          fill $4152.. with JP 012DH / RET vectors, then interpret the stream at $80DD:
+#   `<` n dest  copies n bytes of the stream to dest (128-byte records covering $42F3..$7FF6),
+#   `x` addr    clears the screen (CALL $8072: chars 1CH,1FH via ROM $0033) and JP (HL) to addr.
+#   The stream ends with `x` $43AE: the game relocates itself down to $42F3 and runs there, at
+#   addresses that are never in the loaded image. Static analysis stops at the JP (HL); reaching
+#   the game code needs a relocation facility (proposed: a `relocate` hint emitted with zmac's
+#   .phase, which keeps the round trip intact).
+fugloy-hints 1
+program sha256 bcab1e4a5b9dfb4d34ede6ac6d591068e816be0c4357dc4a5ba7ead2017c6273
+block 0 length $3FF0 hash 5167633e79339601    # start $8000
+block 0:$0000 name LOADER
+block 0:$0000 comment self-relocating loader: copies the payload at $80DD down to $42F3 and jumps to $43AE
+block 0:$0050 name LOADER_NEXT
+block 0:$0050 comment next stream record: `<` copy block, `x` jump, anything else -> BASIC ready
+block 0:$0072 name CLS_HOME
+block 0:$0072 comment prints 1CH (clear) and 1FH (home) through ROM $0033
+block 0:$007C name RAM_VARS_4000
+block 0:$00B5 name RAM_VARS_4080
+block 0:$00DD name PAYLOAD_STREAM
+block 0:$00DD comment `<` 128 dest payload ... `x` $43AE; typed as bytes so nothing decodes the payload at its load address
+block 0:$00DD bytes $3F13

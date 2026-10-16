@@ -46,7 +46,7 @@ describe('renderPass1Listing', () => {
   it('prints the module header, a pass 1 line, blocks, and the listing with DB rows for unreached bytes', () => {
     const lines = cmd('non-contiguous').split('\n');
     expect(lines[0]).toBe('; non-contiguous.cmd: load module, 2 blocks, 2 runs, 14 bytes, entry $6000 (transfer address)');
-    expect(lines[1]).toBe('; pass 1: roots $6000; 6 of 14 bytes reached (43%); 0 external targets; 0 notes');
+    expect(lines[1]).toBe('; pass 1: roots $6000; 6 of 14 bytes decoded as code (43%); 0 external targets; 0 notes');
     expect(lines).toContain('; block 0: $6000-$6005 (6 bytes)');
     expect(lines).toContain('        ORG 6000H');
     expect(lines).toContain('6000  21 00 3C      LD HL,3C00H             ; entry');
@@ -60,9 +60,15 @@ describe('renderPass1Listing', () => {
   it('decodes the second run when --entry names it', () => {
     const lines = cmd('non-contiguous', [0x7000]).split('\n');
     // The eight pattern bytes at $7000 all decode as instructions, so everything is reached.
-    expect(lines[1]).toBe('; pass 1: roots $6000, $7000; 14 of 14 bytes reached (100%); 0 external targets; 0 notes');
+    expect(lines[1]).toBe('; pass 1: roots $6000, $7000; 14 of 14 bytes decoded as code (100%); 0 external targets; 0 notes');
     expect(lines).toContain('7000  00            NOP                     ; entry');
     expect(lines).toContain('7001  01 02 03      LD BC,0302H');
+  });
+
+  it('counts typed data separately from code', () => {
+    const mod = loadRaw(Uint8Array.from([0xcf, 0x2c, 0xc9, 1, 2]), 0x6000);
+    const lines = renderPass1Listing(analyze(mod), { source: 'x.bin' }).split('\n');
+    expect(lines[1]).toBe('; pass 1: roots $6000; 2 of 5 bytes decoded as code (40%); 1 typed as data; 1 external target; 0 notes');
   });
 
   it('says what to do when there are no roots', () => {
@@ -85,7 +91,7 @@ describe('renderPass1Listing', () => {
   it('lists diagnostics as notes and counts external targets', () => {
     const mod = loadRaw(Uint8Array.from([0xcd, 0x33, 0x00, 0x18, 0xfc]), 0x6000); // CALL 0033 ; JR 6001
     const lines = renderPass1Listing(analyze(mod), { source: 'x.bin' }).split('\n');
-    expect(lines[1]).toBe('; pass 1: roots $6000; 5 of 5 bytes reached (100%); 1 external target; 1 note');
+    expect(lines[1]).toBe('; pass 1: roots $6000; 5 of 5 bytes decoded as code (100%); 1 external target; 1 note');
     // The jump target inside the instruction gets a synthesized symbol, emitted as EQU in source; the listing says so.
     expect(lines[2]).toBe('; symbol L6001 = $6001 (inside the instruction at $6000)');
     expect(lines[3]).toBe('; note: target $6001 is inside the instruction at $6000');
