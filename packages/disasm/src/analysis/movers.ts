@@ -115,7 +115,9 @@ export function proposeMovers(image: MemoryImage, pass1: Pass1, identities: Bloc
       addr = endsPath(ins) ? (unconditional ? target : null) : (addr + ins.length) & 0xffff;
     }
   }
-  // Bytes already moved by a hint, or claimed by an earlier proposal, are not available to another.
+  // Bytes already moved by a hint (at their file and their runtime addresses), or claimed by an earlier
+  // proposal, are not available to another. So a second-stage copy out of relocated memory gets no
+  // proposal: its source has no one file offset a relocate line could name.
   const taken = new Uint8Array(0x10000);
   for (const r of relocations) {
     taken.fill(1, r.fileAddr, r.fileAddr + r.length);

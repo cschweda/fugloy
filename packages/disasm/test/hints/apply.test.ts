@@ -105,6 +105,19 @@ describe('relocate hints', () => {
     expect(applied.annotations.comments.get(0x5003)).toBe('skip the padding');
   });
 
+  it('clip a hint that runs into a relocated source at the source, whose bytes execute elsewhere', () => {
+    const img = image({ 0x8000: pattern(32) });
+    const relocate = h(0, 0x10, 'relocate', { addr: 0x5000, length: 8 });
+    const applied = applyHints(fileFor(img, [relocate, h(0, 0x08, 'bytes', { length: 0x10 }), h(0, 0x0c, 'table', { count: 4, width: 2 })]), img);
+    expect(applied.errors).toEqual([]);
+    expect(applied.annotations.overrides).toEqual([{ addr: 0x8008, kind: 'bytes', length: 8 }]);
+    expect(applied.annotations.tables).toEqual([{ addr: 0x800c, count: 2, width: 2 }]);
+    expect(applied.warnings).toEqual([
+      'bytes at 0:$0008 runs into the relocated source at $8010; clipped to $0008 bytes',
+      'table at 0:$000C runs into the relocated source at $8010; clipped to 2 entries',
+    ]);
+  });
+
   it('report a relocation that cannot apply as an error and drop it', () => {
     const mod = loadCmd(CMD_FIXTURES['relocated-code']!());
     const file = HINT_FIXTURES['relocated-code']!();

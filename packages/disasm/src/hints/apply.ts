@@ -89,14 +89,16 @@ export function applyHints(file: HintFile, image: MemoryImage, programHash?: str
     const run = runOf.get(hint.block);
     if (run === undefined || hint.directive === 'relocate') continue;
     const fileAddr = (run.start + hint.offset) & 0xffff;
-    // A hint inside a relocated source stays inside it.
+    // A hint inside a relocated source stays inside it; one before a source stops where the source starts.
     const moved = space.relocations.find((r) => fileAddr >= r.fileAddr && fileAddr < r.fileAddr + r.length);
-    const last = moved === undefined ? run.end : moved.fileAddr + moved.length - 1;
+    const next = moved === undefined ? space.relocations.filter((r) => r.fileAddr > fileAddr && r.fileAddr <= run.end).sort((a, b) => a.fileAddr - b.fileAddr)[0] : undefined;
+    const last = moved !== undefined ? moved.fileAddr + moved.length - 1 : next !== undefined ? next.fileAddr - 1 : run.end;
     const room = last - fileAddr + 1;
+    const limit = next === undefined ? 'runs past the end of the run' : `runs into the relocated source at $${hex4(next.fileAddr)}`;
     const addr = space.toRun(fileAddr) ?? fileAddr;
     const clip = (length: number, what: string): number => {
       if (length <= room) return length;
-      warnings.push(`${what} at ${hint.block}:$${hex4(hint.offset)} runs past the end of the run; clipped to $${hex4(room)} bytes`);
+      warnings.push(`${what} at ${hint.block}:$${hex4(hint.offset)} ${limit}; clipped to $${hex4(room)} bytes`);
       return room;
     };
     switch (hint.directive) {
@@ -128,7 +130,7 @@ export function applyHints(file: HintFile, image: MemoryImage, programHash?: str
         const fit = Math.floor(room / hint.width);
         let count = hint.count;
         if (count > fit) {
-          warnings.push(`table at ${hint.block}:$${hex4(hint.offset)} runs past the end of the run; clipped to ${fit} ${fit === 1 ? 'entry' : 'entries'}`);
+          warnings.push(`table at ${hint.block}:$${hex4(hint.offset)} ${limit}; clipped to ${fit} ${fit === 1 ? 'entry' : 'entries'}`);
           count = fit;
         }
         if (count >= 1) annotations.tables.push({ addr, count, width: hint.width });

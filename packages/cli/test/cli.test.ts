@@ -289,6 +289,13 @@ describe('relocate hints on the command line', () => {
     expect(b.out.join('')).toContain('; pass 1: roots $8100, $5005;');
   });
 
+  it('name the runtime address when --entry gives the file address of relocated code', async () => {
+    const { io, out, err } = capture();
+    expect(await run([cmd, '--hints', hintsFile, '--entry', '8005'], io)).toBe(2);
+    expect(out).toEqual([]);
+    expect(err.join('')).toBe('fugloy: --entry $8005 is a file address a relocate hint moves; it runs at $5005, so use --entry 5005\n');
+  });
+
   it('refuse a relocate that would overwrite loaded memory, with exit 2', async () => {
     const skel = capture();
     expect(await run([cmd, '--write-hints', '/virtual/r.hints'], skel.io)).toBe(0);

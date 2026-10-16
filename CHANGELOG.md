@@ -154,6 +154,11 @@ at its true addresses.
 - The string heuristic finds a message in a `.BAS` code line that runs up to
   the line's `00` terminator or ends just before it; the typed line frame no
   longer blocks it.
+- A hint that starts before a relocated source and runs into it is clipped
+  where the source starts, and the warning names the source; it used to
+  cover bytes that execute elsewhere.
+- `--entry` given the file address of relocated code says where that code
+  runs (`use --entry 5005`) instead of "not in loaded memory".
 - A BASIC line that leaves `THEN` out of `IF` (`IF A PRINT`, `IF A 100`)
   parses, as the ROM's IF handler at `$2039` allows; such lines were reported
   as machine code (all 59 "code lines" in Super Star Trek were these).

@@ -85,6 +85,19 @@ describe('proposeMovers', () => {
     expect(moves(twice).map((m) => m.hints)).toEqual([['block 0:$0000 relocate $6000 $0040', 'block 0:$0000 entry']]);
   });
 
+  it('proposes nothing for a second-stage copy out of relocated memory, which no one file offset can name', () => {
+    // Once at $5000: LD HL,5100H / LD DE,6000H / LD BC,0004H / LDIR / JP 6000H, and four bytes at $5100 to copy.
+    const payload = [0x21, 0x00, 0x51, 0x11, 0x00, 0x60, 0x01, 0x04, 0x00, 0xed, 0xb0, 0xc3, 0x00, 0x60, ...new Array<number>(0x100 - 14).fill(0), 0xc9, 0, 0, 0];
+    const stub = [0x21, 0x00, 0x80, 0x11, 0x00, 0x50, 0x01, 0x04, 0x01, 0xed, 0xb0, 0xc3, 0x00, 0x50]; // copies $0104 bytes from $8000 to $5000
+    const bytes = new CmdWriter().load(0x8000, payload).load(0x8200, stub).transfer(0x8200).bytes();
+    const mod = loadCmd(bytes);
+    const [first] = moves(bytes);
+    expect(first!.hints).toEqual(['block 0:$0000 relocate $5000 $0104', 'block 0:$0000 entry']);
+    const a = analyze(mod, { annotations: applyHints(parseHints(hintText(mod.image, first!.hints)).file, mod.image).annotations });
+    expect(a.pass1.instructions.get(0x5009)?.mnemonic).toBe('LDIR'); // the second stage, decoded where it runs
+    expect(a.proposals.filter((p) => p.kind === 'move')).toEqual([]);
+  });
+
   it('proposes nothing for a source a relocate hint already moved', () => {
     const mod = loadCmd(CMD_FIXTURES['mover']!());
     const { file } = parseHints(hintText(mod.image, ['block 0:$0000 relocate $5000 $0040']));

@@ -271,11 +271,16 @@ export async function run(argv: string[], io: Io): Promise<number> {
     if (format !== 'listing') for (const w of applied.warnings) io.stderr(`fugloy: warning: ${w}\n`);
   }
 
-  // An entry may name a runtime address that a relocate hint created.
-  const runtime = analysisSpace(mod.image, annotations.relocations).space.image;
+  // An entry may name a runtime address that a relocate hint created, but not the file address it moved away from.
+  const { space: runtime } = analysisSpace(mod.image, annotations.relocations);
   for (const e of entries) {
-    if (!runtime.isLoaded(e)) {
-      io.stderr(`fugloy: --entry $${hex4(e)} is not in loaded memory\n`);
+    if (!runtime.image.isLoaded(e)) {
+      const moved = runtime.toRun(e);
+      io.stderr(
+        moved !== null && moved !== e
+          ? `fugloy: --entry $${hex4(e)} is a file address a relocate hint moves; it runs at $${hex4(moved)}, so use --entry ${hex4(moved)}\n`
+          : `fugloy: --entry $${hex4(e)} is not in loaded memory\n`,
+      );
       return 2;
     }
   }
