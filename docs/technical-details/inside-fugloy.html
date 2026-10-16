@@ -1,0 +1,1269 @@
+<title>Inside Fugløy</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Martian+Mono:wght@400;600&family=VT323&display=swap">
+<style>
+/* Layout: one column of short "cartridges" on a CRT-glass night background; each pairs one big idea with a live byte panel, and every byte is colored by what it is: code, BASIC, data, or framing. */
+:root {
+  color-scheme: dark;
+  --night: #0b0f1c;
+  --deck: #121a2e;
+  --deck-2: #19233d;
+  --rule: #2a3757;
+  --phosphor: #e8eefb;
+  --dim: #9fadc9;
+  --signal: #ffb547;
+  --code: #62e3d4;
+  --data: #b8a2ff;
+  --frame: #ff7a6e;
+  --ok: #7fe0a0;
+  --bad: #ff8a80;
+  --glass: #05070d;
+  --str: #a8e6b4;
+  --f-display: "Archivo", "Arial Black", Impact, system-ui, sans-serif;
+  --f-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "Martian Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --f-crt: "VT323", "Courier New", ui-monospace, monospace;
+  --s-1: clamp(0.8rem, 0.78rem + 0.1vw, 0.88rem);
+  --s0: clamp(1rem, 0.96rem + 0.2vw, 1.1rem);
+  --s1: clamp(1.2rem, 1.08rem + 0.6vw, 1.45rem);
+  --s2: clamp(1.55rem, 1.25rem + 1.5vw, 2.3rem);
+  --s3: clamp(2.1rem, 1.5rem + 3vw, 3.9rem);
+  --s4: clamp(2.7rem, 1.6rem + 6vw, 6.4rem);
+  --radius: 14px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation: none !important; transition: none !important; } }
+body { background: var(--night); color: var(--phosphor); font-family: var(--f-body); font-size: var(--s0); line-height: 1.6; margin: 0; overflow-x: hidden; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--night); }
+a { color: var(--code); text-underline-offset: 3px; }
+:focus-visible { outline: 3px solid var(--signal); outline-offset: 3px; border-radius: 6px; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--f-display); font-stretch: 125%; line-height: 1.02; text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: var(--s3); font-weight: 850; }
+h3 { font-size: var(--s1); font-weight: 750; letter-spacing: 0; }
+p { margin: 0; max-width: 62ch; }
+.eyebrow { font-family: var(--f-mono); font-size: var(--s-1); letter-spacing: 0.12em; text-transform: uppercase; color: var(--signal); }
+.lede { font-size: var(--s1); color: var(--phosphor); }
+.dim { color: var(--dim); }
+code, .mono { font-family: var(--f-mono); font-size: 0.86em; }
+.k-code { color: var(--code); } .k-basic { color: var(--signal); } .k-data { color: var(--data); } .k-frame { color: var(--frame); }
+
+/* Top rail */
+.rail { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 9; background: color-mix(in srgb, var(--night) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--rule); }
+.rail .wrap { display: flex; align-items: center; gap: 14px; padding-block: 10px; }
+.brand { font-family: var(--f-display); font-stretch: 125%; font-weight: 900; font-size: 1.05rem; white-space: nowrap; color: var(--phosphor); text-decoration: none; }
+.chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.chips::-webkit-scrollbar { display: none; }
+.chip { flex: none; font-family: var(--f-mono); font-size: 0.72rem; color: var(--dim); text-decoration: none; border: 1px solid var(--rule); border-radius: 999px; padding: 5px 11px; white-space: nowrap; }
+.chip:hover, .chip.on { color: var(--night); background: var(--signal); border-color: var(--signal); }
+
+/* Hero */
+.hero .wrap { display: grid; gap: clamp(24px, 4vw, 48px); padding-block: clamp(28px, 6vw, 72px) clamp(28px, 5vw, 56px); grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 980px) { .hero .wrap { grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr); align-items: center; } }
+.hero h1 { font-size: var(--s4); font-weight: 900; }
+.hero h1 span { color: var(--signal); }
+.hero-text { display: grid; gap: 20px; min-width: 0; }
+.monitor { background: linear-gradient(160deg, #3b4256, #222838 60%, #1a1f2c); border-radius: 22px; padding: clamp(10px, 2vw, 18px); box-shadow: 0 30px 80px -30px #000, inset 0 1px 0 #ffffff22; min-width: 0; }
+.monitor .bezel { background: var(--glass); border-radius: 14px; padding: clamp(8px, 1.6vw, 16px); box-shadow: inset 0 0 40px #000; }
+#crt { display: block; width: 100%; aspect-ratio: 2 / 1; max-width: 100%; border-radius: 6px; }
+.monitor .badge { display: flex; justify-content: space-between; font-family: var(--f-mono); font-size: 0.68rem; color: #c8cede; padding: 10px 6px 2px; letter-spacing: 0.08em; }
+.key { display: flex; flex-wrap: wrap; gap: 8px 14px; font-family: var(--f-mono); font-size: var(--s-1); }
+.key span { display: inline-flex; align-items: center; gap: 7px; }
+.key i { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
+
+/* Sections */
+.cart { border-top: 1px solid var(--rule); }
+.cart > .wrap { padding-block: clamp(40px, 7vw, 88px); display: grid; gap: clamp(22px, 3.5vw, 40px); }
+.split { display: grid; gap: clamp(22px, 3.5vw, 44px); grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 900px) { .split { grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); align-items: start; } }
+.copy { display: grid; gap: 16px; min-width: 0; align-content: start; }
+.panel { background: var(--deck); border: 1px solid var(--rule); border-radius: var(--radius); padding: clamp(14px, 2.4vw, 24px); display: grid; gap: 16px; min-width: 0; }
+.panel-title { font-family: var(--f-mono); font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); }
+.big { font-family: var(--f-display); font-stretch: 125%; font-weight: 900; font-size: var(--s3); line-height: 1; }
+details.deep { border-left: 3px solid var(--signal); padding: 4px 0 4px 14px; }
+details.deep summary { cursor: pointer; font-family: var(--f-mono); font-size: 0.8rem; color: var(--signal); }
+details.deep[open] summary { margin-bottom: 10px; }
+details.deep p + p { margin-top: 10px; }
+
+/* Segmented toggles */
+.seg { display: inline-flex; flex-wrap: wrap; gap: 4px; background: var(--night); border: 1px solid var(--rule); border-radius: 999px; padding: 4px; }
+.seg button { font: 600 0.78rem var(--f-mono); color: var(--dim); background: none; border: 0; border-radius: 999px; padding: 7px 13px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--phosphor); color: var(--night); }
+.btn { font: 600 0.8rem var(--f-mono); color: var(--night); background: var(--signal); border: 0; border-radius: 10px; padding: 9px 15px; cursor: pointer; }
+.btn.ghost { background: none; color: var(--phosphor); border: 1px solid var(--rule); }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+/* Byte tiles */
+.bytes { display: flex; flex-wrap: wrap; gap: 6px; }
+.b { display: grid; justify-items: center; gap: 2px; min-width: 38px; padding: 7px 6px 5px; border-radius: 8px; background: var(--deck-2); border: 1px solid transparent; font-family: var(--f-mono); }
+.b .hx { font-size: 0.9rem; font-weight: 600; }
+.b .lb { font-size: 0.58rem; color: var(--dim); max-width: 9ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.b.code { background: color-mix(in srgb, var(--code) 16%, var(--deck-2)); border-color: color-mix(in srgb, var(--code) 45%, transparent); }
+.b.code .hx { color: var(--code); }
+.b.basic { background: color-mix(in srgb, var(--signal) 15%, var(--deck-2)); border-color: color-mix(in srgb, var(--signal) 45%, transparent); }
+.b.basic .hx { color: var(--signal); }
+.b.data { background: color-mix(in srgb, var(--data) 14%, var(--deck-2)); border-color: color-mix(in srgb, var(--data) 40%, transparent); }
+.b.data .hx { color: var(--data); }
+.b.frame { background: color-mix(in srgb, var(--frame) 15%, var(--deck-2)); border-color: color-mix(in srgb, var(--frame) 45%, transparent); }
+.b.frame .hx { color: var(--frame); }
+.b.bad { outline: 2px dashed var(--bad); outline-offset: 1px; }
+.group { display: grid; gap: 6px; padding: 10px; border-radius: 12px; border: 1px dashed var(--rule); cursor: pointer; background: none; color: inherit; text-align: left; font: inherit; }
+.group[aria-pressed="true"] { border-style: solid; border-color: var(--signal); background: color-mix(in srgb, var(--signal) 7%, transparent); }
+.group .tag { font-family: var(--f-mono); font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); }
+.records { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* Listings */
+.listing { font-family: var(--f-mono); font-size: 0.82rem; line-height: 1.75; background: var(--glass); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; overflow-x: auto; white-space: pre; margin: 0; }
+.listing .ad { color: var(--dim); } .listing .op { color: var(--code); } .listing .cm { color: var(--signal); } .listing .wrong { color: var(--bad); } .listing .str { color: var(--data); } .listing .lbl { color: var(--phosphor); font-weight: 600; }
+
+/* Memory map */
+.mem { display: flex; height: 64px; border-radius: 10px; overflow: hidden; border: 1px solid var(--rule); }
+.mem button { border: 0; padding: 0 6px; min-width: 0; cursor: pointer; font: 600 0.66rem var(--f-mono); color: var(--night); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; border-right: 2px solid var(--night); }
+.mem button:last-child { border-right: 0; }
+.mem button[aria-pressed="true"] { box-shadow: inset 0 -6px 0 var(--phosphor); }
+.memscale { display: flex; justify-content: space-between; font: 0.66rem var(--f-mono); color: var(--dim); }
+.memcard { display: grid; gap: 8px; background: var(--deck-2); border-radius: 12px; padding: 14px 16px; }
+.memcard h3 { font-size: var(--s1); }
+
+/* Line map */
+.linemap { display: grid; grid-template-columns: repeat(auto-fill, minmax(13px, 1fr)); gap: 3px; }
+.linemap i { aspect-ratio: 1; border-radius: 3px; display: block; background: var(--code); opacity: 0.85; }
+.linemap i.b { background: var(--signal); opacity: 1; }
+.linemap i.hot { outline: 2px solid var(--phosphor); outline-offset: 1px; }
+.tally { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.tally div { background: var(--deck-2); border-radius: 12px; padding: 12px; display: grid; gap: 2px; }
+.tally b { font-family: var(--f-display); font-stretch: 125%; font-size: var(--s2); line-height: 1; }
+.tally span { font-size: 0.76rem; color: var(--dim); }
+
+/* Cards */
+.cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.card { text-align: left; font: inherit; color: inherit; background: var(--deck-2); border: 1px solid var(--rule); border-radius: 14px; padding: 16px; cursor: pointer; display: grid; gap: 10px; align-content: start; min-height: 168px; }
+.card .q { font-family: var(--f-mono); font-size: 0.88rem; overflow-wrap: anywhere; }
+.card .hint { font-size: 0.74rem; color: var(--dim); }
+.card .v { display: none; gap: 8px; }
+.card[aria-pressed="true"] .v { display: grid; }
+.card[aria-pressed="true"] .hint { display: none; }
+.verdict { font-family: var(--f-display); font-stretch: 125%; font-weight: 850; font-size: 1.25rem; }
+.verdict.yes { color: var(--ok); } .verdict.no { color: var(--bad); }
+
+/* Bars */
+.bars { display: grid; gap: 12px; }
+.bar { display: grid; gap: 6px; }
+.bar .lab { display: flex; justify-content: space-between; gap: 12px; font-size: 0.86rem; }
+.bar .lab b { font-family: var(--f-mono); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.track { height: 14px; border-radius: 999px; background: var(--deck-2); overflow: hidden; position: relative; }
+.fill { height: 100%; border-radius: 999px; background: var(--code); }
+.fill.before { background: var(--frame); position: absolute; left: 0; top: 0; }
+table.t { width: 100%; border-collapse: collapse; font-size: 0.86rem; font-variant-numeric: tabular-nums; }
+.t th, .t td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--rule); }
+.t th { font: 600 0.7rem var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); }
+.t td.n { text-align: right; font-family: var(--f-mono); }
+.scroll { overflow-x: auto; }
+
+/* Stepper */
+.basicline { font-family: var(--f-mono); font-size: 0.86rem; line-height: 2; background: var(--glass); border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px; overflow-wrap: anywhere; }
+.basicline span { border-radius: 5px; padding: 2px 1px; transition: background 0.25s, color 0.25s; }
+.basicline span.lit { background: var(--signal); color: var(--night); }
+.basicline span.done { color: var(--code); }
+.value { font-family: var(--f-mono); font-size: 0.95rem; background: var(--deck-2); border-radius: 12px; padding: 14px 16px; display: grid; gap: 6px; }
+.value .expr { font-size: 1.05rem; color: var(--signal); overflow-wrap: anywhere; }
+.cells { display: flex; gap: 8px; flex-wrap: wrap; }
+.cell { display: grid; gap: 3px; justify-items: center; background: var(--deck-2); border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px; min-width: 86px; font-family: var(--f-mono); }
+.cell .addr { font-size: 0.66rem; color: var(--dim); }
+.cell .val { font-size: 1.15rem; font-weight: 600; color: var(--dim); }
+.cell.set { border-color: var(--code); }
+.cell.set .val { color: var(--code); }
+
+/* Moving */
+.lane { display: grid; gap: 6px; }
+.lane .name { font: 600 0.72rem var(--f-mono); color: var(--dim); letter-spacing: 0.06em; text-transform: uppercase; }
+.strip { position: relative; height: 40px; border-radius: 10px; background: var(--deck-2); overflow: hidden; border: 1px solid var(--rule); }
+.strip .seg-a { position: absolute; top: 0; bottom: 0; }
+.strip .lab { position: absolute; top: 50%; transform: translateY(-50%); font: 600 0.66rem var(--f-mono); color: var(--night); padding: 0 8px; white-space: nowrap; }
+.ticks { display: flex; justify-content: space-between; font: 0.64rem var(--f-mono); color: var(--dim); }
+input[type="range"] { width: 100%; accent-color: var(--signal); }
+
+/* Pipeline */
+.pipe { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); counter-reset: st; }
+.node { background: var(--deck-2); border: 1px solid var(--rule); border-radius: 14px; padding: 14px; display: grid; gap: 6px; position: relative; }
+.node b { font-family: var(--f-display); font-stretch: 112%; font-size: 1.05rem; }
+.node span { font-size: 0.8rem; color: var(--dim); }
+.node.check { border-color: var(--ok); }
+.node.check.fail { border-color: var(--bad); }
+.node .st { font: 600 0.66rem var(--f-mono); color: var(--signal); }
+
+/* Stats */
+.stats { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.stat { background: var(--deck); border: 1px solid var(--rule); border-radius: 16px; padding: 18px; display: grid; gap: 6px; }
+.stat b { font-family: var(--f-display); font-stretch: 125%; font-weight: 900; font-size: var(--s3); line-height: 0.95; color: var(--signal); font-variant-numeric: tabular-nums; }
+.stat span { font-size: 0.86rem; color: var(--dim); }
+
+/* Timeline and steps */
+.timeline { display: grid; gap: 14px; }
+.tl { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--rule); }
+.tl .when { font: 600 0.76rem var(--f-mono); color: var(--signal); }
+.tl h3 { margin-bottom: 4px; }
+.tl ul { margin: 6px 0 0; padding-left: 18px; color: var(--dim); }
+@media (max-width: 560px) { .tl { grid-template-columns: minmax(0, 1fr); gap: 4px; } }
+ol.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; counter-reset: s; }
+ol.steps li { counter-increment: s; display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 14px; align-items: start; background: var(--deck-2); border-radius: 12px; padding: 14px; }
+ol.steps li::before { content: counter(s, decimal-leading-zero); font-family: var(--f-display); font-stretch: 125%; font-weight: 900; font-size: 1.5rem; color: var(--signal); line-height: 1; }
+
+/* Opcode grid */
+.opgrid { display: grid; grid-template-columns: 22px repeat(16, minmax(0, 1fr)); gap: 2px; font-family: var(--f-mono); }
+.opgrid .hd { font-size: 0.6rem; color: var(--dim); display: grid; place-items: center; }
+.opgrid button { aspect-ratio: 1; border: 0; border-radius: 3px; cursor: pointer; font: 600 clamp(0.42rem, 0.9vw, 0.62rem) var(--f-mono); color: var(--night); padding: 0; }
+.opgrid button[aria-pressed="true"] { outline: 2px solid var(--phosphor); outline-offset: 1px; }
+.bits { display: flex; flex-wrap: wrap; gap: 6px; font-family: var(--f-mono); }
+.bits div { display: grid; justify-items: center; gap: 2px; background: var(--deck-2); border-radius: 10px; padding: 8px 10px; }
+.bits b { font-size: 1.05rem; }
+.bits span { font-size: 0.62rem; color: var(--dim); }
+
+/* Next */
+.next { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.next div { background: var(--deck); border: 1px solid var(--rule); border-radius: 16px; padding: 18px; display: grid; gap: 8px; align-content: start; }
+footer .wrap { padding-block: 32px 56px; color: var(--dim); font-size: 0.86rem; display: grid; gap: 8px; }
+
+/* Syntax coloring for listings and assembler source */
+.listing .ad { color: var(--dim); }
+.listing .by { color: color-mix(in srgb, var(--dim) 75%, var(--code)); }
+.listing .mn { color: var(--code); font-weight: 600; }
+.listing .rg { color: var(--data); }
+.listing .nu { color: var(--signal); }
+.listing .sy { color: var(--phosphor); font-weight: 600; }
+.listing .dr { color: var(--frame); font-weight: 600; }
+.listing .st { color: var(--str); }
+.listing .cm { color: var(--dim); font-style: italic; }
+.listing .pn { color: var(--dim); }
+.listing .row-wrong .mn, .listing .row-wrong .rg, .listing .row-wrong .nu { color: var(--bad); }
+.listing .row-hot { background: color-mix(in srgb, var(--signal) 14%, transparent); border-radius: 4px; }
+.syntaxkey { display: flex; flex-wrap: wrap; gap: 6px 12px; font: 0.7rem var(--f-mono); }
+.syntaxkey span { display: inline-flex; gap: 6px; align-items: center; }
+</style>
+<nav class="rail" aria-label="Sections">
+  <div class="wrap">
+    <a class="brand" href="#top">FUGLØY</a>
+    <div class="chips" id="chips">
+      <a class="chip" href="#machine">Machine</a>
+      <a class="chip" href="#cmd">.CMD files</a>
+      <a class="chip" href="#basic">BASIC</a>
+      <a class="chip" href="#hidden">Hidden code</a>
+      <a class="chip" href="#grammar">Grammar</a>
+      <a class="chip" href="#pointer">Pointer</a>
+      <a class="chip" href="#flow">Flow</a>
+      <a class="chip" href="#moving">Moving code</a>
+      <a class="chip" href="#proof">Proof</a>
+      <a class="chip" href="#hints">Hints</a>
+      <a class="chip" href="#build">How it was built</a>
+      <a class="chip" href="#next">Next</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap">
+    <div class="hero-text">
+      <p class="eyebrow">TRS-80 Model I and III · Z80 · 1977–1983</p>
+      <h1>Inside <span>Fugløy</span></h1>
+      <p class="lede">Fugløy takes a forty-year-old TRS-80 program apart into readable Z80 assembly, then puts it back together and proves that not one byte changed.</p>
+      <p class="dim">This page walks through how it does that, one idea at a time. Every byte here is colored by what it turned out to be.</p>
+      <div class="key" aria-label="Color key">
+        <span><i style="background:var(--code)"></i>Z80 code</span>
+        <span><i style="background:var(--signal)"></i>BASIC</span>
+        <span><i style="background:var(--data)"></i>Data and text</span>
+        <span><i style="background:var(--frame)"></i>Headers and pointers</span>
+      </div>
+    </div>
+    <figure class="monitor" style="margin:0">
+      <div class="bezel"><canvas id="crt" width="768" height="384" role="img" aria-label="A TRS-80 screen: line 1 of a BASIC program says GOTO248, line 2 lists as nonsense, and Fugløy shows line 2 as Z80 instructions at address 62D5."></canvas></div>
+      <figcaption class="badge"><span>TRS-80 VIDEO DISPLAY</span><span>64 × 16 CHARACTERS</span></figcaption>
+    </figure>
+  </div>
+</header>
+
+<section class="cart" id="machine">
+  <div class="wrap">
+    <div class="split">
+      <div class="copy">
+        <p class="eyebrow">The machine</p>
+        <h2>64K is the whole world</h2>
+        <p>A Z80 can address 65,536 bytes, and on a TRS-80 everything lives in that one range: the BASIC ROM, the keyboard, the screen, and the program you loaded.</p>
+        <p class="dim">Fugløy models memory the same way: one flat array of 65,536 bytes, and a second array that marks which of them a file actually loaded.</p>
+      </div>
+      <div class="panel">
+        <div class="row" style="justify-content:space-between">
+          <span class="panel-title">Memory map · Model I</span>
+          <div class="seg" id="memView" role="group" aria-label="Map scale"><button type="button" aria-pressed="true" data-v="scale">To scale</button><button type="button" aria-pressed="false" data-v="equal">Zoomed</button></div>
+        </div>
+        <div class="mem" id="mem"></div>
+        <div class="memscale" id="memscale"><span>$0000</span><span>$4000</span><span>$8000</span><span>$C000</span><span>$FFFF</span></div>
+        <div class="memcard" id="memcard" aria-live="polite"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cart" id="cmd">
+  <div class="wrap">
+    <div class="split">
+      <div class="copy">
+        <p class="eyebrow">The file</p>
+        <h2>A program is a box of records</h2>
+        <p>A <code>.CMD</code> file is not a picture of memory. It is a list of records, each a type byte, a length byte, and a payload: "load these bytes here", "this program is called", "start running there".</p>
+        <p class="dim">Tap a record to read it. This one is six bytes of real Z80 that put the letter A in the top-left corner of the screen.</p>
+        <details class="deep"><summary>Go deeper: the length byte that wraps</summary>
+          <p>In a load record the length also counts the two address bytes, and it wraps around. A length of 8 means six data bytes, but a length of 2 means 256 of them, 1 means 255, and 0 means 254.</p>
+          <p>Real files bend the other rules too: a transfer record with a length of zero, damaged records, padding after the end. Fugløy reads each one by its content, never by the file's extension, and every quirk has its own test.</p>
+        </details>
+      </div>
+      <div class="panel">
+        <div class="row" style="justify-content:space-between">
+          <span class="panel-title">DEMO/CMD · 20 bytes</span>
+          <div class="seg" id="cmdView" role="group" aria-label="View"><button type="button" aria-pressed="true" data-v="records">Records</button><button type="button" aria-pressed="false" data-v="z80">As Z80</button></div>
+        </div>
+        <div class="records" id="records"></div>
+        <div id="cmdOut" aria-live="polite"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cart" id="basic">
+  <div class="wrap">
+    <div class="split">
+      <div class="copy">
+        <p class="eyebrow">BASIC on disk</p>
+        <h2>BASIC, squeezed into bytes</h2>
+        <p>Level II BASIC never stores the word <code>PRINT</code>. It stores one byte, <code>B2</code>. All 124 keywords, from <code>END</code> at <code>80</code> to the apostrophe at <code>FB</code>, are crunched that way as you type.</p>
+        <p>Each stored line is a pointer to the next line, the line number, the crunched body, and a <code>00</code>. Type a line and watch it shrink.</p>
+        <details class="deep"><summary>Go deeper: the odd ones</summary>
+          <p><code>ELSE</code> is stored with a colon in front of it, and a remark apostrophe becomes three bytes, <code>:REM'</code>. A question mark typed for PRINT becomes the PRINT token. Text inside quotes, after <code>REM</code>, and in <code>DATA</code> is copied as typed, so a keyword in a string stays letters.</p>
+        </details>
+      </div>
+      <div class="panel">
+        <label class="panel-title" for="bline">Type a line of BASIC</label>
+        <input id="bline" type="text" spellcheck="false" autocomplete="off" value="10 PRINT &quot;HELLO&quot;:GOTO 10" style="font:600 1rem var(--f-mono);background:var(--glass);color:var(--phosphor);border:1px solid var(--rule);border-radius:10px;padding:12px 14px;width:100%">
+        <div class="row" id="presets"></div>
+        <div class="row" style="justify-content:space-between">
+          <div class="seg" id="basicView" role="group" aria-label="View"><button type="button" aria-pressed="true" data-v="bytes">Bytes</button><button type="button" aria-pressed="false" data-v="tokens">Tokens</button><button type="button" aria-pressed="false" data-v="list">LIST</button></div>
+          <span class="dim mono" id="bstat" aria-live="polite"></span>
+        </div>
+        <div id="bout"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cart" id="hidden">
+  <div class="wrap">
+    <div class="copy">
+      <p class="eyebrow">Voyage of the Valkyrie · Leo Christopherson · 1980</p>
+      <h2>Machine code hiding in plain sight</h2>
+      <p class="lede">One file, one load, and you have a BASIC program and a pile of fast machine code. Line 1 says <code>GOTO248</code>. Everything it jumps over is not BASIC at all.</p>
+    </div>
+    <div class="split">
+      <div class="panel">
+        <span class="panel-title">valkyri1.bas · all 257 lines</span>
+        <div class="linemap" id="linemap" aria-label="Line map: one square per line; amber squares are BASIC, teal squares are machine code; the outlined square is line 250"></div>
+        <div class="key"><span><i style="background:var(--signal)"></i>BASIC line</span><span><i style="background:var(--code)"></i>machine code</span><span><i style="background:none;outline:2px solid var(--phosphor);outline-offset:-2px"></i>line 250, which plants the jump</span></div>
+        <div class="tally"><div><b class="k-basic">1</b><span>BASIC line: GOTO248</span></div><div><b class="k-code">182</b><span>lines of Z80, 2 to 245</span></div><div><b class="k-basic">74</b><span>BASIC lines, 248 to 4800</span></div></div>
+        <p class="dim mono" id="lmout" aria-live="polite" style="font-size:.78rem">Point at a square to see its line.</p>
+      </div>
+      <div class="panel">
+        <div class="row" style="justify-content:space-between">
+          <span class="panel-title">Line 2, first 8 bytes, three ways</span>
+          <div class="seg" id="l2View" role="group" aria-label="Read line 2 as"><button type="button" aria-pressed="true" data-v="list">LIST</button><button type="button" aria-pressed="false" data-v="tokens">Tokens</button><button type="button" aria-pressed="false" data-v="z80">Z80</button></div>
+        </div>
+        <div class="bytes" id="l2bytes"></div>
+        <div id="l2out" aria-live="polite"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cart" id="grammar">
+  <div class="wrap">
+    <div class="split">
+      <div class="copy">
+        <p class="eyebrow">Telling them apart</p>
+        <h2>Is it BASIC? Ask the grammar</h2>
+        <p>Counting bytes cannot tell code from BASIC, because the commonest Z80 instructions are BASIC keywords too:</p>
+        <div class="scroll"><table class="t" id="clash"></table></div>
+        <p>So Fugløy reads each line the way BASIC would. Every statement must have the shape its keyword demands, and every byte must be one BASIC could have stored. One wrong byte and the line is code.</p>
+      </div>
+      <div class="panel">
+        <span class="panel-title">Tap a card for the verdict</span>
+        <div class="cards" id="cards"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="row" style="justify-content:space-between">
+        <span class="panel-title">Why each Valkyrie code line failed · 2,366 lines across 13 files</span>
+        <div class="seg" id="whyView" role="group" aria-label="View"><button type="button" aria-pressed="true" data-v="chart">Chart</button><button type="button" aria-pressed="false" data-v="table">Table</button></div>
+      </div>
+      <div id="why"></div>
+      <p class="dim" style="font-size:.86rem">About six code lines per file are clean enough to pass the byte check. Only the statement shapes catch those, and they catch every one.</p>
+    </div>
+  </div>
+</section>
+
+<section class="cart" id="pointer">
+  <div class="wrap">
+    <div class="split">
+      <div class="copy">
+        <p class="eyebrow">Finding the way in</p>
+        <h2>Following a planted pointer</h2>
+        <p>The code needs an entry point, and BASIC builds one at run time. Line 250 reads where the program sits in memory, adds 14, splits the result into two bytes, and pokes a <code>JP</code> instruction into memory.</p>
+        <p class="dim">Fugløy does not run BASIC. It evaluates just enough of it with symbols in place of numbers, so "wherever the program happens to load, plus 14" comes out as a real address for each file.</p>
+      </div>
+      <div class="panel">
+        <span class="panel-title">Line 250, step by step</span>
+        <div class="basicline" id="l250"></div>
+        <div class="value"><span class="dim" id="stepNote"></span><span class="expr" id="stepExpr"></span></div>
+        <div class="cells" id="cells"></div>
+        <div class="row" style="justify-content:space-between"><button type="button" class="btn ghost" id="stepBack">Back</button><span class="mono dim" id="stepCount" aria-live="polite"></span><button type="button" class="btn" id="stepNext">Next step</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cart" id="flow">
+  <div class="wrap">
+    <div class="split">
+      <div class="copy">
+        <p class="eyebrow">Code or data</p>
+        <h2>Follow the flow, not the bytes</h2>
+        <p>The simple way to disassemble is to decode every byte in order, a linear sweep. It turns text into nonsense instructions, because the Z80 happily decodes the letter H as <code>LD C,B</code>.</p>
+        <p>Fugløy starts where the program starts and follows every jump and call instead. Bytes nothing jumps to stay data, and terminated runs of text become quoted strings.</p>
+      </div>
+      <div class="panel">
+        <div class="row" style="justify-content:space-between">
+          <span class="panel-title">12 bytes at $7000</span>
+          <div class="seg" id="flowView" role="group" aria-label="Method"><button type="button" aria-pressed="true" data-v="sweep">Linear sweep</button><button type="button" aria-pressed="false" data-v="descent">Recursive descent</button></div>
+        </div>
+        <div class="bytes" id="flowBytes"></div>
+        <pre class="listing" id="flowOut"></pre>
+        <div class="syntaxkey" aria-label="Syntax colors"><span class="k-code">mnemonic</span><span class="k-data">register</span><span class="k-basic">number</span><span>label</span><span style="color:var(--str)">string</span><span class="dim"><i>comment</i></span><span class="k-frame">directive</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cart" id="moving">
+  <div class="wrap">
+    <div class="copy">
+      <p class="eyebrow">Asylum · Med Systems Software · 1981</p>
+      <h2>Games that move themselves</h2>
+      <p class="lede">Many games load high in memory, out of the disk system's way, then copy themselves down to where they really run. A disassembler that reads the file sees only the copier.</p>
+    </div>
+    <div class="split">
+      <div class="panel">
+        <span class="panel-title">asylum16.cmd: 123 records copied down, then JP $43AE</span>
+        <div class="lane"><span class="name">In the file · $8000–$BFEF</span><div class="strip" id="fileStrip"></div></div>
+        <div class="lane"><span class="name">When it runs · $4000–$7FFF</span><div class="strip" id="runStrip"></div><div class="ticks"><span>$4000</span><span>$5000</span><span>$6000</span><span>$7000</span><span>$8000</span></div></div>
+        <label class="panel-title" for="rec">Records copied</label>
+        <input type="range" id="rec" min="0" max="123" value="0">
+        <div class="row" style="justify-content:space-between"><span class="mono dim" id="recOut" aria-live="polite"></span><button type="button" class="btn" id="play">Play the loader</button></div>
+      </div>
+      <div class="copy">
+        <p>Fugløy's answer is a <code>relocate</code> hint: these file bytes execute over there. It analyzes them at the address they run at, then writes them back where they load, inside zmac's <code>.PHASE</code>, so labels take the running addresses and the bytes still land in their original place.</p>
+        <p>For Asylum the 123 hints are generated from the loader's own record stream. With them, 61% of the game decodes as code at its running address.</p>
+        <pre class="listing" id="phase"></pre>
+      </div>
+    </div>
+    <div class="split">
+      <div class="copy">
+        <h3>The five-instruction mover</h3>
+        <p>Most of the other games use a simpler copier. Fugløy spots it, works out what moves where, and proposes the exact hint lines, without applying anything on its own.</p>
+        <pre class="listing" id="mover"></pre>
+      </div>
+      <div class="panel">
+        <div class="row" style="justify-content:space-between">
+          <span class="panel-title">Code found before and after the proposal</span>
+          <div class="seg" id="covView" role="group" aria-label="View"><button type="button" aria-pressed="true" data-v="chart">Chart</button><button type="button" aria-pressed="false" data-v="table">Table</button></div>
+        </div>
+        <div id="cov"></div>
+        <div class="key"><span><i style="background:var(--frame)"></i>before: the copier alone</span><span><i style="background:var(--code)"></i>after: the game too</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cart" id="proof">
+  <div class="wrap">
+    <div class="copy">
+      <p class="eyebrow">The guarantee</p>
+      <h2>Prove it: put it back together</h2>
+      <p class="lede">A listing can look right and still be wrong. So every test ends the same way: assemble Fugløy's output with a real assembler and compare the result with the original, byte for byte.</p>
+    </div>
+    <div class="pipe" id="pipe"></div>
+    <div class="split">
+      <div class="panel">
+        <div class="row" style="justify-content:space-between"><span class="panel-title">What the proof catches</span><button type="button" class="btn" id="bug">Plant an emitter bug</button></div>
+        <pre class="listing" id="proofSrc"></pre>
+        <p class="mono" id="proofOut" aria-live="polite"></p>
+      </div>
+      <div class="stats">
+        <div class="stat"><b>1,786</b><span>Z80 encodings, each reassembled to its own bytes</span></div>
+        <div class="stat"><b>46</b><span>real programs that round-trip exactly</span></div>
+        <div class="stat"><b>567</b><span>tests run on every change</span></div>
+        <div class="stat"><b>0</b><span>bytes allowed to differ</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cart" id="hints">
+  <div class="wrap">
+    <div class="split">
+      <div class="copy">
+        <p class="eyebrow">Your notes</p>
+        <h2>Notes that survive a move</h2>
+        <p>What you learn about a program goes into a hint file: plain text, one fact per line, made to be kept in git. It names routines, marks data, declares tables, adds entry points, and says what moves where.</p>
+        <p>Every line is pinned to a block and an offset, and a block is recognized by its content: its length plus a fingerprint of its first 64 bytes. Asylum 1b, 1c, and 1d are the same 20,297 bytes loaded at $6300, $A000, and $5200, and one hint file fits all three.</p>
+      </div>
+      <div class="panel">
+        <span class="panel-title">game.hints</span>
+        <pre class="listing" id="hintsrc"></pre>
+        <details class="deep"><summary>Go deeper: moving a BASIC program</summary>
+          <p>A tokenized BASIC file records the address it was saved from, inside every line pointer. <code>--rebase 7000</code> rewrites the pointers so the program reads as if saved at $7000, and flags any machine code that still points at the old addresses as stale.</p>
+          <p>For BASIC the fingerprint reads each pointer as an offset from the start, so hints written before a rebase still match after it.</p>
+        </details>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cart" id="build">
+  <div class="wrap">
+    <div class="copy">
+      <p class="eyebrow">How it was built</p>
+      <h2>Small steps, each one proven</h2>
+      <p class="lede">Fugløy grew in phases, and every phase ended with something that ran and a test suite that said so.</p>
+    </div>
+    <div class="seg" id="buildView" role="group" aria-label="View"><button type="button" aria-pressed="true" data-v="timeline">Timeline</button><button type="button" aria-pressed="false" data-v="method">The method</button><button type="button" aria-pressed="false" data-v="opcodes">The opcode map</button></div>
+    <div id="buildTimeline" class="timeline">
+      <div class="tl"><span class="when">Phase 1 · v0.1.0</span><div><h3>Decoder and loaders</h3><p class="dim">The Z80's instruction tables are generated from the bit patterns of each opcode, never typed by hand, and checked against a reference written independently: 1,792 encodings, every one compared.</p><ul><li>.CMD and .BAS loaders, one test per quirk</li><li>A BASIC detokenizer and a linear-sweep listing</li></ul></div></div>
+      <div class="tl"><span class="when">Phase 2A</span><div><h3>Follow the flow, prove the round trip</h3><p class="dim">Recursive descent, a JSON description of the program, and the zmac emitter, with a harness that reassembles every output and compares images.</p></div></div>
+      <div class="tl"><span class="when">Phase 2B</span><div><h3>Names and notes</h3><p class="dim">Labels for every jump, call, and data reference, and the hint file with content-based block identity.</p></div></div>
+      <div class="tl"><span class="when">Phase 2C</span><div><h3>Hidden code and moving code</h3><p class="dim">The BASIC grammar, the planted-pointer evaluator, strings, table and loader proposals, rebasing, and relocation with .PHASE; Asylum's generated hints and a ROM smoke test.</p></div></div>
+    </div>
+    <ol class="steps" id="buildMethod" hidden>
+      <li><div><h3>Write the spec</h3><p class="dim">What must be true when the work is done, and what is deliberately left out.</p></div></li>
+      <li><div><h3>Plan small tasks</h3><p class="dim">Each task names its files, the interfaces it shares with its neighbors, and its tests.</p></div></li>
+      <li><div><h3>Test first</h3><p class="dim">Write the test, run it, and watch it fail for the right reason before writing any code.</p></div></li>
+      <li><div><h3>Make it pass</h3><p class="dim">The smallest change that turns the test green, then the whole suite, real programs included.</p></div></li>
+      <li><div><h3>Write down every judgment call</h3><p class="dim">A ledger records each decision the plan did not settle, with what it would cost if wrong.</p></div></li>
+      <li><div><h3>Get a fresh review</h3><p class="dim">A reviewer who did not write the code reads the whole branch before it merges.</p></div></li>
+    </ol>
+    <div class="split" id="buildOpcodes" hidden>
+      <div class="panel">
+        <span class="panel-title">All 256 first bytes · tap one</span>
+        <div class="opgrid" id="opgrid" aria-label="Z80 opcode map"></div>
+        <div class="key"><span><i style="background:var(--code)"></i>x = 0 · loads, jumps, increments</span><span><i style="background:var(--data)"></i>x = 1 · register copies</span><span><i style="background:var(--signal)"></i>x = 2 · arithmetic</span><span><i style="background:var(--frame)"></i>x = 3 · calls, stack, I/O</span></div>
+      </div>
+      <div class="panel" aria-live="polite">
+        <div class="big mono" id="opName" style="font-size:var(--s2)"></div>
+        <div class="bits" id="opBits"></div>
+        <p class="dim" id="opNote"></p>
+        <p class="dim" style="font-size:.86rem">The opcode's eight bits split into x, y, and z (with y split again into p and q), and a handful of rules turn those fields into all 1,792 encodings. That is how Fugløy's tables are generated, so a wrong instruction means a wrong rule, fixed once.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cart" id="next">
+  <div class="wrap">
+    <div class="copy">
+      <p class="eyebrow">What's next</p>
+      <h2>From bytes to names, and beyond</h2>
+    </div>
+    <div class="next">
+      <div><span class="eyebrow">Phase 3</span><h3>Names for the ROM</h3><p class="dim">Tables of ROM and DOS routines, each with its source, so <code>CALL 0033H</code> reads as printing a character.</p></div>
+      <div><span class="eyebrow">Emulator</span><h3>Watch it run</h3><p class="dim">A headless TRS-80 that records which bytes really execute, feeding that back into the listing.</p></div>
+      <div><span class="eyebrow">MCP server</span><h3>An assistant at the keyboard</h3><p class="dim">Lets an AI assistant drive the emulator: break, step, trace, and label.</p></div>
+      <div><span class="eyebrow">Phase 4</span><h3>The workbench</h3><p class="dim">A web app for exploring and annotating listings in the browser. This page moves there as its technical details.</p></div>
+      <div><span class="eyebrow">Part 2</span><h3>Recompilation</h3><p class="dim">Translating Z80 into TypeScript that runs anywhere, for programs whose owners allow it.</p></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>Fugløy is MIT-licensed: <a href="https://github.com/cschweda/fugloy">github.com/cschweda/fugloy</a>.</p>
+    <p>The games named here are still under copyright. They are never committed or redistributed, and this page quotes only a few bytes of them to show the analysis.</p>
+  </div>
+</footer>
+<script>
+const LINEMAP = [[1,0],[2,1],[3,1],[4,1],[5,1],[6,1],[7,1],[8,1],[9,1],[11,1],[12,1],[14,1],[15,1],[16,1],[17,1],[18,1],[19,1],[20,1],[21,1],[22,1],[23,1],[24,1],[25,1],[26,1],[27,1],[28,1],[29,1],[30,1],[31,1],[32,1],[33,1],[35,1],[37,1],[39,1],[44,1],[45,1],[46,1],[47,1],[48,1],[49,1],[50,1],[51,1],[52,1],[53,1],[54,1],[55,1],[56,1],[57,1],[58,1],[59,1],[60,1],[61,1],[62,1],[63,1],[64,1],[65,1],[66,1],[70,1],[71,1],[72,1],[73,1],[74,1],[75,1],[76,1],[80,1],[81,1],[82,1],[83,1],[84,1],[85,1],[86,1],[90,1],[91,1],[92,1],[100,1],[101,1],[102,1],[104,1],[105,1],[106,1],[109,1],[110,1],[111,1],[112,1],[113,1],[114,1],[115,1],[118,1],[119,1],[120,1],[121,1],[122,1],[123,1],[124,1],[125,1],[126,1],[127,1],[128,1],[129,1],[130,1],[131,1],[132,1],[133,1],[134,1],[135,1],[155,1],[156,1],[157,1],[158,1],[159,1],[160,1],[161,1],[162,1],[163,1],[164,1],[165,1],[166,1],[167,1],[168,1],[169,1],[170,1],[171,1],[172,1],[173,1],[174,1],[175,1],[176,1],[177,1],[178,1],[179,1],[180,1],[181,1],[182,1],[183,1],[184,1],[185,1],[186,1],[187,1],[188,1],[189,1],[190,1],[191,1],[192,1],[193,1],[194,1],[195,1],[196,1],[197,1],[198,1],[199,1],[200,1],[201,1],[202,1],[203,1],[204,1],[205,1],[206,1],[210,1],[211,1],[212,1],[213,1],[214,1],[215,1],[216,1],[220,1],[221,1],[222,1],[223,1],[224,1],[225,1],[226,1],[227,1],[231,1],[232,1],[233,1],[234,1],[235,1],[240,1],[241,1],[242,1],[243,1],[244,1],[245,1],[248,0],[249,0],[250,0],[254,0],[255,0],[257,0],[259,0],[260,0],[265,0],[270,0],[300,0],[310,0],[315,0],[316,0],[320,0],[325,0],[330,0],[331,0],[332,0],[334,0],[335,0],[340,0],[350,0],[1000,0],[1014,0],[1015,0],[1020,0],[1024,0],[1025,0],[1027,0],[1030,0],[1035,0],[1040,0],[1045,0],[1050,0],[2000,0],[2010,0],[3000,0],[3005,0],[3006,0],[3010,0],[3021,0],[3022,0],[3030,0],[3035,0],[3040,0],[4000,0],[4005,0],[4200,0],[4201,0],[4202,0],[4203,0],[4205,0],[4206,0],[4210,0],[4215,0],[4216,0],[4220,0],[4225,0],[4310,0],[4320,0],[4330,0],[4400,0],[4500,0],[4510,0],[4515,0],[4520,0],[4530,0],[4550,0],[4600,0],[4700,0],[4705,0],[4710,0],[4800,0]];
+(() => {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const hex2 = (n) => n.toString(16).toUpperCase().padStart(2, '0');
+const hex4 = (n) => n.toString(16).toUpperCase().padStart(4, '0');
+const fmt = (n) => n.toLocaleString('en-US');
+const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+function h(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  if (attrs) for (const [k, v] of Object.entries(attrs)) {
+    if (v === undefined || v === null || v === false) continue;
+    if (k === 'class') e.className = v; else if (k === 'text') e.textContent = v; else e.setAttribute(k, v === true ? '' : String(v));
+  }
+  for (const k of kids) if (k !== null && k !== undefined) e.append(k);
+  return e;
+}
+function seg(id, onChange) {
+  const g = document.getElementById(id);
+  const btns = $$('button', g);
+  const set = (b) => { btns.forEach((x) => x.setAttribute('aria-pressed', String(x === b))); onChange(b.dataset.v); };
+  btns.forEach((b) => b.addEventListener('click', () => set(b)));
+  set(btns.find((b) => b.getAttribute('aria-pressed') === 'true') || btns[0]);
+}
+function tile(byte, label, kind, title) {
+  const t = h('span', { class: `b ${kind || ''}`, title });
+  t.append(h('span', { class: 'hx', text: typeof byte === 'number' ? hex2(byte) : byte }), h('span', { class: 'lb', text: label || ' ' }));
+  return t;
+}
+
+/* ---------- Syntax coloring for Z80 listings and zmac source ---------- */
+const REGS = new Set(['A', 'B', 'C', 'D', 'E', 'H', 'L', 'I', 'R', 'AF', 'BC', 'DE', 'HL', 'SP', 'IX', 'IY', 'IXH', 'IXL', 'IYH', 'IYL', 'NZ', 'Z', 'NC', 'PO', 'PE', 'P', 'M']);
+const DIRECTIVES = new Set(['ORG', 'DB', 'DW', 'DS', 'END', 'EQU', '.PHASE', '.DEPHASE']);
+function colorOps(ops) {
+  const frag = document.createDocumentFragment();
+  let i = 0;
+  while (i < ops.length) {
+    const rest = ops.slice(i);
+    let m = /^'(?:[^']|'')*'/.exec(rest);
+    let cls = 'st';
+    if (!m) { m = /^[0-9][0-9A-F]*H\b/.exec(rest) || /^[0-9]+\b/.exec(rest); cls = 'nu'; }
+    if (!m) { m = /^[A-Za-z_][A-Za-z0-9_]*'?/.exec(rest); if (m) cls = REGS.has(m[0].toUpperCase()) ? 'rg' : 'sy'; }
+    if (!m) { m = [rest[0]]; cls = 'pn'; }
+    frag.append(h('span', { class: cls, text: m[0] }));
+    i += m[0].length;
+  }
+  return frag;
+}
+/** One row: a label line, a listing row (addr + bytes), or a zmac source line (src: true). */
+function asmRow(r) {
+  const row = h('span', { class: r.cls || null });
+  if (r.label !== undefined) { row.append(h('span', { class: 'sy', text: `${r.label}:` })); if (r.comment) row.append(h('span', { class: 'cm', text: `\t; ${r.comment}` })); return row; }
+  if (r.addr !== undefined) row.append(h('span', { class: 'ad', text: `${r.addr}  ` }), h('span', { class: 'by', text: (r.bytes || '').padEnd(14) }));
+  if (r.src) row.append('\t');
+  row.append(h('span', { class: DIRECTIVES.has(r.mn) ? 'dr' : 'mn', text: r.mn }));
+  const body = r.mn + (r.ops ? (r.src ? '\t' : ' ') + r.ops : '');
+  if (r.ops) { row.append(r.src ? '\t' : ' '); row.append(colorOps(r.ops)); }
+  if (r.comment) row.append(h('span', { class: 'cm', text: r.src ? `\t; ${r.comment}` : `${' '.repeat(Math.max(2, 22 - body.length))}; ${r.comment}` }));
+  return row;
+}
+function renderAsm(pre, rows) {
+  pre.textContent = '';
+  rows.forEach((r, i) => { pre.append(asmRow(r)); if (i < rows.length - 1) pre.append('\n'); });
+}
+
+/* ---------- The TRS-80 screen ---------- */
+const GLYPHS = {
+  F: ['11111', '10000', '10000', '11110', '10000', '10000', '10000'],
+  U: ['10001', '10001', '10001', '10001', '10001', '10001', '01110'],
+  G: ['01110', '10001', '10000', '10111', '10001', '10001', '01111'],
+  L: ['10000', '10000', '10000', '10000', '10000', '10000', '11111'],
+  'Ø': ['01110', '10011', '10101', '10101', '10101', '11001', '01110'],
+  Y: ['10001', '10001', '01010', '00100', '00100', '00100', '00100'],
+};
+const SCREEN = [
+  '', ['                      Z80 DISASSEMBLER', 1], '', '',
+  '>LIST 1-2',
+  '1 GOTO248',
+  '2 DY MEM*GET@',
+  'READY',
+  '',
+  'FUGLOY: LINE 2 IS Z80 AT $62D5',
+  '62D5  44        LD B,H',
+  '62D6  79        LD A,C       ;ENTRY',
+  '62D7  FE 0D     CP 0DH',
+  '62D9  C8        RET Z',
+  '62DA  2A A4 40  LD HL,(40A4H)',
+  'READY',
+].map((l) => (Array.isArray(l) ? l[0] : l));
+const TOTAL = SCREEN.reduce((n, l) => n + l.length, 0);
+let shown = reduce ? TOTAL : 0;
+let cursorOn = true;
+function drawCRT() {
+  const cv = $('#crt');
+  const ctx = cv.getContext('2d');
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const w = Math.max(320, Math.round(cv.clientWidth * dpr));
+  const hgt = Math.round(w / 2);
+  if (cv.width !== w || cv.height !== hgt) { cv.width = w; cv.height = hgt; }
+  const s = w / 384;
+  ctx.fillStyle = css('--glass') || '#05070d';
+  ctx.fillRect(0, 0, w, hgt);
+  const ink = '#dfe9ff';
+  ctx.fillStyle = ink;
+  ctx.shadowColor = 'rgba(150, 190, 255, 0.55)';
+  ctx.shadowBlur = 5 * s;
+  let gx = 4;
+  for (const ch of 'FUGLØY') {
+    GLYPHS[ch].forEach((row, y) => [...row].forEach((bit, x) => { if (bit === '1') ctx.fillRect((gx + x) * 3 * s, (1 + y) * 4 * s, 3 * s - 0.6, 4 * s - 0.6); }));
+    gx += 6;
+  }
+  ctx.font = `${Math.round(13 * s)}px VT323, "Courier New", monospace`;
+  ctx.textBaseline = 'top';
+  let budget = shown;
+  let cur = null;
+  for (let row = 0; row < 16; row++) {
+    const line = SCREEN[row] || '';
+    for (let col = 0; col < line.length; col++) {
+      if (budget <= 0) { cur = cur || { row, col }; break; }
+      budget--;
+      if (line[col] !== ' ') ctx.fillText(line[col], col * 6 * s, row * 12 * s - 0.5 * s);
+    }
+    if (budget <= 0 && !cur) cur = { row, col: line.length };
+    if (cur) break;
+  }
+  if (!cur) cur = { row: 15, col: SCREEN[15].length };
+  if (cursorOn) ctx.fillRect(cur.col * 6 * s, cur.row * 12 * s + 9 * s, 6 * s, 1.6 * s);
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+  for (let y = 0; y < hgt; y += Math.max(2, Math.round(2 * s))) ctx.fillRect(0, y, w, Math.max(1, Math.round(0.7 * s)));
+}
+function startCRT() {
+  drawCRT();
+  if (!reduce) {
+    const t0 = performance.now();
+    const tick = (t) => { shown = Math.min(TOTAL, Math.floor((t - t0) / 14)); drawCRT(); if (shown < TOTAL) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+    setInterval(() => { if (shown >= TOTAL) { cursorOn = !cursorOn; drawCRT(); } }, 530);
+  }
+}
+(document.fonts && document.fonts.load ? document.fonts.load('16px VT323').catch(() => {}) : Promise.resolve()).then(startCRT);
+window.addEventListener('resize', () => drawCRT());
+
+/* ---------- Memory map ---------- */
+const MEM = [
+  { a: 0x0000, b: 0x2fff, name: 'ROM', color: '--code', title: 'Level II BASIC ROM', text: '12 KB of Microsoft BASIC and the machine’s own routines: show a character ($0033), wait for a key ($0049), BASIC’s READY prompt ($1A19).' },
+  { a: 0x3000, b: 0x37ff, name: 'I/O', color: '--dim', title: 'Mostly unused, some I/O', text: 'Empty on a plain Model I. With the expansion interface, the printer and the disk controller answer at addresses near $37E0.' },
+  { a: 0x3800, b: 0x3bff, name: 'KEYS', color: '--frame', title: 'The keyboard', text: 'The key matrix, read as memory: the address picks keyboard rows, and the byte that comes back says which keys are down.' },
+  { a: 0x3c00, b: 0x3fff, name: 'VIDEO', color: '--data', title: 'Video memory', text: '64 columns × 16 rows = 1,024 bytes, one per character cell. Store $41 at $3C00 and an A appears in the top-left corner.' },
+  { a: 0x4000, b: 0x42e8, name: 'SYS', color: '--signal', title: 'System RAM', text: 'Vectors and BASIC’s own variables. 16548–16549 ($40A4–$40A5) hold the address where the BASIC program starts, which comes back in a few sections.' },
+  { a: 0x42e9, b: 0xffff, name: 'PROGRAM RAM', color: '--phosphor', title: 'Program memory', text: 'Up to 48 KB. A cassette BASIC program starts at $42E9. Voyage of the Valkyrie was saved from $62C8 with Disk BASIC loaded; Asylum loads at $8000 and then moves itself down to $42F3.' },
+];
+let memSel = 5;
+let memMode = 'scale';
+function renderMem() {
+  const bar = $('#mem');
+  bar.textContent = '';
+  MEM.forEach((m, i) => {
+    const size = m.b - m.a + 1;
+    const b = h('button', { type: 'button', 'aria-pressed': String(i === memSel), title: `$${hex4(m.a)}–$${hex4(m.b)}: ${m.title}` });
+    b.style.flex = memMode === 'scale' ? `${size} 1 0` : '1 1 0';
+    b.style.background = `var(${m.color})`;
+    b.textContent = m.name;
+    b.addEventListener('click', () => { memSel = i; renderMem(); });
+    bar.append(b);
+  });
+  $('#memscale').hidden = memMode !== 'scale';
+  const m = MEM[memSel];
+  const card = $('#memcard');
+  card.textContent = '';
+  card.append(h('span', { class: 'eyebrow', text: `$${hex4(m.a)}–$${hex4(m.b)} · ${fmt(m.b - m.a + 1)} bytes` }), h('h3', { text: m.title }), h('p', { text: m.text }));
+}
+seg('memView', (v) => { memMode = v; renderMem(); });
+
+/* ---------- .CMD records ---------- */
+const CMD = [
+  { tag: 'Name · 05', bytes: [[0x05, 'type', 'frame'], [0x04, 'length', 'frame'], [0x44, 'D', 'data'], [0x45, 'E', 'data'], [0x4d, 'M', 'data'], [0x4f, 'O', 'data']], text: 'Type 05 names the program. Length 4, then the four letters DEMO.' },
+  { tag: 'Load · 01', bytes: [[0x01, 'type', 'frame'], [0x08, 'length', 'frame'], [0x00, 'addr lo', 'frame'], [0x70, 'addr hi', 'frame'], [0x21, '', 'code'], [0x00, '', 'code'], [0x3c, '', 'code'], [0x36, '', 'code'], [0x41, '', 'code'], [0xc9, '', 'code']], text: 'Type 01 loads data. Length 8 is the two address bytes plus six data bytes, and they go to $7000, low byte first: 00 70.' },
+  { tag: 'Start · 02', bytes: [[0x02, 'type', 'frame'], [0x02, 'length', 'frame'], [0x00, 'addr lo', 'frame'], [0x70, 'addr hi', 'frame']], text: 'Type 02 ends the file and says where to start running: $7000.' },
+];
+let cmdSel = 1;
+let cmdMode = 'records';
+function renderCmd() {
+  const box = $('#records');
+  box.textContent = '';
+  CMD.forEach((r, i) => {
+    const g = h('button', { type: 'button', class: 'group', 'aria-pressed': String(i === cmdSel) }, h('span', { class: 'tag', text: r.tag }));
+    const bytes = h('span', { class: 'bytes' });
+    r.bytes.forEach(([b, l, k]) => bytes.append(tile(b, l, k)));
+    g.append(bytes);
+    g.addEventListener('click', () => { cmdSel = i; renderCmd(); });
+    box.append(g);
+  });
+  const out = $('#cmdOut');
+  out.textContent = '';
+  if (cmdMode === 'records') {
+    out.append(h('p', { text: CMD[cmdSel].text }));
+  } else {
+    const pre = h('pre', { class: 'listing' });
+    renderAsm(pre, [
+      { addr: '7000', bytes: '21 00 3C', mn: 'LD', ops: 'HL,3C00H', comment: 'the top-left of the screen' },
+      { addr: '7003', bytes: '36 41', mn: 'LD', ops: '(HL),41H', comment: 'the letter A' },
+      { addr: '7005', bytes: 'C9', mn: 'RET', comment: 'back to whoever called' },
+    ]);
+    const screen = h('div', { style: 'background:var(--glass);border:1px solid var(--rule);border-radius:8px;aspect-ratio:2/1;max-width:260px;position:relative;font:1.4rem var(--f-crt);color:#dfe9ff' }, h('span', { text: 'A', style: 'position:absolute;left:6px;top:2px' }));
+    out.append(pre, h('p', { class: 'dim', text: 'Load record 01 put those six bytes at $7000. Run them and this happens on the 64 × 16 screen:', style: 'margin:12px 0 8px' }), screen);
+  }
+}
+seg('cmdView', (v) => { cmdMode = v; renderCmd(); });
+
+/* ---------- BASIC tokenizer ---------- */
+const TOKENS = ['END', 'FOR', 'RESET', 'SET', 'CLS', 'CMD', 'RANDOM', 'NEXT', 'DATA', 'INPUT', 'DIM', 'READ', 'LET', 'GOTO', 'RUN', 'IF', 'RESTORE', 'GOSUB', 'RETURN', 'REM', 'STOP', 'ELSE', 'TRON', 'TROFF', 'DEFSTR', 'DEFINT', 'DEFSNG', 'DEFDBL', 'LINE', 'EDIT', 'ERROR', 'RESUME', 'OUT', 'ON', 'OPEN', 'FIELD', 'GET', 'PUT', 'CLOSE', 'LOAD', 'MERGE', 'NAME', 'KILL', 'LSET', 'RSET', 'SAVE', 'SYSTEM', 'LPRINT', 'DEF', 'POKE', 'PRINT', 'CONT', 'LIST', 'LLIST', 'DELETE', 'AUTO', 'CLEAR', 'CLOAD', 'CSAVE', 'NEW', 'TAB(', 'TO', 'FN', 'USING', 'VARPTR', 'USR', 'ERL', 'ERR', 'STRING$', 'INSTR', 'POINT', 'TIME$', 'MEM', 'INKEY$', 'THEN', 'NOT', 'STEP', '+', '-', '*', '/', '^', 'AND', 'OR', '>', '=', '<', 'SGN', 'INT', 'ABS', 'FRE', 'INP', 'POS', 'SQR', 'RND', 'LOG', 'EXP', 'COS', 'SIN', 'TAN', 'ATN', 'PEEK', 'CVI', 'CVS', 'CVD', 'EOF', 'LOC', 'LOF', 'MKI$', 'MKS$', 'MKD$', 'CINT', 'CSNG', 'CDBL', 'FIX', 'LEN', 'STR$', 'VAL', 'ASC', 'CHR$', 'LEFT$', 'RIGHT$', 'MID$', "'"];
+const KEYWORDS = TOKENS.map((t, i) => [t, 0x80 + i]).sort((a, b) => b[0].length - a[0].length);
+const tokenName = (b) => (b >= 0x80 && b <= 0xfb ? TOKENS[b - 0x80] : null);
+function crunch(text) {
+  const out = [];
+  const lit = (c, kind) => out.push({ b: c.charCodeAt(0) & 0xff, kind });
+  let i = 0;
+  const n = text.length;
+  while (i < n) {
+    const ch = text[i];
+    if (ch === '"') {
+      lit(ch, 'str'); i++;
+      while (i < n && text[i] !== '"') lit(text[i++], 'str');
+      if (i < n) { lit('"', 'str'); i++; }
+      continue;
+    }
+    if (ch === '?') { out.push({ b: 0xb2, kind: 'tok', name: 'PRINT' }); i++; continue; }
+    const rest = text.slice(i).toUpperCase();
+    const kw = KEYWORDS.find(([k]) => rest.startsWith(k));
+    if (!kw) { lit(ch.toUpperCase(), 'text'); i++; continue; }
+    i += kw[0].length;
+    const code = kw[1];
+    if (code === 0xfb) { out.push({ b: 0x3a, kind: 'text' }, { b: 0x93, kind: 'tok', name: 'REM' }, { b: 0xfb, kind: 'tok', name: "'" }); while (i < n) lit(text[i++], 'rem'); }
+    else if (code === 0x93) { out.push({ b: code, kind: 'tok', name: 'REM' }); while (i < n) lit(text[i++], 'rem'); }
+    else if (code === 0x95) out.push({ b: 0x3a, kind: 'text' }, { b: code, kind: 'tok', name: 'ELSE' });
+    else if (code === 0x88) {
+      out.push({ b: code, kind: 'tok', name: 'DATA' });
+      let q = false;
+      while (i < n) { const c = text[i]; if (c === '"') q = !q; if (c === ':' && !q) break; lit(c, 'rem'); i++; }
+    } else out.push({ b: code, kind: 'tok', name: kw[0] });
+  }
+  return out;
+}
+const PRESETS = ['10 PRINT "HELLO":GOTO 10', '20 FOR I=1 TO 10:PRINT I;:NEXT', '30 IF X>0 THEN GOSUB 100 ELSE END', '40 POKE 15360,65 \' AN A ON SCREEN', '50 ?"SHORTHAND"'];
+let basicMode = 'bytes';
+function renderBasic() {
+  const raw = $('#bline').value;
+  const m = /^\s*(\d+)\s*(.*)$/.exec(raw);
+  const out = $('#bout');
+  out.textContent = '';
+  if (!m || Number(m[1]) > 65529) { $('#bstat').textContent = 'Start with a line number from 0 to 65529.'; return; }
+  const number = Number(m[1]);
+  const body = crunch(m[2]);
+  const base = 0x42e9;
+  const next = base + 4 + body.length + 1;
+  const kindOf = { tok: 'basic', text: '', str: 'data', rem: 'data' };
+  if (basicMode === 'list') {
+    let listed = `${number} `;
+    body.forEach((t) => { if (t.kind === 'tok') listed += t.name; else if (!(t.b === 0x3a && (body[body.indexOf(t) + 1]?.name === 'ELSE' || body[body.indexOf(t) + 1]?.name === 'REM'))) listed += String.fromCharCode(t.b); });
+    out.append(h('pre', { class: 'listing', text: listed.replace(":REM'", "'").replace('REM\'', "'") }));
+  } else {
+    const row = h('div', { class: 'bytes' });
+    const frame = (b, l) => row.append(tile(b, l, 'frame'));
+    frame(next & 0xff, 'next lo'); frame(next >> 8, 'next hi'); frame(number & 0xff, 'line lo'); frame(number >> 8, 'line hi');
+    body.forEach((t) => {
+      const label = t.kind === 'tok' ? t.name : t.b === 0x20 ? 'space' : String.fromCharCode(t.b);
+      if (basicMode === 'tokens') row.append(tile(t.kind === 'tok' ? t.name : String.fromCharCode(t.b) === ' ' ? '␠' : String.fromCharCode(t.b), hex2(t.b), kindOf[t.kind]));
+      else row.append(tile(t.b, label, kindOf[t.kind]));
+    });
+    frame(0x00, 'end');
+    out.append(row);
+  }
+  const typed = m[2].length;
+  const keywords = body.filter((t) => t.kind === 'tok').length;
+  $('#bstat').textContent = `${typed} characters typed → ${body.length + 5} bytes stored, ${keywords} keyword${keywords === 1 ? '' : 's'} crunched`;
+}
+PRESETS.forEach((p) => {
+  const b = h('button', { type: 'button', class: 'btn ghost', text: p.split(' ').slice(1).join(' ').slice(0, 22) + (p.length > 26 ? '…' : '') });
+  b.addEventListener('click', () => { $('#bline').value = p; renderBasic(); });
+  $('#presets').append(b);
+});
+$('#bline').addEventListener('input', renderBasic);
+seg('basicView', (v) => { basicMode = v; renderBasic(); });
+
+/* ---------- Valkyrie: the line map and line 2 ---------- */
+(() => {
+  const map = $('#linemap');
+  const out = $('#lmout');
+  LINEMAP.forEach(([n, code]) => {
+    const cell = h('i', { class: `${code ? '' : 'b'}${n === 250 ? ' hot' : ''}`, title: `line ${n}: ${code ? 'machine code' : 'BASIC'}`, 'data-n': n, 'data-k': code });
+    map.append(cell);
+  });
+  const show = (e) => { const t = e.target.closest('i'); if (!t) return; out.textContent = `Line ${t.dataset.n}: ${t.dataset.k === '1' ? 'machine code, disassembled at its true address' : t.dataset.n === '250' ? 'BASIC, and the line that plants the jump into the code' : 'BASIC'}`; };
+  map.addEventListener('pointerover', show);
+  map.addEventListener('click', show);
+})();
+const L2 = [0x44, 0x79, 0xfe, 0x0d, 0xc8, 0x2a, 0xa4, 0x40];
+L2.forEach((b) => $('#l2bytes').append(tile(b, '', 'code')));
+seg('l2View', (v) => {
+  const out = $('#l2out');
+  out.textContent = '';
+  if (v === 'list') {
+    const pre = h('pre', { class: 'listing' });
+    pre.append('2 Dy', h('span', { class: 'wrong', text: '{FE}{0D}' }), 'MEM*GET@');
+    out.append(pre, h('p', { class: 'dim', text: 'What LIST would make of it: two letters, two bytes it cannot print, and two keywords that happen to match.', style: 'margin-top:10px' }));
+  } else if (v === 'tokens') {
+    const row = h('div', { class: 'bytes' });
+    [['D', 'letter', ''], ['y', 'letter', ''], ['FE', 'not a token', 'bad'], ['0D', 'control', 'bad'], ['MEM', 'C8', 'basic'], ['*', '2A', ''], ['GET', 'A4', 'basic'], ['@', '40', '']].forEach(([t, l, k]) => row.append(tile(t, l, k === 'bad' ? 'b bad' : k)));
+    out.append(row, h('p', { class: 'mono', text: 'Verdict: invalid token FEH at +2. Not BASIC.', style: 'margin-top:10px;color:var(--bad)' }));
+  } else {
+    const pre = h('pre', { class: 'listing' });
+    renderAsm(pre, [
+      { addr: '62D5', bytes: '44', mn: 'LD', ops: 'B,H' },
+      { addr: '62D6', bytes: '79', mn: 'LD', ops: 'A,C', comment: 'entry, planted by line 250', cls: 'row-hot' },
+      { addr: '62D7', bytes: 'FE 0D', mn: 'CP', ops: '0DH' },
+      { addr: '62D9', bytes: 'C8', mn: 'RET', ops: 'Z' },
+      { addr: '62DA', bytes: '2A A4 40', mn: 'LD', ops: 'HL,(40A4H)', comment: 'where the program starts' },
+    ]);
+    out.append(pre);
+  }
+});
+
+/* ---------- Grammar ---------- */
+(() => {
+  const t = $('#clash');
+  t.append(h('thead', null, h('tr', null, h('th', { text: 'Byte' }), h('th', { text: 'To the Z80' }), h('th', { text: 'To BASIC' }))));
+  const body = h('tbody');
+  [[0xc3, 'JP nn'], [0xcd, 'CALL nn'], [0xc9, 'RET'], [0xed, 'ED prefix'], [0x3a, 'LD A,(nn)'], [0xb2, 'OR D']].forEach(([b, z]) => {
+    const name = tokenName(b);
+    body.append(h('tr', null, h('td', { class: 'mono', text: hex2(b) }), h('td', { class: 'mono k-code', text: z }), h('td', { class: 'mono k-basic', text: name ? `${name} keyword` : b === 0x3a ? ': between statements' : String.fromCharCode(b) })));
+  });
+  t.append(body);
+})();
+const CARDS = [
+  { q: 'PRINT"HELLO', yes: true, why: 'A string may run to the end of the line. Level II allows it, and programs saved a byte that way.' },
+  { q: 'IF A GOTO 10', yes: true, why: 'Quirky but legal: GOTO can stand in for THEN.' },
+  { q: 'PRINT@512,"HI"', yes: true, why: 'PRINT@ puts the cursor at position 512 of the 64 × 16 screen.' },
+  { q: 'CD 50 41 C9', yes: false, as: '+PAINKEY$', why: 'unexpected + at +0. It is CALL 4150H / RET.' },
+  { q: 'C3 41 42', yes: false, as: 'ERRAB', why: 'unexpected ERR at +0. It is JP 4241H.' },
+  { q: 'AF C9', yes: true, as: 'LPRINTINKEY$', why: 'Parses, yet it is XOR A / RET. Code can pass as BASIC; a code hint says otherwise, and a jump into the line is reported with the hint that fixes it.' },
+];
+CARDS.forEach((c) => {
+  const card = h('button', { type: 'button', class: 'card', 'aria-pressed': 'false' },
+    h('span', { class: 'panel-title', text: c.as ? 'bytes' : 'BASIC text' }),
+    h('span', { class: 'q', text: c.q }),
+    c.as ? h('span', { class: 'dim mono', text: `reads as ${c.as}`, style: 'font-size:.78rem' }) : null,
+    h('span', { class: 'hint', text: 'Is it BASIC? Tap to see.' }),
+    h('span', { class: 'v' }, h('span', { class: `verdict ${c.yes ? 'yes' : 'no'}`, text: c.yes ? 'BASIC' : 'Code' }), h('span', { class: 'dim', text: c.why, style: 'font-size:.86rem' })));
+  card.addEventListener('click', () => card.setAttribute('aria-pressed', String(card.getAttribute('aria-pressed') !== 'true')));
+  $('#cards').append(card);
+});
+const WHY = [
+  ['A control byte (00H–1FH) outside a string', 1517],
+  ['A character BASIC would have crunched, or never stores bare', 713],
+  ['Bytes fine, but no statement has that shape', 79],
+  ['An invalid token, FCH–FFH', 57],
+];
+const WHY_TOTAL = WHY.reduce((n, [, v]) => n + v, 0);
+seg('whyView', (v) => {
+  const box = $('#why');
+  box.textContent = '';
+  if (v === 'chart') {
+    const bars = h('div', { class: 'bars' });
+    WHY.forEach(([label, n]) => {
+      const fill = h('div', { class: 'fill' });
+      fill.style.width = `${(100 * n) / WHY[0][1]}%`;
+      bars.append(h('div', { class: 'bar' }, h('div', { class: 'lab' }, h('span', { text: label }), h('b', { text: `${fmt(n)} · ${Math.round((100 * n) / WHY_TOTAL)}%` })), h('div', { class: 'track' }, fill)));
+    });
+    box.append(bars);
+  } else {
+    const t = h('table', { class: 't' }, h('thead', null, h('tr', null, h('th', { text: 'Why the line is not BASIC' }), h('th', { text: 'Lines', style: 'text-align:right' }), h('th', { text: 'Share', style: 'text-align:right' }))));
+    const b = h('tbody');
+    WHY.forEach(([label, n]) => b.append(h('tr', null, h('td', { text: label }), h('td', { class: 'n', text: fmt(n) }), h('td', { class: 'n', text: `${((100 * n) / WHY_TOTAL).toFixed(1)}%` }))));
+    t.append(b);
+    box.append(h('div', { class: 'scroll' }, t));
+  }
+});
+
+/* ---------- Line 250 stepper ---------- */
+const L250 = ['CLS', ':', 'Q0=PEEK(16549)*256+PEEK(16548)+14', ':', 'Q1=INT(Q0/256)', ':', 'Q0=Q0-Q1*256', ':', 'POKE16422,Q0', ':', 'POKE16423,Q1', ':', 'POKE16421,195'];
+const STEPS = [
+  { hl: [2], expr: 'hi(start) × 256 + lo(start) + 14', note: '16548 and 16549 ($40A4/$40A5) hold where the BASIC program starts. Each PEEK reads one byte of that address.' },
+  { hl: [2], expr: 'Q0 = start + 14', note: 'A high byte times 256 plus its low byte is the whole address. The evaluator knows that idiom in either order.' },
+  { hl: [4], expr: 'Q1 = hi(start + 14)', note: 'Dividing by 256 and dropping the fraction keeps the high byte.' },
+  { hl: [6], expr: 'Q0 = lo(start + 14)', note: 'Taking away the high byte’s share leaves the low byte. Q0 is reused, so variables are tracked line by line, in order.' },
+  { hl: [8, 10], expr: '$4026 = lo, $4027 = hi', note: 'The two bytes go to 16422 and 16423, low byte first, the way a Z80 stores an address.', cells: { 0x4026: 'lo', 0x4027: 'hi' } },
+  { hl: [12], expr: '$4025 = C3 (JP)', note: '195 is C3, the opcode for JP. Three bytes in a system vector now read JP start + 14.', cells: { 0x4025: 'C3', 0x4026: 'lo', 0x4027: 'hi' } },
+  { hl: [], expr: 'entry = $62C8 + 14 = $62D6', note: 'valkyri1.bas starts at $62C8, so the jump lands on $62D6: the second byte of line 2, where the machine code begins.', cells: { 0x4025: 'C3', 0x4026: 'D6', 0x4027: '62' } },
+];
+let step = 0;
+function renderStep() {
+  const s = STEPS[step];
+  const line = $('#l250');
+  line.textContent = '250 ';
+  L250.forEach((part, i) => {
+    const done = STEPS.slice(0, step).some((x) => x.hl.includes(i));
+    line.append(h('span', { class: s.hl.includes(i) ? 'lit' : done ? 'done' : null, text: part }));
+  });
+  $('#stepNote').textContent = s.note;
+  $('#stepExpr').textContent = s.expr;
+  const cells = $('#cells');
+  cells.textContent = '';
+  [0x4025, 0x4026, 0x4027].forEach((a) => {
+    const v = s.cells?.[a];
+    cells.append(h('div', { class: `cell${v ? ' set' : ''}` }, h('span', { class: 'addr', text: `$${hex4(a)} · ${a}` }), h('span', { class: 'val', text: v ?? '??' })));
+  });
+  $('#stepCount').textContent = `${step + 1} / ${STEPS.length}`;
+  $('#stepBack').disabled = step === 0;
+  $('#stepNext').textContent = step === STEPS.length - 1 ? 'Start over' : 'Next step';
+}
+$('#stepNext').addEventListener('click', () => { step = step === STEPS.length - 1 ? 0 : step + 1; renderStep(); });
+$('#stepBack').addEventListener('click', () => { if (step > 0) { step--; renderStep(); } });
+renderStep();
+
+/* ---------- Flow ---------- */
+const FLOW_BYTES = [[0xc3, 'code'], [0x09, 'code'], [0x70, 'code'], [0x48, 'data'], [0x45, 'data'], [0x4c, 'data'], [0x4c, 'data'], [0x4f, 'data'], [0x0d, 'data'], [0x3e, 'code'], [0x01, 'code'], [0xc9, 'code']];
+FLOW_BYTES.forEach(([b, k], i) => $('#flowBytes').append(tile(b, hex4(0x7000 + i).slice(2), k)));
+seg('flowView', (v) => {
+  const sweep = [
+    { addr: '7000', bytes: 'C3 09 70', mn: 'JP', ops: '7009H' },
+    { addr: '7003', bytes: '48', mn: 'LD', ops: 'C,B', comment: 'really the letter H', cls: 'row-wrong' },
+    { addr: '7004', bytes: '45', mn: 'LD', ops: 'B,L', comment: 'E', cls: 'row-wrong' },
+    { addr: '7005', bytes: '4C', mn: 'LD', ops: 'C,H', comment: 'L', cls: 'row-wrong' },
+    { addr: '7006', bytes: '4C', mn: 'LD', ops: 'C,H', comment: 'L', cls: 'row-wrong' },
+    { addr: '7007', bytes: '4F', mn: 'LD', ops: 'C,A', comment: 'O', cls: 'row-wrong' },
+    { addr: '7008', bytes: '0D', mn: 'DEC', ops: 'C', comment: 'carriage return', cls: 'row-wrong' },
+    { addr: '7009', bytes: '3E 01', mn: 'LD', ops: 'A,01H' },
+    { addr: '700B', bytes: 'C9', mn: 'RET' },
+  ];
+  const descent = [
+    { addr: '7000', bytes: 'C3 09 70', mn: 'JP', ops: 'L7009', comment: 'entry' },
+    { addr: '7003', bytes: '48 45 4C 4C', mn: 'DB', ops: "'HELL'" },
+    { addr: '7007', bytes: '4F 0D', mn: 'DB', ops: "'O',0DH" },
+    { label: 'L7009' },
+    { addr: '7009', bytes: '3E 01', mn: 'LD', ops: 'A,01H' },
+    { addr: '700B', bytes: 'C9', mn: 'RET' },
+  ];
+  renderAsm($('#flowOut'), v === 'sweep' ? sweep : descent);
+});
+
+/* ---------- Moving code ---------- */
+const FILE_LO = 0x8000, FILE_HI = 0xbff0, RUN_LO = 0x4000, RUN_HI = 0x8000;
+const pct = (a, lo, hi) => (100 * (a - lo)) / (hi - lo);
+function band(strip, a, b, color, label, lo, hi) {
+  const d = h('div', { class: 'seg-a' });
+  d.style.left = `${pct(a, lo, hi)}%`;
+  d.style.width = `${Math.max(0.6, pct(b, lo, hi) - pct(a, lo, hi))}%`;
+  d.style.background = color;
+  strip.append(d);
+  if (label) { const l = h('span', { class: 'lab', text: label }); l.style.left = `${pct(a, lo, hi)}%`; strip.append(l); }
+}
+function renderMove(k) {
+  const copied = Math.min(k, 122) * 128 + (k === 123 ? 4 : 0);
+  const consumed = 0x80dd + (Math.min(k, 122) * 132 + (k === 123 ? 8 : 0));
+  const fs = $('#fileStrip');
+  fs.textContent = '';
+  band(fs, 0x8000, 0x80dc, 'var(--code)', null, FILE_LO, FILE_HI);
+  band(fs, 0x80dd, 0xbfcc, 'color-mix(in srgb, var(--data) 70%, var(--deck-2))', null, FILE_LO, FILE_HI);
+  if (k > 0) band(fs, 0x80dd, consumed, 'color-mix(in srgb, var(--data) 22%, var(--deck-2))', null, FILE_LO, FILE_HI);
+  band(fs, 0x8000, 0x8000, null, 'loader', FILE_LO, FILE_HI);
+  const label = h('span', { class: 'lab', text: k === 0 ? '123 records: < count dest + data' : `${k} of 123 records read` });
+  label.style.left = '18%';
+  fs.append(label);
+  const rs = $('#runStrip');
+  rs.textContent = '';
+  band(rs, 0x4000, 0x42f2, 'var(--signal)', null, RUN_LO, RUN_HI);
+  if (copied > 0) band(rs, 0x42f3, 0x42f3 + copied - 1, 'var(--code)', null, RUN_LO, RUN_HI);
+  const rl = h('span', { class: 'lab', text: k === 123 ? 'game at $42F3–$7FF6 · JP $43AE' : copied ? `game so far: $42F3–$${hex4(0x42f3 + copied - 1)}` : 'empty until the loader runs', style: copied ? '' : 'color:var(--dim)' });
+  rl.style.left = '9%';
+  rs.append(rl);
+  $('#recOut').textContent = `${k} / 123 records · ${fmt(copied)} bytes copied`;
+}
+const rec = $('#rec');
+rec.addEventListener('input', () => renderMove(Number(rec.value)));
+$('#play').addEventListener('click', () => {
+  if (reduce) { rec.value = '123'; renderMove(123); return; }
+  const t0 = performance.now();
+  const tick = (t) => { const k = Math.min(123, Math.floor((t - t0) / 22)); rec.value = String(k); renderMove(k); if (k < 123) requestAnimationFrame(tick); };
+  requestAnimationFrame(tick);
+});
+renderMove(0);
+renderAsm($('#phase'), [
+  { src: true, mn: 'ORG', ops: '8000H', comment: 'the bytes sit here in the file' },
+  { src: true, mn: '.PHASE', ops: '5000H', comment: 'but run here' },
+  { label: 'L5000' },
+  { src: true, mn: 'CALL', ops: 'SETONE' },
+  { src: true, mn: 'JR', ops: 'L5007' },
+  { src: true, mn: 'DB', ops: '00H,00H' },
+  { label: 'L5007' },
+  { src: true, mn: 'RET' },
+  { label: 'SETONE' },
+  { src: true, mn: 'LD', ops: 'A,01H' },
+  { src: true, mn: 'RET' },
+  { src: true, mn: '.DEPHASE' },
+  { src: true, mn: 'ORG', ops: '8100H' },
+  { src: true, mn: 'LD', ops: 'HL,8000H', comment: 'copy from here' },
+  { src: true, mn: 'LD', ops: 'DE,L5000', comment: 'to the running address' },
+  { src: true, mn: 'LD', ops: 'BC,000BH' },
+  { src: true, mn: 'LDIR' },
+  { src: true, mn: 'JP', ops: 'L5000' },
+]);
+renderAsm($('#mover'), [
+  { src: true, mn: 'LD', ops: 'HL,7000H', comment: 'source: where the file put the game' },
+  { src: true, mn: 'LD', ops: 'DE,4300H', comment: 'destination: where it runs' },
+  { src: true, mn: 'LD', ops: 'BC,3D00H', comment: 'how many bytes' },
+  { src: true, mn: 'LDIR', comment: 'copy them all' },
+  { src: true, mn: 'JP', ops: '4350H', comment: 'and jump into the copy' },
+]);
+const COV = [['Space Warp', 26, 2699, 3941], ['Asylum 1a', 90, 9631, 15719], ['Deathmaze 5000', 15, 9364, 15650], ['Sea Dragon 01', 15, 6260, 13968], ['Armored Patrol', 15, 5642, 14592], ["Pirate's Adventure", 15, 3018, 15631]];
+seg('covView', (v) => {
+  const box = $('#cov');
+  box.textContent = '';
+  if (v === 'chart') {
+    const bars = h('div', { class: 'bars' });
+    COV.forEach(([name, before, after, total]) => {
+      const a = h('div', { class: 'fill' }); a.style.width = `${(100 * after) / total}%`;
+      const b = h('div', { class: 'fill before' }); b.style.width = `${Math.max(0.8, (100 * before) / total)}%`;
+      bars.append(h('div', { class: 'bar' }, h('div', { class: 'lab' }, h('span', { text: name }), h('b', { text: `${Math.round((100 * before) / total)}% → ${Math.round((100 * after) / total)}%` })), h('div', { class: 'track' }, a, b)));
+    });
+    box.append(bars);
+  } else {
+    const t = h('table', { class: 't' }, h('thead', null, h('tr', null, h('th', { text: 'Program' }), h('th', { text: 'Bytes', style: 'text-align:right' }), h('th', { text: 'Code before', style: 'text-align:right' }), h('th', { text: 'Code after', style: 'text-align:right' }))));
+    const b = h('tbody');
+    COV.forEach(([name, before, after, total]) => b.append(h('tr', null, h('td', { text: name }), h('td', { class: 'n', text: fmt(total) }), h('td', { class: 'n', text: fmt(before) }), h('td', { class: 'n', text: `${fmt(after)} (${Math.round((100 * after) / total)}%)` }))));
+    t.append(b);
+    box.append(h('div', { class: 'scroll' }, t));
+  }
+});
+
+/* ---------- Proof ---------- */
+const PIPE = [['01', 'Original file', 'The .CMD exactly as it came off the disk.'], ['02', 'Fugløy', 'Finds the code, names the labels, writes assembler source.'], ['03', 'zmac source', 'Plain text you can read, edit, and diff.'], ['04', 'zmac', 'A real Z80 assembler, pinned to one exact version.'], ['05', 'Same bytes?', 'Every loaded address compared, byte for byte.']];
+PIPE.forEach(([n, t, d], i) => $('#pipe').append(h('div', { class: `node${i === 4 ? ' check' : ''}`, id: i === 4 ? 'checkNode' : null }, h('span', { class: 'st', text: n }), h('b', { text: t }), h('span', { text: d }))));
+let bug = false;
+function renderProof() {
+  renderAsm($('#proofSrc'), [
+    { src: true, mn: 'ORG', ops: '7000H' },
+    { src: true, mn: 'LD', ops: 'HL,3C00H' },
+    { src: true, mn: 'LD', ops: bug ? '(HL),42H' : '(HL),41H', comment: bug ? 'the planted bug' : 'the letter A', cls: bug ? 'row-wrong' : null },
+    { src: true, mn: 'RET' },
+    { src: true, mn: 'END', ops: '7000H' },
+  ]);
+  const out = $('#proofOut');
+  out.textContent = bug ? 'byte differs at $7004: expected 41, got 42' : '6 of 6 bytes identical. The listing is proven.';
+  out.style.color = bug ? 'var(--bad)' : 'var(--ok)';
+  $('#checkNode').classList.toggle('fail', bug);
+  $('#bug').textContent = bug ? 'Remove the bug' : 'Plant an emitter bug';
+}
+$('#bug').addEventListener('click', () => { bug = !bug; renderProof(); });
+renderProof();
+
+/* ---------- Hints ---------- */
+(() => {
+  const pre = $('#hintsrc');
+  const lines = [
+    ['fugloy-hints 1', null],
+    ['block 0 length $4F49 hash f5a5fd42d16a2030', 'asylum1b.cmd, loaded at $6300'],
+    ['block 0:$4E12 name MAIN_ENTRY', 'the transfer address, $B112'],
+    ['block 0:$4E12 comment where the game starts', null],
+    ['block 0:$1A00 bytes $40', 'example: 64 bytes of data'],
+    ['block 0:$0D12 table 16 2', 'example: 16 two-byte addresses'],
+  ];
+  lines.forEach(([text, comment], i) => {
+    const row = h('span');
+    text.split(/(\s+)/).forEach((w) => {
+      let cls = null;
+      if (/^\$[0-9A-F]+$|^\d+$|^[0-9a-f]{16}$/.test(w)) cls = 'nu';
+      else if (/^(block|length|hash|fugloy-hints)$/.test(w)) cls = 'dr';
+      else if (/^\d+:\$[0-9A-F]+$/.test(w)) cls = 'ad';
+      else if (/^(name|comment|bytes|table|entry|code|words|string|nocode|relocate)$/.test(w)) cls = 'mn';
+      else if (/^[A-Z_][A-Z0-9_]*$/.test(w)) cls = 'sy';
+      row.append(cls ? h('span', { class: cls, text: w }) : w);
+    });
+    if (comment) row.append(h('span', { class: 'cm', text: `    # ${comment}` }));
+    pre.append(row);
+    if (i < lines.length - 1) pre.append('\n');
+  });
+})();
+
+/* ---------- How it was built ---------- */
+seg('buildView', (v) => {
+  $('#buildTimeline').hidden = v !== 'timeline';
+  $('#buildMethod').hidden = v !== 'method';
+  $('#buildOpcodes').hidden = v !== 'opcodes';
+});
+const R = ['B', 'C', 'D', 'E', 'H', 'L', '(HL)', 'A'];
+const RP = ['BC', 'DE', 'HL', 'SP'];
+const RP2 = ['BC', 'DE', 'HL', 'AF'];
+const CC = ['NZ', 'Z', 'NC', 'C', 'PO', 'PE', 'P', 'M'];
+const ALU = ['ADD A,', 'ADC A,', 'SUB ', 'SBC A,', 'AND ', 'XOR ', 'OR ', 'CP '];
+function decodeOp(op) {
+  const x = op >> 6, y = (op >> 3) & 7, z = op & 7, p = y >> 1, q = y & 1;
+  if (x === 0) {
+    switch (z) {
+      case 0: return ['NOP', "EX AF,AF'", 'DJNZ d', 'JR d', 'JR NZ,d', 'JR Z,d', 'JR NC,d', 'JR C,d'][y];
+      case 1: return q ? `ADD HL,${RP[p]}` : `LD ${RP[p]},nn`;
+      case 2: return q ? ['LD A,(BC)', 'LD A,(DE)', 'LD HL,(nn)', 'LD A,(nn)'][p] : ['LD (BC),A', 'LD (DE),A', 'LD (nn),HL', 'LD (nn),A'][p];
+      case 3: return `${q ? 'DEC' : 'INC'} ${RP[p]}`;
+      case 4: return `INC ${R[y]}`;
+      case 5: return `DEC ${R[y]}`;
+      case 6: return `LD ${R[y]},n`;
+      default: return ['RLCA', 'RRCA', 'RLA', 'RRA', 'DAA', 'CPL', 'SCF', 'CCF'][y];
+    }
+  }
+  if (x === 1) return y === 6 && z === 6 ? 'HALT' : `LD ${R[y]},${R[z]}`;
+  if (x === 2) return `${ALU[y]}${R[z]}`;
+  switch (z) {
+    case 0: return `RET ${CC[y]}`;
+    case 1: return q ? ['RET', 'EXX', 'JP (HL)', 'LD SP,HL'][p] : `POP ${RP2[p]}`;
+    case 2: return `JP ${CC[y]},nn`;
+    case 3: return ['JP nn', 'CB prefix', 'OUT (n),A', 'IN A,(n)', 'EX (SP),HL', 'EX DE,HL', 'DI', 'EI'][y];
+    case 4: return `CALL ${CC[y]},nn`;
+    case 5: return q ? ['CALL nn', 'DD prefix', 'ED prefix', 'FD prefix'][p] : `PUSH ${RP2[p]}`;
+    case 6: return `${ALU[y]}n`;
+    default: return `RST ${hex2(y * 8)}H`;
+  }
+}
+function opNote(op) {
+  if (op === 0x76) return 'LD (HL),(HL) would be pointless, so this slot became HALT.';
+  if (op === 0xcf) return 'On the TRS-80, RST 08H is BASIC’s syntax check, and the byte after it is data. Fugløy knows.';
+  if ([0xcb, 0xdd, 0xed, 0xfd].includes(op)) return 'A prefix: the next byte is read from a second table. DD and FD swap HL for IX and IY.';
+  if (op >> 6 === 1) return 'One rule, LD r,r′, makes 63 of these 64 instructions.';
+  if (op >> 6 === 2) return 'Eight operations × eight registers, all from one rule.';
+  if (op === 0xc3) return 'JP nn. To BASIC this same byte is the ERR keyword.';
+  return 'x picks the quarter of the map, y and z pick the operation and its register.';
+}
+const OPCOLORS = ['--code', '--data', '--signal', '--frame'];
+let opSel = 0xc3;
+(() => {
+  const g = $('#opgrid');
+  g.append(h('span', { class: 'hd' }));
+  for (let c = 0; c < 16; c++) g.append(h('span', { class: 'hd', text: hex2(c).slice(1) }));
+  for (let r = 0; r < 16; r++) {
+    g.append(h('span', { class: 'hd', text: hex2(r * 16).slice(0, 1) }));
+    for (let c = 0; c < 16; c++) {
+      const op = r * 16 + c;
+      const b = h('button', { type: 'button', 'aria-pressed': String(op === opSel), title: `${hex2(op)}: ${decodeOp(op)}`, 'aria-label': `${hex2(op)}: ${decodeOp(op)}`, text: hex2(op) });
+      const prefix = [0xcb, 0xdd, 0xed, 0xfd].includes(op);
+      b.style.background = prefix ? 'var(--phosphor)' : `color-mix(in srgb, var(${OPCOLORS[op >> 6]}) ${70 + ((op >> 3) & 7) * 4}%, var(--deck-2))`;
+      b.addEventListener('click', () => { opSel = op; $$('#opgrid button').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); renderOp(); });
+      g.append(b);
+    }
+  }
+})();
+function renderOp() {
+  const op = opSel;
+  const x = op >> 6, y = (op >> 3) & 7, z = op & 7;
+  $('#opName').textContent = `${hex2(op)}  ${decodeOp(op)}`;
+  const bits = $('#opBits');
+  bits.textContent = '';
+  const bin = (v, n) => v.toString(2).padStart(n, '0');
+  [['x', bin(x, 2), `bits 7–6 = ${x}`], ['y', bin(y, 3), `bits 5–3 = ${y}`], ['z', bin(z, 3), `bits 2–0 = ${z}`], ['p', bin(y >> 1, 2), `y ÷ 2 = ${y >> 1}`], ['q', String(y & 1), `y odd? ${y & 1}`]].forEach(([n, v, d]) => bits.append(h('div', null, h('span', { text: n }), h('b', { text: v }), h('span', { text: d }))));
+  $('#opNote').textContent = opNote(op);
+}
+renderOp();
+
+/* ---------- Rail: mark the section in view ---------- */
+const chips = $$('#chips .chip');
+const io = new IntersectionObserver((entries) => {
+  entries.forEach((e) => {
+    if (!e.isIntersecting) return;
+    chips.forEach((c) => c.classList.toggle('on', c.getAttribute('href') === `#${e.target.id}`));
+  });
+}, { rootMargin: '-40% 0px -55% 0px' });
+$$('section.cart').forEach((s) => io.observe(s));
+})();
+</script>

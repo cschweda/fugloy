@@ -68,7 +68,8 @@ The plan's phases 3 (symbol tables) and 4 (web workbench) are not yet placed
 in this sequence. When phase 4 builds the site, it gets a "technical details"
 page carrying the interactive explainer of how Fugløy was built (dark,
 infographic, many examples, written for a curious student or retro
-enthusiast; requested 2026-10-16).
+enthusiast; requested 2026-10-16). Its source is
+`docs/technical-details/inside-fugloy.html`.
 
 ## Conventions
 
