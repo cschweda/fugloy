@@ -55,18 +55,6 @@ at its true addresses.
 - A smoke test on the Model I Level II ROM: half of it decodes as code from
   its documented entry points, and it reassembles byte for byte.
 
-### Changed
-
-- `BasLine.parsed` and `detokenize().ok` mean the line parses as BASIC,
-  lexically and by statement shape; the reason names the byte offset.
-- A `.BAS` with hidden code or a planted entry gets the pass 1 listing by
-  default.
-- Listing and zmac rows break at the start of every typed region, and bytes
-  typed as a string (including by a `string` hint) print quoted.
-- A `.BAS` block's identity reads its line pointers as offsets from the
-  program start, so a `.BAS` hint file written before this change no longer
-  matches.
-
 - Hint file (`--hints`): line-oriented text keyed by block and offset, with
   content-based block identity (length plus a SHA-256 prefix of the first 64
   bytes, computed in pure TypeScript) so the same hints apply to relocated
@@ -118,8 +106,25 @@ at its true addresses.
 ### Changed
 
 - `fugloy <file>` prints the pass 1 listing for load modules and raw
-  binaries; the phase-1 linear sweep is `--sweep`. `.BAS` listings are
-  unchanged unless `--entry` names hidden code.
+  binaries; the phase-1 linear sweep is `--sweep`. A `.BAS` with hidden code
+  or a planted entry gets the pass 1 listing too; a plain BASIC program keeps
+  its BASIC listing.
+- `BasLine.parsed` and `detokenize().ok` mean the line parses as BASIC,
+  lexically and by statement shape; the reason names the byte offset. A
+  file's line 1 still has to read as BASIC bytes for the file to count as
+  BASIC, but a grammar failure there only marks that line as code.
+- A line whose bytes happen to read as BASIC, such as `XOR A / RET` as
+  `LPRINT INKEY$`, stays BASIC unless a `code` hint covers it; the hint lists
+  it as code, and a jump that lands inside such a line says so and names the
+  hint.
+- The IR (`fugloyIr: 1`) gains `entries`, `proposals`, and `relocations`;
+  with relocations, `regions` describe runtime addresses while `loaded`
+  keeps the file's runs.
+- Listing and zmac rows break at the start of every typed region, and bytes
+  typed as a string (including by a `string` hint) print quoted.
+- A `.BAS` block's identity reads its line pointers as offsets from the
+  program start, so a `.BAS` hint file written before this change no longer
+  matches.
 - The pass 1 header counts bytes decoded as code and, separately, bytes typed
   as data by hints.
 - Project plan: the undocumented-opcode spelling question is closed (zmac's

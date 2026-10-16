@@ -22,7 +22,8 @@ every present real program, and every Z80 encoding under a pinned zmac), a
 JSON IR, labels, and the hint file; machine code hidden in tokenized BASIC
 found by parse validity and disassembled at its true addresses; strings,
 jump-table and loader-stub proposals; rebasing; and relocated regions analyzed
-where they run. Next is phase 3, the ROM and DOS symbol tables. Every change
+where they run. Next come the emulator's first phase and phase 3's ROM and
+DOS symbol tables, in the order the roadmap in `CLAUDE.md` gives. Every change
 is recorded in [CHANGELOG.md](CHANGELOG.md); releases are tagged `vX.Y.Z` on
 `main`.
 
@@ -86,7 +87,9 @@ targets, data references, and declared tables get `L`, `SUB_`, `DATA_`, and
 `TBL_` labels; `name` hints rename them. The listing header proposes jump
 tables and loader stubs (a copy with `LDIR` followed by a jump into it) with
 the exact hint lines that would declare them; nothing is applied until those
-lines are in a hint file.
+lines are in a hint file. A code line whose bytes happen to read as BASIC
+(`XOR A / RET` is `LPRINT INKEY$`) stays BASIC; declare it with a `code` hint,
+and a jump that lands inside such a line says which line and which hint.
 
 ## Sample programs
 

@@ -4,6 +4,7 @@
  * zero bytes end the program. The pointers are absolute, so the file records
  * the address it was saved from, and the whole program is loaded there.
  */
+import { lexLine } from './basic/lexer.js';
 import { detokenize } from './detokenize.js';
 import { MemoryImage } from './memory.js';
 
@@ -75,6 +76,16 @@ function walk(bytes: Uint8Array, start: number, base: number): Chain | null {
   }
 }
 
+/** Why a body (with its terminator) cannot be BASIC bytes at all, or undefined when it can. */
+function lexicalProblem(body: Uint8Array): string | undefined {
+  const n = body.length;
+  if (n === 0 || body[n - 1] !== 0) return 'no 00 terminator';
+  const inner = body.subarray(0, n - 1);
+  const zero = inner.indexOf(0);
+  if (zero >= 0) return `embedded 00 at +${zero}`;
+  return lexLine(inner).error?.message;
+}
+
 export function loadBas(bytes: Uint8Array): BasProgram {
   const image = new MemoryImage();
   const warnings: string[] = [];
@@ -107,8 +118,11 @@ export function loadBas(bytes: Uint8Array): BasProgram {
     const d = detokenize(l.body);
     return d.reason === undefined ? { ...l, text: d.text, parsed: d.ok } : { ...l, text: d.text, parsed: d.ok, reason: d.reason };
   });
-  if (lines[0]?.parsed !== true) {
-    warnings.push(`line 1 does not parse as BASIC (${lines[0]?.reason ?? 'empty'}); not a tokenized BASIC program`);
+  // Execution starts at line 1, so its bytes must read as BASIC; its grammar is judged like any other line's, so a
+  // grammar gap marks one line as code instead of hiding the whole program (spec §7: parse failures never stop loading).
+  const firstProblem = lines[0] === undefined ? 'empty' : lexicalProblem(lines[0].body);
+  if (firstProblem !== undefined) {
+    warnings.push(`line 1 does not parse as BASIC (${firstProblem}); not a tokenized BASIC program`);
     return prog;
   }
   prog.base = chain.base;

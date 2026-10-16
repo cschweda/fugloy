@@ -253,3 +253,35 @@ describe('mover proposals in the listing', () => {
     expect(text).toContain('\n; proposed move: LDIR at $7049 copies $7000-$703F to $5000-$503F; declare with:\n;   block 0:$0000 relocate $5000 $0040\n;   block 0:$0000 entry\n');
   });
 });
+
+describe('code that reads as BASIC', () => {
+  // XOR A / RET is also LPRINT INKEY$: a code line the grammar cannot catch.
+  const keywordShaped = () => loadBas(writeBasic([{ number: 10, text: 'CLS' }, { number: 20, raw: [0xaf, 0xc9] }, { number: 30, text: 'END' }], 0x7000));
+
+  it('lists a line a code hint declares as machine code, even when its bytes parse as BASIC', () => {
+    const prog = keywordShaped();
+    expect(prog.lines[1]).toMatchObject({ parsed: true, text: 'LPRINTINKEY$', bodyAddr: 0x700a });
+    const text = renderPass1Listing(analyze(prog, { annotations: { ...emptyAnnotations(), overrides: [{ addr: 0x700a, kind: 'code', length: 2 }] } }));
+    expect(text).toContain('; code lines: 1; entries mined: 0\n');
+    expect(text).toContain(['; line 20: machine code, 2 bytes at $700A', row('700A', 'AF', 'XOR A', 'entry; 20 LPRINTINKEY$'), row('700B', 'C9', 'RET')].join('\n'));
+  });
+
+  it('names the BASIC line a jump lands in and the hint that would make it code', () => {
+    // Line 20 is code that jumps to line 30's body, which parses as PRINT.
+    const prog = loadBas(writeBasic([{ number: 10, text: 'CLS' }, { number: 20, raw: [0xc3, 0x12, 0x70] }, { number: 30, text: 'PRINT' }], 0x7000));
+    const a = analyze(prog);
+    const message = 'target $7012 is typed as data (inside line 30, which parses as BASIC; declare block 0:$0012 code if it is machine code)';
+    expect(a.pass1.diagnostics.map((d) => d.message)).toContain(message);
+    expect(renderPass1Listing(a)).toContain(`\n; note: ${message}\n`);
+  });
+
+  it('never decodes a JP inside a string literal, even when a code line jumps to it (Review Focus 3)', () => {
+    // Line 10 is PRINT"<C3 10 70>": JP 7010H as text. Line 20 is code jumping to the C3 at $7006.
+    const prog = loadBas(writeBasic([{ number: 10, raw: [0xb2, 0x22, 0xc3, 0x10, 0x70, 0x22] }, { number: 20, raw: [0xc3, 0x06, 0x70] }], 0x7000));
+    expect(prog.lines.map((l) => l.parsed)).toEqual([true, false]);
+    const a = analyze(prog);
+    expect(a.pass1.instructions.has(0x7006)).toBe(false);
+    expect(a.pass1.map.kind(0x7006)).toBe(Kind.Byte);
+    expect(a.pass1.diagnostics.map((d) => d.kind)).toContain('in-data');
+  });
+});

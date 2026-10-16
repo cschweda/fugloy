@@ -5,7 +5,7 @@
 import { hex4, hexByte, hexWord } from '@fugloy/z80';
 import { renderInstruction } from './emit/operands.js';
 import { Kind } from './analysis/map.js';
-import type { BasProgram } from './bas.js';
+import type { BasLine, BasProgram } from './bas.js';
 import { codeLineLabel } from './basic/structure.js';
 import { dbItems } from './emit/strings.js';
 import { filePieces } from './analysis/relocate.js';
@@ -151,9 +151,16 @@ export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {})
   const { rebasedFrom } = analysis;
   if (rebasedFrom !== undefined) out.push(`; rebased from ${$(rebasedFrom)} to ${$(runs[0]?.start ?? 0)}`);
   out.push(`; pass 1: ${rootText}`);
+  /** A .BAS line lists as code when it does not parse, or when a hint had any of its body decoded anyway. */
+  const lastBodyByte = (line: BasLine): number => line.bodyAddr + (line.body.length > 0 && line.body[line.body.length - 1] === 0 ? line.body.length - 1 : line.body.length) - 1;
+  const listsAsCode = (line: BasLine): boolean => {
+    if (!line.parsed) return true;
+    for (let a = line.bodyAddr; a <= lastBodyByte(line); a++) if (map.isCode(a)) return true;
+    return false;
+  };
   if (mod.format === 'bas') {
     const found = entries.filter((e) => e.addr !== null);
-    out.push(`; code lines: ${mod.lines.filter((l) => !l.parsed).length}; entries mined: ${found.length}`);
+    out.push(`; code lines: ${mod.lines.filter(listsAsCode).length}; entries mined: ${found.length}`);
     for (const e of found) out.push(`; entry ${$(e.addr!)} (${e.evidence})`);
     for (const e of entries) if (e.addr === null) out.push(`; note: ${e.evidence}`);
   }
@@ -228,9 +235,7 @@ export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {})
     // A BASIC line reads as its text; a code line as rows at its true addresses. Symbols the rows do not show are named.
     out.push('');
     for (const line of mod.lines) {
-      const n = line.body.length;
-      const last = line.bodyAddr + (n > 0 && line.body[n - 1] === 0 ? n - 1 : n) - 1;
-      const shown = line.parsed ? null : { from: line.bodyAddr, to: last };
+      const shown = listsAsCode(line) ? { from: line.bodyAddr, to: lastBodyByte(line) } : null;
       if (shown === null) out.push(line.text === '' ? `${line.number}` : `${line.number} ${line.text}`);
       else {
         out.push(`; ${codeLineLabel(line)}`);

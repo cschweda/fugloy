@@ -103,6 +103,16 @@ export function analyze(mod: Module, opts: AnalyzeOptions = {}): Analysis {
   // Relocations were validated when the hints applied; here they only place the bytes.
   const { space } = analysisSpace(mod.image, annotations.relocations);
   const pass1 = recursiveDescent(space.image, roots, annotations);
+  if (mod.format === 'bas') {
+    // Keyword-shaped code (XOR A / RET reads as LPRINT INKEY$) passes the grammar; say which line a jump hit and how to override it.
+    pass1.diagnostics = pass1.diagnostics.map((d) => {
+      if (d.kind !== 'in-data') return d;
+      const line = mod.lines.find((l) => l.parsed && d.addr >= l.bodyAddr && d.addr < l.bodyAddr + l.body.length - 1);
+      if (line === undefined) return d;
+      const offset = (d.addr - mod.base).toString(16).toUpperCase().padStart(4, '0');
+      return { ...d, message: `${d.message} (inside line ${line.number}, which parses as BASIC; declare block 0:$${offset} code if it is machine code)` };
+    });
+  }
   const transfer = mod.format === 'cmd' ? (mod.entrySource === 'transfer' ? mod.entry : null) : mod.format === 'raw' ? mod.entry : null;
   // Symbols name references, not byte kinds, so they come first and bound the strings typed after descent.
   const symbols = synthesizeSymbols(pass1, annotations, space.image);

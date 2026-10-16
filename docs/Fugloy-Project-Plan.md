@@ -118,7 +118,7 @@ This matters because a class of TRS-80 games hides machine code inside BASIC lin
 What the .BAS path does:
 
 - Detokenizes to a listing, with `PEEK`/`POKE`/`USR`/`DEFUSR` operands resolved through the symbol table (16548/16549 is the program-start pointer, 16526/16527 the USR vector, 14400 keyboard row 7).
-- Finds hidden code by **parse validity**, not byte statistics: a line is BASIC if its body parses as tokens with well-formed operands; a line that fails to parse is treated as data and offered to Pass 1 as a candidate code region. Byte histograms do not work here because `C3`, `CD`, `C9`, `ED`, `DD`, and `FD` are all in the token range.
+- Finds hidden code by **parse validity**, not byte statistics: a line is BASIC if its body parses as tokens with well-formed operands; a line that fails to parse is treated as data and offered to Pass 1 as a candidate code region. Byte histograms do not work here because `C3`, `CD`, `C9`, `ED`, `DD`, and `FD` are all in the token range. The test has a known blind spot: code whose bytes also form valid BASIC (`XOR A / RET` is `LPRINT INKEY$`) passes as BASIC; a `code` hint overrides it, and a jump into such a line is reported with the hint that would fix it.
 - Places each hidden region at its true address: line *N*'s body sits at `ptr(N−1) + 4`. Those bytes go into the same 64K image the .CMD loader fills and Pass 1 and Pass 2 run unchanged.
 - Mines entry points from the BASIC text: `DEFUSR=`, pokes to the USR vector, and `POKE addr,195` followed by two pokes of an address.
 - Offers rebasing, since the saved addresses are an accident of the saving machine's memory map. Hidden code in such programs is usually position-dependent, so a rebased listing shows absolute references pointing at the old addresses; the tool marks those and the listing header states the original base. Hints survive rebasing because they are keyed by block and offset, not address (see Hint file).
@@ -165,7 +165,7 @@ Each table is a data file with a source citation per entry. Published maps disag
 
 The hint file is the one piece of persistent state in v1. Decisions, made now:
 
-- **Format: line-oriented text**, one directive per line, so it diffs in git and can be hand-edited. Example directives: `code`, `bytes`, `words`, `string`, `entry`, `table <count> <width>`, `name <label>`, `comment <text>`, `nocode`.
+- **Format: line-oriented text**, one directive per line, so it diffs in git and can be hand-edited. Example directives: `code`, `bytes`, `words`, `string`, `entry`, `table <count> <width>`, `name <label>`, `comment <text>`, `nocode`, and (phase 2) `relocate <addr> <length>`, which declares that the bytes at this offset execute at another address: they are analyzed there and emitted under zmac's `.phase`.
 - **Keys are block-relative and block identity is content-based**: `block <index>:<offset>` where a block is a loaded run identified by its original start address, its length, and a hash of its first 64 bytes. When a hint file is applied to a different file, blocks are paired by length and hash, not by position, so the same hints apply to Asylum 1b, 1c, and 1d, and a variant with an extra 2-byte vector block (1e) still matches on its main run. Unmatched blocks' hints are reported, not silently dropped.
 - **Identity**: the file header carries the SHA-256 of the input program, so the workbench can match a dropped file to its hints and refuse a mismatch.
 - **Storage**: a file on disk (CLI) or IndexedDB (browser), downloadable; nothing else in v1.

@@ -14,10 +14,11 @@ stay in Part 2 until phase 3 is complete and the plan's kill criteria have
 been reviewed. If a task seems to need machinery from a later step, stop and
 say so.
 
-Current phase: **2 — Pass 1 and Pass 2.** Deliverable: every synthetic fixture
-round-trips through a pinned zmac to an identical memory image and bitmap, and
-Valkyrie's hidden code disassembles at its true addresses. Phase 1 shipped as
-v0.1.0.
+Current phase: **2 — Pass 1 and Pass 2, deliverable met** (sub-projects A–C;
+release as v0.2.0 pending). Deliverable: every synthetic fixture round-trips
+through a pinned zmac to an identical memory image and bitmap, and Valkyrie's
+hidden code disassembles at its true addresses. Phase 1 shipped as v0.1.0.
+Next, per the Roadmap: emu phase 0.
 
 ## Stack and layout
 

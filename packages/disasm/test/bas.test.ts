@@ -79,9 +79,17 @@ describe('.BAS loader', () => {
     expect(p.lines[1]).toMatchObject({ number: 20, text: '+PAINKEY$', reason: 'unexpected + at +0' });
   });
 
-  it('does not take a file whose line 1 fails the grammar for BASIC', () => {
+  it('loads a file whose line 1 reads as BASIC bytes but fails the grammar, with line 1 marked as code', () => {
     const bytes = writeBasic([{ number: 10, raw: [0xcd, 0x50, 0x41, 0xc9] }, { number: 20, text: 'END' }], 0x7000);
-    expect(loadBas(bytes).warnings).toEqual(['line 1 does not parse as BASIC (unexpected + at +0); not a tokenized BASIC program']);
+    const p = loadBas(bytes);
+    expect(p.warnings).toEqual([]);
+    expect(p.lines[0]).toMatchObject({ number: 10, parsed: false, reason: 'unexpected + at +0' });
+    expect(isBas(bytes)).toBe(true);
+  });
+
+  it('does not take a file whose line 1 does not even read as BASIC bytes', () => {
+    const bytes = writeBasic([{ number: 10, raw: [0x01, 0x41] }, { number: 20, text: 'END' }], 0x7000);
+    expect(loadBas(bytes).warnings).toEqual(['line 1 does not parse as BASIC (control byte 01H at +0); not a tokenized BASIC program']);
     expect(isBas(bytes)).toBe(false);
   });
 
