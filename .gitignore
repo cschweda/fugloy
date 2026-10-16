@@ -1,5 +1,5 @@
-# Copyrighted sample programs and ROM images stay out of the repo.
-# Tests that need them skip when the folder is empty.
+# Copyrighted sample programs and ROM images stay out of the repo (public-domain
+# programs are committed under examples/). Tests that need them skip when absent.
 fixtures/real/
 sample/
 *.rom

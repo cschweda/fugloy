@@ -245,7 +245,8 @@ A real program: the first build of *Sea Dragon* (1982), which Wayne
 Westmoreland released into the public domain in 1995. Pass 1 alone finds only
 its 15-byte loader, which copies the game from `$5200` down to `$497F` and
 jumps there, and the listing header proposes the two hint lines that
-describe the copy (`pnpm fugloy seadrg01.cmd`, excerpt):
+describe the copy (`pnpm fugloy examples/sea-dragon/seadrg01.cmd`, excerpt; the
+game ships with Fugløy in [`examples/sea-dragon/`](examples/sea-dragon/)):
 
 ```
 ; seadrg01.cmd: load module, 56 blocks, 1 run, 13968 bytes, entry $8881 (transfer address)
@@ -262,9 +263,10 @@ describe the copy (`pnpm fugloy seadrg01.cmd`, excerpt):
 888D  C3 7F 49      JP 497FH
 ```
 
-Put those two lines under the skeleton that `--write-hints` writes and pass
-the file with `--hints`: the game then decodes at `$497F`, 45% of its bytes
-as code, and the zmac output still rebuilds the original file.
+Put those two lines under the skeleton that `--write-hints` writes, as
+[`seadrg01.hints`](examples/sea-dragon/seadrg01.hints) does, and pass the
+file with `--hints`: the game then decodes at `$497F`, 45% of its bytes as
+code, and the zmac output still assembles to the identical memory image.
 
 ### Hint files
 
@@ -325,8 +327,10 @@ and a jump that lands inside such a line says which line and which hint.
 
 ## Getting ROMs and programs
 
-Fugløy ships no ROMs and no programs: you bring your own. The disassembler
-itself needs no ROM; only the ROM smoke test and the planned emulator do.
+Fugløy ships no ROMs. It ships one program, *Sea Dragon*, which is public
+domain, in [`examples/sea-dragon/`](examples/sea-dragon/); for everything
+else, bring your own. The disassembler itself needs no ROM; only the ROM
+smoke test and the planned emulator do.
 
 - **ROMs.** The [kiwisincebirth/TRS-80-ROMS](https://github.com/kiwisincebirth/TRS-80-ROMS)
   repository holds Model I Level II and Model III ROM images in its
@@ -350,11 +354,15 @@ itself needs no ROM; only the ROM smoke test and the planned emulator do.
 
 ## Sample programs
 
-The programs and ROM images the tests use are never committed: Asylum,
-Volcano Hunter, Voyage of the Valkyrie, Armored Patrol, Space Warp, Sea
-Dragon, Pirate's Adventure, Voodoo Castle, and Deathmaze 5000. Tests that
-need them look in `sample/` or `fixtures/real/`, both gitignored, and skip
-when the files are absent, so the suite passes on a fresh clone and in CI.
+Sea Dragon, in `examples/`, is committed, so the real-program tests run on
+it everywhere, CI included. The other programs and the ROM images the tests
+use stay out of the repo: Asylum, Volcano Hunter, Voyage of the Valkyrie,
+Armored Patrol, Space Warp, Pirate's Adventure, Voodoo Castle, Deathmaze
+5000, Rear Guard, Eliminator, Planetfall, Penetrator, Super Nova, Crazy
+Painter, Crush, Crumble & Chomp, Super Star Trek, and Sea Dragon's build 05,
+whose loader is Zeta Microcomputer Software's. Tests that need them look in
+`sample/` or `fixtures/real/`, both gitignored, and skip when the files are
+absent, so the suite passes on a fresh clone.
 
 ## Conventions
 

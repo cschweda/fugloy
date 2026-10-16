@@ -1,7 +1,8 @@
 /**
- * Locates the copyrighted sample programs, which are never committed. They
- * live in `sample/` (per the plan) or `fixtures/real/` (where they are today),
- * both gitignored, in any subfolder; tests skip when a file is absent.
+ * Locates the real programs the tests run on. Public-domain ones are committed
+ * under `examples/`; the copyrighted ones never are, and live in `sample/` (per
+ * the plan) or `fixtures/real/` (where they are today), both gitignored, in any
+ * subfolder. Tests skip when a file is absent.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -9,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { it } from 'vitest';
 
 const repo = fileURLToPath(new URL('../../../../', import.meta.url));
-const ROOTS = ['sample', 'fixtures/real'].map((d) => join(repo, d));
+const ROOTS = ['examples', 'sample', 'fixtures/real'].map((d) => join(repo, d));
 
 function findIn(dir: string, name: string): string | null {
   for (const entry of readdirSync(dir)) {

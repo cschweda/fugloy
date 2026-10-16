@@ -1,0 +1,12 @@
+# Fugløy hints for seadrg01.cmd: Sea Dragon (Wayne Westmoreland and Terry Gilman, 1982),
+# in the public domain since 1995. Identities from `fugloy --write-hints`.
+#
+# The file loads the game at $5200 and starts at a 15-byte stub at $8881 that copies it down:
+#   LD HL,5200H / LD DE,497FH / LD BC,3681H / LDIR / JP 497FH
+# The two lines at the end are the ones the listing header proposes. With them the game
+# is analyzed at $497F, where it runs, and the zmac output still rebuilds the same image.
+fugloy-hints 1
+program sha256 8fa50e79d9f699e23f5daf41c654fc82c288e4df8816d5aaebd709bce43ed2af
+block 0 length $3690 hash d2d65cca12ac798d    # start $5200
+block 0:$0000 relocate $497F $3681
+block 0:$0000 entry

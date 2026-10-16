@@ -18,7 +18,7 @@ This document is in two parts. **Part 1 (v1)** is the disassembler and workbench
 
 ## Scope, audience, and rights
 
-**Audience.** One user: the author. The workbench may be deployed publicly because it ships no programs, only a tool. Nothing in v1 depends on other people using it; the sharing and registry ideas in Part 2 are conditional on that changing.
+**Audience.** One user: the author. The workbench may be deployed publicly because it ships no copyrighted programs, only a tool and one public-domain game. Nothing in v1 depends on other people using it; the sharing and registry ideas in Part 2 are conditional on that changing.
 
 **What v1 is.** Phases 1–4: a core library, a CLI, and a static web workbench for Model I and Model III programs. v1 is done when a real game (asylum16.cmd) produces a listing with named ROM calls that reassembles to the original memory image, and that listing can be annotated and saved in the browser.
 
@@ -26,7 +26,7 @@ This document is in two parts. **Part 1 (v1)** is the disassembler and workbench
 
 **Kill criteria.** If phase 2 cannot produce a round-trip-clean listing of a synthetic fixture within eight weeks of evenings (the estimate's top end plus a third), the approach is wrong and the project pauses for a redesign rather than proceeding to phase 3. Part 2 starts only after phase 3 produces a readable Asylum listing; if phase 4 is still unfinished after the estimate below has doubled, Part 2 is cut and v1 ships as a CLI.
 
-**Rights.** The code is MIT. The programs used as fixtures (Asylum, Volcano Hunter, Voyage of the Valkyrie, Armored Patrol) are still under copyright and are never committed or distributed; tests that use them skip when they are absent. Published ROM address maps are facts and may be used freely; the Model I and III ROM images are Tandy's and stay out of the repo. For Part 2, a TypeScript translation of a copyrighted game is a derivative work, and a runtime that reimplements ROM routines by reading the ROM is derivative of the ROM. Recompiled commercial games are therefore for personal use unless the rights holder agrees; public bundles are limited to public-domain programs (Super Star Trek is one) and the author's own code. Shipping "no original binary" does not change this and the plan does not pretend it does.
+**Rights.** The code is MIT. The programs used as fixtures (Asylum, Volcano Hunter, Voyage of the Valkyrie, Armored Patrol) are still under copyright and are never committed or distributed; tests that use them skip when they are absent. Public-domain programs are the exception: *Sea Dragon*, which Wayne Westmoreland released into the public domain in 1995, is committed under `examples/sea-dragon/` (every build except the one rebuilt with Zeta's copyrighted OFFSET loader), so anyone can try the tool on a real game and the real-program tests run in CI. Published ROM address maps are facts and may be used freely; the Model I and III ROM images are Tandy's and stay out of the repo. For Part 2, a TypeScript translation of a copyrighted game is a derivative work, and a runtime that reimplements ROM routines by reading the ROM is derivative of the ROM. Recompiled commercial games are therefore for personal use unless the rights holder agrees; public bundles are limited to public-domain programs (Super Star Trek is one) and the author's own code. Shipping "no original binary" does not change this and the plan does not pretend it does.
 
 ## Goals and non-goals
 
@@ -194,7 +194,7 @@ A static Nuxt 4 site running the core library in the browser. Files never leave 
 - **Synthetic .BAS fixtures.** A tokenizer in the test suite builds BASIC programs with and without embedded code, saved from two different base addresses, to test detokenizing, hidden-code detection, address placement, and hint portability.
 - **Image round trip.** Disassemble a fixture, assemble the output with a pinned zmac, load the result, and compare the two **memory images and bitmaps**. This catches label, `ORG`, and operand-encoding mistakes. It does not and cannot compare files.
 - **ROM smoke test.** When a ROM image is present locally, disassemble it and assert the documented entry points decode as code and that descent reaches a minimum fraction of the image. Skipped otherwise.
-- **Real-program snapshots.** A gitignored `sample/` holds the sample programs; expected-output snapshots are committed; tests run when the files are present and skip when not.
+- **Real-program snapshots.** A gitignored `sample/` holds the copyrighted sample programs and `examples/` the committed public-domain ones; expected-output snapshots are committed; tests run when the files are present and skip when not.
 - **Web app.** Component tests for marking and renaming; one Playwright test that drops a fixture, marks a region, exports, and checks the hint file; a render test that scrolls an 8,000-row listing.
 
 ## Phases and estimates
@@ -231,7 +231,7 @@ Total v1: roughly four to five months of spare time. Part 2 is not estimated unt
 - **CLI:** Node, thin wrapper over the core.
 - **Web:** Nuxt 4 with Nuxt UI, pnpm, static generation, no server routes. Netlify.
 - **Tests:** Vitest; Playwright for the browser flow; zmac installed in CI. GitHub Actions.
-- **Repo:** pnpm monorepo. v1 creates `packages/z80` (table and semantics), `packages/disasm` (loaders, passes, IR, emitters), `packages/cli`, `apps/web`, `fixtures/synthetic`. Part 2 adds `packages/emulator`, `packages/recomp`, `packages/runtime`. ROM images and real programs live outside the repo.
+- **Repo:** pnpm monorepo. v1 creates `packages/z80` (table and semantics), `packages/disasm` (loaders, passes, IR, emitters), `packages/cli`, `apps/web`, `fixtures/synthetic`. Part 2 adds `packages/emulator`, `packages/recomp`, `packages/runtime`. ROM images and copyrighted programs live outside the repo; public-domain programs are committed under `examples/`.
 
 **Name and hosting.** The project is **Fugløy** (the island in Voyage of the Valkyrie; spelled `fugloy` in code, repo, and package names). Domain `fugloy.dev`, registered at DNSimple, DNS left at DNSimple with ALIAS for the apex. Layout: `app.fugloy.dev` is the workbench and the primary domain of its Netlify site; `fugloy.dev` and `www.fugloy.dev` are aliases that 301 to it until a landing page exists, at which point the apex moves to its own site. Each exported game (Part 2) gets `<slug>.fugloy.dev`, served either as its own Netlify site or by host-based rewrites from one games site; slugs come from the manifest, are lowercase-hyphenated, and are checked against a reserved list (`app`, `www`, `api`, `docs`, `cdn`, `play`). Because `.dev` is HSTS-preloaded, every hostname is HTTPS-only and redirects are done by Netlify, not by DNS-level URL records. Commercial-game subdomains are password-protected by default (Netlify site password), driven by the manifest's `rights` field; only public-domain titles and the author's own programs are open. Package scope: `@fugloy/*`.
 

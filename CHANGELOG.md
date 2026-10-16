@@ -16,6 +16,10 @@ at its true addresses.
 
 ### Added
 
+- `examples/sea-dragon/`: *Sea Dragon* (Wayne Westmoreland and Terry Gilman,
+  1982), public domain since 1995, in ten `.CMD` builds with a ready hint file
+  for `seadrg01.cmd`. It is the first real program in the repository, so the
+  real-program tests now run on it in CI too.
 - `--color`: the listing in color on a terminal (addresses, bytes,
   mnemonics, registers, numbers, labels, strings, comments, warnings). It
   stays plain when piped, written with `-o`, or with `NO_COLOR` set; zmac
