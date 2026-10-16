@@ -334,8 +334,9 @@ Fugløy ships no ROMs. It ships one program, *Sea Dragon*, which is public
 domain, in [`examples/sea-dragon/`](examples/sea-dragon/); for everything
 else, bring your own. The disassembler itself needs no ROM; only the ROM
 smoke test and the emulator do. The emulator's tests read the ROM paths from
-`fugloy.mcp.json` at the repository root (copy `fugloy.mcp.example.json`), and
-skip without it.
+the file `$FUGLOY_CONFIG` names, else `fugloy.mcp.json` at the repository root
+(copy `fugloy.mcp.example.json`), else `~/.config/fugloy/fugloy.mcp.json`.
+Without one they skip; a config that names a missing ROM fails them.
 
 - **ROMs.** The [kiwisincebirth/TRS-80-ROMS](https://github.com/kiwisincebirth/TRS-80-ROMS)
   repository holds Model I Level II and Model III ROM images in its

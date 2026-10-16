@@ -6,9 +6,9 @@
  * 2.02752 MHz clock and raises the 30 Hz RTC heartbeat interrupt the
  * ROM's clock/cursor services depend on.
  *
- * Rendering is the caller's concern: pass `memory` to a VideoSystem and
- * consult `memory.videoDirty`. Keyboard input goes through
- * `system.keyboard` (attach to a DOM element, or press/release directly).
+ * Rendering is the caller's concern: read `memory.videoRam` (or
+ * `screenText()`) and consult `memory.videoDirty`. Keyboard input goes
+ * through `system.keyboard` (press and release keys directly).
  */
 
 import { Z80CPU } from "../cpu/z80cpu.js";

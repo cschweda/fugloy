@@ -1,5 +1,6 @@
 /**
- * The ROM a test boots, from the `roms` table of fugloy.mcp.json (docs/fugloy-mcp-spec.md §3):
+ * The ROM a test boots, from the `roms` table of fugloy.mcp.json (format: docs/fugloy-mcp-spec.md §3,
+ * which looks in the working directory; tests use the repository root, where pnpm runs them):
  * $FUGLOY_CONFIG (which must exist when set), else fugloy.mcp.json at the repository root, else
  * ~/.config/fugloy/fugloy.mcp.json.
  * A relative path in the file is relative to the file's own folder. No config, or no entry for

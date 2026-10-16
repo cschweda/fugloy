@@ -1,6 +1,6 @@
 # Notice
 
-The files under `src/` come from [cschweda/trs80-emulator](https://github.com/cschweda/trs80-emulator) at commit 11612849c7e4dbbe76a45b38116486223fb05a9a (v1.6.0), moved into this layout in emu phase 0, under this license:
+The files under `src/`, all but `src/index.js`, come from [cschweda/trs80-emulator](https://github.com/cschweda/trs80-emulator) at commit 11612849c7e4dbbe76a45b38116486223fb05a9a (v1.6.0), moved into this layout in emu phase 0, under this license:
 
 ```text
 MIT License

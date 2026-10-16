@@ -170,7 +170,7 @@ export class CassetteSystem {
       memory.writeByte(targetAddress + i, this.tapeData[i]);
     }
 
-    this.log("info", 
+    this.log("info",
       `CLOAD: ${this.tapeLength} bytes at 0x${targetAddress.toString(16)}`
     );
 

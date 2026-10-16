@@ -30,7 +30,8 @@ export function toBase64(bytes) {
 }
 
 export function fromBase64(text) {
-  const clean = text.replace(/=+$/, "");
+  // Whitespace and the URL-safe alphabet are accepted, as the Buffer decoder upstream used them.
+  const clean = text.replace(/\s+/g, "").replace(/-/g, "+").replace(/_/g, "/").replace(/=+$/, "");
   const bytes = new Uint8Array(Math.floor((clean.length * 3) / 4));
   let bits = 0;
   let value = 0;

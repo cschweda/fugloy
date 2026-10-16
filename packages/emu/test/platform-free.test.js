@@ -47,3 +47,9 @@ it('encodes and decodes base64 itself', () => {
     expect(Array.from(fromBase64(text))).toEqual(bytes);
   }
 });
+
+it('decodes base64 as upstream did: whitespace ignored, the URL-safe alphabet accepted', () => {
+  expect(Array.from(fromBase64(' TW\nFu '))).toEqual([0x4d, 0x61, 0x6e]);
+  expect(Array.from(fromBase64('-_8='))).toEqual([0xfb, 0xff]);
+  expect(() => fromBase64('TW*u')).toThrow(/not base64/);
+});

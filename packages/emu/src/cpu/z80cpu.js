@@ -375,7 +375,7 @@ export class Z80CPU {
     const key = prefix ? `${prefix}${opcode}` : opcode;
     if (!this.unimplementedOpcodes.has(key)) {
       this.unimplementedOpcodes.add(key);
-      this.log("warn", 
+      this.log("warn",
         `Unimplemented opcode: ${label} at PC=0x${(this.registers.PC - 1)
           .toString(16)
           .padStart(4, "0")}`
@@ -1647,7 +1647,7 @@ export class Z80CPU {
         default:
           if (!this.unimplementedOpcodes.has(0xcb00 | opcode)) {
             this.unimplementedOpcodes.add(0xcb00 | opcode);
-            this.log("warn", 
+            this.log("warn",
               `Unimplemented CB opcode: 0xCB 0x${opcode
                 .toString(16)
                 .toUpperCase()
@@ -1706,7 +1706,7 @@ export class Z80CPU {
         default:
           if (!this.unimplementedOpcodes.has(0xcb00 | opcode)) {
             this.unimplementedOpcodes.add(0xcb00 | opcode);
-            this.log("warn", 
+            this.log("warn",
               `Unimplemented CB opcode: 0xCB 0x${opcode
                 .toString(16)
                 .toUpperCase()

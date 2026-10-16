@@ -33,7 +33,7 @@ describe.skipIf(rom === null)('the Model III ROM from fugloy.mcp.json', { timeou
     expect(sys.screenText().some((line) => line.startsWith('READY'))).toBe(true);
   });
 
-  it('boots the same way twice: READY at the same T-state, the same screen', () => {
+  it('boots the same way twice: READY within the same 20,000-T-state step, the same screen', () => {
     const a = new TRS80System({ romData: rom });
     const b = new TRS80System({ romData: rom });
     expect(boot(a)).toBe(boot(b));

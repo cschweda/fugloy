@@ -13,6 +13,13 @@ ROM, disk, and program file stayed upstream: rendering and sound belong to the
 workbench, and the caller supplies ROM bytes. Provenance and license:
 [`NOTICE.md`](NOTICE.md).
 
+The core never writes to the console. Pass a logger to see what it reports,
+such as an unimplemented opcode or a tape load:
+`new TRS80System({ romData, log: (level, text) => console[level === 'info' ? 'log' : level](text) })`.
+Without one it stays silent, unlike upstream, which printed warnings;
+`system.cpu.unimplementedOpcodes` still records every opcode it hit and does
+not implement.
+
 - Spec: [`docs/fugloy-emu-spec.md`](../../docs/fugloy-emu-spec.md) (phases 0–7 in §11)
 - Label and coverage file shared with `mcp` and `disasm`: [`docs/label-format.md`](../../docs/label-format.md)
 - ROM images are never bundled or committed; `roms/` here is gitignored and
