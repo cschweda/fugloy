@@ -148,6 +148,12 @@ at its true addresses.
 
 ### Fixed
 
+- `analyze` keeps the reasons it refuses relocations in annotations built
+  without `applyHints` (`Analysis.relocationErrors`, also listed as warnings)
+  instead of dropping those relocations silently.
+- The string heuristic finds a message in a `.BAS` code line that runs up to
+  the line's `00` terminator or ends just before it; the typed line frame no
+  longer blocks it.
 - A BASIC line that leaves `THEN` out of `IF` (`IF A PRINT`, `IF A 100`)
   parses, as the ROM's IF handler at `$2039` allows; such lines were reported
   as machine code (all 59 "code lines" in Super Star Trek were these).

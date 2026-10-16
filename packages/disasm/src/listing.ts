@@ -182,6 +182,7 @@ export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {})
     }
   }
   for (const w of hints?.warnings ?? []) out.push(`; warning: ${w}`);
+  for (const e of analysis.relocationErrors) out.push(`; warning: ${e}`);
   if (mod.format === 'cmd') out.push(...cmdDetails(mod));
   const rootSet = new Set(roots);
   /** After a rebase, an absolute operand into the program's old range still points where the program no longer is. */

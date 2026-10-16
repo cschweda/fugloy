@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { analysisSpace } from '../../src/analysis/relocate.js';
+import { loadCmd } from '../../src/cmd.js';
+import { emptyAnnotations } from '../../src/hints/apply.js';
+import { renderPass1Listing } from '../../src/listing.js';
+import { analyze } from '../../src/pipeline.js';
+import { CMD_FIXTURES } from '../fixtures.js';
 import { image } from '../images.js';
 
 const PAYLOAD = [0xcd, 0x08, 0x50, 0x18, 0x02, 0x00, 0x00, 0xc9, 0x3e, 0x01, 0xc9];
@@ -34,5 +39,19 @@ describe('analysisSpace', () => {
     const { space } = analysisSpace(img(), [{ fileAddr: 0x8000, length: 11, runAddr: 0x8105 }]);
     expect(space.relocations).toEqual([]);
     expect(space.image.runs()).toEqual(img().runs());
+  });
+});
+
+describe('analyze with relocations built directly', () => {
+  it('reports the relocations it refuses instead of dropping them silently', () => {
+    const mod = loadCmd(CMD_FIXTURES['relocated-code']!());
+    const relocations = [{ fileAddr: 0x8000, length: 11, runAddr: 0x8100 }]; // over the loader stub, which stays loaded
+    const a = analyze(mod, { annotations: { ...emptyAnnotations(), relocations } });
+    const { errors } = analysisSpace(mod.image, relocations);
+    expect(errors).toHaveLength(1);
+    expect(a.relocationErrors).toEqual(errors);
+    expect(a.space.relocations).toEqual([]);
+    expect(renderPass1Listing(a)).toContain(`; warning: ${errors[0]}`);
+    expect(analyze(mod, { annotations: { ...emptyAnnotations(), relocations: [{ fileAddr: 0x8000, length: 11, runAddr: 0x5000 }] } }).relocationErrors).toEqual([]);
   });
 });

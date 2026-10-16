@@ -33,10 +33,20 @@ const isData = (k: number): boolean => k === Kind.Byte || k === Kind.Word || k =
  * terminator included. A candidate never includes code or typed bytes, never
  * touches data typed before the scan, and may start at a symbol (`stops`) but
  * never runs through one. The caller types the results as Kind.String.
+ *
+ * `frame` names a .BAS program's line headers, terminators, and end marker:
+ * typed, but no data a string could belong to, so a candidate may sit beside
+ * them, and a line's own 00 may end one without joining it.
  */
-export function findStrings(image: MemoryImage, map: ByteMap, stops: ReadonlySet<number> = new Set()): { addr: number; length: number }[] {
+export function findStrings(
+  image: MemoryImage,
+  map: ByteMap,
+  stops: ReadonlySet<number> = new Set(),
+  frame: (addr: number) => boolean = () => false,
+): { addr: number; length: number }[] {
   const found: { addr: number; length: number }[] = [];
   const free = (a: number): boolean => map.kind(a) === Kind.Unknown;
+  const data = (a: number): boolean => isData(map.kind(a)) && !frame(a);
   for (const run of image.runs()) {
     let a = run.start;
     while (a <= run.end) {
@@ -46,10 +56,11 @@ export function findStrings(image: MemoryImage, map: ByteMap, stops: ReadonlySet
       }
       let b = a + 1;
       while (b <= run.end && free(b) && printable(image.bytes[b]!) && !stops.has(b)) b++;
-      const terminated = b <= run.end && free(b) && TERMINATORS.has(image.bytes[b]!) && !stops.has(b);
-      const touches = (a > run.start && isData(map.kind(a - 1))) || (b < run.end && isData(map.kind(b + 1)));
-      if (terminated && b - a >= MIN_STRING && !touches) {
-        found.push({ addr: a, length: b - a + 1 });
+      const ownTerminator = b <= run.end && free(b) && TERMINATORS.has(image.bytes[b]!) && !stops.has(b);
+      const lineTerminator = b <= run.end && frame(b) && image.bytes[b] === 0x00;
+      const touches = (a > run.start && data(a - 1)) || (ownTerminator && b < run.end && data(b + 1));
+      if ((ownTerminator || lineTerminator) && b - a >= MIN_STRING && !touches) {
+        found.push({ addr: a, length: ownTerminator ? b - a + 1 : b - a });
         a = b + 1;
       } else a = b;
     }
@@ -57,8 +68,11 @@ export function findStrings(image: MemoryImage, map: ByteMap, stops: ReadonlySet
   return found;
 }
 
-/** Three or more consecutive little-endian words in untyped memory, each the address of a decoded instruction. */
-/** `toFile` maps a runtime address back to the file, so a proposal inside a relocated region names its file offset. */
+/**
+ * Three or more consecutive little-endian words in untyped memory, each the
+ * address of a decoded instruction. `toFile` maps a runtime address back to
+ * the file, so a proposal inside a relocated region names its file offset.
+ */
 export function proposeTables(image: MemoryImage, pass1: Pass1, identities: BlockIdentity[], toFile: (runAddr: number) => number | null = (a) => a): TableProposal[] {
   const { map, instructions } = pass1;
   const proposals: TableProposal[] = [];

@@ -4,7 +4,10 @@ import { findStrings, proposeTables } from '../../src/analysis/heuristics.js';
 import { ByteMap, Kind } from '../../src/analysis/map.js';
 import { emptyAnnotations } from '../../src/hints/apply.js';
 import { blockIdentities } from '../../src/hints/identity.js';
+import { loadBas } from '../../src/bas.js';
+import { analyze } from '../../src/pipeline.js';
 import { image } from '../images.js';
+import { writeBasic } from '../writers/basic-tokenizer.js';
 
 const text = (s: string): number[] => Array.from(s, (c) => c.charCodeAt(0));
 
@@ -43,6 +46,22 @@ describe('findStrings', () => {
     const img = image({ 0x7000: [...text('HELLO WORLD'), 0x0d] });
     expect(findStrings(img, new ByteMap(), new Set([0x7006]))).toEqual([{ addr: 0x7006, length: 6 }]);
     expect(findStrings(img, new ByteMap(), new Set([0x7000]))).toEqual([{ addr: 0x7000, length: 12 }]);
+  });
+});
+
+describe('findStrings in a .BAS code line', () => {
+  it('types a message that the line terminator ends, or that ends just before it, despite the typed line frame', () => {
+    const text = (s: string): number[] => Array.from(s, (c) => c.charCodeAt(0));
+    // C9 (RET, or INKEY$ to the BASIC grammar) makes each body a code line whose message descent never reaches.
+    const prog = loadBas(writeBasic([{ number: 10, raw: [0xc9, ...text('HELLO!')] }, { number: 20, raw: [0xc9, ...text('HELLO'), 0x0d] }], 0x6a00));
+    const { map } = analyze(prog).pass1;
+    const kinds = (n: number): Kind[] => {
+      const line = prog.lines.find((l) => l.number === n)!;
+      return Array.from({ length: line.body.length }, (_, i) => map.kind(line.bodyAddr + i));
+    };
+    // RET, the message, and the line's own 00, which stays the line's terminator.
+    expect(kinds(10)).toEqual([Kind.Code, ...Array<Kind>(6).fill(Kind.String), Kind.Byte]);
+    expect(kinds(20)).toEqual([Kind.Code, ...Array<Kind>(6).fill(Kind.String), Kind.Byte]);
   });
 });
 

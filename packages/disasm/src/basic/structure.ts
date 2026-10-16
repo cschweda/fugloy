@@ -13,6 +13,8 @@ export interface BasStructure {
   annotations: Annotations;
   /** Body address → `N text` for every line that parses as BASIC. */
   texts: Map<number, string>;
+  /** Addresses of the frame around the bodies: line headers, terminators, and the end marker. */
+  frame: Set<number>;
 }
 
 const hex4 = (n: number): string => n.toString(16).toUpperCase().padStart(4, '0');
@@ -27,8 +29,13 @@ export function codeLineLabel(line: BasLine): string {
 export function basStructure(prog: BasProgram): BasStructure {
   const annotations = emptyAnnotations();
   const texts = new Map<number, string>();
+  const frame = new Set<number>();
+  const framed = (addr: number, length: number): void => {
+    for (let i = 0; i < length; i++) frame.add((addr + i) & 0xffff);
+  };
   for (const line of prog.lines) {
     annotations.overrides.push({ addr: line.addr, kind: 'words', length: 4 });
+    framed(line.addr, 4);
     const n = line.body.length;
     const terminated = n > 0 && line.body[n - 1] === 0;
     const content = terminated ? n - 1 : n;
@@ -38,8 +45,14 @@ export function basStructure(prog: BasProgram): BasStructure {
     } else {
       annotations.entries.push(line.bodyAddr);
     }
-    if (terminated) annotations.overrides.push({ addr: (line.bodyAddr + content) & 0xffff, kind: 'bytes', length: 1 });
+    if (terminated) {
+      annotations.overrides.push({ addr: (line.bodyAddr + content) & 0xffff, kind: 'bytes', length: 1 });
+      framed(line.bodyAddr + content, 1);
+    }
   }
-  if (prog.lines.length > 0) annotations.overrides.push({ addr: prog.end, kind: 'words', length: 2 });
-  return { annotations, texts };
+  if (prog.lines.length > 0) {
+    annotations.overrides.push({ addr: prog.end, kind: 'words', length: 2 });
+    framed(prog.end, 2);
+  }
+  return { annotations, texts, frame };
 }
