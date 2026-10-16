@@ -36,7 +36,11 @@ importers:
         specifier: workspace:*
         version: link:../z80
 
-  packages/emu: {}
+  packages/emu:
+    devDependencies:
+      '@fugloy/z80':
+        specifier: workspace:*
+        version: link:../z80
 
   packages/mcp:
     dependencies:

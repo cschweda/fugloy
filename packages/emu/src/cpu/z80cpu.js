@@ -731,7 +731,10 @@ export class Z80CPU {
     this.opcodeHandlers[0x8b] = () => this.adcA(this.registers.E);
     this.opcodeHandlers[0x8c] = () => this.adcA(this.registers.H);
     this.opcodeHandlers[0x8d] = () => this.adcA(this.registers.L);
-    this.opcodeHandlers[0x8e] = () => this.adcA(this.readMemory(this.HL));
+    this.opcodeHandlers[0x8e] = () => {
+      this.adcA(this.readMemory(this.HL));
+      return 7;
+    };
 
     // SBC A, r (0x9F-0x9E)
     this.opcodeHandlers[0x9f] = () => this.sbcA(this.registers.A);
@@ -741,7 +744,10 @@ export class Z80CPU {
     this.opcodeHandlers[0x9b] = () => this.sbcA(this.registers.E);
     this.opcodeHandlers[0x9c] = () => this.sbcA(this.registers.H);
     this.opcodeHandlers[0x9d] = () => this.sbcA(this.registers.L);
-    this.opcodeHandlers[0x9e] = () => this.sbcA(this.readMemory(this.HL));
+    this.opcodeHandlers[0x9e] = () => {
+      this.sbcA(this.readMemory(this.HL));
+      return 7;
+    };
 
     // SUB A, (HL) (0x96)
     this.opcodeHandlers[0x96] = () => {
@@ -757,7 +763,10 @@ export class Z80CPU {
     this.opcodeHandlers[0xa3] = () => this.andA(this.registers.E);
     this.opcodeHandlers[0xa4] = () => this.andA(this.registers.H);
     this.opcodeHandlers[0xa5] = () => this.andA(this.registers.L);
-    this.opcodeHandlers[0xa6] = () => this.andA(this.readMemory(this.HL));
+    this.opcodeHandlers[0xa6] = () => {
+      this.andA(this.readMemory(this.HL));
+      return 7;
+    };
 
     // XOR r (0xA8-0xAF)
     this.opcodeHandlers[0xaf] = () => this.xorA(this.registers.A);
@@ -767,7 +776,10 @@ export class Z80CPU {
     this.opcodeHandlers[0xab] = () => this.xorA(this.registers.E);
     this.opcodeHandlers[0xac] = () => this.xorA(this.registers.H);
     this.opcodeHandlers[0xad] = () => this.xorA(this.registers.L);
-    this.opcodeHandlers[0xae] = () => this.xorA(this.readMemory(this.HL));
+    this.opcodeHandlers[0xae] = () => {
+      this.xorA(this.readMemory(this.HL));
+      return 7;
+    };
 
     // OR r (0xB0-0xB7)
     this.opcodeHandlers[0xb7] = () => this.orA(this.registers.A);
@@ -777,7 +789,10 @@ export class Z80CPU {
     this.opcodeHandlers[0xb3] = () => this.orA(this.registers.E);
     this.opcodeHandlers[0xb4] = () => this.orA(this.registers.H);
     this.opcodeHandlers[0xb5] = () => this.orA(this.registers.L);
-    this.opcodeHandlers[0xb6] = () => this.orA(this.readMemory(this.HL));
+    this.opcodeHandlers[0xb6] = () => {
+      this.orA(this.readMemory(this.HL));
+      return 7;
+    };
 
     // LD r, r (0x40-0x7F) - register-to-register transfers
     // Pattern: 0x40 | (dest << 3) | src
@@ -915,7 +930,10 @@ export class Z80CPU {
     this.opcodeHandlers[0xbb] = () => this.subA(this.registers.E, true);
     this.opcodeHandlers[0xbc] = () => this.subA(this.registers.H, true);
     this.opcodeHandlers[0xbd] = () => this.subA(this.registers.L, true);
-    this.opcodeHandlers[0xbe] = () => this.subA(this.readMemory(this.HL), true);
+    this.opcodeHandlers[0xbe] = () => {
+      this.subA(this.readMemory(this.HL), true);
+      return 7;
+    };
 
     // INC (HL) (0x34)
     this.opcodeHandlers[0x34] = () => {
