@@ -1,4 +1,5 @@
 import { expect } from 'vitest';
+import { dbString } from '../../src/emit/strings.js';
 import { assemble, skipIfNoZmac } from './zmac.js';
 
 const test = skipIfNoZmac();
@@ -22,4 +23,13 @@ test('reports zmac errors with the offending source', () => {
 
 test('treats a zmac warning as a failure, since an unknown mnemonic becomes a silent label', () => {
   expect(() => assemble('\tbogus\n')).toThrow(/zmac failed[\s\S]*treated as label[\s\S]*bogus/);
+});
+
+test('assembles quoted DB rows byte for byte: doubled quotes, semicolons, backslashes, short and long runs', () => {
+  const text = (s: string): number[] => Array.from(s, (c) => c.charCodeAt(0));
+  const rows = [[...text("IT'S"), 0x0d], [...text('A;B "Q" \\N'), 0x00], text("'"), text('A'), text('AB'), [0x80, ...text('xyz'), 0x03], [...text('ABCDEFGHIJKLMNOPQRSTUVWXYZ'), 0x0d]];
+  const bytes = rows.flat();
+  const { module } = assemble(`\tORG\t7000H\n${rows.map((r) => dbString(r)).join('\n')}\n\tEND\n`);
+  expect(Array.from(module.image.bytes.subarray(0x7000, 0x7000 + bytes.length))).toEqual(bytes);
+  expect(module.image.runs()).toEqual([{ start: 0x7000, end: 0x7000 + bytes.length - 1, length: bytes.length }]);
 });

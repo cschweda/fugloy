@@ -135,7 +135,8 @@ describe('renderPass1Listing with hints and symbols', () => {
     expect(lines).toContain('6044  BB AA         DW 0AABBH');
     expect(lines).toContain('FLAGS:');
     expect(lines).toContain('6050  01 02 03 04   DB 01H,02H,03H,04H');
-    expect(lines).toContain('6054  48 45 4C 4C   DB 48H,45H,4CH,4CH');
+    expect(lines).toContain("6054  48 45 4C 4C   DB 'HELL'"); // a string hint lists quoted
+    expect(lines).toContain("6058  4F 0D         DB 'O',0DH");
     expect(lines).toContain('605A  FF            DB 0FFH');
   });
 
@@ -203,5 +204,34 @@ describe('renderPass1Listing on a .BAS program', () => {
     const lines = [{ number: 1, text: 'END' }, ...Array.from({ length: 10 }, (_, i) => ({ number: i + 2, raw: [0xc9] }))];
     const text = renderPass1Listing(analyze(loadBas(writeBasic(lines, 0x7000))));
     expect(text).toContain('; pass 1: roots $700A, $7010, $7016, $701C, $7022, $7028, $702E, $7034 and 2 more;');
+  });
+});
+
+describe('strings and proposals', () => {
+  const text = (s: string): number[] => Array.from(s, (c) => c.charCodeAt(0));
+  // LD HL,7004H / RET, then the text it points at.
+  const greeting = () => loadRaw(Uint8Array.from([0x21, 0x04, 0x70, 0xc9, ...text("IT'S HI"), 0x0d]), 0x7000);
+
+  it('types a terminated printable run as a string and lists it quoted, four bytes a row', () => {
+    const a = analyze(greeting());
+    expect(a.pass1.map.kind(0x7004)).toBe(Kind.String);
+    const lines = renderPass1Listing(a).split('\n');
+    const at = lines.indexOf('DATA_7004:');
+    expect(lines.slice(at, at + 3)).toEqual(['DATA_7004:', row('7004', "49 54 27 53", "DB 'IT''S'"), row('7008', '20 48 49 0D', "DB ' HI',0DH")]);
+  });
+
+  it('lets a string hint win, and never overrides a bytes hint', () => {
+    const asString = analyze(greeting(), { annotations: { ...emptyAnnotations(), overrides: [{ addr: 0x7004, kind: 'string', length: 3 }] } });
+    expect([0x7004, 0x7006, 0x7007].map((x) => asString.pass1.map.kind(x))).toEqual([Kind.String, Kind.String, Kind.Unknown]);
+    const asBytes = analyze(greeting(), { annotations: { ...emptyAnnotations(), overrides: [{ addr: 0x7004, kind: 'bytes', length: 8 }] } });
+    expect(asBytes.pass1.map.kind(0x7004)).toBe(Kind.Byte);
+  });
+
+  it('names a proposed table in the header with the hint line that declares it, and applies nothing', () => {
+    const mod = loadRaw(Uint8Array.from([0xc9, 0xc9, 0xc9, 0, 0, 0, 0, 0, 0, 0, 0x00, 0x70, 0x01, 0x70, 0x02, 0x70, 0x00, 0x00]), 0x7000);
+    const a = analyze(mod, { entries: [0x7001, 0x7002] });
+    expect(a.proposals).toEqual([{ kind: 'table', addr: 0x700a, count: 3, hint: 'block 0:$000A table 3 2' }]);
+    expect(a.pass1.map.kind(0x700a)).toBe(Kind.Unknown);
+    expect(renderPass1Listing(a)).toContain('\n; proposed table at $700A, 3 entries, all in code; declare with: block 0:$000A table 3 2\n');
   });
 });

@@ -102,7 +102,7 @@ describe('emitZmac with symbols', () => {
     expect(text).toContain('PRINT:\n\tLD\tA,41H\n\tCALL\t0033H\n\tRET\n');
     expect(text).toContain('DISPATCH:\n\tDW\tL6019,L601B\n');
     expect(text).toContain('DATA_6040:\n\tDW\t1234H,5678H,0AABBH\n');
-    expect(text).toContain('FLAGS:\n\tDB\t01H,02H,03H,04H\n\tDB\t48H,45H,4CH,4CH,4FH,0DH\n\tDB\t0FFH\n');
+    expect(text).toContain("FLAGS:\n\tDB\t01H,02H,03H,04H\n\tDB\t'HELLO',0DH\n\tDB\t0FFH\n"); // the string hint emits quoted
     expect(text.trimEnd().endsWith('\tEND\t6000H')).toBe(true);
   });
 });

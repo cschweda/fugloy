@@ -8,6 +8,7 @@
  * resolve to the same values, so labels never change bytes.
  */
 import { hexByte, hexWord } from '@fugloy/z80';
+import { dbString } from './strings.js';
 import type { Instruction } from '@fugloy/z80';
 import type { Pass1 } from '../analysis/descent.js';
 import { Kind } from '../analysis/map.js';
@@ -82,6 +83,14 @@ export function emitZmac(image: MemoryImage, pass1: Pass1, entry: number | null,
       }
       // A data row: same kind throughout, cut at symbols, comments, instructions, typed-region starts, and the run end.
       const kind = map.kind(addr);
+      if (kind === Kind.String) {
+        let n = 1;
+        while (addr + n <= run.end && !startsRow(addr + n) && map.kind(addr + n) === Kind.String) n++;
+        const [first, ...rest] = dbString(image.bytes.subarray(addr, addr + n)).split('\n');
+        out.push(withComment(addr, first!), ...rest);
+        addr += n;
+        continue;
+      }
       let n = 1;
       while (addr + n <= run.end && n < ROW_BYTES && !startsRow(addr + n) && map.kind(addr + n) === kind) n++;
       let line: string;

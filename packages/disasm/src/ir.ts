@@ -10,7 +10,7 @@ import { basicBlocks, regions } from './analysis/regions.js';
 import type { BasicBlock, Region } from './analysis/regions.js';
 import type { BasProgram } from './bas.js';
 import type { CmdModule } from './cmd.js';
-import type { Analysis, HintsSummary } from './pipeline.js';
+import type { Analysis, HintsSummary, Proposal } from './pipeline.js';
 import type { RawModule } from './raw.js';
 
 export type Module = CmdModule | BasProgram | RawModule;
@@ -32,10 +32,12 @@ export interface Ir {
   diagnostics: Diagnostic[];
   /** Pass 2 symbols in address order; empty when no analysis was supplied. */
   symbols: Symbol[];
+  /** Heuristic suggestions with their hint lines; none are applied. */
+  proposals: Proposal[];
   hints?: HintsSummary;
 }
 
-export function buildIr(mod: Module, pass1: Pass1, source?: string, analysis?: Pick<Analysis, 'symbols' | 'hints' | 'entries'>): Ir {
+export function buildIr(mod: Module, pass1: Pass1, source?: string, analysis?: Pick<Analysis, 'symbols' | 'hints' | 'entries' | 'proposals'>): Ir {
   return {
     fugloyIr: 1,
     ...(source === undefined ? {} : { source }),
@@ -51,6 +53,7 @@ export function buildIr(mod: Module, pass1: Pass1, source?: string, analysis?: P
     indirectJumps: pass1.indirectJumps,
     diagnostics: pass1.diagnostics,
     symbols: analysis?.symbols.list() ?? [],
+    proposals: analysis?.proposals ?? [],
     ...(analysis?.hints === undefined ? {} : { hints: analysis.hints }),
   };
 }

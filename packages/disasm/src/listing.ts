@@ -7,6 +7,7 @@ import { renderInstruction } from './emit/operands.js';
 import { Kind } from './analysis/map.js';
 import type { BasProgram } from './bas.js';
 import { codeLineLabel } from './basic/structure.js';
+import { dbItems } from './emit/strings.js';
 import type { CmdModule } from './cmd.js';
 import type { MemoryImage } from './memory.js';
 import type { RawModule } from './raw.js';
@@ -161,6 +162,9 @@ export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {})
     out.push(`; symbol ${s.name} = ${$(s.addr)} (inside the instruction at ${$(owner)})`);
   }
   for (const d of pass1.diagnostics) out.push(`; note: ${d.message}`);
+  for (const p of analysis.proposals) {
+    out.push(`; proposed table at ${$(p.addr)}, ${p.count} entries, all in code; declare with: ${p.hint}`);
+  }
   for (const w of hints?.warnings ?? []) out.push(`; warning: ${w}`);
   if (mod.format === 'cmd') out.push(...cmdDetails(mod));
   const rootSet = new Set(roots);
@@ -197,6 +201,8 @@ export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {})
           words.push(symbols.get(value)?.name ?? hexWord(value));
         }
         text = `DW ${words.join(',')}`;
+      } else if (kind === Kind.String) {
+        text = `DB ${dbItems(image.bytes.subarray(addr, addr + n))}`;
       } else {
         text = `DB ${Array.from(image.bytes.subarray(addr, addr + n), hexByte).join(',')}`;
       }

@@ -57,3 +57,11 @@ describe('buildIr for a .BAS program', () => {
     expect(buildIr(mod, analyze(mod).pass1, 'x.cmd', analyze(mod)).entries).toEqual([]);
   });
 });
+
+describe('buildIr proposals', () => {
+  it('carries table proposals without applying them', () => {
+    const mod = loadRaw(Uint8Array.from([0xc9, 0xc9, 0xc9, 0, 0, 0, 0, 0, 0, 0, 0x00, 0x70, 0x01, 0x70, 0x02, 0x70, 0x00, 0x00]), 0x7000);
+    const a = analyze(mod, { entries: [0x7001, 0x7002] });
+    expect(buildIr(mod, a.pass1, 't.bin', a).proposals).toEqual([{ kind: 'table', addr: 0x700a, count: 3, hint: 'block 0:$000A table 3 2' }]);
+  });
+});

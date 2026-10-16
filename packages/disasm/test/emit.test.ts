@@ -4,6 +4,7 @@ import { recursiveDescent } from '../src/analysis/descent.js';
 import { loadBas } from '../src/bas.js';
 import { emitZmac, instructionLine } from '../src/emit/zmac.js';
 import { analyze } from '../src/pipeline.js';
+import { loadRaw } from '../src/raw.js';
 import { BAS_FIXTURES } from './fixtures.js';
 import { image } from './images.js';
 
@@ -99,5 +100,14 @@ describe('emitZmac on a .BAS program', () => {
 
   it('puts a long BASIC line\'s text on the first DB row of its body', () => {
     expect(emit('prog-62c8')).toContain('\tORG\t62C8H\n\tDW\t62E8H,000AH\n\tDB\t84H,3AH,0B2H,22H,56H,4FH,59H,41H\t; 10 CLS:PRINT"VOYAGE OF THE VALKYRIE"\n');
+  });
+});
+
+describe('emitZmac with strings', () => {
+  it('emits a typed string as a quoted DB row under its label', () => {
+    const text = (s: string): number[] => Array.from(s, (c) => c.charCodeAt(0));
+    const mod = loadRaw(Uint8Array.from([0x21, 0x04, 0x70, 0xc9, ...text("IT'S HI"), 0x0d]), 0x7000);
+    const a = analyze(mod);
+    expect(emitZmac(mod.image, a.pass1, a.transfer, { symbols: a.symbols, annotations: a.annotations })).toContain("\tRET\nDATA_7004:\n\tDB\t'IT''S HI',0DH\n");
   });
 });
