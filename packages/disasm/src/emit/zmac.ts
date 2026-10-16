@@ -1,14 +1,21 @@
 /**
- * zmac source emitter for Pass 1: one ORG per loaded run, instructions with
- * absolute operands in zmac spelling, everything else as DB rows, and END
- * with the entry. Every instruction line assembles back to its own bytes
- * under the pinned zmac (test/roundtrip/table.test.ts proves it for all 1792
- * encodings); the few encodings zmac re-spells are emitted as DB.
+ * zmac source emitter: one ORG per loaded run, instructions in zmac spelling
+ * with symbol names where Pass 2 has them, data as DB or DW rows, labels on
+ * their own lines (EQU when a symbol falls inside an instruction), hint
+ * comments, and END with the file's own transfer address. Every instruction
+ * line assembles back to its own bytes under the pinned zmac
+ * (test/roundtrip/table.test.ts proves it for all 1792 encodings); symbols
+ * resolve to the same values, so labels never change bytes.
  */
-import { formatInstruction, hexByte, hexWord } from '@fugloy/z80';
+import { hexByte, hexWord } from '@fugloy/z80';
 import type { Instruction } from '@fugloy/z80';
 import type { Pass1 } from '../analysis/descent.js';
+import { Kind } from '../analysis/map.js';
+import type { SymbolTable } from '../analysis/symbols.js';
+import { emptyAnnotations } from '../hints/apply.js';
+import type { Annotations } from '../hints/apply.js';
 import type { MemoryImage } from '../memory.js';
+import { renderOperands } from './operands.js';
 
 /**
  * Encodings the pinned zmac assembles to different (shorter) bytes, keyed by
@@ -22,47 +29,74 @@ export interface EmitOptions {
   source?: string;
   /** Append `; 6000H` to each instruction line (off by default: noise for the round trip). */
   addresses?: boolean;
+  /** Pass 2 symbols: label lines, EQU for symbols inside instructions, names in operands and DW rows. */
+  symbols?: SymbolTable;
+  /** Hint comments appended to the row at their address. */
+  annotations?: Annotations;
 }
 
 const hex2 = (n: number): string => n.toString(16).toUpperCase().padStart(2, '0');
 const key = (ins: Instruction): string => ins.bytes.slice(0, 2).map(hex2).join('');
 const dbRow = (bytes: number[]): string => `\tDB\t${bytes.map(hexByte).join(',')}`;
+const ROW_BYTES = 8;
 
 /** `\tLD\tHL,3C00H`, or a DB row for undocumented forms and byte-exact exceptions. */
-export function instructionLine(ins: Instruction): string {
+export function instructionLine(ins: Instruction, symbols?: SymbolTable): string {
   if (ins.mnemonic === 'DB' || BYTE_EXACT_EXCEPTIONS.has(key(ins))) return dbRow(ins.bytes);
-  const text = formatInstruction(ins);
-  const space = text.indexOf(' ');
-  return space < 0 ? `\t${text}` : `\t${text.slice(0, space)}\t${text.slice(space + 1)}`;
+  const operands = renderOperands(ins, symbols);
+  return operands === '' ? `\t${ins.mnemonic}` : `\t${ins.mnemonic}\t${operands}`;
 }
 
 export function emitZmac(image: MemoryImage, pass1: Pass1, entry: number | null, opts: EmitOptions = {}): string {
+  const { symbols } = opts;
+  const annotations = opts.annotations ?? emptyAnnotations();
+  const { map, instructions } = pass1;
   const runs = image.runs();
   const loaded = runs.reduce((n, r) => n + r.length, 0);
   const out: string[] = [
     `; ${opts.source === undefined ? '' : `${opts.source}: `}Fugløy pass 1, ${runs.length} run${runs.length === 1 ? '' : 's'}, ${loaded} bytes, ${entry === null ? 'no entry' : `entry ${hexWord(entry)}`}`,
   ];
+  if (symbols !== undefined) {
+    for (const s of symbols.list()) if (map.kind(s.addr) === Kind.Tail) out.push(`${s.name}\tEQU\t${hexWord(s.addr)}`);
+  }
+  const withComment = (addr: number, line: string): string => {
+    const text = annotations.comments.get(addr);
+    return text === undefined ? line : `${line}\t; ${text}`;
+  };
+  const startsRow = (addr: number): boolean => (symbols?.has(addr) ?? false) || annotations.comments.has(addr) || instructions.has(addr);
+
   for (const run of runs) {
     out.push(`\tORG\t${hexWord(run.start)}`);
-    let pending: number[] = [];
-    const flush = (): void => {
-      for (let i = 0; i < pending.length; i += 8) out.push(dbRow(pending.slice(i, i + 8)));
-      pending = [];
-    };
     let addr = run.start;
     while (addr <= run.end) {
-      const ins = pass1.instructions.get(addr);
+      const symbol = symbols?.get(addr);
+      if (symbol !== undefined && map.kind(addr) !== Kind.Tail) out.push(`${symbol.name}:`);
+      const ins = instructions.get(addr);
       if (ins !== undefined) {
-        flush();
-        out.push(opts.addresses === true ? `${instructionLine(ins)}\t; ${hexWord(addr)}` : instructionLine(ins));
+        const line = instructionLine(ins, symbols);
+        out.push(withComment(addr, opts.addresses === true ? `${line}\t; ${hexWord(addr)}` : line));
         addr += ins.length;
-      } else {
-        pending.push(image.bytes[addr]!);
-        if (pending.length === 8) flush();
-        addr++;
+        continue;
       }
+      // A data row: same kind throughout, cut at symbols, comments, instructions, and the run end.
+      const kind = map.kind(addr);
+      let n = 1;
+      while (addr + n <= run.end && n < ROW_BYTES && !startsRow(addr + n) && map.kind(addr + n) === kind) n++;
+      let line: string;
+      if (kind === Kind.Word && n >= 2) {
+        if (n % 2 === 1) n--;
+        const words: string[] = [];
+        for (let i = 0; i < n; i += 2) {
+          const value = image.bytes[addr + i]! | (image.bytes[addr + i + 1]! << 8);
+          words.push(symbols?.get(value)?.name ?? hexWord(value));
+        }
+        line = `\tDW\t${words.join(',')}`;
+      } else {
+        line = dbRow(Array.from(image.bytes.subarray(addr, addr + n)));
+      }
+      out.push(withComment(addr, line));
+      addr += n;
     }
-    flush();
   }
   out.push(entry === null ? '\tEND' : `\tEND\t${hexWord(entry)}`);
   return `${out.join('\n')}\n`;

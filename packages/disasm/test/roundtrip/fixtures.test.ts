@@ -14,7 +14,7 @@ for (const [name, make] of Object.entries(CMD_FIXTURES)) {
   test(`cmd/${name} round-trips through zmac to the same image, bitmap, and entry`, () => {
     const mod = loadCmd(make());
     const a = analyze(mod);
-    const { module: back } = assemble(emitZmac(mod.image, a.pass1, a.transfer, { source: name }));
+    const { module: back } = assemble(emitZmac(mod.image, a.pass1, a.transfer, { source: name, symbols: a.symbols, annotations: a.annotations }));
     expectSameImage(back.image, mod.image);
     // zmac writes an 02 record only for END with an address; a file that had none (or an 03) reloads with the lowest address.
     expect(back.entrySource).toBe(mod.entrySource === 'transfer' ? 'transfer' : 'lowest');
@@ -26,7 +26,7 @@ for (const [name, make] of Object.entries(BAS_FIXTURES)) {
   test(`bas/${name} round-trips as DB with a bare END`, () => {
     const prog = loadBas(make());
     const a = analyze(prog);
-    const source = emitZmac(prog.image, a.pass1, a.transfer, { source: name });
+    const source = emitZmac(prog.image, a.pass1, a.transfer, { source: name, symbols: a.symbols, annotations: a.annotations });
     expect(source.trimEnd().endsWith('\tEND')).toBe(true);
     expectSameImage(assemble(source).module.image, prog.image);
   });
@@ -41,7 +41,7 @@ for (const [name, base, bytes] of RAW) {
   test(`raw/${name} round-trips from its base with the entry there`, () => {
     const mod = loadRaw(Uint8Array.from(bytes), base);
     const a = analyze(mod);
-    const { module: back } = assemble(emitZmac(mod.image, a.pass1, a.transfer, { source: name }));
+    const { module: back } = assemble(emitZmac(mod.image, a.pass1, a.transfer, { source: name, symbols: a.symbols, annotations: a.annotations }));
     expectSameImage(back.image, mod.image);
     expect(back.entry).toBe(base);
   });

@@ -1,0 +1,15 @@
+# Fugløy hints. Numbers: $hex or decimal. Offsets are relative to a block.
+fugloy-hints 1
+program sha256 3f96010c552e7213d2c2f087ab91330f4f62747b5b88c66ff785fc697223b4f6
+block 0 length $005B hash 346b19b103b96ff1    # start $6000
+block 0:$0000 comment entry: call PRINT then dispatch through the table
+block 0:$0001 name MIDCALL
+block 0:$001C nocode
+block 0:$0020 name PRINT
+block 0:$0030 table 2 2
+block 0:$0030 name DISPATCH
+block 0:$0040 words $0006
+block 0:$0050 bytes $0004
+block 0:$0050 name FLAGS
+block 0:$0054 string
+block 0:$005A words $0001

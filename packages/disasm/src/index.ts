@@ -40,3 +40,4 @@ export { applyHints, emptyAnnotations } from './hints/apply.js';
 export type { Annotations, Applied, Override, OverrideKind, TableHint } from './hints/apply.js';
 export { dataReference, SymbolTable, synthesizeSymbols } from './analysis/symbols.js';
 export type { Symbol, SymbolKind } from './analysis/symbols.js';
+export { renderInstruction, renderOperands } from './emit/operands.js';

@@ -23,7 +23,7 @@ for (const file of CMD_FILES) {
     const mod = loadCmd(readSample(file));
     const a = analyze(mod);
     expect(a.pass1.instructions.size).toBeGreaterThan(0);
-    const { module: back } = assemble(emitZmac(mod.image, a.pass1, a.transfer, { source: file }));
+    const { module: back } = assemble(emitZmac(mod.image, a.pass1, a.transfer, { source: file, symbols: a.symbols, annotations: a.annotations }));
     expectSameImage(back.image, mod.image);
     expect(back.entry).toBe(mod.entry);
   });
@@ -33,6 +33,6 @@ for (const file of listSamples((n) => /^valkyr.*\.bas$/i.test(n))) {
   when(file)(`${file}: emitted as DB, zmac reproduces the image`, () => {
     const prog = loadBas(readSample(file));
     const a = analyze(prog);
-    expectSameImage(assemble(emitZmac(prog.image, a.pass1, a.transfer, { source: file })).module.image, prog.image);
+    expectSameImage(assemble(emitZmac(prog.image, a.pass1, a.transfer, { source: file, symbols: a.symbols, annotations: a.annotations })).module.image, prog.image);
   });
 }
