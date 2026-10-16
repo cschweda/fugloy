@@ -2,12 +2,17 @@
  * Pass 1: recursive descent from the entry points. Decodes linearly from each
  * root, follows every statically known jump, call, and RST target, queues both
  * arms of conditional branches, and ends a path at returns, indirect jumps,
- * unconditional jumps, and HALT. Unreached bytes stay Unknown; targets outside
- * loaded memory are external references (ROM); the first decode of any byte
- * wins and later paths that would overlap it stop with a diagnostic.
+ * unconditional jumps, HALT, and `nocode` hints. Annotations are applied
+ * first and win: typed regions are data to descent, declared tables seed it,
+ * forced code regions decode before anything else. Unreached bytes stay
+ * Unknown; targets outside loaded memory are external references (ROM); the
+ * first decode of any byte wins and later paths that would overlap it stop
+ * with a diagnostic.
  */
 import { decode } from '@fugloy/z80';
 import type { Instruction } from '@fugloy/z80';
+import { emptyAnnotations } from '../hints/apply.js';
+import type { Annotations } from '../hints/apply.js';
 import type { MemoryImage } from '../memory.js';
 import { ByteMap, Kind } from './map.js';
 
@@ -19,7 +24,7 @@ export interface Xref {
   kind: XrefKind;
 }
 
-export type DiagnosticKind = 'overlap' | 'inside-instruction' | 'in-data' | 'truncated' | 'unloaded-root';
+export type DiagnosticKind = 'overlap' | 'inside-instruction' | 'in-data' | 'truncated' | 'unloaded-root' | 'nocode';
 
 export interface Diagnostic {
   kind: DiagnosticKind;
@@ -78,84 +83,125 @@ function ownerOf(map: ByteMap, addr: number): number {
   return addr;
 }
 
-function firstCode(map: ByteMap, addr: number, length: number): number {
-  for (let i = 0; i < length; i++) if (map.isCode(addr + i)) return (addr + i) & 0xffff;
-  return addr & 0xffff;
-}
-
 interface WorkItem {
   addr: number;
   from?: number;
 }
 
-export function recursiveDescent(image: MemoryImage, rootsIn: number[]): Pass1 {
+export function recursiveDescent(image: MemoryImage, rootsIn: number[], annotations: Annotations = emptyAnnotations()): Pass1 {
   const map = new ByteMap();
   const instructions = new Map<number, Instruction>();
   const xrefs: Xref[] = [];
   const externals = new Set<number>();
   const indirectJumps: number[] = [];
   const diagnostics: Diagnostic[] = [];
-  const roots = [...new Set(rootsIn.map((r) => r & 0xffff))];
+  const nocode = new Set<number>();
   const work: WorkItem[] = [];
   const diagnose = (kind: DiagnosticKind, addr: number, message: string, from?: number): void => {
     diagnostics.push(from === undefined ? { kind, addr, message } : { kind, addr, from, message });
   };
-
-  for (const r of roots) {
-    if (image.isLoaded(r)) work.push({ addr: r });
-    else diagnose('unloaded-root', r, `entry ${$(r)} is not in loaded memory`);
-  }
-
   const transfer = (from: number, to: number, kind: XrefKind): void => {
     xrefs.push({ from, to, kind });
     if (image.isLoaded(to)) work.push({ addr: to, from });
     else externals.add(to);
   };
 
+  // 1. Overrides first: they win over anything descent would decide.
+  for (const o of annotations.overrides) {
+    if (o.kind === 'nocode') nocode.add(o.addr);
+    else if (o.kind === 'bytes') map.mark(o.addr, o.length, Kind.Byte);
+    else if (o.kind === 'words') map.mark(o.addr, o.length, Kind.Word);
+    else if (o.kind === 'string') map.mark(o.addr, o.length, Kind.String);
+  }
+  // 2. Tables: typed as words; their loaded entries become roots after the explicit ones.
+  const tableTargets: { from: number; to: number }[] = [];
+  for (const t of annotations.tables) {
+    map.mark(t.addr, t.count * t.width, Kind.Word);
+    for (let i = 0; i < t.count; i++) {
+      const at = (t.addr + i * t.width) & 0xffff;
+      const lo = image.read(at);
+      const hi = image.read(at + 1);
+      if (lo === undefined || hi === undefined) break;
+      tableTargets.push({ from: at, to: lo | (hi << 8) });
+    }
+  }
+  // 3. Roots, in the caller's order, then table targets.
+  const roots = [...new Set(rootsIn.map((r) => r & 0xffff))];
+  for (const r of roots) {
+    if (image.isLoaded(r)) work.push({ addr: r });
+    else diagnose('unloaded-root', r, `entry ${$(r)} is not in loaded memory`);
+  }
+  for (const { from, to } of tableTargets) transfer(from, to, 'jump');
+
+  /** Decodes one instruction at `addr` and records it; null when the path cannot continue there. */
+  const decodeOne = (addr: number, from?: number): { ins: Instruction; next: number } | null => {
+    if (!image.isLoaded(addr) || map.isStart(addr)) return null;
+    if (nocode.has(addr)) {
+      diagnose('nocode', addr, `path ends at ${$(addr)} (nocode hint)`, from);
+      return null;
+    }
+    const kind = map.kind(addr);
+    if (kind === Kind.Tail) {
+      diagnose('inside-instruction', addr, `target ${$(addr)} is inside the instruction at ${$(ownerOf(map, addr))}`, from);
+      return null;
+    }
+    if (kind !== Kind.Unknown) {
+      diagnose('in-data', addr, `target ${$(addr)} is typed as data`, from);
+      return null;
+    }
+    const ins = decode((i) => image.read(addr + i), addr);
+    if (ins.truncated === true) {
+      map.markByte(addr, 1);
+      diagnose('truncated', addr, `instruction at ${$(addr)} runs past loaded memory`);
+      return null;
+    }
+    const typed = map.firstTyped(addr, ins.length);
+    if (typed !== null) {
+      diagnose('overlap', addr, `instruction at ${$(addr)} would overlap ${map.isCode(typed) ? 'code' : 'data'} at ${$(typed)}`);
+      return null;
+    }
+    map.markCode(addr, ins.length);
+    instructions.set(addr, ins);
+    let next = (addr + ins.length) & 0xffff;
+    const target = targetOf(ins);
+    if (target !== null) {
+      if (ins.flow.kind === 'call') transfer(addr, target, ins.operands[0]?.kind === 'rst' ? 'rst' : ins.flow.conditional ? 'ccall' : 'call');
+      else transfer(addr, target, ins.flow.conditional ? 'cjump' : 'jump');
+    }
+    if (ins.flow.kind === 'jump' && ins.flow.indirect) indirectJumps.push(addr);
+    if (isRst08(ins) && image.isLoaded(next)) {
+      if (map.isCode(next)) diagnose('overlap', addr, `inline byte after RST 08H at ${$(addr)} is already code at ${$(next)}`);
+      else {
+        if (map.kind(next) === Kind.Unknown) map.markByte(next, 1);
+        next = (next + 1) & 0xffff;
+      }
+    }
+    return { ins, next };
+  };
+
+  // 4. Forced code regions decode linearly, flow ignored, before the worklist.
+  for (const o of annotations.overrides) {
+    if (o.kind !== 'code' || o.length === 0) continue;
+    let a = o.addr;
+    const end = o.addr + o.length;
+    while (a < end) {
+      if (map.kind(a & 0xffff) !== Kind.Unknown || !image.isLoaded(a)) { a++; continue; }
+      const r = decodeOne(a & 0xffff);
+      a = r === null ? a + 1 : (r.next < a ? end : r.next);
+    }
+  }
+
+  // 5. The worklist.
   while (work.length > 0) {
     const item = work.shift()!;
     let addr = item.addr;
-    if (map.isStart(addr)) continue;
-    const kind = map.kind(addr);
-    if (kind === Kind.Tail) {
-      diagnose('inside-instruction', addr, `target ${$(addr)} is inside the instruction at ${$(ownerOf(map, addr))}`, item.from);
-      continue;
-    }
-    if (kind === Kind.Byte) {
-      diagnose('in-data', addr, `target ${$(addr)} is typed as data`, item.from);
-      continue;
-    }
+    let from = item.from;
     for (;;) {
-      if (!image.isLoaded(addr) || map.isStart(addr)) break;
-      const ins = decode((i) => image.read(addr + i), addr);
-      if (ins.truncated === true) {
-        map.markByte(addr, 1);
-        diagnose('truncated', addr, `instruction at ${$(addr)} runs past loaded memory`);
-        break;
-      }
-      if (map.overlapsCode(addr, ins.length)) {
-        diagnose('overlap', addr, `instruction at ${$(addr)} would overlap code at ${$(firstCode(map, addr, ins.length))}`);
-        break;
-      }
-      map.markCode(addr, ins.length);
-      instructions.set(addr, ins);
-      let next = (addr + ins.length) & 0xffff;
-      const target = targetOf(ins);
-      if (target !== null) {
-        if (ins.flow.kind === 'call') transfer(addr, target, ins.operands[0]?.kind === 'rst' ? 'rst' : ins.flow.conditional ? 'ccall' : 'call');
-        else transfer(addr, target, ins.flow.conditional ? 'cjump' : 'jump');
-      }
-      if (ins.flow.kind === 'jump' && ins.flow.indirect) indirectJumps.push(addr);
-      if (isRst08(ins) && image.isLoaded(next)) {
-        if (map.isCode(next)) {
-          diagnose('overlap', addr, `inline byte after RST 08H at ${$(addr)} is already code at ${$(next)}`);
-        } else {
-          map.markByte(next, 1);
-          next = (next + 1) & 0xffff;
-        }
-      }
-      if (endsPath(ins)) break;
-      addr = next;
+      const r = decodeOne(addr, from);
+      if (r === null) break;
+      from = undefined;
+      if (endsPath(r.ins)) break;
+      addr = r.next;
     }
   }
 

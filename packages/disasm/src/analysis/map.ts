@@ -39,18 +39,32 @@ export class ByteMap {
     }
   }
 
-  /** Types `length` bytes from `addr` as data, clearing any instruction start. */
-  markByte(addr: number, length: number): void {
+  /** Types `length` bytes from `addr` as data of the given kind, clearing any instruction start. */
+  mark(addr: number, length: number, kind: Kind): void {
     for (let i = 0; i < length; i++) {
       const a = (addr + i) & 0xffff;
-      this.kinds[a] = Kind.Byte;
+      this.kinds[a] = kind;
       this.starts[a] = 0;
     }
+  }
+
+  /** Types `length` bytes from `addr` as plain data bytes. */
+  markByte(addr: number, length: number): void {
+    this.mark(addr, length, Kind.Byte);
   }
 
   /** True when any byte in [addr, addr + length) already belongs to an instruction. */
   overlapsCode(addr: number, length: number): boolean {
     for (let i = 0; i < length; i++) if (this.isCode(addr + i)) return true;
     return false;
+  }
+
+  /** First address in [addr, addr + length) that is already typed (code or data), or null. */
+  firstTyped(addr: number, length: number): number | null {
+    for (let i = 0; i < length; i++) {
+      const a = (addr + i) & 0xffff;
+      if (this.kinds[a] !== Kind.Unknown) return a;
+    }
+    return null;
   }
 }
