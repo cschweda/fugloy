@@ -46,6 +46,7 @@ packages/disasm/src/emit/strings.ts           dbString
 packages/disasm/src/bas-rebase.ts             rebaseBas
 packages/disasm/src/hints/identity.ts         + normalizer parameter, basIdentityNormalizer
 packages/disasm/src/analysis/relocate.ts      analysisSpace, Relocation, AnalysisSpace
+packages/disasm/src/analysis/movers.ts        proposeMovers (LDIR mover stubs → relocate/entry proposals)
 packages/disasm/src/hints/format.ts, apply.ts + `relocate` directive and runtime mapping
 packages/disasm/src/pipeline.ts               + .BAS structure/entries, heuristics, space
 packages/disasm/src/emit/zmac.ts              + quoted strings, .phase blocks
@@ -53,7 +54,8 @@ packages/disasm/src/listing.ts                + .BAS mixed listing, proposals, s
 packages/disasm/src/ir.ts                     + proposals, relocations, entries
 packages/cli/src/index.ts                     + --rebase, .BAS default
 packages/disasm/test/basic/*.test.ts, test/analysis/heuristics.test.ts, test/bas-rebase.test.ts, test/analysis/relocate.test.ts
-packages/disasm/test/real/valkyrie.test.ts, test/real/asylum-relocate.test.ts, test/real/rom.test.ts
+packages/disasm/test/real/valkyrie.test.ts, test/real/asylum-relocate.test.ts, test/real/rom.test.ts, test/real/movers.test.ts
+packages/disasm/test/analysis/movers.test.ts
 packages/disasm/test/real/asylum-relocations.ts   generator for the relocate lines
 fixtures/synthetic/cmd/relocated-code.cmd, fixtures/synthetic/hints/relocated-code.hints
 fixtures/hints/asylum16.hints                 regenerated with relocate lines
@@ -150,11 +152,12 @@ AST and `parseLine` per spec §5.1. Expression parser: precedence climbing per s
 
 ---
 
-### Task 8: Asylum, the ROM smoke test, docs, report
+### Task 8: Asylum, mover proposals, the ROM smoke test, docs, report
 
-**Files:** `test/real/asylum-relocations.ts`, `test/real/asylum-relocate.test.ts`, `fixtures/hints/asylum16.hints`, `test/real/rom.test.ts`, `CHANGELOG.md`, `README.md`, `docs/Fugloy-Project-Plan.md`
+**Files:** `test/real/asylum-relocations.ts`, `test/real/asylum-relocate.test.ts`, `fixtures/hints/asylum16.hints`, `src/analysis/movers.ts`, `src/pipeline.ts`, `src/listing.ts`, `src/ir.ts`, `test/analysis/movers.test.ts`, `test/fixtures.ts` (`mover` fixture), `test/real/movers.test.ts`, `test/real/rom.test.ts`, `CHANGELOG.md`, `README.md`, `docs/Fugloy-Project-Plan.md`
 
 - [ ] Generator: from the asylum16 image, walk the stream at `$80DD` and emit one `block 0:$<src> relocate $<dest> $0080` per `<` record (source offset = record data start − `$8000`), plus `block 0:$<off> entry` for `$43AE` mapped back to its file offset. Regenerate `fixtures/hints/asylum16.hints` keeping the existing names and comments and replacing the `bytes` override by the relocate lines. Test: generator output equals the fixture's relocate/entry lines (skip when absent).
 - [ ] Acceptance: with the fixture applied, `$43AE` is loaded in the space, descent from it decodes code (record the instruction count and fraction in the report), the zmac output contains 123 `.PHASE` blocks, and the file-image round trip holds.
+- [ ] Mover proposals (approved 2026-10-16; spec §3, §5.7): `proposeMovers` follows each root's path through decoded instructions (fallthrough and unconditional jumps; a visited set ends loops) tracking HL, DE, BC: `LD rr,nn` sets a constant; `EX DE,HL` swaps; anything else that names a register or half of it, `EXX`, `POP`, block instructions, `CALL`, and `RST` forget. At an `LDIR` with all three known: split `[src, src+len)` into loaded pieces, cut out bytes pass 1 decoded as code at file addresses, drop pieces whose destination `dst + (piece − src)` overlaps loaded memory outside the move's own source, and emit `block i:$off relocate $dst $len` per piece; the first unconditional `JP nn` after the `LDIR` landing in a destination adds `block i:$off entry` at the file offset that copies there. `Analysis.proposals` and the IR `proposals` gain `{ kind: 'move', ldir, src, dst, length, hints }`; listing header `; proposed move: LDIR at $AD0A copies $7000-$ACFF to $4300-$7FFF; declare with:` then one `;   <hint line>` row each. Tests: a synthetic `mover` .CMD fixture (payload at `$7000` with an internal `CALL` and `JR`, stub at `$7040`: `LD HL,7000H / LD DE,5000H / LD BC,0040H / LDIR / JP 5000H`) gives exactly `block 0:$0000 relocate $5000 $0040` and `block 0:$0000 entry`; a stub whose `LDIR` sits inside its own source keeps its own code; a source across a load gap gives one line per piece; a ROM source and a destination overlapping loaded memory give none; applying the lines with `parseHints` decodes the copy at `$5000` and round-trips with `.PHASE`; real samples (skip when absent): pirate, sa04118a/b, dthmz5k1/2, spcwarp1/3, seadrg01–03 and 05 each get a proposal, and applying it lifts decoded code by at least 1,000 bytes (record each in the report). Commit `p2: propose relocate hints for LDIR mover stubs`.
 - [ ] ROM smoke test (skip when `fixtures/real/level2-model1.rom` is absent): load raw at `$0000`, roots at the documented entries (`$0000`, `$0008`, `$0010`, `$0018`, `$0020`, `$0028`, `$0030`, `$0038`, `$001B`, `$0033`, `$0049`, `$1A19`), assert each decodes as code and descent reaches at least 40% of the image; round trip.
 - [ ] Docs: CHANGELOG Unreleased (C items), README (hidden code, `--rebase`, `relocate`, strings/proposals), project plan: mark the phase 2 deliverable met and note the self-relocating-loader finding under the Asylum appendix rows as a reported fact. Full suite, typecheck, build. Report.

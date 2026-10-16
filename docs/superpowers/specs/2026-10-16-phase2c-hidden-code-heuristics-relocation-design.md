@@ -17,7 +17,8 @@ C1 hidden code in `.BAS`, C2 heuristics, C3 rebasing and relocation.
    marked and its hints still matching; declare that bytes execute somewhere
    other than where they load (`relocate`), analyze them there, and emit them
    with zmac's `.phase` so the round trip holds. Use it to analyze Asylum's
-   game code at its runtime address.
+   game code at its runtime address, and propose `relocate` and `entry` hints
+   for the LDIR mover stub most sample load modules begin with.
 
 **Done when:** for every Valkyrie file present, lines 2–247 are reported as
 code and every other line parses as BASIC; `base+14` is mined from line 250
@@ -25,7 +26,9 @@ with its evidence; the `.BAS` zmac output round-trips with labels. Strings and
 table proposals appear on the real samples and every round trip still holds.
 Hints written for a `.BAS` apply after `--rebase`. asylum16 analyzes from
 `$43AE` through generated `relocate` hints, reaching its game code, with the
-file-image round trip intact.
+file-image round trip intact. The mover stubs in the Scott Adams, Deathmaze,
+Space Warp, and Sea Dragon samples get proposals that, applied, analyze each
+game at its runtime address.
 
 ## 2. Non-goals
 
@@ -84,6 +87,20 @@ interpreter: the entry miner evaluates only the idioms the plan names.
 - **Asylum's relocations are generated, not typed.** Its loader stream is
   machine-readable; a test-suite script derives one `relocate` line per
   128-byte record from the sample and the committed fixture must match it.
+- **LDIR movers are proposed, not applied.** Most real load modules start with
+  a stub that loads the game high, copies it down with `LD HL,src / LD DE,dst
+  / LD BC,len / LDIR`, and jumps into the copy. Pass 1's paths are followed
+  from the roots with HL, DE, and BC tracked as constants (set by `LD rr,nn`,
+  forgotten by anything else that writes them); at an `LDIR` with all three
+  known, the source is split into its loaded pieces, bytes the stub itself
+  executes at their file address are left in place, and each piece gets a
+  `relocate` line to `dst + (piece − src)`. The first jump after the `LDIR`
+  that lands in a destination gives an `entry` line at the matching file
+  offset. A destination that would overlap loaded memory outside the move's
+  own source gets no line, since `relocate` would refuse it. Like table
+  proposals, mover proposals appear in the listing header and the IR with the
+  exact hint lines and apply only from a hint file. Added during execution on
+  2026-10-16, when the user's new samples showed this stub in 11 of 19 files.
 
 ## 4. BASIC grammar
 
@@ -197,6 +214,11 @@ export interface AnalysisSpace { image: MemoryImage; relocations: Relocation[]; 
 export function analysisSpace(image: MemoryImage, relocations: Relocation[]): { space: AnalysisSpace; errors: string[] };
 ```
 
+```ts
+export interface MoverProposal { kind: 'move'; ldir: number; src: number; dst: number; length: number; hints: string[] }
+export function proposeMovers(image: MemoryImage, pass1: Pass1, identities: BlockIdentity[]): MoverProposal[];   // src/analysis/movers.ts
+```
+
 Hint directive `relocate <addr> <length>`; `Annotations.relocations`;
 `applyHints` returns annotations with every address mapped to runtime space.
 `analyze` builds the space, runs descent and symbols on `space.image`, and
@@ -272,6 +294,11 @@ heuristic never overrides typed bytes or hints.
 - Asylum (skip when absent): the generated `relocate` lines match the
   committed fixture; `$43AE` is a loaded runtime address; descent from it
   reaches a large fraction (recorded in the report); round trip holds.
+- Movers: a synthetic stub's proposal lines exactly; a stub inside its own
+  source is left in place; a source across a gap gives one line per piece; a
+  ROM source gives none; applying a proposal analyzes the copy at its runtime
+  address and round-trips with `.phase`; on the real samples (skip when
+  absent) each stub gets a proposal and applying it lifts decoded code.
 
 ## 9. Risks
 
@@ -294,6 +321,7 @@ heuristic never overrides typed bytes or hints.
 4. Rebase: `rebaseBas`, normalized identity, stale marks, `--rebase`.
 5. Relocation: analysis space, hint directive and mapping, emitter `.phase`,
    listing and IR; synthetic relocation fixture.
-6. Asylum: generated relocate lines, fixture, acceptance; docs; report.
+6. Asylum: generated relocate lines, fixture, acceptance; LDIR mover
+   proposals; docs; report.
 
 Natural session cuts: after step 2 and after step 4.
