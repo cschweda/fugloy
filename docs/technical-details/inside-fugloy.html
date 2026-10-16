@@ -513,7 +513,7 @@ footer .wrap { padding-block: 32px 56px; color: var(--dim); font-size: 0.86rem; 
     <div class="split">
       <div class="copy">
         <h3>The five-instruction mover</h3>
-        <p>Most of the other games use a simpler copier. Fugløy spots it, works out what moves where, and proposes the exact hint lines, without applying anything on its own.</p>
+        <p>Most of the other games use a simpler copier, like this one from Sea Dragon (1982), which its author released into the public domain in 1995. Fugløy spots it, works out what moves where, and proposes the exact hint lines, without applying anything on its own.</p>
         <pre class="listing" id="mover"></pre>
       </div>
       <div class="panel">
@@ -545,7 +545,7 @@ footer .wrap { padding-block: 32px 56px; color: var(--dim); font-size: 0.86rem; 
       <div class="stats">
         <div class="stat"><b>1,786</b><span>Z80 encodings, each reassembled to its own bytes</span></div>
         <div class="stat"><b>46</b><span>real programs that round-trip exactly</span></div>
-        <div class="stat"><b>567</b><span>tests run on every change</span></div>
+        <div class="stat"><b>600</b><span>automated tests, all passing</span></div>
         <div class="stat"><b>0</b><span>bytes allowed to differ</span></div>
       </div>
     </div>
@@ -635,6 +635,7 @@ footer .wrap { padding-block: 32px 56px; color: var(--dim); font-size: 0.86rem; 
         <ul class="rules">
           <li>Fugløy ships no ROMs and no programs. You supply the TRS-80 ROM and the .CMD and .BAS files you want to work on.</li>
           <li>Everything happens on your own machine: the listing, the hint files, and any game built from them stay with you.</li>
+          <li>Some games are free to share. Wayne Westmoreland released the TRS-80 games he wrote with Terry Gilman into the public domain in 1995: Sea Dragon, Armored Patrol and its original Tank Zone, Eliminator, Rear Guard, Zaxxon, and a Donkey Kong that was never sold. They make natural first candidates.</li>
         </ul>
         <span class="panel-title">When</span>
         <p class="dim">After phase 3's ROM and DOS names exist and the plan's kill criteria have been reviewed. The emulator comes first, because it is the oracle every translation is checked against.</p>
@@ -662,7 +663,7 @@ footer .wrap { padding-block: 32px 56px; color: var(--dim); font-size: 0.86rem; 
 <footer>
   <div class="wrap">
     <p>Fugløy is MIT-licensed: <a href="https://github.com/cschweda/fugloy">github.com/cschweda/fugloy</a>.</p>
-    <p>Fugløy ships no ROMs and no programs: you bring your own. The games named here are the ones it was tested on, and this page shows only a few of their bytes.</p>
+    <p>Fugløy ships no ROMs and no programs: you bring your own. The games named here are the ones it was tested on, and this page shows only a few of their bytes. Sea Dragon, whose copy loop appears above, has been in the public domain since Wayne Westmoreland released it in 1995.</p>
   </div>
 </footer>
 <script>
@@ -1171,11 +1172,11 @@ renderAsm($('#phase'), [
   { src: true, mn: 'JP', ops: 'L5000' },
 ]);
 renderAsm($('#mover'), [
-  { src: true, mn: 'LD', ops: 'HL,7000H', comment: 'source: where the file put the game' },
-  { src: true, mn: 'LD', ops: 'DE,4300H', comment: 'destination: where it runs' },
-  { src: true, mn: 'LD', ops: 'BC,3D00H', comment: 'how many bytes' },
+  { src: true, mn: 'LD', ops: 'HL,5200H', comment: 'source: where the file put the game' },
+  { src: true, mn: 'LD', ops: 'DE,497FH', comment: 'destination: where it runs' },
+  { src: true, mn: 'LD', ops: 'BC,3681H', comment: 'how many bytes: 13,953' },
   { src: true, mn: 'LDIR', comment: 'copy them all' },
-  { src: true, mn: 'JP', ops: '4350H', comment: 'and jump into the copy' },
+  { src: true, mn: 'JP', ops: '497FH', comment: 'and jump into the copy' },
 ]);
 const COV = [['Space Warp', 26, 2699, 3941], ['Asylum 1a', 90, 9631, 15719], ['Deathmaze 5000', 15, 9364, 15650], ['Sea Dragon 01', 15, 6260, 13968], ['Armored Patrol', 15, 5642, 14592], ["Pirate's Adventure", 15, 3018, 15631]];
 seg('covView', (v) => {

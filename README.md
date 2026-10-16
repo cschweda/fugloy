@@ -238,6 +238,31 @@ SETONE:
 	END	8100H
 ```
 
+A real program: the first build of *Sea Dragon* (1982), which Wayne
+Westmoreland released into the public domain in 1995. Pass 1 alone finds only
+its 15-byte loader, which copies the game from `$5200` down to `$497F` and
+jumps there, and the listing header proposes the two hint lines that
+describe the copy (`pnpm fugloy seadrg01.cmd`, excerpt):
+
+```
+; seadrg01.cmd: load module, 56 blocks, 1 run, 13968 bytes, entry $8881 (transfer address)
+; pass 1: roots $8881; 15 of 13968 bytes decoded as code (0%); 52 typed as data; 1 external target; 0 notes
+; proposed move: LDIR at $888B copies $5200-$8880 to $497F-$7FFF; declare with:
+;   block 0:$0000 relocate $497F $3681
+;   block 0:$0000 entry
+…
+8881  00            NOP                     ; entry
+8882  21 00 52      LD HL,DATA_5200
+8885  11 7F 49      LD DE,497FH
+8888  01 81 36      LD BC,3681H
+888B  ED B0         LDIR
+888D  C3 7F 49      JP 497FH
+```
+
+Put those two lines under the skeleton that `--write-hints` writes and pass
+the file with `--hints`: the game then decodes at `$497F`, 45% of its bytes
+as code, and the zmac output still rebuilds the original file.
+
 ### Hint files
 
 A hint file is line-oriented text keyed by block and offset, so it diffs in
@@ -295,13 +320,38 @@ and a jump that lands inside such a line says which line and which hint.
   shared by the emulator, the MCP server, and the disassembler.
 - [CLAUDE.md](CLAUDE.md): working conventions and the roadmap.
 
+## Getting ROMs and programs
+
+Fugløy ships no ROMs and no programs: you bring your own. The disassembler
+itself needs no ROM; only the ROM smoke test and the planned emulator do.
+
+- **ROMs.** The [kiwisincebirth/TRS-80-ROMS](https://github.com/kiwisincebirth/TRS-80-ROMS)
+  repository holds Model I Level II and Model III ROM images in its
+  `test-roms` folder, along with commented disassemblies of the ROMs. The
+  smoke test looks for the Model I Level II image as
+  `fixtures/real/level2-model1.rom`.
+- **Public-domain games.** Wayne Westmoreland, who wrote his TRS-80 games
+  with Terry Gilman, released them into the public domain in 1995:
+  *Armored Patrol* and its original form, *Tank Zone*; *Eliminator*, their
+  *Defender* clone; *Sea Dragon*; *Rear Guard*; *Zaxxon*; and a *Donkey Kong*
+  that was never sold.
+  [trs-80.org](http://www.trs-80.org/games-by-wayne-westmoreland-and-terry-gilman.html)
+  offers them as `AIGAMES.ZIP`, two disk images. Fugløy reads `.CMD` and
+  `.BAS` files, not disk images, so extract the programs from the images
+  first. The
+  [TRS-80 software archive](http://cpmarchives.classiccmp.org/trs80/Software/Model%201/)
+  at classiccmp.org has several of them as ready-made `.CMD` files, filed by
+  first letter and often in more than one version.
+- **Everything else.** Programs you own, as `.CMD` load modules or tokenized
+  `.BAS` files saved from Level II or Disk BASIC.
+
 ## Sample programs
 
-The copyrighted programs used as fixtures (Asylum, Volcano Hunter, Voyage of
-the Valkyrie, Armored Patrol, Space Warp, Sea Dragon, Pirate's Adventure,
-Voodoo Castle, Deathmaze 5000) and the ROM images are never committed. Tests
-that need them look in `sample/` or `fixtures/real/`, both gitignored, and
-skip when the files are absent.
+The programs and ROM images the tests use are never committed: Asylum,
+Volcano Hunter, Voyage of the Valkyrie, Armored Patrol, Space Warp, Sea
+Dragon, Pirate's Adventure, Voodoo Castle, and Deathmaze 5000. Tests that
+need them look in `sample/` or `fixtures/real/`, both gitignored, and skip
+when the files are absent, so the suite passes on a fresh clone and in CI.
 
 ## Conventions
 
