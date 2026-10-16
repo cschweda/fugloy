@@ -1,0 +1,6 @@
+{
+  "roms": { "model1": "./fixtures/real/level2-model1.rom", "model3": "./fixtures/real/model3.rom" },
+  "defaultModel": 3,
+  "fixtures": "./fixtures/real",
+  "limits": { "runSecondsEmulated": 10, "outputBytes": 4096, "traceDepth": 2000 }
+}

@@ -5,6 +5,8 @@ sample/
 *.rom
 *.ROM
 packages/emu/roms/
+# Local ROM paths for the emulator and the MCP server (fugloy.mcp.example.json shows the format).
+fugloy.mcp.json
 
 # Dependencies and build output
 node_modules/
