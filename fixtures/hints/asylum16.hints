@@ -1,15 +1,17 @@
-# Fugløy hints for asylum16.cmd (Asylum, 16K build). Hand-written; identities from `fugloy --write-hints`.
+# Fugløy hints for asylum16.cmd (Asylum, 16K build). Identities from `fugloy --write-hints`.
 # Numbers: $hex or decimal. Offsets are relative to block 0, which loads at $8000.
 #
 # What the entry stub does, read from the pass 1 listing:
 #   $8000  DI, SP, copy 54 bytes from $807C to $4000 and 39 bytes from $80B5 to $4080 (RAM variables),
 #          fill $4152.. with JP 012DH / RET vectors, then interpret the stream at $80DD:
-#   `<` n dest  copies n bytes of the stream to dest (128-byte records covering $42F3..$7FF6),
+#   `<` n dest  copies n bytes of the stream to dest (122 records of 128 bytes and one of 4, $42F3..$7FF6),
 #   `x` addr    clears the screen (CALL $8072: chars 1CH,1FH via ROM $0033) and JP (HL) to addr.
-#   The stream ends with `x` $43AE: the game relocates itself down to $42F3 and runs there, at
-#   addresses that are never in the loaded image. Static analysis stops at the JP (HL); reaching
-#   the game code needs a relocation facility (proposed: a `relocate` hint emitted with zmac's
-#   .phase, which keeps the round trip intact).
+#   The stream ends with `x` $43AE: the game relocates itself down to $42F3 and runs there.
+#
+# The relocate and entry lines at the end are generated from the sample by
+# packages/disasm/test/real/asylum-relocations.ts, and asylum-relocate.test.ts checks they match:
+# one relocate per stream record, so the game is analyzed at its runtime address and emitted
+# under zmac's .PHASE, and an entry at the byte that lands at $43AE.
 fugloy-hints 1
 program sha256 bcab1e4a5b9dfb4d34ede6ac6d591068e816be0c4357dc4a5ba7ead2017c6273
 block 0 length $3FF0 hash 5167633e79339601    # start $8000
@@ -22,5 +24,129 @@ block 0:$0072 comment prints 1CH (clear) and 1FH (home) through ROM $0033
 block 0:$007C name RAM_VARS_4000
 block 0:$00B5 name RAM_VARS_4080
 block 0:$00DD name PAYLOAD_STREAM
-block 0:$00DD comment `<` 128 dest payload ... `x` $43AE; typed as bytes so nothing decodes the payload at its load address
-block 0:$00DD bytes $3F13
+block 0:$00DD comment `<` n dest payload ... `x` $43AE; each record's data relocates below, its 4-byte header stays here
+# Generated from the loader stream: one relocate per record, then the entry.
+block 0:$00E1 relocate $42F3 $0080
+block 0:$0165 relocate $4373 $0080
+block 0:$01E9 relocate $43F3 $0080
+block 0:$026D relocate $4473 $0080
+block 0:$02F1 relocate $44F3 $0080
+block 0:$0375 relocate $4573 $0080
+block 0:$03F9 relocate $45F3 $0080
+block 0:$047D relocate $4673 $0080
+block 0:$0501 relocate $46F3 $0080
+block 0:$0585 relocate $4773 $0080
+block 0:$0609 relocate $47F3 $0080
+block 0:$068D relocate $4873 $0080
+block 0:$0711 relocate $48F3 $0080
+block 0:$0795 relocate $4973 $0080
+block 0:$0819 relocate $49F3 $0080
+block 0:$089D relocate $4A73 $0080
+block 0:$0921 relocate $4AF3 $0080
+block 0:$09A5 relocate $4B73 $0080
+block 0:$0A29 relocate $4BF3 $0080
+block 0:$0AAD relocate $4C73 $0080
+block 0:$0B31 relocate $4CF3 $0080
+block 0:$0BB5 relocate $4D73 $0080
+block 0:$0C39 relocate $4DF3 $0080
+block 0:$0CBD relocate $4E73 $0080
+block 0:$0D41 relocate $4EF3 $0080
+block 0:$0DC5 relocate $4F73 $0080
+block 0:$0E49 relocate $4FF3 $0080
+block 0:$0ECD relocate $5073 $0080
+block 0:$0F51 relocate $50F3 $0080
+block 0:$0FD5 relocate $5173 $0080
+block 0:$1059 relocate $51F3 $0080
+block 0:$10DD relocate $5273 $0080
+block 0:$1161 relocate $52F3 $0080
+block 0:$11E5 relocate $5373 $0080
+block 0:$1269 relocate $53F3 $0080
+block 0:$12ED relocate $5473 $0080
+block 0:$1371 relocate $54F3 $0080
+block 0:$13F5 relocate $5573 $0080
+block 0:$1479 relocate $55F3 $0080
+block 0:$14FD relocate $5673 $0080
+block 0:$1581 relocate $56F3 $0080
+block 0:$1605 relocate $5773 $0080
+block 0:$1689 relocate $57F3 $0080
+block 0:$170D relocate $5873 $0080
+block 0:$1791 relocate $58F3 $0080
+block 0:$1815 relocate $5973 $0080
+block 0:$1899 relocate $59F3 $0080
+block 0:$191D relocate $5A73 $0080
+block 0:$19A1 relocate $5AF3 $0080
+block 0:$1A25 relocate $5B73 $0080
+block 0:$1AA9 relocate $5BF3 $0080
+block 0:$1B2D relocate $5C73 $0080
+block 0:$1BB1 relocate $5CF3 $0080
+block 0:$1C35 relocate $5D73 $0080
+block 0:$1CB9 relocate $5DF3 $0080
+block 0:$1D3D relocate $5E73 $0080
+block 0:$1DC1 relocate $5EF3 $0080
+block 0:$1E45 relocate $5F73 $0080
+block 0:$1EC9 relocate $5FF3 $0080
+block 0:$1F4D relocate $6073 $0080
+block 0:$1FD1 relocate $60F3 $0080
+block 0:$2055 relocate $6173 $0080
+block 0:$20D9 relocate $61F3 $0080
+block 0:$215D relocate $6273 $0080
+block 0:$21E1 relocate $62F3 $0080
+block 0:$2265 relocate $6373 $0080
+block 0:$22E9 relocate $63F3 $0080
+block 0:$236D relocate $6473 $0080
+block 0:$23F1 relocate $64F3 $0080
+block 0:$2475 relocate $6573 $0080
+block 0:$24F9 relocate $65F3 $0080
+block 0:$257D relocate $6673 $0080
+block 0:$2601 relocate $66F3 $0080
+block 0:$2685 relocate $6773 $0080
+block 0:$2709 relocate $67F3 $0080
+block 0:$278D relocate $6873 $0080
+block 0:$2811 relocate $68F3 $0080
+block 0:$2895 relocate $6973 $0080
+block 0:$2919 relocate $69F3 $0080
+block 0:$299D relocate $6A73 $0080
+block 0:$2A21 relocate $6AF3 $0080
+block 0:$2AA5 relocate $6B73 $0080
+block 0:$2B29 relocate $6BF3 $0080
+block 0:$2BAD relocate $6C73 $0080
+block 0:$2C31 relocate $6CF3 $0080
+block 0:$2CB5 relocate $6D73 $0080
+block 0:$2D39 relocate $6DF3 $0080
+block 0:$2DBD relocate $6E73 $0080
+block 0:$2E41 relocate $6EF3 $0080
+block 0:$2EC5 relocate $6F73 $0080
+block 0:$2F49 relocate $6FF3 $0080
+block 0:$2FCD relocate $7073 $0080
+block 0:$3051 relocate $70F3 $0080
+block 0:$30D5 relocate $7173 $0080
+block 0:$3159 relocate $71F3 $0080
+block 0:$31DD relocate $7273 $0080
+block 0:$3261 relocate $72F3 $0080
+block 0:$32E5 relocate $7373 $0080
+block 0:$3369 relocate $73F3 $0080
+block 0:$33ED relocate $7473 $0080
+block 0:$3471 relocate $74F3 $0080
+block 0:$34F5 relocate $7573 $0080
+block 0:$3579 relocate $75F3 $0080
+block 0:$35FD relocate $7673 $0080
+block 0:$3681 relocate $76F3 $0080
+block 0:$3705 relocate $7773 $0080
+block 0:$3789 relocate $77F3 $0080
+block 0:$380D relocate $7873 $0080
+block 0:$3891 relocate $78F3 $0080
+block 0:$3915 relocate $7973 $0080
+block 0:$3999 relocate $79F3 $0080
+block 0:$3A1D relocate $7A73 $0080
+block 0:$3AA1 relocate $7AF3 $0080
+block 0:$3B25 relocate $7B73 $0080
+block 0:$3BA9 relocate $7BF3 $0080
+block 0:$3C2D relocate $7C73 $0080
+block 0:$3CB1 relocate $7CF3 $0080
+block 0:$3D35 relocate $7D73 $0080
+block 0:$3DB9 relocate $7DF3 $0080
+block 0:$3E3D relocate $7E73 $0080
+block 0:$3EC1 relocate $7EF3 $0080
+block 0:$3F45 relocate $7F73 $0080
+block 0:$3FC9 relocate $7FF3 $0004
+block 0:$01A0 entry

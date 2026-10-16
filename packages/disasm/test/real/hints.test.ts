@@ -52,7 +52,7 @@ it.skipIf(!present)('hints written against asylum1b apply unchanged to asylum1c 
   }
 });
 
-it.skipIf(resolveSample('asylum16.cmd') === null)('the committed asylum16 hint file documents its self-relocating loader and still round-trips', async () => {
+it.skipIf(resolveSample('asylum16.cmd') === null)('the committed asylum16 hint file names its self-relocating loader, carries analysis on into the game, and still round-trips', async () => {
   const { readFileSync } = await import('node:fs');
   const { fileURLToPath } = await import('node:url');
   const text = readFileSync(fileURLToPath(new URL('../../../../fixtures/hints/asylum16.hints', import.meta.url)), 'utf8');
@@ -64,12 +64,12 @@ it.skipIf(resolveSample('asylum16.cmd') === null)('the committed asylum16 hint f
   expect(applied.unmatched).toEqual([]);
   expect(applied.warnings).toEqual([]);
   const a = analyze(mod, { annotations: applied.annotations });
-  // The loader's JP (HL) is the last thing static analysis can see; the payload is data at its load address.
-  expect(a.pass1.indirectJumps).toEqual([0x805e]);
+  // The loader's own path still ends at its JP (HL); the relocate lines carry analysis on into the game.
+  expect(a.pass1.indirectJumps).toContain(0x805e);
   expect(a.symbols.get(0x8000)).toMatchObject({ name: 'LOADER', source: 'user' });
   expect(a.symbols.get(0x8072)).toMatchObject({ name: 'CLS_HOME', kind: 'sub', source: 'user' });
   expect(a.symbols.get(0x80dd)).toMatchObject({ name: 'PAYLOAD_STREAM', kind: 'data', source: 'user' });
-  expect(a.pass1.instructions.size).toBe(71);
+  expect(a.pass1.instructions.size).toBeGreaterThan(71); // 71 before the relocate lines: the loader alone
   // The stream really does end with an `x` record naming $43AE.
   const run = mod.image.runs().find((r) => r.start === 0x8000)!;
   let p = 0x80dd;
@@ -83,7 +83,7 @@ it.skipIf(resolveSample('asylum16.cmd') === null)('the committed asylum16 hint f
   expect(target).toBe(0x43ae);
   expect(mod.image.isLoaded(0x43ae)).toBe(false);
   if (findZmac() !== null) {
-    const { module: back } = assemble(emitZmac(mod.image, a.pass1, a.transfer, { source: 'asylum16.cmd', symbols: a.symbols, annotations: a.annotations }));
+    const { module: back } = assemble(emitZmac(mod.image, a.pass1, a.transfer, { source: 'asylum16.cmd', symbols: a.symbols, annotations: a.annotations, space: a.space }));
     expectSameImage(back.image, mod.image);
   }
 });
