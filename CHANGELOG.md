@@ -8,6 +8,12 @@ Releases are tagged `vX.Y.Z` on `main`.
 
 ## [Unreleased]
 
+### Fixed
+
+- `fugloy` no longer crashes when the reader of its output goes away and the
+  write fails with `ENOTCONN` or `ECONNRESET` instead of `EPIPE`, as Node's
+  piped stdio can on macOS; 0.2.0's fix caught only `EPIPE`.
+
 ## [0.2.0] - 2026-10-16
 
 Phase 2 of the plan: Pass 1 and Pass 2, built as sub-projects A (Pass 1 and

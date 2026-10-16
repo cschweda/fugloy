@@ -1,15 +1,16 @@
 import { access, readFile, writeFile } from 'node:fs/promises';
 import { run } from './index.js';
+import { readerGone } from './pipes.js';
 
 // A reader that stops early (`fugloy game.cmd | head`) closes the pipe; end quietly, as Unix tools do.
 process.stdout.on('error', (e: NodeJS.ErrnoException) => {
-  if (e.code === 'EPIPE') process.exit(0);
+  if (readerGone(e)) process.exit(0);
   throw e;
 });
 // The same reader may hold stderr (`2>&1 | head`): stop writing to it, and keep the exit code.
 let stderrOpen = true;
 process.stderr.on('error', (e: NodeJS.ErrnoException) => {
-  if (e.code !== 'EPIPE' && e.code !== 'ERR_STREAM_DESTROYED') throw e;
+  if (!readerGone(e)) throw e;
   stderrOpen = false;
 });
 
