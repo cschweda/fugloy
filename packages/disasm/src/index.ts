@@ -38,3 +38,5 @@ export { isValidName, parseHints, parseNumber, RESERVED, SYNTH_NAME, writeHints 
 export type { Directive, Hint, HintBlock, HintError, HintFile } from './hints/format.js';
 export { applyHints, emptyAnnotations } from './hints/apply.js';
 export type { Annotations, Applied, Override, OverrideKind, TableHint } from './hints/apply.js';
+export { dataReference, SymbolTable, synthesizeSymbols } from './analysis/symbols.js';
+export type { Symbol, SymbolKind } from './analysis/symbols.js';
