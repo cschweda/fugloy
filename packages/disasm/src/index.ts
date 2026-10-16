@@ -34,3 +34,5 @@ export { renderPass1Listing } from './listing.js';
 export { sha256, sha256Hex } from './hash.js';
 export { blockIdentities, IDENTITY_BYTES, programHash } from './hints/identity.js';
 export type { BlockIdentity } from './hints/identity.js';
+export { isValidName, parseHints, parseNumber, RESERVED, SYNTH_NAME, writeHints } from './hints/format.js';
+export type { Directive, Hint, HintBlock, HintError, HintFile } from './hints/format.js';
