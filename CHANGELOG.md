@@ -8,10 +8,64 @@ Releases are tagged `vX.Y.Z` on `main`.
 
 ## [Unreleased]
 
-Phase 2, sub-projects A (Pass 1 and the round-trip proof) and B (labels and
-the hint file), plus the emulator and MCP server stubs.
+Phase 2, sub-projects A (Pass 1 and the round-trip proof), B (labels and the
+hint file), and C (hidden code, heuristics, rebasing, and relocation), plus
+the emulator and MCP server stubs. With C the phase 2 deliverable is met:
+every synthetic fixture round-trips, and Valkyrie's hidden code disassembles
+at its true addresses.
 
 ### Added
+
+- Level II BASIC lexer and parser: a line counts as BASIC only when every
+  statement parses, each keyword checked against its argument shape over one
+  expression grammar, Disk BASIC statements and `&H`/`&O` constants included.
+  On every Voyage of the Valkyrie file exactly lines 2–247, 182 lines, come
+  out as machine code.
+- `.BAS` analysis: line headers typed as words and BASIC bodies as bytes with
+  their text attached, each code line's body a candidate root; entry points
+  mined from `DEFUSR`, the USR vector, and a poked `JP`, through an abstract
+  evaluator over constants and "program start plus N" (Valkyrie's line 250
+  resolves to program start + 14 in all 13 files).
+- `.BAS` listing and zmac output: BASIC lines as text, code lines
+  disassembled at their true addresses; the zmac output (`DW` headers, `DB`
+  bodies with the line as a comment, instructions) reassembles to the
+  identical image, labels included, for every Valkyrie file.
+- Strings: terminated runs of printable bytes are typed as strings and
+  emitted as quoted `DB` rows (quotes doubled, other bytes in hex), byte-exact
+  under zmac.
+- Proposals, reported in the listing header and the IR (`proposals`) and
+  never applied: jump tables (three or more words that all land on decoded
+  instructions) and LDIR mover stubs (`LD HL,src / LD DE,dst / LD BC,len /
+  LDIR` and a jump or pushed address into the copy), each with the exact hint
+  lines that would declare it.
+- `--rebase <hex>` for a `.BAS`: the program as saved from another address.
+  Hints written before still match, since block identity reads line pointers
+  as offsets, and operands that still point into the old range are marked
+  stale.
+- `relocate <addr> <length>` hint directive and an analysis space: a region
+  is analyzed at the address it executes at and emitted under zmac's
+  `.PHASE`/`.DEPHASE`, so the file image still round-trips. A destination over
+  memory that stays loaded, or over another destination, is an error (exit 2).
+- `fixtures/hints/asylum16.hints` now relocates Asylum's 123 loader-stream
+  records, generated from the sample by a test script: the game decodes from
+  `$43AE` at its runtime address, 61% of its bytes as code.
+- New real samples in the round-trip tests (Space Warp, Sea Dragon, Pirate's
+  Adventure, Voodoo Castle, Deathmaze 5000). Applying their mover proposals
+  lifts decoded code from under 1% to between 19% and 68%.
+- A smoke test on the Model I Level II ROM: half of it decodes as code from
+  its documented entry points, and it reassembles byte for byte.
+
+### Changed
+
+- `BasLine.parsed` and `detokenize().ok` mean the line parses as BASIC,
+  lexically and by statement shape; the reason names the byte offset.
+- A `.BAS` with hidden code or a planted entry gets the pass 1 listing by
+  default.
+- Listing and zmac rows break at the start of every typed region, and bytes
+  typed as a string (including by a `string` hint) print quoted.
+- A `.BAS` block's identity reads its line pointers as offsets from the
+  program start, so a `.BAS` hint file written before this change no longer
+  matches.
 
 - Hint file (`--hints`): line-oriented text keyed by block and offset, with
   content-based block identity (length plus a SHA-256 prefix of the first 64

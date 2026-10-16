@@ -46,10 +46,11 @@ v0.1.0.
 
 ## Roadmap
 
-1. **disasm — phase 2 (in progress).** Pass 1 and Pass 2 per the plan:
+1. **disasm — phase 2 (deliverable met).** Pass 1 and Pass 2 per the plan:
    recursive descent, zmac emitter and image round trip, labels, hint file,
-   hidden-code detection, heuristics. Sub-projects A (Pass 1 and the round-trip
-   proof), B (labels and the hint file), C (hidden code and heuristics).
+   hidden-code detection, heuristics, rebasing, relocation. Sub-projects A
+   (Pass 1 and the round-trip proof), B (labels and the hint file), C (hidden
+   code, heuristics, rebasing, relocation). Next: tag v0.2.0.
 2. **emu — phases 0–7** (`docs/fugloy-emu-spec.md` §11). 0: import
    `cschweda/trs80-emulator`, strip DOM, boot to `READY` in Node. 1: Z80 core
    passes ZEXALL. 2: Model III devices and `.CMD`/`.BAS`/`.CAS` loaders.
@@ -63,7 +64,10 @@ v0.1.0.
    publish. A starts after emu phase 0; B and C need emu phase 3.
 
 The plan's phases 3 (symbol tables) and 4 (web workbench) are not yet placed
-in this sequence.
+in this sequence. When phase 4 builds the site, it gets a "technical details"
+page carrying the interactive explainer of how Fugløy was built (dark,
+infographic, many examples, written for a curious student or retro
+enthusiast; requested 2026-10-16).
 
 ## Conventions
 
