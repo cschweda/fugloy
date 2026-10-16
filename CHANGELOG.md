@@ -141,6 +141,11 @@ at its true addresses.
   Planetfall, Penetrator, Super Nova, Crazy Painter, and the BASIC programs
   of Super Star Trek, Crush, Crumble & Chomp, and Eliminator's patchers.
 
+### Fixed
+
+- `fugloy` no longer crashes with an unhandled `EPIPE` when the reader of its
+  output stops early (`fugloy game.cmd | head`); it ends quietly.
+
 ## [0.1.0] - 2026-10-14
 
 Phase 1 of the plan: core decoder and loaders. Deliverable: a CLI that prints
