@@ -56,6 +56,7 @@ const CPU_SCALARS = [
   "halted",
   "pendingEI",
   "wz",
+  "afterPrefix",
   "cycles",
 ];
 const IO_SCALARS = [
@@ -162,6 +163,7 @@ export function restoreState(system, state) {
   }
   for (const key of CPU_SCALARS) cpu[key] = state.cpu[key];
   cpu.wz ??= 0; // absent in version-1 saves from before emu phase 1
+  cpu.afterPrefix ??= false; // likewise
   for (const key of IO_SCALARS) io[key] = state.io[key];
 
   system.memory.ram.set(fromBase64(state.memory.ram));

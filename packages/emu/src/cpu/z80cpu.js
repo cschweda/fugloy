@@ -75,6 +75,7 @@ export class Z80CPU {
     // EI enables interrupts only after the instruction that follows it;
     // counts down at the end of each executed instruction (2 -> 1 -> enable).
     this.pendingEI = 0;
+    this.afterPrefix = false; // a DD or FD the next byte made a no-op; no interrupt until it runs
 
     // When true, unimplemented opcodes throw instead of executing as NOP.
     // Test harnesses use this so instruction-set gaps can't hide.
@@ -234,11 +235,13 @@ export class Z80CPU {
     this.IFF2 = false;
     this.interruptMode = 0;
     this.pendingEI = 0;
+    this.afterPrefix = false; // a DD or FD the next byte made a no-op; no interrupt until it runs
     this.cycles = 0;
   }
 
   // Execute single instruction
   executeInstruction() {
+    this.afterPrefix = false;
     if (this.halted) {
       this.lastOpCycles = 4;
       this.cycles += 4;
@@ -281,7 +284,7 @@ export class Z80CPU {
    * which in IM 0/1 behaves as RST 38.
    */
   interrupt(dataBus = 0xff) {
-    if (!this.IFF1 || this.pendingEI > 0) {
+    if (!this.IFF1 || this.pendingEI > 0 || this.afterPrefix) {
       return false;
     }
 
@@ -341,11 +344,9 @@ export class Z80CPU {
       return this.executeED();
     }
     if (opcode === 0xdd) {
-      this.incrementR();
       return this.executeDD();
     }
     if (opcode === 0xfd) {
-      this.incrementR();
       return this.executeFD();
     }
 
@@ -1939,7 +1940,14 @@ export class Z80CPU {
 
   executeDD() {
     const opcode = this.readMemory(this.registers.PC);
+    // Before another prefix or ED, DD is a 4-T-state no-op: leave PC on that byte, which starts
+    // the next step, and take no interrupt before it (Young §3.6).
+    if (opcode === 0xdd || opcode === 0xfd || opcode === 0xed) {
+      this.afterPrefix = true;
+      return 4;
+    }
     this.registers.PC = (this.registers.PC + 1) & 0xffff;
+    this.incrementR(); // the second opcode fetch
 
     // DD instructions (IX register operations)
     // Most DD instructions mirror HL instructions but use IX
@@ -1960,7 +1968,14 @@ export class Z80CPU {
 
   executeFD() {
     const opcode = this.readMemory(this.registers.PC);
+    // Before another prefix or ED, FD is a 4-T-state no-op: leave PC on that byte, which starts
+    // the next step, and take no interrupt before it (Young §3.6).
+    if (opcode === 0xdd || opcode === 0xfd || opcode === 0xed) {
+      this.afterPrefix = true;
+      return 4;
+    }
     this.registers.PC = (this.registers.PC + 1) & 0xffff;
+    this.incrementR(); // the second opcode fetch
 
     // FD instructions (IY register operations)
     // Most FD instructions mirror HL instructions but use IY
@@ -2648,6 +2663,10 @@ export class Z80CPU {
         // substituted and take no displacement (INC IXH, ADD A,IXL, ...):
         // the HL-swap delegation is faithful for these.
         if (this.opcodeHandlers[opcode]) {
+          // EX DE,HL and EXX ignore the prefix
+          if (opcode === 0xeb || opcode === 0xd9) {
+            return this.opcodeHandlers[opcode].call(this) + 4;
+          }
           const tempHL = this.HL;
           this.HL = indexReg;
           const cycles = this.opcodeHandlers[opcode].call(this);

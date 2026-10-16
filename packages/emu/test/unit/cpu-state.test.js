@@ -21,4 +21,21 @@ describe('CPU state that only the flags show', () => {
     restoreState(restored, state);
     expect(restored.cpu.wz).toBe(0);
   });
+
+  it('a save state keeps a lone prefix pending', () => {
+    const saved = blank();
+    saved.cpu.afterPrefix = true;
+    const restored = blank();
+    restoreState(restored, serializeState(saved));
+    expect(restored.cpu.afterPrefix).toBe(true);
+  });
+
+  it('a save from before emu phase 1 restores with no prefix pending', () => {
+    const state = serializeState(blank());
+    delete state.cpu.afterPrefix;
+    const restored = blank();
+    restored.cpu.afterPrefix = true;
+    restoreState(restored, state);
+    expect(restored.cpu.afterPrefix).toBe(false);
+  });
 });
