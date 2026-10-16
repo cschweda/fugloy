@@ -10,6 +10,9 @@ import { assemble, expectSameImage, skipIfNoZmac } from './zmac.js';
 const CMD_FILES = [
   'asylum1a.cmd', 'asylum1b.cmd', 'asylum1c.cmd', 'asylum1d.cmd', 'asylum1e.cmd', 'asylum1f.cmd', 'asylum16.cmd',
   'asylum32.cmd', 'asylum1g.cmd', 'asylumd.bad', 'volcano.cmd', 'GO.CMD', 'ARMOUR.III', 'enchante.cmd',
+  'spcwarp1.cmd', 'spcwarp2.cmd', 'spcwarp3.cmd',
+  ...Array.from({ length: 11 }, (_, i) => `seadrg${String(i + 1).padStart(2, '0')}.cmd`),
+  'pirate.cmd', 'dthmz5k1.cmd', 'dthmz5k2.cmd', 'sa04118a.cmd', 'sa04118b.cmd',
 ];
 
 /** Runs only when both zmac (required under FUGLOY_REQUIRE_ZMAC=1) and the file are present. */
