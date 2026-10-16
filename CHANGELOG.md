@@ -8,10 +8,31 @@ Releases are tagged `vX.Y.Z` on `main`.
 
 ## [Unreleased]
 
-Phase 2, sub-project A: Pass 1 and the round-trip proof, plus the emulator and
-MCP server stubs.
+Phase 2, sub-projects A (Pass 1 and the round-trip proof) and B (labels and
+the hint file), plus the emulator and MCP server stubs.
 
 ### Added
+
+- Hint file (`--hints`): line-oriented text keyed by block and offset, with
+  content-based block identity (length plus a SHA-256 prefix of the first 64
+  bytes, computed in pure TypeScript) so the same hints apply to relocated
+  builds; directives `entry`, `code`, `bytes`, `words`, `string`, `nocode`,
+  `table`, `name`, `comment`; every parse error reports its line.
+- `--write-hints <path>` writes a hint-file skeleton (identities and `--entry`
+  addresses) and refuses to overwrite.
+- Annotations drive Pass 1: overrides win and are applied before descent,
+  `nocode` ends paths, declared tables seed roots, `code` with a length
+  forces decoding.
+- Pass 2 symbols: `L` jump targets, `SUB_` call targets, `DATA_` data
+  references (`LD BC|DE|HL|IX|IY,nn` and `(nn)` operands into loaded memory),
+  `TBL_` tables; user names replace them.
+- Labels in zmac output (`NAME:` lines, `EQU` for a symbol inside an
+  instruction, `DW` rows for words and tables), in the listing, and in the IR
+  (`symbols`, `hints`); every round trip re-proven with labels on, including
+  all real samples.
+- `fixtures/hints/asylum16.hints`, documenting that build's self-relocating
+  loader: it copies the payload from `$80DD` down to `$42F3` and jumps to
+  `$43AE`, so its game code is never at a loaded address.
 
 - Pass 1 recursive descent (`@fugloy/disasm`): a byte-kind map parallel to
   the image, decoded instructions, cross-references, external (ROM) targets,
@@ -45,6 +66,8 @@ MCP server stubs.
 - `fugloy <file>` prints the pass 1 listing for load modules and raw
   binaries; the phase-1 linear sweep is `--sweep`. `.BAS` listings are
   unchanged unless `--entry` names hidden code.
+- The pass 1 header counts bytes decoded as code and, separately, bytes typed
+  as data by hints.
 - Project plan: the undocumented-opcode spelling question is closed (zmac's
   names, which the listing already used).
 - README: CI badge, release badge (latest semver tag, live now that the

@@ -145,7 +145,7 @@ Pass 1 produces a typed map of the image: each byte is code, data of a known kin
 
 Pass 2 never changes what a byte is, only what it is called.
 
-**Label synthesis.** Every jump, call, or data-reference target gets a label whose prefix records the use: `L5210` jump target, `SUB_5340` call target, `DATA_5400` referenced bytes, `TBL_5480` jump table. `LD HL,nnnn` and `LD DE,nnnn` operands inside a loaded region are data references; outside, constants.
+**Label synthesis.** Every jump, call, or data-reference target gets a label whose prefix records the use: `L5210` jump target, `SUB_5340` call target, `DATA_5400` referenced bytes, `TBL_5480` jump table. `LD HL,nnnn` and `LD DE,nnnn` operands inside a loaded region are data references; outside, constants. (Phase 2 applies the same rule to `LD BC|IX|IY,nnnn` and to every `(nnnn)` memory operand; `LD SP,nnnn` and port numbers stay constants.)
 
 **Symbol tables**, one per machine, chosen by the machine selector:
 

@@ -22,9 +22,16 @@ Sub-project C (hidden code and heuristics) follows.
 **Done when:** every synthetic fixture and every present real sample
 round-trips with labels on; a hint file round-trips through the writer and
 the parser; a hint file written against asylum1b applies unchanged to
-asylum1c and asylum1d; a committed hint fixture declares asylum16's dispatch
-and every table entry's target decodes as code; the CLI reads and writes
-hints.
+asylum1c and asylum1d; a committed hint fixture documents asylum16's loader
+and applies with nothing unmatched; the CLI reads and writes hints.
+
+*Outcome note (2026-10-16):* asylum16 has no dispatch table. Its stub
+interprets a stream at `$80DD` whose `<` records copy the loaded payload down
+to `$42F3` and whose final `x` record jumps to `$43AE`, an address never in
+the loaded image. The game relocates itself at run time, so no static hint
+can reach its code; the fixture documents the loader instead, and a
+`relocate` hint emitted through zmac's `.phase` directive is proposed for a
+later sub-project.
 
 ## 2. Non-goals
 
@@ -59,8 +66,10 @@ arrives with C's heuristic.
 - **Overrides win.** `bytes`, `words`, `string` pre-type the map before
   descent, which then treats them as data; `nocode` ends any path that
   reaches it; `entry`, `code`, and table targets are roots; `code` with a
-  length additionally forces linear decoding of still-unknown bytes in its
-  range after descent.
+  length forces linear decoding of its range *before* the worklist runs, so
+  the override wins over a disagreeing natural path and the forced
+  instructions' transfers are followed; data overrides inside the range are
+  skipped.
 - **Tables are two bytes wide in B.** `table <count> <width>` accepts the
   plan's grammar; width 1 is rejected with a message, because a one-byte
   entry needs a base the plan does not specify.
@@ -71,10 +80,11 @@ arrives with C's heuristic.
 - **Precedence of synthesized kinds:** `SUB_` over `L` over `TBL_` over
   `DATA_` at the same address; a `name` hint replaces the name and keeps the
   kind, or creates a `data` symbol where none was synthesized.
-- **User names** match `[A-Za-z_][A-Za-z0-9_]{0,31}` and are not Z80
-  mnemonics, registers, condition codes, or zmac directives; the same
-  address named twice is an error. Synthesized names cannot collide with user
-  names because user names replace them.
+- **User names** match `[A-Za-z_][A-Za-z0-9_]{0,31}`, are not Z80
+  mnemonics, registers, condition codes, or zmac directives, and do not have
+  the generated shape `L`/`SUB_`/`DATA_`/`TBL_` plus four hex digits (so a
+  user name can never collide with a synthesized label elsewhere); the same
+  address named twice is an error.
 - **Labels in the source** are `NAME:` lines before the row at that address;
   DB and DW rows split at every symbol address; a symbol inside an
   instruction is emitted as `NAME EQU addrH` after the header. Jump and call
@@ -190,10 +200,12 @@ Before the worklist: overrides pre-type the map (`Kind.Byte`, `Kind.Word`,
 `Kind.String`); `nocode` addresses go into a set the loop checks, ending the
 path with a `nocode` diagnostic; each table is typed as words and its
 `count` little-endian entries that are loaded become roots (an unloaded entry
-is an `external`). Roots are the module entry, `entries`, hint entries, code
-hints, and table targets, in that order. After descent, each `code` hint
-with a length decodes linearly through still-unknown bytes in its range.
-`DiagnosticKind` gains `'nocode'`.
+is an `external`; the xref's `from` is the entry's own address); then each
+`code` hint with a length decodes linearly through still-unknown bytes in its
+range, flow ignored, following its transfers. Roots are the module entry,
+`entries`, hint entries, code hints, and table targets, in that order.
+Descent refuses an instruction whose bytes would cover any typed byte, data
+as well as code. `DiagnosticKind` gains `'nocode'`.
 
 ### 5.6 Pass 2 (`src/analysis/symbols.ts`)
 
@@ -302,10 +314,12 @@ Test-first per unit, as in A.
 - **Rebasing proof:** hints written against asylum1b, applied to asylum1c and
   asylum1d, yield the same offsets, the same symbol names relative to each
   base, and no unmatched blocks (skip when absent).
-- **Asylum acceptance:** `fixtures/hints/asylum16.hints` (offsets and hashes
-  only) declares the dispatch table found by reading the entry stub; with it
-  applied, every table entry target is an instruction start and the reached
-  fraction is recorded in the report (skip when absent).
+- **Asylum acceptance:** `fixtures/hints/asylum16.hints` (offsets, hashes,
+  names, and comments only) documents the loader found by reading the entry
+  stub; with it applied nothing is unmatched, the loader's `JP (HL)` is the
+  only indirect jump, the stream's `x` record names `$43AE`, and the round
+  trip holds (skip when absent). Generated hint fixtures live under
+  `fixtures/synthetic/hints/`; hand-written ones under `fixtures/hints/`.
 
 ## 9. Risks
 

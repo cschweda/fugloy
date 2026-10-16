@@ -19,7 +19,8 @@ Named after the island in *Voyage of the Valkyrie*; spelled `fugloy` in code.
 **In progress: phase 2.** Pass 1 recursive descent, zmac source that
 reassembles to the identical memory image (proven against every fixture, every
 present real program, and every Z80 encoding under a pinned zmac), and a JSON
-IR are done; labels, the hint file, and hidden-code detection follow. Every
+IR, Pass 2 labels, and the hint file are done; hidden-code detection and the
+string and jump-table heuristics follow. Every
 change is recorded in [CHANGELOG.md](CHANGELOG.md); releases are tagged
 `vX.Y.Z` on `main`.
 
@@ -56,12 +57,28 @@ pnpm fugloy game.cmd --entry 7000 --entry 7A40   # extra entry points for pass 1
 pnpm fugloy game.cmd --format zmac -o game.z     # assembler source that reassembles to the same image
 pnpm fugloy game.cmd --format ir                 # JSON: regions, basic blocks, xrefs, diagnostics
 pnpm fugloy game.cmd --sweep                     # the phase-1 linear sweep instead of pass 1
+pnpm fugloy game.cmd --write-hints game.hints    # a hint-file skeleton to edit by hand
+pnpm fugloy game.cmd --hints game.hints          # apply entries, overrides, tables, names, comments
+```
+
+A hint file is line-oriented text keyed by block and offset, so it diffs in
+git and the same file applies to a relocated build of the same program:
+
+```
+fugloy-hints 1
+block 0 length $4F49 hash 7f83b1657ff1fc53    # start $6300
+block 0:$4E12 name MAIN_ENTRY
+block 0:$0D12 table 16 2
+block 0:$1A00 bytes $40
+block 0:$2000 comment main loop
 ```
 
 The format is detected from content, never from the extension; `.III`,
 `.bad`, and `.CMD` are all load modules. Raw binaries need `--base`. Bytes
 pass 1 does not reach are listed as `DB`; a `.BAS` file keeps its BASIC
-listing unless `--entry` names hidden code.
+listing unless `--entry` names hidden code. Jump and call targets, data
+references, and declared tables get `L`, `SUB_`, `DATA_`, and `TBL_` labels;
+`name` hints rename them.
 
 ## Sample programs
 
