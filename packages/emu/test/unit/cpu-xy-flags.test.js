@@ -136,6 +136,16 @@ describe("X/Y from A on accumulator rotates and carry ops", () => {
     expect(c.flagC).toBe(1);
     expect(xy(c)).toBe(0x28);
   });
+
+  it("CPL copies the complemented A's bits 3/5", () => {
+    const c = cpuWithMemory([0x2f, 0x2f]);
+    c.registers.A = 0x00; // -> 0xFF
+    c.registers.F = 0x00;
+    c.executeInstruction();
+    expect(xy(c)).toBe(0x28);
+    c.executeInstruction(); // -> 0x00
+    expect(xy(c)).toBe(0x00);
+  });
 });
 
 describe("X/Y on CB-prefixed ops", () => {

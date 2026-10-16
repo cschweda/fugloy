@@ -1354,6 +1354,7 @@ export class Z80CPU {
       this.registers.A = ~this.registers.A & 0xff;
       this.flagH = true;
       this.flagN = true;
+      this._xy(this.registers.A);
       return 4;
     };
 
