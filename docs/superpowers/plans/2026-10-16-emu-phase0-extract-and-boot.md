@@ -213,6 +213,8 @@ it('encodes and decodes base64 itself', () => {
 });
 ```
 
+*Amended after the final review:* the scan's comment stripper and name list moved into `packages/emu/test/platform-scan.js`, a small lexer that blanks string, template, and regular-expression contents too (a `//` inside a string once hid the rest of its line), with a longer list of names and tests of its own (`platform-scan.test.js`).
+
 - [ ] **Step 2: Run and see them fail**
 
 Run: `pnpm -s vitest run packages/emu/test/platform-free.test.js`
@@ -559,12 +561,14 @@ import { fileURLToPath } from 'node:url';
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
 
 export function configPath(env = process.env) {
-  const candidates = [env.FUGLOY_CONFIG, join(repo, 'fugloy.mcp.json'), join(homedir(), '.config', 'fugloy', 'fugloy.mcp.json')];
-  return candidates.find((p) => p !== undefined && p !== '' && existsSync(p)) ?? null;
+  // A FUGLOY_CONFIG that is set wins even when it names nothing, so a typo fails instead of falling back.
+  if (env.FUGLOY_CONFIG !== undefined && env.FUGLOY_CONFIG !== '') return env.FUGLOY_CONFIG;
+  return [join(repo, 'fugloy.mcp.json'), join(homedir(), '.config', 'fugloy', 'fugloy.mcp.json')].find((p) => existsSync(p)) ?? null;
 }
 
 export function configuredRom(model = 'model3', config = configPath()) {
   if (config === null) return null;
+  if (!existsSync(config)) throw new Error(`no config file at ${config}`);
   const entry = (JSON.parse(readFileSync(config, 'utf8')).roms ?? {})[model];
   if (entry === undefined) return null;
   const path = isAbsolute(entry) ? entry : resolve(dirname(config), entry);

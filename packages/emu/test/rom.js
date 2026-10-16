@@ -1,6 +1,7 @@
 /**
  * The ROM a test boots, from the `roms` table of fugloy.mcp.json (docs/fugloy-mcp-spec.md §3):
- * $FUGLOY_CONFIG, else fugloy.mcp.json at the repository root, else ~/.config/fugloy/fugloy.mcp.json.
+ * $FUGLOY_CONFIG (which must exist when set), else fugloy.mcp.json at the repository root, else
+ * ~/.config/fugloy/fugloy.mcp.json.
  * A relative path in the file is relative to the file's own folder. No config, or no entry for
  * the model: null, and the test skips. An entry naming a missing file is an error, never a skip.
  */
@@ -12,12 +13,14 @@ import { fileURLToPath } from 'node:url';
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
 
 export function configPath(env = process.env) {
-  const candidates = [env.FUGLOY_CONFIG, join(repo, 'fugloy.mcp.json'), join(homedir(), '.config', 'fugloy', 'fugloy.mcp.json')];
-  return candidates.find((p) => p !== undefined && p !== '' && existsSync(p)) ?? null;
+  // A FUGLOY_CONFIG that is set wins even when it names nothing, so a typo fails instead of falling back.
+  if (env.FUGLOY_CONFIG !== undefined && env.FUGLOY_CONFIG !== '') return env.FUGLOY_CONFIG;
+  return [join(repo, 'fugloy.mcp.json'), join(homedir(), '.config', 'fugloy', 'fugloy.mcp.json')].find((p) => existsSync(p)) ?? null;
 }
 
 export function configuredRom(model = 'model3', config = configPath()) {
   if (config === null) return null;
+  if (!existsSync(config)) throw new Error(`no config file at ${config}`);
   const entry = (JSON.parse(readFileSync(config, 'utf8')).roms ?? {})[model];
   if (entry === undefined) return null;
   const path = isAbsolute(entry) ? entry : resolve(dirname(config), entry);

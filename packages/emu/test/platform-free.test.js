@@ -3,19 +3,14 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, expect, it, vi } from 'vitest';
 import { CassetteSystem, fromBase64, toBase64, Z80CPU } from '../src/index.js';
+import { platformHits } from './platform-scan.js';
 
 const src = fileURLToPath(new URL('../src/', import.meta.url));
 const files = (dir) => readdirSync(dir).flatMap((e) => (statSync(join(dir, e)).isDirectory() ? files(join(dir, e)) : e.endsWith('.js') ? [join(dir, e)] : []));
-/** Code without comments, so prose like "the window of time" does not count. */
-const code = (text) => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-const GLOBALS = ['window', 'document', 'navigator', 'globalThis', 'self', 'requestAnimationFrame', 'cancelAnimationFrame', 'AudioContext', 'webkitAudioContext', 'localStorage', 'sessionStorage', 'fetch', 'XMLHttpRequest', 'addEventListener', 'removeEventListener', 'atob', 'btoa', 'Buffer', 'process', 'require', 'console', 'setTimeout', 'setInterval', 'performance', 'queueMicrotask'];
-/** A bare global (not a property like `this.process`, not part of a longer name), or a clock or random source. */
-const PLATFORM = new RegExp(`(?<![.\\w$])(?:${GLOBALS.join('|')})(?![\\w$])|\\bDate\\.now\\b|\\bnew Date\\b|\\bMath\\.random\\b`);
-
 afterEach(() => vi.restoreAllMocks());
 
 it('names no browser or Node global anywhere in src', () => {
-  const hits = files(src).flatMap((f) => code(readFileSync(f, 'utf8')).split('\n').flatMap((line, i) => (PLATFORM.test(line) ? [`${f.slice(src.length)}:${i + 1}: ${line.trim()}`] : [])));
+  const hits = files(src).flatMap((f) => platformHits(readFileSync(f, 'utf8')).map((hit) => `${f.slice(src.length)}:${hit}`));
   expect(hits).toEqual([]);
 });
 

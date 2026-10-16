@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { configuredRom } from './rom.js';
+import { configPath, configuredRom } from './rom.js';
 
 let dir;
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
@@ -29,4 +29,11 @@ it('fails, rather than skipping, when the config names a ROM that is not there',
 it('returns null with no config or no entry for the model, so the test skips', () => {
   expect(configuredRom('model3', null)).toBeNull();
   expect(configuredRom('model3', config({ model1: './l2.rom' }))).toBeNull();
+});
+
+it('fails on a FUGLOY_CONFIG that names a missing file, instead of falling back to another config', () => {
+  dir = mkdtempSync(join(tmpdir(), 'fugloy-rom-'));
+  const missing = join(dir, 'nowhere', 'fugloy.mcp.json');
+  expect(configPath({ FUGLOY_CONFIG: missing })).toBe(missing);
+  expect(() => configuredRom('model3', missing)).toThrow(/no config file/);
 });
