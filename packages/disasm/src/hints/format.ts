@@ -49,6 +49,7 @@ const ZMAC = [
   'NAME', 'TITLE', 'SUBTTL', 'PAGE', 'EJECT', 'SPACE', 'LIST', 'NOLIST', 'MLIST', 'ASEG', 'CSEG', 'DSEG', 'COMMON', 'PHASE', 'DEPHASE', 'SET', 'ASSERT',
   'ERROR', 'BYTE', 'WORD', 'TEXT', 'ASCII', 'ASCIZ', 'ASCIS', 'RADIX', 'JPERROR', 'JRPROMOTE', 'DSYM', 'DIAG', 'SETT', 'RSYM', 'SKIP',
   'AND', 'OR', 'XOR', 'NOT', 'MOD', 'SHL', 'SHR', 'EQ', 'NE', 'LT', 'LE', 'GT', 'GE', 'HIGH', 'LOW', 'NUL', 'DEFINED', 'Z80', 'Z180',
+  'T', 'TILO', 'TIHI', 'OCF', // zmac's instruction-timing operators
 ];
 const mnemonics = new Set<string>();
 for (const table of Object.values(TABLES)) for (const t of table) if (t.prefix === undefined) mnemonics.add(t.mnemonic);
@@ -88,6 +89,8 @@ export function parseHints(text: string): { file: HintFile; errors: HintError[] 
   const blocks: HintBlock[] = [];
   const hints: Hint[] = [];
   const named = new Set<string>();
+  /** Upper-cased user names already taken, with where; zmac folds label case. */
+  const usedNames = new Map<string, string>();
   let program: string | undefined;
   let headerSeen = false;
   const lines = text.split(/\r?\n/);
@@ -103,7 +106,8 @@ export function parseHints(text: string): { file: HintFile; errors: HintError[] 
       fail(tokens[0] === 'fugloy-hints' ? 'unsupported hint file version' : 'expected "fugloy-hints 1" first');
       continue;
     }
-    if (tokens[0] === 'program' && tokens[1] === 'sha256' && tokens[2] !== undefined) {
+    if (tokens[0] === 'program' && tokens[1] === 'sha256') {
+      if (tokens[2] === undefined || !/^[0-9a-f]{64}$/i.test(tokens[2])) { fail('bad program hash'); continue; }
       program = tokens[2].toLowerCase();
       continue;
     }
@@ -132,8 +136,16 @@ export function parseHints(text: string): { file: HintFile; errors: HintError[] 
     if (block === undefined) { fail(`block ${blockIndex} is not declared`); continue; }
     if (offset >= block.length) { fail(`offset $${hex4(offset)} is past the end of block ${blockIndex} (length $${hex4(block.length)})`); continue; }
     const directive = tokens[2];
-    const args = tokens.slice(3);
+    // A trailing `# comment` is allowed on every line except `comment`, whose text runs to the end.
+    const rawArgs = tokens.slice(3);
+    const hashAt = rawArgs.findIndex((t) => t.startsWith('#'));
+    const args = directive === 'comment' || hashAt < 0 ? rawArgs : rawArgs.slice(0, hashAt);
     const base = { block: blockIndex, offset, line };
+    const noExtra = (allowed: number): boolean => {
+      if (args.length <= allowed) return true;
+      fail(`unexpected argument "${args[allowed]}"`);
+      return false;
+    };
     const optionalLength = (): number | null | undefined => {
       if (args[0] === undefined) return undefined;
       const n = parseNumber(args[0]);
@@ -142,13 +154,14 @@ export function parseHints(text: string): { file: HintFile; errors: HintError[] 
     };
     switch (directive) {
       case 'entry':
-        hints.push({ ...base, directive: 'entry' });
+        if (noExtra(0)) hints.push({ ...base, directive: 'entry' });
         break;
       case 'nocode':
-        hints.push({ ...base, directive: 'nocode' });
+        if (noExtra(0)) hints.push({ ...base, directive: 'nocode' });
         break;
       case 'code':
       case 'string': {
+        if (!noExtra(1)) break;
         const n = optionalLength();
         if (n === null) break;
         hints.push(n === undefined ? { ...base, directive } : { ...base, directive, length: n });
@@ -157,6 +170,7 @@ export function parseHints(text: string): { file: HintFile; errors: HintError[] 
       case 'bytes':
       case 'words': {
         if (args[0] === undefined) { fail(`${directive} needs a length`); break; }
+        if (!noExtra(1)) break;
         const n = parseNumber(args[0]);
         if (n === null) { fail(`bad number "${args[0]}"`); break; }
         hints.push({ ...base, directive, length: n });
@@ -164,10 +178,12 @@ export function parseHints(text: string): { file: HintFile; errors: HintError[] 
       }
       case 'table': {
         if (args[0] === undefined || args[1] === undefined) { fail('table needs a count and a width'); break; }
+        if (!noExtra(2)) break;
         const count = parseNumber(args[0]);
         const width = parseNumber(args[1]);
         if (count === null) { fail(`bad number "${args[0]}"`); break; }
         if (width === null) { fail(`bad number "${args[1]}"`); break; }
+        if (count < 1) { fail('table needs a count of at least 1'); break; }
         if (width !== 2) { fail(`table width ${width} is not supported`); break; }
         hints.push({ ...base, directive: 'table', count, width });
         break;
@@ -175,11 +191,16 @@ export function parseHints(text: string): { file: HintFile; errors: HintError[] 
       case 'name': {
         const name = args[0];
         if (name === undefined) { fail('name needs an identifier'); break; }
+        if (!noExtra(1)) break;
         const problem = nameProblem(name);
         if (problem !== null) { fail(problem); break; }
         const key = `${blockIndex}:${offset}`;
         if (named.has(key)) { fail(`address ${blockIndex}:$${hex4(offset)} already has a name`); break; }
+        const upper = name.toUpperCase();
+        const elsewhere = usedNames.get(upper);
+        if (elsewhere !== undefined) { fail(`name "${name}" is already used at ${elsewhere}`); break; }
         named.add(key);
+        usedNames.set(upper, `${blockIndex}:$${hex4(offset)}`);
         hints.push({ ...base, directive: 'name', name });
         break;
       }

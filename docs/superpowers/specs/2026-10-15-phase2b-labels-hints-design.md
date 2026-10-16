@@ -84,7 +84,9 @@ arrives with C's heuristic.
   mnemonics, registers, condition codes, or zmac directives, and do not have
   the generated shape `L`/`SUB_`/`DATA_`/`TBL_` plus four hex digits (so a
   user name can never collide with a synthesized label elsewhere); the same
-  address named twice is an error.
+  address named twice, or one name (compared case-insensitively, as zmac
+  folds label case) used at two addresses, is an error. zmac's timing
+  operators `T`, `TILO`, `TIHI`, and `OCF` are reserved too.
 - **Labels in the source** are `NAME:` lines before the row at that address;
   DB and DW rows split at every symbol address; a symbol inside an
   instruction is emitted as `NAME EQU addrH` after the header. Jump and call
@@ -119,7 +121,10 @@ block 0:$3F00 nocode
 Grammar: blank lines and `#` comments ignored; the first non-comment line is
 `fugloy-hints 1`; `program sha256 <64 hex>` optional; `block <i> length <n>
 hash <16 hex>` declares identities; `block <i>:<offset> <directive> [args]`
-declares hints. Directives and arguments: `entry`; `code [length]`; `bytes
+declares hints. A `table` is clipped to its run with a warning rather than
+typing bytes of the next run. A trailing `# comment` is allowed on every line except a
+`comment` directive, whose text runs to the end of the line. Directives and
+arguments: `entry`; `code [length]`; `bytes
 <length>`; `words <length>`; `string [length]` (without a length: through the
 first `00H`, `0DH`, or `03H` byte in the run); `nocode`; `table <count>
 <width>`; `name <identifier>`; `comment <text to end of line>`. An offset at
@@ -228,7 +233,7 @@ Externals get no symbol.
 ```ts
 export interface EmitOptions { source?: string; addresses?: boolean; symbols?: SymbolTable; annotations?: Annotations }
 export function emitZmac(image, pass1, transfer, opts?): string;
-export function renderOperands(ins: Instruction, addr: number, symbols: SymbolTable | undefined): string;   // shared with the listing
+export function renderOperands(ins: Instruction, symbols?: SymbolTable): string;   // shared with the listing
 ```
 
 Output order: header comment; `NAME EQU addrH` for every symbol inside an

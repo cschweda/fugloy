@@ -103,9 +103,16 @@ export function applyHints(file: HintFile, image: MemoryImage, programHash?: str
         annotations.overrides.push({ addr, kind: 'string', length: clip(length, 'string') });
         break;
       }
-      case 'table':
-        annotations.tables.push({ addr, count: hint.count, width: hint.width });
+      case 'table': {
+        const fit = Math.floor(room / hint.width);
+        let count = hint.count;
+        if (count > fit) {
+          warnings.push(`table at ${hint.block}:$${hex4(hint.offset)} runs past the end of the run; clipped to ${fit} ${fit === 1 ? 'entry' : 'entries'}`);
+          count = fit;
+        }
+        if (count >= 1) annotations.tables.push({ addr, count, width: hint.width });
         break;
+      }
       case 'name':
         annotations.names.set(addr, hint.name);
         break;

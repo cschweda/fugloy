@@ -52,9 +52,24 @@ describe('parseHints', () => {
     [`${HEAD}block 0 length $10 hash 0123456789abcdef\n`, 3, 'block 0 is already declared'],
     [`${HEAD}bogus line\n`, 3, 'unexpected line'],
     [`${HEAD}block 0:$1 name\n`, 3, 'name needs an identifier'],
+    [`${HEAD}block 0:$1 name FOO\nblock 0:$2 name FOO\n`, 4, 'name "FOO" is already used at 0:$0001'],
+    [`${HEAD}block 0:$1 name Main\nblock 0:$2 name MAIN\n`, 4, 'name "MAIN" is already used at 0:$0001'],
+    [`${HEAD}block 0:$1 name T\n`, 3, 'name "T" is reserved'],
+    [`${HEAD}block 0:$1 entry now\n`, 3, 'unexpected argument "now"'],
+    [`${HEAD}block 0:$1 table 0 2\n`, 3, 'table needs a count of at least 1'],
+    ['fugloy-hints 1\nprogram sha256 nothex\n', 2, 'bad program hash'],
   ])('reports %j at line %i: %s', (text, line, message) => {
     const r = parseHints(text);
     expect(r.errors.map((e) => [e.line, e.message])).toEqual([[line, message]]);
+  });
+
+  it('allows a trailing # comment on any directive line', () => {
+    const f = ok(`${HEAD}block 0:$2 code # forced\nblock 0:$3 bytes 2 # two\nblock 0:$4 comment keep # this\n`);
+    expect(f.hints.map(({ line: _line, ...h }) => h)).toEqual([
+      { block: 0, offset: 2, directive: 'code' },
+      { block: 0, offset: 3, directive: 'bytes', length: 2 },
+      { block: 0, offset: 4, directive: 'comment', text: 'keep # this' },
+    ]);
   });
 
   it('collects every error in a file rather than stopping at the first', () => {
@@ -126,5 +141,7 @@ describe('isValidName', () => {
     expect(isValidName('')).toBe(false);
     expect(RESERVED.has('SLL')).toBe(true);
     expect(RESERVED.has('ORG')).toBe(true);
+    for (const w of ['T', 'TILO', 'TIHI', 'OCF']) expect(RESERVED.has(w), w).toBe(true);
+    expect(isValidName('tilo')).toBe(false);
   });
 });

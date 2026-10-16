@@ -82,6 +82,13 @@ describe('applyHints', () => {
     expect(applied.warnings).toEqual(['bytes at 0:$0005 runs past the end of the run; clipped to $0002 bytes']);
   });
 
+  it('clips a table to its run with a warning instead of retyping the next run', () => {
+    const img = image({ 0x6000: pattern(8), 0x6010: [0x3e, 0x01, 0xc9, 0x00] });
+    const applied = applyHints(fileFor(img, [h(0, 4, 'table', { count: 8, width: 2 })]), img);
+    expect(applied.annotations.tables).toEqual([{ addr: 0x6004, count: 2, width: 2 }]);
+    expect(applied.warnings).toEqual(['table at 0:$0004 runs past the end of the run; clipped to 2 entries']);
+  });
+
   it('starts from empty annotations', () => {
     expect(emptyAnnotations()).toEqual({ entries: [], overrides: [], tables: [], names: new Map(), comments: new Map() });
   });

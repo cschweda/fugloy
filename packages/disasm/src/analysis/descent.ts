@@ -116,7 +116,7 @@ export function recursiveDescent(image: MemoryImage, rootsIn: number[], annotati
   // 2. Tables: typed as words; their loaded entries become roots after the explicit ones.
   const tableTargets: { from: number; to: number }[] = [];
   for (const t of annotations.tables) {
-    map.mark(t.addr, t.count * t.width, Kind.Word);
+    for (let i = 0; i < t.count * t.width && image.isLoaded(t.addr + i); i++) map.mark((t.addr + i) & 0xffff, 1, Kind.Word);
     for (let i = 0; i < t.count; i++) {
       const at = (t.addr + i * t.width) & 0xffff;
       const lo = image.read(at);

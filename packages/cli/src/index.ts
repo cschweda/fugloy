@@ -208,7 +208,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
   let text: string;
   if (values.sweep === true && format === 'listing') {
     text = mod.format === 'cmd' ? renderCmdListing(mod, { source }) : mod.format === 'raw' ? renderRawListing(mod, { source }) : renderBasListing(mod, { source });
-  } else if (format === 'listing' && mod.format === 'bas' && entries.length === 0) {
+  } else if (format === 'listing' && mod.format === 'bas' && entries.length === 0 && hints === undefined) {
     text = renderBasListing(mod, { source });
   } else {
     const analysis = analyze(mod, hints === undefined ? { entries, annotations } : { entries, annotations, hints });

@@ -71,10 +71,14 @@ describe('descent with annotations', () => {
     expect(p.externals).toEqual([0x0033]);
   });
 
-  it('stops reading table entries at the end of loaded memory', () => {
-    const p = recursiveDescent(image({ 0x6010: [0x00, 0x60, 0x33] }), [], ann({ tables: [{ addr: 0x6010, count: 4, width: 2 }] }));
+  it('stops reading and typing table entries at the end of loaded memory', () => {
+    const img = image({ 0x6010: [0x00, 0x60, 0x33], 0x6020: [0x3e, 0x01, 0xc9] });
+    const p = recursiveDescent(img, [0x6020], ann({ tables: [{ addr: 0x6010, count: 9, width: 2 }] }));
     expect(p.xrefs).toEqual([{ from: 0x6010, to: 0x6000, kind: 'jump' }]);
     expect(p.externals).toEqual([0x6000]);
+    expect(kinds(p, 0x6010, 3)).toEqual([Kind.Word, Kind.Word, Kind.Word]);
+    expect(p.map.kind(0x6013)).toBe(Kind.Unknown);
+    expect(starts(p)).toEqual([0x6020, 0x6022]); // the next run is untouched
   });
 
   it('decodes a code hint with a length linearly, ignoring flow, and still follows its transfers', () => {

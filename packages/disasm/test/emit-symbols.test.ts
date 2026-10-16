@@ -79,10 +79,12 @@ describe('emitZmac with symbols', () => {
     expect(text).toContain('\tDB\t01H\n\tDB\t02H,03H\t; second byte\n');
   });
 
-  it('produces exactly the sub-project A output when there are no symbols or annotations', () => {
+  it('emits no label lines, EQU, or comments when there are no symbols or annotations, and empty ones change nothing', () => {
     const img = image({ 0x6000: [0x21, 0x00, 0x3c, 0x36, 0x41, 0xc9], 0x7000: [0, 1, 2, 3, 4, 5, 6, 7, 8] });
     const p = recursiveDescent(img, [0x6000]);
-    expect(emitZmac(img, p, 0x6000, { symbols: new SymbolTable(), annotations: emptyAnnotations() })).toBe(emitZmac(img, p, 0x6000));
+    const plain = emitZmac(img, p, 0x6000);
+    expect(plain).toBe(['; Fugløy pass 1, 2 runs, 15 bytes, entry 6000H', '\tORG\t6000H', '\tLD\tHL,3C00H', '\tLD\t(HL),41H', '\tRET', '\tORG\t7000H', '\tDB\t00H,01H,02H,03H,04H,05H,06H,07H', '\tDB\t08H', '\tEND\t6000H', ''].join('\n'));
+    expect(emitZmac(img, p, 0x6000, { symbols: new SymbolTable(), annotations: emptyAnnotations() })).toBe(plain);
   });
 
   it('renders the hint-paths fixture with every path', () => {

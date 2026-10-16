@@ -255,6 +255,18 @@ describe('hint flags', () => {
     expect(err.join('')).toContain('exists');
   });
 
+  it('runs pass 1 on a .BAS file when --hints is given, like --entry', async () => {
+    const bas = `${fixtures}bas/hidden-code.bas`;
+    const { io, out, files } = capture();
+    const skel = capture();
+    expect(await run([bas, '--write-hints', '/virtual/bas.hints'], skel.io)).toBe(0);
+    files.set('/virtual/bas.hints', `${skel.files.get('/virtual/bas.hints')!}block 0:$000D entry\n`);
+    expect(await run([bas, '--hints', '/virtual/bas.hints'], io)).toBe(0);
+    const text = out.join('');
+    expect(text).toContain('; pass 1: roots $700D;');
+    expect(text).toContain('; hints: bas.hints: 1 block matched, 0 unmatched, 1 hint applied');
+  });
+
   it('refuses --sweep with --hints, and --hints with --write-hints', async () => {
     const a = capture();
     expect(await run([file, '--sweep', '--hints', hints], a.io)).toBe(2);
