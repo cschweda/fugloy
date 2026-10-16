@@ -5,6 +5,8 @@ sample/
 *.rom
 *.ROM
 packages/emu/roms/
+# Copyrighted manuals and books the symbol tables cite (phase 3); each table entry names its page.
+docs/reference/
 # Local ROM paths for the emulator and the MCP server (fugloy.mcp.example.json shows the format).
 fugloy.mcp.json
 
