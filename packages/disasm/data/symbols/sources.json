@@ -1,0 +1,87 @@
+{
+  "sources": [
+    {
+      "id": "m3-basic",
+      "author": "Radio Shack (Tandy Corporation)",
+      "title": "TRS-80 Model III Operation and BASIC Language Reference Manual",
+      "publisher": "Radio Shack",
+      "year": "1980",
+      "edition": "2nd",
+      "locator": "https://archive.org/details/trs-80-model-iii-manual"
+    },
+    {
+      "id": "paay",
+      "author": "Edwin R. Paay",
+      "title": "Level II ROM Reference Manual",
+      "publisher": "MICRO-80 Products",
+      "year": "1980",
+      "locator": "https://archive.org/details/Level_II_ROM_Reference_Manual_1980_Micro_Products"
+    },
+    {
+      "id": "decker",
+      "author": "Jack Decker",
+      "title": "TRS-80 ROM Routines Documented",
+      "publisher": "The Alternate Source",
+      "year": "1983",
+      "locator": "https://archive.org/details/ROM_Routines_Documented_1983_The_Alternate_Source"
+    },
+    {
+      "id": "l2-1979",
+      "author": "Radio Shack",
+      "title": "Level II BASIC Reference Manual",
+      "publisher": "Radio Shack",
+      "year": "1979",
+      "locator": "https://archive.org/details/Level_II_BASIC_Reference_Manual_1979_Radio_Shack"
+    },
+    {
+      "id": "m1-trh",
+      "author": "Radio Shack",
+      "title": "TRS-80 Micro Computer Technical Reference Handbook",
+      "publisher": "Radio Shack",
+      "year": "1982",
+      "edition": "2nd",
+      "locator": "Radio Shack catalog no. 26-2103"
+    },
+    {
+      "id": "m3-trm",
+      "author": "Tandy Corporation",
+      "title": "TRS-80 Model III Technical Reference Manual",
+      "publisher": "Radio Shack",
+      "year": "1981",
+      "locator": "https://archive.org/details/Model_III_Technical_Reference_Manual_1981_Tandy"
+    },
+    {
+      "id": "trsdos13",
+      "author": "Radio Shack",
+      "title": "TRS-80 Model III Disk System Owner's Manual",
+      "publisher": "Radio Shack",
+      "year": "1980",
+      "locator": "https://archive.org/details/TRS-80_Model_III_Disk_System_Owners_Manual"
+    },
+    {
+      "id": "ldos51",
+      "author": "Logical Systems, Inc.",
+      "title": "LDOS 5.1 for the Model I and III",
+      "publisher": "Radio Shack",
+      "year": "c. 1982",
+      "edition": "Tandy edition",
+      "locator": "https://archive.org/details/LDOS_v5.1_for_Model_I_and_III_19xx_Tandy (text: http://www.tim-mann.org/trs80/doc/ld51man3.txt)"
+    },
+    {
+      "id": "soltoff",
+      "author": "Roy Soltoff",
+      "title": "The Programmer's Guide to LDOS/TRSDOS Version 6",
+      "publisher": "MISOSYS",
+      "year": "1983–84",
+      "locator": "http://www.tim-mann.org/trs80/doc/Guide.txt (free to redistribute: http://www.tim-mann.org/misosys.html)"
+    },
+    {
+      "id": "m4-trm",
+      "author": "Tandy Corporation",
+      "title": "TRS-80 Model 4 Technical Reference Manual",
+      "publisher": "Radio Shack",
+      "year": "1983",
+      "locator": "Radio Shack catalog no. 26-2110"
+    }
+  ]
+}

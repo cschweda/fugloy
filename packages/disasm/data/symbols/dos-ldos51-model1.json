@@ -1,0 +1,68 @@
+{
+  "table": "dos-ldos51-model1",
+  "entries": [
+    {
+      "addr": "402D",
+      "name": "@EXIT",
+      "kind": "routine",
+      "purpose": "return to LDOS READY",
+      "cite": [{ "source": "ldos51", "page": "6-29" }]
+    },
+    {
+      "addr": "4030",
+      "name": "@ABORT",
+      "kind": "routine",
+      "purpose": "abort the program and return to LDOS",
+      "cite": [{ "source": "ldos51", "page": "6-29" }]
+    },
+    {
+      "addr": "4400",
+      "name": "@CMD",
+      "kind": "routine",
+      "purpose": "enter the LDOS command interpreter",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "4409",
+      "name": "@ERROR",
+      "kind": "routine",
+      "purpose": "display the message for a DOS error code",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "4424",
+      "name": "@OPEN",
+      "kind": "routine",
+      "purpose": "open an existing file",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "4428",
+      "name": "@CLOSE",
+      "kind": "routine",
+      "purpose": "close an open file",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "4436",
+      "name": "@READ",
+      "kind": "routine",
+      "purpose": "read a record from an open file",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "4439",
+      "name": "@WRITE",
+      "kind": "routine",
+      "purpose": "write a record to an open file",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "4467",
+      "name": "@DSPLY",
+      "kind": "routine",
+      "purpose": "display a line of text on the screen",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    }
+  ]
+}

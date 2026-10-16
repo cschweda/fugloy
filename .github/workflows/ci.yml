@@ -33,5 +33,5 @@ jobs:
       - run: pnpm typecheck
       - run: FUGLOY_REQUIRE_ZMAC=1 FUGLOY_REQUIRE_ZEX=1 pnpm test
       - run: pnpm build
-      - name: fixtures are in sync with their writers
-        run: pnpm fixtures && git diff --exit-code -- fixtures/synthetic
+      - name: fixtures and symbol tables are in sync with their sources
+        run: pnpm fixtures && pnpm symbols && git diff --exit-code -- fixtures/synthetic packages/disasm/src/symbols/tables.generated.ts packages/disasm/data/symbols/COMPARISON.md

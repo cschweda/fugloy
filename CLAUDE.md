@@ -14,11 +14,15 @@ stay in Part 2 until phase 3 is complete and the plan's kill criteria have
 been reviewed. If a task seems to need machinery from a later step, stop and
 say so.
 
-Current phase: **emu phase 1 done** — the Z80 core in `packages/emu` passes
-ZEXDOC and ZEXALL, all 67 groups each (`pnpm zex:install`, then `FUGLOY_ZEX=1`),
-and its T-states match `@fugloy/z80` for every opcode. Next, per the Roadmap:
-emu phase 2 (Model III devices and the `.CMD`/`.BAS`/`.CAS` loaders).
-Disassembler phase 2 shipped as v0.2.0, phase 1 as v0.1.0.
+Current phase: **disasm phase 3 in progress** — symbol tables: cited JSON in
+`packages/disasm/data/symbols/`, compiled by `pnpm symbols`. Design:
+`docs/superpowers/specs/2026-10-16-phase3-symbol-tables-design.md`; plan:
+`docs/superpowers/plans/2026-10-16-phase3-symbol-tables.md`. Next, per the
+Roadmap: phase 4 (the web workbench); emu phase 2 and the MCP server resume
+after v1. Emu phase 1 is done: the Z80 core in `packages/emu` passes ZEXDOC and
+ZEXALL, all 67 groups each (`pnpm zex:install`, then `FUGLOY_ZEX=1`), and its
+T-states match `@fugloy/z80` for every opcode. Disassembler phase 2 shipped as
+v0.2.0, phase 1 as v0.1.0.
 
 ## Stack and layout
 
@@ -58,24 +62,25 @@ Disassembler phase 2 shipped as v0.2.0, phase 1 as v0.1.0.
    hidden-code detection, heuristics, rebasing, relocation. Sub-projects A
    (Pass 1 and the round-trip proof), B (labels and the hint file), C (hidden
    code, heuristics, rebasing, relocation).
-2. **emu — phases 0–7** (`docs/fugloy-emu-spec.md` §11). 0: import
+2. **disasm — phase 3, then phase 4** (decided 2026-10-16): symbol tables, then
+   the web workbench; emu phases 2+ and the MCP server resume after v1.
+3. **emu — phases 0–7** (`docs/fugloy-emu-spec.md` §11). 0: import
    `cschweda/trs80-emulator`, strip DOM, boot to `READY` in Node. 1: Z80 core
    passes ZEXALL. 2: Model III devices and `.CMD`/`.BAS`/`.CAS` loaders.
    3: debugger API, coverage, the label file. 4: `@fugloy/mcp` v0.1. 5: FDC
    and disk images. 6: Model I, then Model 4. 7: differential harness. Phases 0
-   and 1 are done; phase 2 is next.
-3. **mcp — phases A–F** (`docs/fugloy-mcp-spec.md` §11). A: lifecycle,
+   and 1 are done; phase 2 resumes after v1 (item 2).
+4. **mcp — phases A–F** (`docs/fugloy-mcp-spec.md` §11). A: lifecycle,
    execution, and inspection tools. B: break, watch, trace, callers, disasm.
    C: labels, coverage, sidecar file. D: snapshots, diff, search, callees.
    E: resources, prompts, ROM symbols. F: guardrails, golden transcripts, npm
    publish. A starts after emu phase 0; B and C need emu phase 3.
 
-The plan's phases 3 (symbol tables) and 4 (web workbench) are not yet placed
-in this sequence, nor is phase 5 (assembler and IDE, after v1; it needs phases
-3 and 4 and emu phases 2–3). When phase 4 builds the site, it gets a "technical details"
-page carrying the interactive explainer of how Fugløy was built (dark,
-infographic, many examples, written for a curious student or retro
-enthusiast; requested 2026-10-16). Its source is
+The plan's phase 5 (assembler and IDE) is not placed in this sequence: it comes
+after v1 and needs phases 3 and 4 and emu phases 2–3. When phase 4 builds the
+site, it gets a "technical details" page carrying the interactive explainer of
+how Fugløy was built (dark, infographic, many examples, written for a curious
+student or retro enthusiast; requested 2026-10-16). Its source is
 `docs/technical-details/inside-fugloy.html`. The site also ships full SEO
 (requested 2026-10-16): a title and description on every page, canonical
 URLs on `app.fugloy.dev`, Open Graph and Twitter card tags whose image is
@@ -94,7 +99,9 @@ with alt text), favicons from the card's ø tile, `robots.txt`,
 - Hint-file format is line-oriented text keyed by `block <index>:<offset>` as the
   plan specifies; do not switch to JSON without updating the plan first.
 - Symbol tables are data files (`packages/disasm/data/symbols/*.json`), one per
-  machine, each entry with a `source` citation. No symbols in code.
+  table, each entry with a `source` citation, compiled by `pnpm symbols` into
+  `src/symbols/tables.generated.ts`, which is never hand-edited. No symbols in
+  code.
 - Detect file format from content, never from extension.
 - No external runtime dependencies in `z80` or `disasm`. Dev dependencies are
   fine.

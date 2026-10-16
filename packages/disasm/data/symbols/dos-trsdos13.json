@@ -1,0 +1,47 @@
+{
+  "table": "dos-trsdos13",
+  "entries": [
+    {
+      "addr": "402D",
+      "name": "$JP2DOS",
+      "kind": "routine",
+      "purpose": "return to TRSDOS READY",
+      "cite": [{ "source": "trsdos13", "page": "86" }]
+    },
+    {
+      "addr": "4420",
+      "name": "$INIT",
+      "kind": "routine",
+      "purpose": "open a file, creating it if it does not exist",
+      "cite": [{ "source": "trsdos13", "page": "78" }]
+    },
+    {
+      "addr": "4424",
+      "name": "$OPEN",
+      "kind": "routine",
+      "purpose": "open an existing file",
+      "cite": [{ "source": "trsdos13", "page": "79" }]
+    },
+    {
+      "addr": "4428",
+      "name": "$CLOSE",
+      "kind": "routine",
+      "purpose": "close an open file",
+      "cite": [{ "source": "trsdos13", "page": "85" }]
+    },
+    {
+      "addr": "4436",
+      "name": "$READ",
+      "kind": "routine",
+      "purpose": "read a record from an open file",
+      "cite": [{ "source": "trsdos13", "page": "80" }]
+    },
+    {
+      "addr": "4439",
+      "name": "$WRITE",
+      "kind": "routine",
+      "purpose": "write a record to an open file",
+      "cite": [{ "source": "trsdos13", "page": "80" }]
+    }
+  ]
+}

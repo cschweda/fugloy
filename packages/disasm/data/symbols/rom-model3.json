@@ -1,0 +1,40 @@
+{
+  "table": "rom-model3",
+  "entries": [
+    {
+      "addr": "002B",
+      "name": "$KBCHAR",
+      "kind": "routine",
+      "purpose": "scan the keyboard once and return a key if one is down",
+      "cite": [{ "source": "m3-basic", "page": "12/11" }]
+    },
+    {
+      "addr": "0033",
+      "name": "$VDCHAR",
+      "kind": "routine",
+      "purpose": "display the character in A at the cursor",
+      "cite": [{ "source": "m3-basic", "page": "12/20" }]
+    },
+    {
+      "addr": "0040",
+      "name": "$KBLINE",
+      "kind": "routine",
+      "purpose": "read a line from the keyboard into a buffer at HL",
+      "cite": [{ "source": "m3-basic", "page": "12/12" }]
+    },
+    {
+      "addr": "0049",
+      "name": "$KBWAIT",
+      "kind": "routine",
+      "purpose": "wait for a key and return it in A",
+      "cite": [{ "source": "m3-basic", "page": "12/12" }]
+    },
+    {
+      "addr": "0060",
+      "name": "$DELAY",
+      "kind": "routine",
+      "purpose": "pause for a time set by BC",
+      "cite": [{ "source": "m3-basic", "page": "12/10" }]
+    }
+  ]
+}
