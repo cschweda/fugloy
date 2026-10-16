@@ -87,10 +87,13 @@ interpreter: the entry miner evaluates only the idioms the plan names.
 
 ## 4. BASIC grammar
 
-Tokens: keyword bytes `80H`–`FBH` by name; `"…"` string literals; numbers
-(digits, `.`, `E±nn`, type suffixes `!`, `#`, `%` are accepted); identifiers
-(letter, then letters and digits, optional `$ % ! #`); `: , ; ( )`;
-relational pairs `<=`, `>=`, `<>` built from the `<`, `>`, `=` tokens.
+Tokens: keyword bytes `80H`–`FBH` by name; `"…"` string literals, which may
+run to the end of the line as Level II allows; numbers (digits, `.`, `E±nn`
+with the sign stored as text or as the `+`/`-` token, type suffixes `!`, `#`,
+`%`) and Disk BASIC's `&H`/`&O` constants; identifiers (letter, then letters
+and digits, optional `$ % ! #`); `: , ; ( ) # @`; relational pairs `<=`,
+`>=`, `<>`, in either order, built from the `<`, `>`, `=` tokens. A `?`
+outside a literal is an error: the ROM crunches it to the PRINT token.
 
 Expression grammar, lowest to highest: `OR`; `AND`; `NOT`; relational;
 additive `+ -`; multiplicative `* /`; unary `-`; power `^`; primary: number,
@@ -104,19 +107,20 @@ Statement shapes: `none` (END STOP RETURN CLS TRON TROFF CONT NEW RANDOM
 SYSTEM); `optional-number` (CLEAR RESTORE RUN LIST LLIST DELETE AUTO EDIT
 RESUME accept nothing, a number, a range, or `NEXT`); `line-list` (GOTO GOSUB
 one line number; `ON expr GOTO|GOSUB n,n,…`; `ON ERROR GOTO n`); `print`
-(PRINT LPRINT: optional `#n,`, optional `USING expr;`, items separated by `,`
-or `;`, `TAB(` items); `input` (INPUT LINE INPUT: optional `#n,`, optional
+(PRINT LPRINT: optional `#n,`, then items, `@pos`, `TAB(n)`, and `USING
+expr`, with `,`, `;`, or nothing between them); `input` (INPUT LINE INPUT: optional `#n,`, optional
 `"prompt";`, variable list); `var-list` (READ DIM NEXT; DIM subscripts); `two-
 expr` (POKE OUT; SET RESET POINT with parentheses); `assign` (LET or bare
-`var = expr`); `for` (FOR var = expr TO expr [STEP expr]); `if` (IF expr
-[THEN] statements-or-line [ELSE statements-or-line], with `GOTO` allowed after
-`IF`); `def` (DEF FN name(args) = expr; DEFUSR[n] = expr; DEFINT DEFSTR
+`var = expr`; Disk BASIC's `MID$(…) = expr`); `for` (FOR var = expr TO expr [STEP expr]); `if` (IF expr, an
+optional comma, then THEN statements-or-line or GOTO line, then optionally
+ELSE statements-or-line); `def` (DEF FN name(args) = expr; DEFUSR[n] = expr; DEFINT DEFSTR
 DEFSNG DEFDBL letter ranges); `error` (ERROR expr); `raw` (DATA to the next
 colon outside quotes; REM and `'` to the end); `disk` (OPEN FIELD GET PUT
 CLOSE LOAD MERGE NAME KILL LSET RSET SAVE CLOAD CSAVE CMD: an expression list
-with `,` `;` `AS` `FOR` keywords tolerated). Any other token at statement
-start, any dangling operator, unbalanced parenthesis, unterminated string,
-or unknown byte fails the line with a reason naming the byte offset.
+with `,` `;` `AS` `FOR` keywords tolerated; `CLOAD?` is stored as CLOAD
+followed by the PRINT token). Any other token at statement
+start, any dangling operator, unbalanced parenthesis, or unknown byte fails
+the line with a reason naming the byte offset.
 
 ## 5. Components and interfaces
 

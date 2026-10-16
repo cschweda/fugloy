@@ -1,10 +1,11 @@
 /**
  * Turns one tokenized BASIC line body back into text, the way LIST would,
- * and says whether the body parsed. Phase 1 "parses" means: terminated by a
- * single trailing 00, every byte 80H..FBH outside a literal region is a
- * token, and no control byte appears outside a literal region. Operand
- * well-formedness (the plan's hidden-code test) is phase 2.
+ * and says whether the body is BASIC: terminated by a single trailing 00, no
+ * other 00 inside, and accepted by the parser, lexically and by statement
+ * shape (basic/parser.ts). The reason names the first failure. The text is
+ * rendered whatever the verdict, so a code line still lists.
  */
+import { parseLine } from './basic/parser.js';
 import { TOKENS, TOKEN_APOSTROPHE, TOKEN_DATA, TOKEN_ELSE, TOKEN_FIRST, TOKEN_LAST, TOKEN_REM } from './tokens.js';
 
 export interface Detokenized {
@@ -20,24 +21,26 @@ const literal = (b: number): string => (printable(b) ? String.fromCharCode(b) : 
 
 type Mode = 'normal' | 'string' | 'rest' | 'data';
 
+/** Why a body (with its terminator) is not BASIC, or undefined when it is. */
+function verdict(body: Uint8Array): string | undefined {
+  const n = body.length;
+  if (n === 0 || body[n - 1] !== 0) return 'no 00 terminator';
+  const inner = body.subarray(0, n - 1);
+  const zero = inner.indexOf(0);
+  if (zero >= 0) return `embedded 00 at +${zero}`;
+  return parseLine(inner).reason;
+}
+
 export function detokenize(body: Uint8Array): Detokenized {
   let text = '';
-  let ok = true;
-  let reason: string | undefined;
-  const fail = (why: string): void => {
-    if (ok) { ok = false; reason = why; }
-  };
   const n = body.length;
-  const terminated = n > 0 && body[n - 1] === 0;
-  if (!terminated) fail('no 00 terminator');
-  const end = terminated ? n - 1 : n;
+  const end = n > 0 && body[n - 1] === 0 ? n - 1 : n;
   let mode: Mode = 'normal';
   let quoted = false;
   let i = 0;
   while (i < end) {
     const b = body[i]!;
     if (b === 0) {
-      fail(`embedded 00 at +${i}`);
       text += '{00}';
       i++;
       continue;
@@ -69,12 +72,11 @@ export function detokenize(body: Uint8Array): Detokenized {
           i++;
           break;
         }
-        if (b > TOKEN_LAST) fail(`invalid token ${hex2(b)}H at +${i}`);
-        else if (!printable(b)) fail(`control byte ${hex2(b)}H at +${i}`);
         text += literal(b);
         i++;
         break;
     }
   }
-  return reason === undefined ? { text, ok } : { text, ok, reason };
+  const reason = verdict(body);
+  return reason === undefined ? { text, ok: true } : { text, ok: false, reason };
 }

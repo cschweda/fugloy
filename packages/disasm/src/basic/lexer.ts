@@ -2,12 +2,13 @@
  * Lexer for one tokenized Level II BASIC line body (without its terminator):
  * keyword bytes become keyword tokens by name, text becomes identifiers,
  * numbers, strings, and punctuation, and the regions the ROM stores verbatim
- * (REM and ' remarks, DATA items) become raw tokens. Lexical errors use the
- * same wording as the phase-1 check in detokenize.ts.
+ * (REM and ' remarks, DATA items) become raw tokens. Lexical errors keep the
+ * phase-1 wording. Two Disk BASIC forms are lexed too: `&H`/`&O` constants
+ * (stored as ASCII) and the `@` of `PRINT@`.
  */
 import { TOKENS, TOKEN_APOSTROPHE, TOKEN_DATA, TOKEN_ELSE, TOKEN_FIRST, TOKEN_LAST, TOKEN_REM } from '../tokens.js';
 
-export type Punct = ':' | ',' | ';' | '(' | ')' | '#';
+export type Punct = ':' | ',' | ';' | '(' | ')' | '#' | '@';
 
 export type Token =
   | { t: 'kw'; name: string; at: number }
@@ -30,7 +31,9 @@ export interface LexResult {
 const hex2 = (b: number): string => b.toString(16).toUpperCase().padStart(2, '0');
 const isDigit = (b: number): boolean => b >= 0x30 && b <= 0x39;
 const isLetter = (b: number): boolean => (b >= 0x41 && b <= 0x5a) || (b >= 0x61 && b <= 0x7a);
-const PUNCT: ReadonlySet<number> = new Set([':', ',', ';', '(', ')', '#'].map((c) => c.charCodeAt(0)));
+const isHex = (b: number): boolean => isDigit(b) || ((b | 0x20) >= 0x61 && (b | 0x20) <= 0x66);
+const isOctal = (b: number): boolean => b >= 0x30 && b <= 0x37;
+const PUNCT: ReadonlySet<number> = new Set([':', ',', ';', '(', ')', '#', '@'].map((c) => c.charCodeAt(0)));
 /** The ROM tokenizes the sign of an exponent like any operator: `1E-2` is stored as 31 45 CE 32. */
 const EXPONENT_SIGNS: ReadonlyMap<number, string> = new Map([
   [TOKEN_FIRST + TOKENS.indexOf('+'), '+'],
@@ -96,6 +99,19 @@ export function lexLine(body: Uint8Array): LexResult {
       tokens.push({ t: 'punct', ch: String.fromCharCode(b) as Punct, at: i });
       i++;
       continue;
+    }
+    if (b === 0x26) {
+      // &Hnnnn and &Onnn; anything else after & falls through to the error below.
+      const radix = (body[i + 1] ?? 0) & 0xdf;
+      const digit = radix === 0x48 ? isHex : radix === 0x4f ? isOctal : undefined;
+      if (digit !== undefined && digit(body[i + 2] ?? 0)) {
+        const start = i;
+        i += 2;
+        while (i < n && digit(body[i]!)) i++;
+        const value = Number.parseInt(ascii(start + 2, i), radix === 0x48 ? 16 : 8);
+        tokens.push({ t: 'num', text: ascii(start, i), value, at: start });
+        continue;
+      }
     }
     if (isDigit(b) || (b === 0x2e && isDigit(body[i + 1] ?? 0))) {
       const start = i;

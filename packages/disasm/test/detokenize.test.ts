@@ -34,11 +34,15 @@ describe('detokenize', () => {
 
   it('rejects FC..FF outside literals as invalid tokens', () => {
     expect(d(0xb2, 0xfc, 0x41, 0x00)).toEqual({ text: 'PRINT{FC}A', ok: false, reason: 'invalid token FCH at +1' });
-    expect(d(0x22, 0xfc, 0x22, 0x00).ok).toBe(true);
+    expect(d(0xb2, 0x22, 0xfc, 0x22, 0x00).ok).toBe(true);
   });
 
   it('rejects control bytes outside literals', () => {
     expect(d(0x01, 0x41, 0x00)).toEqual({ text: '{01}A', ok: false, reason: 'control byte 01H at +0' });
+  });
+
+  it('rejects a body that lexes but does not parse, naming the offset', () => {
+    expect(d(0xcd, 0x50, 0x41, 0xc9, 0x00)).toEqual({ text: '+PAINKEY$', ok: false, reason: 'unexpected + at +0' });
   });
 
   it('rejects an embedded 00 before the terminator', () => {

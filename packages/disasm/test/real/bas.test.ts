@@ -13,7 +13,7 @@ describe('Voyage of the Valkyrie .BAS files', () => {
   });
 
   for (const file of files) {
-    it(`${file}: FF header, 257 lines, base in $62C8..$6F3B, GOTO248 first, line 250 plants the JP`, () => {
+    it(`${file}: FF header, 257 lines, base in $62C8..$6F3B, GOTO248 first, line 250 plants the JP, lines 2-247 are code`, () => {
       const bytes = readSample(file);
       expect(detectFormat(bytes)).toBe('bas');
       const p = loadBas(bytes);
@@ -32,10 +32,10 @@ describe('Voyage of the Valkyrie .BAS files', () => {
         const prev = p.lines[i - 1]!;
         expect(p.lines[i]!.addr, `line ${p.lines[i]!.number} sits where line ${prev.number}'s pointer says`).toBe(bytes[prev.offset]! | (bytes[prev.offset + 1]! << 8));
       }
-      // Phase 1 flags lines by structure only; the plan counts 190 code lines, and most of them trip it.
-      const unparsed = p.lines.filter((l) => !l.parsed);
-      expect(unparsed.length).toBeGreaterThan(150);
-      expect(unparsed.length).toBeLessThan(190);
+      // Grammar validity decides: exactly the lines numbered 2-247 hold machine code (the appendix counts 190 lines; there are 182).
+      const code = p.lines.filter((l) => !l.parsed).map((l) => l.number);
+      expect(code).toEqual(p.lines.map((l) => l.number).filter((n) => n >= 2 && n <= 247));
+      expect(code.length).toBe(182);
       expect(p.trailing).toBeLessThanOrEqual(3);
       expect(renderBasListing(p, { source: file })).toContain('\n1 GOTO248\n');
     });

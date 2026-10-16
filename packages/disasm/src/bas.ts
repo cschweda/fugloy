@@ -20,7 +20,9 @@ export interface BasLine {
   /** Body bytes through the end of the line, including the terminator when present. */
   body: Uint8Array;
   text: string;
+  /** The body parses as BASIC, lexically and by statement shape: false marks hidden code. */
   parsed: boolean;
+  /** Why it does not parse, naming the byte offset in the body. */
   reason?: string;
 }
 

@@ -73,6 +73,18 @@ describe('.BAS loader', () => {
     expect(fx('bad-token').lines[2]).toMatchObject({ parsed: true, text: 'END' });
   });
 
+  it('reports a code line that lexes cleanly by its grammar failure', () => {
+    const p = loadBas(writeBasic([{ number: 10, text: 'CLS' }, { number: 20, raw: [0xcd, 0x50, 0x41, 0xc9] }, { number: 30, text: 'END' }], 0x7000));
+    expect(p.lines.map((l) => l.parsed)).toEqual([true, false, true]);
+    expect(p.lines[1]).toMatchObject({ number: 20, text: '+PAINKEY$', reason: 'unexpected + at +0' });
+  });
+
+  it('does not take a file whose line 1 fails the grammar for BASIC', () => {
+    const bytes = writeBasic([{ number: 10, raw: [0xcd, 0x50, 0x41, 0xc9] }, { number: 20, text: 'END' }], 0x7000);
+    expect(loadBas(bytes).warnings).toEqual(['line 1 does not parse as BASIC (unexpected + at +0); not a tokenized BASIC program']);
+    expect(isBas(bytes)).toBe(false);
+  });
+
   it('counts bytes after the 00 00 terminator as trailing and warns', () => {
     const p = fx('trailing-bytes');
     expect(p.lines.length).toBe(2);

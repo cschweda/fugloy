@@ -59,10 +59,19 @@ describe('lexLine', () => {
   it('reports lexical errors with their offsets, in the phase-1 wording', () => {
     expect(lexLine(Uint8Array.from([0xb2, 0xfc, 0x41])).error).toEqual({ at: 1, message: 'invalid token FCH at +1' });
     expect(lexLine(Uint8Array.from([0x01, 0x41])).error).toEqual({ at: 0, message: 'control byte 01H at +0' });
-    expect(lexLine(Uint8Array.from([0x41, 0xd5, 0x40])).error).toEqual({ at: 2, message: 'unexpected byte 40H at +2' });
-    expect(lexLine(Uint8Array.from([0x41, 0xd5, 0x26, 0x48, 0x31, 0x30])).error).toEqual({ at: 2, message: 'unexpected byte 26H at +2' });
+    expect(lexLine(Uint8Array.from([0x41, 0xd5, 0x3f])).error).toEqual({ at: 2, message: 'unexpected byte 3FH at +2' });
+    expect(lexLine(Uint8Array.from([0x41, 0xd5, 0x26, 0x31, 0x30])).error).toEqual({ at: 2, message: 'unexpected byte 26H at +2' });
     expect(lexLine(Uint8Array.from([0x22, 0xfc, 0x22])).error).toBeUndefined(); // inside a string
     expect(lexLine(Uint8Array.from([0x93, 0x01, 0xfc])).error).toBeUndefined(); // inside a remark
+  });
+
+  it('lexes PRINT@ and the Disk BASIC &H and &O constants', () => {
+    expect(brief(lex('PRINT@512,"HI"').tokens)).toEqual(['kw:PRINT', 'p:@', 'num:512', 'p:,', 'str:HI']);
+    const r = lex('A=&H6000+&O17+&HFF');
+    expect(r.error).toBeUndefined();
+    const nums = (tokens: Token[]) => tokens.filter((t): t is Extract<Token, { t: 'num' }> => t.t === 'num').map((t) => [t.text, t.value]);
+    expect(nums(r.tokens)).toEqual([['&H6000', 0x6000], ['&O17', 15], ['&HFF', 255]]);
+    expect(nums(lexLine(Uint8Array.from([0x26, 0x68, 0x66, 0x66])).tokens)).toEqual([['&hff', 255]]);
   });
 
   it('lexes an empty body to no tokens', () => {
