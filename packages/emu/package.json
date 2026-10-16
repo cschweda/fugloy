@@ -7,7 +7,10 @@
   "exports": {
     ".": "./src/index.js"
   },
-  "files": ["src"],
+  "files": [
+    "src",
+    "NOTICE.md"
+  ],
   "engines": {
     "node": ">=22"
   }
