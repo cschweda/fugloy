@@ -17,7 +17,8 @@
     "clean": "rm -rf packages/*/dist",
     "fixtures": "tsx packages/disasm/scripts/write-fixtures.ts",
     "fugloy": "node packages/cli/bin/fugloy.js",
-    "zmac:install": "bash scripts/install-zmac.sh"
+    "zmac:install": "bash scripts/install-zmac.sh",
+    "zex:install": "bash scripts/install-zex.sh"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
