@@ -8,7 +8,7 @@
 
 import path from "node:path";
 import { describe, it, expect } from "vitest";
-import { configuredRom } from "../rom.js";
+import { configuredRom, ROM_TEST_TIMEOUT } from "../rom.js";
 import { TRS80System } from "../../src/machine/trs80-system.js";
 
 // The ROM from fugloy.mcp.json; null without one, and the suite skips.
@@ -21,7 +21,7 @@ function bootToReady() {
   return system;
 }
 
-describe.skipIf(romData === null)("LPRINT through the real ROM", () => {
+describe.skipIf(romData === null)("LPRINT through the real ROM", { timeout: ROM_TEST_TIMEOUT }, () => {
   it('LPRINT "HELLO" lands on the printer with a carriage return', () => {
     const system = bootToReady();
     system.typeText('LPRINT "HELLO"\n');

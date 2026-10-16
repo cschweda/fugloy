@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { configuredRom } from "../rom.js";
+import { configuredRom, ROM_TEST_TIMEOUT } from "../rom.js";
 import { TRS80System, CPU_CLOCK_HZ } from "../../src/machine/trs80-system.js";
 import { MODE_32COL_BIT } from "../../src/machine/io.js";
 
@@ -42,7 +42,7 @@ function bootToReady(system) {
   expect(runUntilScreen(system, "READY", 5)).toBe(true);
 }
 
-describe.skipIf(romData === null)("32-column mode (real ROM)", () => {
+describe.skipIf(romData === null)("32-column mode (real ROM)", { timeout: ROM_TEST_TIMEOUT }, () => {
   let system;
 
   beforeEach(() => {

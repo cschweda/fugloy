@@ -12,6 +12,12 @@ import { fileURLToPath } from 'node:url';
 
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
 
+/**
+ * Vitest timeout for suites that run the real ROM. They emulate seconds of machine time (a
+ * 500-baud CLOAD most of all), and in the full parallel suite one passed the 5-second default.
+ */
+export const ROM_TEST_TIMEOUT = 30_000;
+
 export function configPath(env = process.env) {
   // A FUGLOY_CONFIG that is set wins even when it names nothing, so a typo fails instead of falling back.
   if (env.FUGLOY_CONFIG !== undefined && env.FUGLOY_CONFIG !== '') return env.FUGLOY_CONFIG;

@@ -11,7 +11,7 @@
 
 import path from "node:path";
 import { describe, it, expect } from "vitest";
-import { configuredRom } from "../rom.js";
+import { configuredRom, ROM_TEST_TIMEOUT } from "../rom.js";
 import { TRS80System, CPU_CLOCK_HZ } from "../../src/machine/trs80-system.js";
 import { DiskImage } from "../../src/devices/disk-image.js";
 
@@ -54,7 +54,7 @@ function runUntilScreen(system, text, maxSeconds = 4) {
   return system.screenText().join("\n").includes(text);
 }
 
-describe.skipIf(romData === null)("Disk boot (drive 0)", () => {
+describe.skipIf(romData === null)("Disk boot (drive 0)", { timeout: ROM_TEST_TIMEOUT }, () => {
   it("boots the synthesized floppy's boot sector via the real ROM", () => {
     const system = new TRS80System({ romData });
     system.cpu.strictMode = true;

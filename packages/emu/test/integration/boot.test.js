@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TRS80System } from '../../src/index.js';
-import { configuredRom } from '../rom.js';
+import { configuredRom, ROM_TEST_TIMEOUT } from '../rom.js';
 
 const rom = configuredRom('model3');
 const screen = (sys) => sys.screenText().join('\n');
@@ -24,7 +24,7 @@ function boot(sys) {
   return runUntil(sys, () => sys.screenText().some((line) => line.startsWith('READY')), 8_000_000);
 }
 
-describe.skipIf(rom === null)('the Model III ROM from fugloy.mcp.json', () => {
+describe.skipIf(rom === null)('the Model III ROM from fugloy.mcp.json', { timeout: ROM_TEST_TIMEOUT }, () => {
   it('boots to READY in Node with no DOM stubs', () => {
     expect(globalThis.window).toBeUndefined();
     expect(globalThis.document).toBeUndefined();

@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { configuredRom } from "../rom.js";
+import { configuredRom, ROM_TEST_TIMEOUT } from "../rom.js";
 import { TRS80System, CPU_CLOCK_HZ, RTC_HZ } from "../../src/machine/trs80-system.js";
 
 function buildInterruptCounterRom() {
@@ -105,7 +105,7 @@ describe("TRS80System", () => {
 // The ROM from fugloy.mcp.json; null without one, and the suite skips.
 const rom = configuredRom("model3");
 
-describe.skipIf(rom === null)("TRS80System.typeText", () => {
+describe.skipIf(rom === null)("TRS80System.typeText", { timeout: ROM_TEST_TIMEOUT }, () => {
   it("types a BASIC program into the real ROM and runs it", () => {
     const romData = rom;
     const system = new TRS80System({ romData });

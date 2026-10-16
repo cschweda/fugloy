@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { configuredRom } from "../rom.js";
+import { configuredRom, ROM_TEST_TIMEOUT } from "../rom.js";
 import { TRS80System, CPU_CLOCK_HZ } from "../../src/machine/trs80-system.js";
 import {
   parseCas,
@@ -42,7 +42,7 @@ function bootToReady(system) {
   }
 }
 
-describe.skipIf(romData === null)("Cassette fast-load against the real ROM", () => {
+describe.skipIf(romData === null)("Cassette fast-load against the real ROM", { timeout: ROM_TEST_TIMEOUT }, () => {
   let system;
 
   beforeEach(() => {

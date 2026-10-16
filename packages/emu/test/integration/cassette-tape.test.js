@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { configuredRom } from "../rom.js";
+import { configuredRom, ROM_TEST_TIMEOUT } from "../rom.js";
 import { TRS80System } from "../../src/machine/trs80-system.js";
 import { casToPulses, pulsesToBytes } from "../../src/devices/cassette-tape.js";
 import { parseCas } from "../../src/loaders/cas-format.js";
@@ -49,7 +49,7 @@ function cloadAndRun(system, tapeBytes, baud) {
   return system.screenText().join("\n");
 }
 
-describe.skipIf(romData === null)("CSAVE -> CLOAD round trip through the real ROM", () => {
+describe.skipIf(romData === null)("CSAVE -> CLOAD round trip through the real ROM", { timeout: ROM_TEST_TIMEOUT }, () => {
   it("works at 1500 baud (the Model III default)", () => {
     const a = bootToReady("");
     const recorded = csaveCapture(a);

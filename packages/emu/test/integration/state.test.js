@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { configuredRom } from "../rom.js";
+import { configuredRom, ROM_TEST_TIMEOUT } from "../rom.js";
 import { TRS80System, CPU_CLOCK_HZ } from "../../src/machine/trs80-system.js";
 import { serializeState, restoreState } from "../../src/debug/state.js";
 import { DiskImage } from "../../src/devices/disk-image.js";
@@ -47,7 +47,7 @@ function jsonRoundTrip(state) {
   return JSON.parse(JSON.stringify(state));
 }
 
-describe.skipIf(romData === null)("Save states", () => {
+describe.skipIf(romData === null)("Save states", { timeout: ROM_TEST_TIMEOUT }, () => {
   it("restores screen, registers, and a typed BASIC program", () => {
     const a = new TRS80System({ romData });
     a.cpu.strictMode = true;

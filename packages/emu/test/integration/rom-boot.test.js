@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { configuredRom } from "../rom.js";
+import { configuredRom, ROM_TEST_TIMEOUT } from "../rom.js";
 import { TRS80System, CPU_CLOCK_HZ } from "../../src/machine/trs80-system.js";
 
 // vitest runs with the repo root as cwd; jsdom's import.meta.url is not
@@ -73,7 +73,7 @@ function bootToReady(system) {
   expect(runUntilScreen(system, "READY", 5)).toBe(true);
 }
 
-describe.skipIf(romData === null)("Model III ROM boot (non-disk machine)", () => {
+describe.skipIf(romData === null)("Model III ROM boot (non-disk machine)", { timeout: ROM_TEST_TIMEOUT }, () => {
   let system;
 
   beforeEach(() => {
