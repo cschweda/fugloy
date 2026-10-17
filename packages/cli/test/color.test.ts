@@ -35,6 +35,42 @@ describe('colorListing', () => {
     expect(colored.endsWith(paint('90', '; entry'))).toBe(true);
   });
 
+  it('colors a table name as one token, with its leading $ or @ and its trailing $', () => {
+    const cases: [string, number[], string, string][] = [
+      ['CALL $KBWAIT', [0xcd, 0x49, 0x00], `${paint('94', 'CALL')} ${paint('96', '$KBWAIT')}`, 'a ROM routine'],
+      ['JP @EXIT', [0xc3, 0x2d, 0x40], `${paint('94', 'JP')} ${paint('96', '@EXIT')}`, 'a DOS routine'],
+      ['LD HL,(TIME$)', [0x2a, 0x00, 0x43], `${paint('32', 'HL')},(${paint('96', 'TIME$')})`, 'a name that ends in $'],
+      ['LD HL,(@HIGH$)', [0x2a, 0x00, 0x43], `${paint('32', 'HL')},(${paint('96', '@HIGH$')})`, 'a name that starts with @ and ends in $'],
+      ['LD HL,@HIGH$+0001H', [0x21, 0x01, 0x43], `${paint('32', 'HL')},${paint('96', '@HIGH$')}+${paint('33', '0001H')}`, 'a sigil name with an offset'],
+      ['LD A,($KIDCB)', [0x3a, 0x00, 0x40], `${paint('32', 'A')},(${paint('96', '$KIDCB')})`, 'a memory operand'],
+    ];
+    for (const [text, bytes, expected, what] of cases) {
+      const line = row(0x5200, bytes, text, 'entry');
+      const colored = colorListing(line);
+      expect(colored, what).toContain(expected);
+      expect(plain(colored), what).toBe(line);
+    }
+  });
+
+  it('colors a plain name as before, and leaves a $ or @ that opens no name plain', () => {
+    expect(colorListing(row(0x5200, [0x21, 0x40, 0x3d], 'LD HL,VIDEO+0140H'))).toContain(`${paint('32', 'HL')},${paint('96', 'VIDEO')}+${paint('33', '0140H')}`);
+    expect(colorListing(row(0x5200, [0xcd, 0x0a, 0x4a], 'CALL SUB_4A0A'))).toContain(`${paint('94', 'CALL')} ${paint('96', 'SUB_4A0A')}`);
+    // A lone $ or @ is no name, and a $ before digits opens none: operands print hex as 3C00H, so this is not a form the listing writes.
+    expect(colorListing(row(0x5200, [0xc9], 'RET $ @'))).toContain(`${paint('94', 'RET')} $ @`);
+    expect(colorListing(row(0x5200, [0x21, 0x00, 0x3c], 'LD HL,$3C00'))).toContain(`${paint('32', 'HL')},$${paint('33', '3C00')}`);
+  });
+
+  it('paints a $-hex address in a comment or a prose line as part of the comment, never as a name', () => {
+    expect(colorListing('; symbol FOO = $3C00 (in line 10)')).toBe(paint('90', '; symbol FOO = $3C00 (in line 10)'));
+    expect(colorListing('; table name $KBWAIT = $0049: wait for a key (m3-basic 12/12)')).toBe(paint('90', '; table name $KBWAIT = $0049: wait for a key (m3-basic 12/12)'));
+    const line = row(0x5200, [0x21, 0x00, 0x3c], 'LD HL,VIDEO', 'video is $3C00, same as $KBWAIT');
+    const colored = colorListing(line);
+    expect(colored.endsWith(paint('90', '; video is $3C00, same as $KBWAIT'))).toBe(true);
+    expect(plain(colored)).toBe(line);
+    // a BASIC note line is a comment too
+    expect(colorListing(';   16526 = $408E USR vector (USRVEC+1)')).toBe(paint('90', ';   16526 = $408E USR vector (USRVEC+1)'));
+  });
+
   it("keeps the alternate register's apostrophe from opening a string", () => {
     const colored = colorListing(row(0x0100, [0x08], "EX AF,AF'", 'entry'));
     expect(colored).toContain(`${paint('32', 'AF')},${paint('32', "AF'")}`);

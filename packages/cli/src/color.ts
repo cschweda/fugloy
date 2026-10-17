@@ -34,14 +34,16 @@ const ROW = /^([0-9A-F]{4})  ([0-9A-F]{2}(?: [0-9A-F]{2}){0,3})( +)(\S.*)$/;
 /**
  * Operand tokens: a string as the emitter quotes it (`'IT''S'`), a name (the
  * apostrophe of AF' included, so it never opens a string), a number, or one
- * other character.
+ * other character. A table name is one token with its `$` or `@` prefix and its
+ * trailing `$` (`$KBWAIT`, `@EXIT`, `TIME$`, `@HIGH$`); a `$` before digits
+ * opens no name.
  */
-const OPERAND = /'(?:[^']|'')*'?|[A-Za-z_.][A-Za-z0-9_.]*'?|[0-9][0-9A-Fa-f]*H?|[^]/g;
+const OPERAND = /'(?:[^']|'')*'?|[$@]?[A-Za-z_.][A-Za-z0-9_.]*\$?'?|[0-9][0-9A-Fa-f]*H?|[^]/g;
 
 function token(t: string): string {
   if (t.startsWith("'")) return paint('string', t);
   if (/^[0-9]/.test(t)) return paint('number', t);
-  if (/^[A-Za-z_.]/.test(t)) return paint(REGISTERS.has(t.toUpperCase()) ? 'register' : 'symbol', t);
+  if (/^[$@]?[A-Za-z_.]/.test(t)) return paint(REGISTERS.has(t.toUpperCase()) ? 'register' : 'symbol', t);
   return t;
 }
 
