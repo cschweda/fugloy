@@ -23,14 +23,45 @@ test('G goes to an address and Alt+Left comes back, Alt+Right returns', async ({
   await expect(page.locator('.fg-row-cursor')).toHaveAttribute('data-addr', String(0x4b9e));
 });
 
-test('the G box refuses an unknown name inline and keys are ignored while typing in it', async ({ page }) => {
+test('the G box refuses an unknown name inline, ignores workbench keys while typing, and Esc returns focus to the listing', async ({ page }) => {
   await open(page);
   await page.keyboard.press('g');
-  await page.keyboard.type('NOSUCH');
+  // A g typed into the box is text, not a second "open the box".
+  await page.keyboard.type('GAME');
+  await expect(page.getByTestId('goto-input')).toHaveValue('GAME');
+  await expect(page.getByTestId('goto-input')).toBeFocused();
+  await page.keyboard.press('Alt+ArrowLeft');
+  await expect(page.getByTestId('goto-input')).toBeFocused();
   await page.keyboard.press('Enter');
-  await expect(page.getByTestId('goto-error')).toContainText('NOSUCH');
+  await expect(page.getByTestId('goto-error')).toContainText('GAME');
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('goto-box')).toBeHidden();
+  await expect(page.locator('[data-testid="workbench"] [tabindex="0"]:focus')).toHaveCount(1);
+  await expect(page.getByTestId('goto-input')).toHaveCount(0);
+});
+
+test('G to a label switches the right page to the Symbol tab', async ({ page }) => {
+  await open(page);
+  await page.keyboard.press('g');
+  await page.keyboard.type('SUB_4B9E');
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('tab', { name: 'Symbol' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('symbol-name')).toHaveText('SUB_4B9E');
+});
+
+test('workbench keys wait while a dialog is open', async ({ page }) => {
+  await open(page);
+  await page.evaluate(() => {
+    const d = document.createElement('dialog');
+    d.id = 'probe';
+    document.body.append(d);
+    d.show();
+  });
+  await page.keyboard.press('g');
+  await expect(page.getByTestId('goto-box')).toHaveCount(0);
+  await page.evaluate(() => document.getElementById('probe')!.remove());
+  await page.keyboard.press('g');
+  await expect(page.getByTestId('goto-box')).toBeVisible();
 });
 
 test('clicking a name in the listing opens it in the Symbol tab with its uses', async ({ page }) => {

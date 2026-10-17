@@ -4,10 +4,16 @@
  * (C, D, W, S, T, N, ;, undo and redo) join the same map in Task 12.
  */
 
-/** True while the key press belongs to a text field, which keeps its own keys. */
+/** True while the key press belongs to a text field, which keeps its own keys. Duck-typed so it needs no DOM to test. */
 export function isTyping(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+  const el = target as { tagName?: unknown; isContentEditable?: unknown } | null;
+  if (el === null || typeof el.tagName !== 'string') return false;
+  return el.isContentEditable === true || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName);
+}
+
+/** True while a modal dialog is open: the workbench's keys wait until it closes. */
+export function modalOpen(root: Pick<Document, 'querySelector'>): boolean {
+  return root.querySelector('dialog[open]') !== null;
 }
 
 /** `alt+arrowleft`, `g`, `ctrl+z`: modifiers in a fixed order, then the lowercase key. */

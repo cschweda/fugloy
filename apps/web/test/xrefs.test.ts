@@ -44,13 +44,30 @@ describe('usesOf', () => {
 });
 
 describe('callersOf', () => {
-  it('splits cross-references into callers and jumpers, in address order', async () => {
+  it('counts an rst as a caller, not a jumper', () => {
+    // RST 10H; RST 18H; RET, as a raw program at $7000.
+    const wb = createWorkbench({ readExample });
+    wb.openBytes(Uint8Array.from([0xd7, 0xdf, 0xc9]), 'rst.bin', { base: 0x7000 });
+    const a = wb.session.value!.analysis;
+    const rsts = a.pass1.xrefs.filter((r) => r.kind === 'rst');
+    expect(rsts.map((r) => [r.from, r.to])).toEqual([
+      [0x7000, 0x10],
+      [0x7001, 0x18],
+    ]);
+    expect(callersOf(a, 0x10)).toEqual({ callers: [0x7000], jumpers: [] });
+  });
+
+  it('lists callers ascending without duplicates, and counts an rst as a call', async () => {
     const wb = await seadragon();
     const a = wb.session.value!.analysis;
-    const x = a.pass1.xrefs.find((r) => r.kind === 'call')!;
-    const groups = callersOf(a, x.to);
-    expect(groups.callers).toContain(x.from);
-    const all = [...groups.callers, ...groups.jumpers];
-    expect([...all].sort((p, q) => p - q).length).toBe(all.length);
+    const call = a.pass1.xrefs.find((r) => r.kind === 'call')!;
+    const groups = callersOf(a, call.to);
+    expect(groups.callers).toContain(call.from);
+    expect(groups.callers).toEqual([...groups.callers].sort((p, q) => p - q));
+    expect(new Set(groups.callers).size).toBe(groups.callers.length);
+    expect(groups.jumpers).toEqual([...groups.jumpers].sort((p, q) => p - q));
+    const jump = a.pass1.xrefs.find((r) => r.kind === 'jump' || r.kind === 'cjump');
+    expect(jump).toBeDefined();
+    expect(callersOf(a, jump!.to).jumpers).toContain(jump!.from);
   });
 });

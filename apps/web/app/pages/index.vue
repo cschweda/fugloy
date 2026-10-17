@@ -13,7 +13,7 @@ import StatusLine from '~/components/StatusLine.vue';
 import IndexTab from '~/components/side/IndexTab.vue';
 import SymbolTab from '~/components/side/SymbolTab.vue';
 import { resolveGoTo } from '~/utils/goto';
-import { isTyping, keyId } from '~/utils/keys';
+import { isTyping, keyId, modalOpen } from '~/utils/keys';
 import { entryOf } from '~/utils/symbol-info';
 import type { FollowInfo } from '~/utils/xrefs';
 import FacingPages from '~/components/workbench/FacingPages.vue';
@@ -153,6 +153,7 @@ function openGo(): void {
 function closeGo(): void {
   goOpen.value = false;
   goError.value = null;
+  void nextTick(() => listing.value?.focus());
 }
 
 function submitGo(): void {
@@ -166,7 +167,10 @@ function submitGo(): void {
   closeGo();
   go(r.addr);
   // A program label also fills the Symbol tab, as clicking it would.
-  if (s.analysis.symbols.has(r.addr)) wb.symbolFocus.value = { kind: 'label', addr: r.addr };
+  if (s.analysis.symbols.has(r.addr)) {
+    wb.symbolFocus.value = { kind: 'label', addr: r.addr };
+    rightTab.value = 'symbol';
+  }
 }
 
 /** Every workbench key binding, by `keyId`. Editing keys (C, D, W, S, T, N, ;, undo, redo) join in Task 12. */
@@ -177,7 +181,7 @@ const KEYS: Record<string, () => void> = {
 };
 
 function onKeydown(e: KeyboardEvent): void {
-  if (session.value === null || isTyping(e.target) || e.defaultPrevented) return;
+  if (session.value === null || isTyping(e.target) || modalOpen(document) || e.defaultPrevented) return;
   const action = KEYS[keyId(e)];
   if (action === undefined) return;
   e.preventDefault();

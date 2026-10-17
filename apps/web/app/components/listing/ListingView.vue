@@ -193,7 +193,12 @@ onMounted(() => {
 });
 onBeforeUnmount(() => resize?.disconnect());
 
-defineExpose({ scrollToAddr });
+/** Puts keyboard focus on the listing, for after a box above it closes. */
+function focus(): void {
+  scroller.value?.focus({ preventScroll: true });
+}
+
+defineExpose({ scrollToAddr, focus });
 </script>
 
 <template>
