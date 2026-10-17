@@ -6,18 +6,22 @@
 // With no storage the workbench works as before and says so. DOM-free.
 import { computed, ref, shallowRef, watch } from 'vue';
 import type { ComputedRef, Ref, ShallowRef } from 'vue';
-import { withHintText, withSelection, writeHints } from '@fugloy/disasm';
+import { parseHints, withHintText, withSelection, writeHints } from '@fugloy/disasm';
 import type { Session, SymbolSelection } from '@fugloy/disasm';
 import { bestCarryOver } from '../utils/carry-over';
 import type { CarryCandidate } from '../utils/carry-over';
+import { EXAMPLES } from '../data/examples';
+import { fetchExample } from '../utils/example-files';
 import { openStore, requestPersistence } from '../utils/store';
 import type { Store } from '../utils/store';
+import { useEditing } from './useEditing';
 import { useWorkbench } from './useWorkbench';
-import type { Workbench } from './useWorkbench';
+import type { ExampleReader, Workbench } from './useWorkbench';
 
 export const SAVE_DELAY_MS = 500;
 
-export type SaveState = 'saved' | 'unsaved' | 'no hints yet' | 'not saved (storage unavailable)';
+/** 'no changes yet': the hints are as the program opened (an example's committed ones), so nothing needs saving. */
+export type SaveState = 'saved' | 'unsaved' | 'no hints yet' | 'no changes yet' | 'not saved (storage unavailable)';
 
 export interface Persistence {
   /** The status line's save state. */
@@ -26,6 +30,9 @@ export interface Persistence {
   store: ShallowRef<Store | null | undefined>;
   /** Saved hints for another build that pair with the open program, waiting for a yes or no. */
   carry: ShallowRef<CarryCandidate | null>;
+  /** Lines of a carried-over hint file that did not parse or cannot apply, for the Hints tab. */
+  hintErrors: Ref<readonly string[]>;
+  /** Applies the offered file as one undoable step. */
   acceptCarry(): void;
   dismissCarry(): void;
   /** Opens the store (browser only); safe to call again. */
@@ -41,9 +48,24 @@ const hintText = (s: Session): string => writeHints(s.hintFile);
 /** A file name for hints nobody named: the program's, with `.hints`. */
 const defaultName = (s: Session): string => `${s.name.replace(/\.[^.]+$/, '')}.hints`;
 
-export function createPersistence(wb: Workbench, open: () => Promise<Store | null> = openStore): Persistence {
+export interface PersistenceDeps {
+  open?: () => Promise<Store | null>;
+  /** Reads the bundled examples' committed hint files, which are offered for carry-over too. */
+  readExample?: ExampleReader;
+  /** The edit history's loadHints, so a carry-over is one undoable step. */
+  loadHints?: (text: string, source: string, opts?: { lenient?: boolean }) => string | null;
+}
+
+export function createPersistence(wb: Workbench, deps: PersistenceDeps = {}): Persistence {
+  const open = deps.open ?? openStore;
+  const readExample = deps.readExample ?? fetchExample;
+  const loadHints = deps.loadHints ?? ((t, n, o) => useEditing().loadHints(t, n, o));
   const store = shallowRef<Store | null | undefined>(undefined);
   const carry = shallowRef<CarryCandidate | null>(null);
+  const hintErrors = ref<readonly string[]>([]);
+  /** The hint text the open program opened with (committed or skeleton): changes from it are the user's. */
+  const baseline = ref<string | null>(null);
+  let committedHints: Promise<{ hash: string; name: string; text: string }[]> | null = null;
   /** Writing failed (quota, a closed database). */
   const failed = ref(false);
   /** Bumps when the open program's saved text changes, so the status recomputes. */
@@ -87,12 +109,29 @@ export function createPersistence(wb: Workbench, open: () => Promise<Store | nul
     if (p !== null) await write(p);
   }
 
+  /** The bundled examples' committed hint files, read once. */
+  function committed(): Promise<{ hash: string; name: string; text: string }[]> {
+    committedHints ??= (async () => {
+      const out: { hash: string; name: string; text: string }[] = [];
+      for (const e of EXAMPLES) {
+        if (e.hints === undefined) continue;
+        const bytes = await readExample(`${e.id}/${e.hints}`);
+        if (bytes === null) continue;
+        const text = new TextDecoder().decode(bytes);
+        out.push({ hash: parseHints(text).file.program ?? `example:${e.id}`, name: e.hints, text });
+      }
+      return out;
+    })();
+    return committedHints;
+  }
+
   /** Schedules a save when the open program's hint file differs from what is stored. */
   function check(): void {
     const s = wb.session.value;
     if (s === null || !restored.value) return;
     const text = hintText(s);
-    if (text === savedText.value || (savedText.value === null && s.hintFile.hints.length === 0)) {
+    // Nothing stored: only a change from what the program opened with is worth saving.
+    if (savedText.value === null ? text === baseline.value : text === savedText.value) {
       if (timer !== null && pending !== null && pending.hash === s.hash) {
         clearTimeout(timer);
         timer = null;
@@ -107,16 +146,24 @@ export function createPersistence(wb: Workbench, open: () => Promise<Store | nul
     timer = setTimeout(() => void flush(), SAVE_DELAY_MS);
   }
 
+  /** The user edited before the saved work arrived: their edit stands, and saves like any other. */
+  function settleEdited(): void {
+    restored.value = true;
+    check();
+  }
+
   async function restore(s: Session, gen: number): Promise<void> {
     const st = await start();
-    if (gen !== generation || wb.session.value !== s) return;
+    if (gen !== generation) return;
+    if (wb.session.value !== s) return settleEdited();
     if (st === null) {
       restored.value = true;
       return;
     }
     try {
       const [saved, prefs] = await Promise.all([st.getHints(s.hash), st.getPrefs(s.hash)]);
-      if (gen !== generation || wb.session.value !== s) return;
+      if (gen !== generation) return;
+      if (wb.session.value !== s) return settleEdited();
       let next = s;
       if (prefs !== undefined && selKey(prefs) !== selKey(s.selection)) {
         try {
@@ -137,8 +184,11 @@ export function createPersistence(wb: Workbench, open: () => Promise<Store | nul
         }
         if (savedText.value === null) savedText.value = saved.text;
       } else if (s.hintFile.hints.length === 0) {
-        carried = bestCarryOver(s, await st.allHints());
-        if (gen !== generation || wb.session.value !== s) return;
+        const stored = await st.allHints();
+        const have = new Set(stored.map((h) => h.hash));
+        carried = bestCarryOver(s, [...stored, ...(await committed()).filter((h) => !have.has(h.hash))]);
+        if (gen !== generation) return;
+        if (wb.session.value !== s) return settleEdited();
       }
       lastSel = selKey(next.selection);
       if (next !== s) wb.session.value = next;
@@ -159,9 +209,11 @@ export function createPersistence(wb: Workbench, open: () => Promise<Store | nul
     if (previous !== null) void write(previous);
     generation++;
     carry.value = null;
+    hintErrors.value = [];
     savedText.value = null;
     restored.value = false;
     const s = wb.session.value;
+    baseline.value = s === null ? null : hintText(s);
     if (s === null) return;
     lastSel = selKey(s.selection);
     void restore(s, generation);
@@ -195,7 +247,7 @@ export function createPersistence(wb: Workbench, open: () => Promise<Store | nul
     const s = wb.session.value;
     if (store.value === null || failed.value) return 'not saved (storage unavailable)';
     if (s === null) return 'no hints yet';
-    if (s.hintFile.hints.length === 0 && savedText.value === null) return 'no hints yet';
+    if (savedText.value === null && hintText(s) === baseline.value) return s.hintFile.hints.length === 0 ? 'no hints yet' : 'no changes yet';
     if (waiting.value || savedText.value !== hintText(s)) return 'unsaved';
     return 'saved';
   });
@@ -204,16 +256,15 @@ export function createPersistence(wb: Workbench, open: () => Promise<Store | nul
     status,
     store,
     carry,
+    hintErrors,
     acceptCarry() {
       const c = carry.value;
-      const s = wb.session.value;
       carry.value = null;
-      if (c === null || s === null) return;
-      try {
-        wb.session.value = withHintText(s, c.text, c.name);
-      } catch (err) {
-        wb.report(`${c.name} could not be carried over: ${err instanceof Error ? err.message : String(err)}`);
-      }
+      if (c === null || wb.session.value === null) return;
+      // Lenient: what parses applies, and the lines that did not are listed in the Hints tab.
+      const refused = loadHints(c.text, c.name, { lenient: true });
+      if (refused !== null) wb.report(`${c.name} could not be carried over: ${refused}`);
+      else hintErrors.value = c.problems;
     },
     dismissCarry() {
       carry.value = null;

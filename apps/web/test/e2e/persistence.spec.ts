@@ -45,6 +45,7 @@ const dropFile = (page: Page, name: string, text: string): Promise<void> =>
 
 test('a rename survives a reload, and the status line says saved', async ({ page }) => {
   await openSea(page);
+  await expect(saveState(page)).toHaveText('no changes yet');
   await rename(page, 'INIT');
   await expect(saveState(page)).toHaveText('saved');
   await page.reload();
@@ -74,6 +75,13 @@ test('a dropped hint file, told by content, goes to the open program; another pr
   const other = seaHints.replace(/block 0 length \$3690 hash [0-9a-f]+/, 'block 0 length $3690 hash 0000000000000000');
   await dropFile(page, 'other.hints', other);
   await expect(page.getByTestId('edit-message')).toHaveText('these hints are for another program (no block matched)');
+});
+
+test('a hint file with a mistake in it is reported inline, not loaded as binary', async ({ page }) => {
+  await openSea(page);
+  await dropFile(page, 'bad.hints', 'fugloy-hints 1\nblock zero nonsense\n');
+  await expect(page.getByTestId('edit-message')).toContainText('bad.hints does not parse');
+  await expect(page.getByTestId('open-error')).toHaveCount(0);
 });
 
 test('a hint file dropped with no program open asks for the program first', async ({ page }) => {

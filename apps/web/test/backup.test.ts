@@ -60,6 +60,19 @@ describe('backup', () => {
     expect((await a.getHints('h1'))!.text).toBe(HINTS);
   });
 
+  it('carries settings for a program that has no hints, and round-trips them', async () => {
+    await a.putPrefs('p9', { machine: 1, dos: 'ldos' });
+    await a.putHints('h1', { name: 'one.hints', text: HINTS });
+    const json = await makeBackup(a);
+    const programs = JSON.parse(json).programs;
+    expect(programs.map((p: { hash: string }) => p.hash).sort()).toEqual(['h1', 'p9']);
+    expect(programs.find((p: { hash: string }) => p.hash === 'p9').hints).toBeUndefined();
+    const b = await fresh();
+    expect(await restoreBackup(b, json, async () => true)).toEqual({ added: 2, replaced: 0, skipped: 0 });
+    expect(await b.getPrefs('p9')).toEqual({ machine: 1, dos: 'ldos' });
+    expect(await b.getHints('p9')).toBeUndefined();
+  });
+
   it('does not ask about identical work', async () => {
     await a.putHints('h1', { name: 'one.hints', text: HINTS });
     const json = await makeBackup(a);

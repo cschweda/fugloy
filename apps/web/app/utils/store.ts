@@ -24,6 +24,7 @@ export interface Store {
   putHints(hash: string, value: { name: string; text: string }): Promise<void>;
   allHints(): Promise<{ hash: string; name: string; text: string }[]>;
   getPrefs(hash: string): Promise<Prefs | undefined>;
+  allPrefs(): Promise<{ hash: string; prefs: Prefs }[]>;
   putPrefs(hash: string, prefs: Prefs): Promise<void>;
   /** Forgets one program: its hints and its settings. */
   deleteProgram(hash: string): Promise<void>;
@@ -64,6 +65,11 @@ function make(db: IDBDatabase): Store {
       return keys.map((k, i) => ({ hash: String(k), name: values[i]!.name, text: values[i]!.text }));
     },
     getPrefs: (hash) => wrap<Prefs | undefined>(db.transaction('prefs').objectStore('prefs').get(hash)),
+    async allPrefs() {
+      const os = db.transaction('prefs').objectStore('prefs');
+      const [keys, values] = await Promise.all([wrap(os.getAllKeys()), wrap<Prefs[]>(os.getAll())]);
+      return keys.map((k, i) => ({ hash: String(k), prefs: values[i]! }));
+    },
     async putPrefs(hash, prefs) {
       const tx = db.transaction('prefs', 'readwrite');
       tx.objectStore('prefs').put({ machine: prefs.machine, dos: prefs.dos } satisfies Prefs, hash);

@@ -66,6 +66,16 @@ describe('carry-over between builds (Review Focus 3)', () => {
     expect(bestCarryOver(sea('seadrg03.cmd'), saved)).toBeNull();
   });
 
+  it('offers a file even when it has lines that do not parse, and says so (not silently skipped)', () => {
+    const broken = `${hints.trimEnd()}\nblock 0:$0010 frobnicate\nblock 1 length $0010 hash 0123456789abcdef\nblock 1:$0000 name GHOST\n`;
+    const best = bestCarryOver(sea('seadrg02.cmd'), [{ hash: 'x', name: 'broken.hints', text: broken }]);
+    expect(best).not.toBeNull();
+    expect(best!.matched).toBe(1);
+    expect(best!.unmatched).toBe(1);
+    expect(best!.problems).toHaveLength(1);
+    expect(best!.problems[0]).toMatch(/^line \d+: /);
+  });
+
   it('a hint file never offers itself to its own program', () => {
     expect(bestCarryOver(sea('seadrg01.cmd'), saved)).toBeNull();
   });
@@ -90,6 +100,10 @@ describe('hint-file drop', () => {
   const enc = (t: string): Uint8Array => new TextEncoder().encode(t);
   it('recognizes hint text by content, whatever the name', () => {
     expect(asHintText(enc(ex('sea-dragon/seadrg01.hints').toString('utf8')))).toContain('fugloy-hints 1');
+  });
+  it('still takes a hint file that does not parse, so its errors can be reported instead of loading it as binary', () => {
+    expect(asHintText(enc('# mine\nfugloy-hints 1\nblock zero nonsense\n'))).toContain('nonsense');
+    expect(asHintText(enc('fugloy-hints 9\n'))).not.toBeNull();
   });
   it('refuses programs, other text and empty files', () => {
     expect(asHintText(new Uint8Array(ex('sea-dragon/seadrg01.cmd')))).toBeNull();

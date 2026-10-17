@@ -3,9 +3,15 @@
 import ConfirmDialog from '~/components/ConfirmDialog.vue';
 import type { CarryCandidate } from '~/utils/carry-over';
 
-defineProps<{ candidate: CarryCandidate | null; program: string }>();
+const props = defineProps<{ candidate: CarryCandidate | null; program: string }>();
 defineEmits<{ accept: []; dismiss: [] }>();
 const plural = (n: number, one: string): string => `${n} ${one}${n === 1 ? '' : 's'}`;
+
+const message = (c: CarryCandidate): string => {
+  const unmatched = c.unmatched === 0 ? '' : ` ${plural(c.unmatched, 'hint block')} match nothing here and will be listed in the Hints tab, not applied.`;
+  const problems = c.problems.length === 0 ? '' : ` ${plural(c.problems.length, 'problem')} in the file (${c.problems.slice(0, 3).join('; ')}${c.problems.length > 3 ? '; …' : ''}) will be listed in the Hints tab.`;
+  return `The hints saved as ${c.name} match ${plural(c.matched, 'block')} of ${plural(c.blocks, 'block')} in its hint file.${unmatched}${problems} Carry them over to ${props.program}?`;
+};
 </script>
 
 <template>
@@ -13,7 +19,7 @@ const plural = (n: number, one: string): string => `${n} ${one}${n === 1 ? '' : 
     testid="carry-dialog"
     :open="candidate !== null"
     title="Carry over hints from another build?"
-    :message="candidate === null ? '' : `The hints saved as ${candidate.name} match ${plural(candidate.matched, 'block')} of ${program} (of ${plural(candidate.blocks, 'block')} in the hint file). Carry them over? Hints for blocks that do not match are kept and listed in the Hints tab.`"
+    :message="candidate === null ? '' : message(candidate)"
     confirm-label="Carry over"
     @confirm="$emit('accept')"
     @cancel="$emit('dismiss')"

@@ -7,6 +7,7 @@ import { writeHints } from '@fugloy/disasm';
 
 const wb = useWorkbench();
 const ed = useEditing();
+const persistence = usePersistence();
 
 const view = computed(() => {
   const s = wb.session.value;
@@ -48,6 +49,12 @@ const plural = (n: number, one: string, many = `${one}s`): string => `${n.toLoca
         <p class="fg-muted">block {{ u.index }}: {{ plural(u.lines.length, 'hint') }}</p>
         <pre class="fg-hints-text">{{ u.lines.join('\n') }}</pre>
       </div>
+    </section>
+    <section v-if="persistence.hintErrors.value.length > 0" data-testid="hints-errors">
+      <h3 class="fg-sec">Carried over, but not read</h3>
+      <ul class="fg-hints-warnings">
+        <li v-for="(e, i) in persistence.hintErrors.value" :key="i">{{ e }}</li>
+      </ul>
     </section>
     <section v-if="view.warnings.length > 0" data-testid="hints-warnings">
       <h3 class="fg-sec">Warnings</h3>

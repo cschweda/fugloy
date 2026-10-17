@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createEditing } from '../app/composables/useEditing';
-import { createPersistence } from '../app/composables/usePersistence';
+import { createPersistence, SAVE_DELAY_MS } from '../app/composables/usePersistence';
 import { createWorkbench } from '../app/composables/useWorkbench';
 import { openStore } from '../app/utils/store';
 import type { Store } from '../app/utils/store';
@@ -27,9 +27,10 @@ const until = async (f: () => boolean | Promise<boolean>): Promise<void> => {
 let opened: Store | null = null;
 const rig = async (open = openStore) => {
   const wb = createWorkbench({ readExample });
-  const p = createPersistence(wb, async () => (opened = await open()));
+  const ed = createEditing(wb);
+  const p = createPersistence(wb, { open: async () => (opened = await open()), readExample, loadHints: ed.loadHints });
   await p.start();
-  return { wb, p, ed: createEditing(wb) };
+  return { wb, p, ed };
 };
 afterEach(async () => {
   opened?.db.close();
@@ -41,13 +42,15 @@ describe('usePersistence', () => {
   it('saves an edit after the delay, and the saved rename beats the committed hints on the next open', async () => {
     const a = await rig();
     await a.wb.openExample('sea-dragon');
-    await until(() => a.p.status.value === 'saved'); // the committed hints save once
+    await sleep(SAVE_DELAY_MS + 150);
+    expect(a.p.status.value).toBe('no changes yet'); // committed hints, untouched
+    expect(await opened!.allHints()).toEqual([]);
     expect(a.ed.apply({ op: 'name', addr: 0x4b9e, name: 'INIT' })).toBeNull();
     expect(a.p.status.value).toBe('unsaved');
     await until(() => a.p.status.value === 'saved');
     // A second visit: same store, new workbench.
     const b = createWorkbench({ readExample });
-    const p2 = createPersistence(b, async () => opened);
+    const p2 = createPersistence(b, { open: async () => opened, readExample });
     await b.openExample('sea-dragon');
     await until(() => b.session.value!.analysis.symbols.list().some((s) => s.name === 'INIT'));
     expect(p2.status.value).toBe('saved');
@@ -56,7 +59,6 @@ describe('usePersistence', () => {
   it('counts undo as a change', async () => {
     const a = await rig();
     await a.wb.openExample('sea-dragon');
-    await until(() => a.p.status.value === 'saved');
     a.ed.apply({ op: 'name', addr: 0x4b9e, name: 'INIT' });
     await until(() => a.p.status.value === 'saved');
     a.ed.undo();
@@ -68,33 +70,44 @@ describe('usePersistence', () => {
   it('says no hints yet for a program without hints, and saves nothing', async () => {
     const a = await rig();
     await a.wb.openExample('sea-dragon', 'seadrg03.cmd');
-    await sleep(100);
+    await sleep(SAVE_DELAY_MS + 150);
     expect(a.p.status.value).toBe('no hints yet');
     expect(await opened!.allHints()).toEqual([]);
   });
 
-  it('offers seadrg01 hints for seadrg02 and carries them over', async () => {
+  it('offers the committed seadrg01 hints for seadrg02 with no prior edit, and carries them over as one undoable step', async () => {
     const a = await rig();
-    await a.wb.openExample('sea-dragon');
-    await until(() => a.p.status.value === 'saved');
     await a.wb.openExample('sea-dragon', 'seadrg02.cmd');
     await until(() => a.p.carry.value !== null);
+    expect(await opened!.allHints()).toEqual([]); // nothing was saved to make the offer
     expect(a.p.carry.value!.name).toBe('seadrg01.hints');
     a.p.acceptCarry();
     expect(a.wb.session.value!.applied.matched).toHaveLength(1);
     expect(a.wb.session.value!.hintFile.hints.length).toBeGreaterThan(0);
     await until(() => a.p.status.value === 'saved');
-    expect((await opened!.allHints()).map((h) => h.name).sort()).toEqual(['seadrg01.hints', 'seadrg01.hints']);
+    expect((await opened!.allHints()).map((h) => h.name)).toEqual(['seadrg01.hints']);
+    a.ed.undo();
+    expect(a.wb.session.value!.hintFile.hints).toHaveLength(0);
+  });
+
+  it('a saved copy of the hints is offered before the committed one, and never as the program\'s own', async () => {
+    const a = await rig();
+    await a.wb.openExample('sea-dragon');
+    a.ed.apply({ op: 'name', addr: 0x4b9e, name: 'INIT' });
+    await until(() => a.p.status.value === 'saved');
+    await a.wb.openExample('sea-dragon', 'seadrg02.cmd');
+    await until(() => a.p.carry.value !== null);
+    expect(a.p.carry.value!.text).toContain('INIT');
   });
 
   it('keeps the machine the user picked, over the manifest', async () => {
     const a = await rig();
     await a.wb.openExample('sea-dragon');
-    await until(() => a.p.status.value === 'saved');
+    await sleep(50); // the saved work is read first
     a.wb.setSelection({ machine: 1, dos: 'ldos' });
     await until(async () => (await opened!.getPrefs(a.wb.session.value!.hash)) !== undefined);
     const b = createWorkbench({ readExample });
-    createPersistence(b, async () => opened);
+    createPersistence(b, { open: async () => opened, readExample });
     await b.openExample('sea-dragon');
     await until(() => b.session.value!.selection?.machine === 1);
     expect(b.session.value!.selection?.dos).toBe('ldos');
@@ -126,10 +139,8 @@ describe('usePersistence prefs', () => {
   it('does not save settings just for opening a program', async () => {
     const a = await rig();
     await a.wb.openExample('sea-dragon');
-    await until(() => a.p.status.value === 'saved');
     await a.wb.openExample('sea-dragon', 'seadrg02.cmd');
     await sleep(150);
-    expect(await opened!.getPrefs(a.wb.session.value!.hash)).toBeUndefined();
-    expect(await opened!.getPrefs((await opened!.allHints())[0]!.hash)).toBeUndefined();
+    expect(await opened!.allPrefs()).toEqual([]);
   });
 });

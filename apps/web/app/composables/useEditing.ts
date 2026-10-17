@@ -16,7 +16,8 @@ export interface Editing {
   /** Adds a proposal's hint lines, as one undoable edit. */
   applyLines(lines: readonly string[]): string | null;
   /** Replaces the hint file with a dropped one, as one undoable edit; returns why it was refused, or null. */
-  loadHints(text: string, source: string): string | null;
+  /** `lenient` applies what parses and ignores the lines that do not (a carried-over file, whose errors are shown elsewhere). */
+  loadHints(text: string, source: string, opts?: { lenient?: boolean }): string | null;
   undo(): void;
   redo(): void;
   canUndo: ComputedRef<boolean>;
@@ -67,11 +68,11 @@ export function createEditing(wb: Workbench): Editing {
     return null;
   }
 
-  function loadHints(text: string, source: string): string | null {
+  function loadHints(text: string, source: string, opts: { lenient?: boolean } = {}): string | null {
     const s = wb.session.value;
     if (s === null) return 'no program is open';
     const parsed = parseHints(text);
-    if (parsed.errors.length > 0) return `${source} does not parse: ${parsed.errors.map((e) => `line ${e.line}: ${e.message}`).join('; ')}`;
+    if (parsed.errors.length > 0 && opts.lenient !== true) return `${source} does not parse: ${parsed.errors.map((e) => `line ${e.line}: ${e.message}`).join('; ')}`;
     // The library pairs blocks by length and hash, so one file serves several builds; only a file with no matching block is refused.
     if (applyHints(parsed.file, s.module.image, s.hash, s.normalize).matched.length === 0) return 'these hints are for another program (no block matched)';
     const error = show(s, parsed.file, source);
