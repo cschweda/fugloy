@@ -22,6 +22,7 @@ defineProps<{ row: Row; cursor: boolean; selected: boolean; /** The row is the h
       <span class="fg-col-text"><template v-for="(span, i) in row.spans" :key="i"><a
         v-if="isFollowable(span)"
         :href="`#$${hexAddr(span.target)}`"
+        tabindex="-1"
         :data-target="span.target"
         :data-span="span.kind"
         :data-use="spanUseKind(span)"

@@ -6,6 +6,9 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { addressKey, withHintFile, withSelection } from '@fugloy/disasm';
 import type { Row, TableEntry } from '@fugloy/disasm';
 import ListingView from '~/components/listing/ListingView.vue';
+import InlineEdit from '~/components/listing/InlineEdit.vue';
+import RowMenu from '~/components/listing/RowMenu.vue';
+import HintsTab from '~/components/HintsTab.vue';
 import FirstScreen from '~/components/FirstScreen.vue';
 import ConfirmDialog from '~/components/ConfirmDialog.vue';
 import OpenProblem from '~/components/OpenProblem.vue';
@@ -14,7 +17,9 @@ import IndexTab from '~/components/side/IndexTab.vue';
 import ProgramTab from '~/components/side/ProgramTab.vue';
 import SymbolTab from '~/components/side/SymbolTab.vue';
 import { resolveGoTo } from '~/utils/goto';
-import { isTyping, keyId, modalOpen } from '~/utils/keys';
+import { followOf, stepCursor } from '~/utils/edit-targets';
+import { cursorRowIndex, rowLookup } from '~/utils/row-lookup';
+import type { KeyBinding } from '~/composables/useWorkbenchKeys';
 import { entryOf } from '~/utils/symbol-info';
 import type { FollowInfo } from '~/utils/xrefs';
 import FacingPages from '~/components/workbench/FacingPages.vue';
@@ -122,12 +127,35 @@ function onDocumentDrop(e: DragEvent): void {
   void receive(file);
 }
 
+/** Where a shift-extended selection started; the cursor is its other end. */
+let anchor: number | null = null;
+
+/** Moves the cursor to a row; `extend` selects from the anchor (the cursor before the first extend) to it. */
 function onSelect(addr: number, extend: boolean): void {
-  if (extend && cursor.value !== null) selection.value = { from: Math.min(cursor.value, addr), to: Math.max(cursor.value, addr) };
-  else {
+  if (extend && cursor.value !== null) {
+    if (selection.value === null || anchor === null) anchor = cursor.value;
+    selection.value = { from: Math.min(anchor, addr), to: Math.max(anchor, addr) };
+  } else {
     selection.value = null;
-    cursor.value = addr;
+    anchor = null;
   }
+  cursor.value = addr;
+}
+
+/** ↑ and ↓ (with Shift, extending the selection). */
+function step(dir: 1 | -1, extend: boolean): void {
+  const to = stepCursor(rows.value, cursor.value, dir);
+  if (to === null) return;
+  onSelect(to, extend);
+  scrollTo(to);
+}
+
+/** Enter: follow the cursor row's first link, as clicking it would. */
+function followCursor(): void {
+  const list = rows.value;
+  const row = list[cursorRowIndex(list, rowLookup(list), cursor.value) ?? -1];
+  const f = row === undefined ? null : followOf(row);
+  if (f !== null) onFollow(f.target, f.info);
 }
 
 /** A label opens in the Symbol tab and the cursor goes there (a step back can undo); a table name only fills the panel. */
@@ -142,10 +170,15 @@ function showTable(entry: TableEntry): void {
   rightTab.value = 'symbol';
 }
 
-/** A proposal's hint lines: Task 12 creates `applyHintLines` and adds them to the hint file. */
-function applyHintLines(_lines: string[]): void {
-  // TODO(Task 12): add the lines to the hint file through applyHintLines.
-}
+// Editing: marks, the inline editor, the right-click menu (composables/useListingEditor).
+const editor = useListingEditor({
+  listing,
+  select: (addr) => onSelect(addr, false),
+  showListing: () => {
+    leftTab.value = 'listing';
+  },
+});
+const { editMessage, inline, inlineValue, inlineChoice, menu } = editor;
 
 function onFollow(target: number, info: FollowInfo): void {
   if (info.span === 'table') {
@@ -197,20 +230,32 @@ function submitGo(): void {
   }
 }
 
-/** Every workbench key binding, by `keyId`. Editing keys (C, D, W, S, T, N, ;, undo, redo) join in Task 12. */
-const KEYS: Record<string, () => void> = {
-  g: openGo,
-  'alt+arrowleft': () => nav.back(),
-  'alt+arrowright': () => nav.forward(),
+/** Esc: clear the selection and any message. */
+function escape(): void {
+  editMessage.value = null;
+  selection.value = null;
+  anchor = null;
+}
+
+/** Every workbench key binding, by `keyId` (utils/keys). */
+const KEYS: Record<string, KeyBinding> = {
+  g: { run: openGo },
+  'alt+arrowleft': { run: () => nav.back() },
+  'alt+arrowright': { run: () => nav.forward() },
+  ...editor.keys,
+  escape: { run: escape },
+  arrowdown: { run: () => step(1, false), listing: true },
+  arrowup: { run: () => step(-1, false), listing: true },
+  'shift+arrowdown': { run: () => step(1, true), listing: true },
+  'shift+arrowup': { run: () => step(-1, true), listing: true },
+  enter: { run: followCursor, listing: true },
 };
 
-function onKeydown(e: KeyboardEvent): void {
-  if (session.value === null || isTyping(e.target) || modalOpen(document) || e.defaultPrevented) return;
-  const action = KEYS[keyId(e)];
-  if (action === undefined) return;
-  e.preventDefault();
-  action();
-}
+useWorkbenchKeys({
+  keys: KEYS,
+  active: () => session.value !== null && !editor.busy.value,
+  inListing: (target) => target instanceof Element && target.closest('.fg-listing') !== null,
+});
 
 const MODEL3 = { machine: 3, dos: 'trsdos' } as const;
 
@@ -255,7 +300,7 @@ declare global {
 
 onMounted(() => {
   document.addEventListener('drop', onDocumentDrop);
-  document.addEventListener('keydown', onKeydown);
+  editor.isMac.value = /Mac|iPhone|iPad/.test(navigator.platform);
   // Back from another page with a program still open: show it where it was.
   if (session.value !== null) showOpened();
   window.__fugloyTest = {
@@ -279,7 +324,6 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   document.removeEventListener('drop', onDocumentDrop);
-  document.removeEventListener('keydown', onKeydown);
   delete window.__fugloyTest;
 });
 </script>
@@ -321,12 +365,14 @@ onBeforeUnmount(() => {
               :selection="selection"
               @select="onSelect"
               @follow="onFollow"
+              @context="editor.onContext"
+              @context-key="editor.menuAtCursor"
               @toggle-header="headerOpen = !headerOpen"
             />
+            <p v-if="editMessage !== null" class="fg-edit-message" role="alert" data-testid="edit-message">{{ editMessage }}</p>
           </div>
           <div id="left-panel-hints" v-show="leftTab === 'hints'" role="tabpanel" aria-labelledby="left-tab-hints" class="fg-panel">
-            <p class="fg-muted">The hint file, as you edit, arrives with editing.</p>
-            <p v-if="session.hintSource" class="fg-muted">Hints loaded from <span class="fg-mono">{{ session.hintSource }}</span>: {{ session.hintFile.hints.length }}.</p>
+            <HintsTab />
           </div>
         </template>
         <template #right>
@@ -346,7 +392,7 @@ onBeforeUnmount(() => {
               :diagnostics="session.analysis.pass1.diagnostics"
               :proposals="session.analysis.proposals"
               @symbol="showTable"
-              @apply-hint-lines="applyHintLines"
+              @apply-hint-lines="editor.applyHintLines"
             />
           </div>
         </template>
@@ -354,6 +400,20 @@ onBeforeUnmount(() => {
       <StatusLine />
     </div>
     <FirstScreen v-else :reading="reading" @file="receive" />
+    <RowMenu v-if="menu !== null && session !== null" :items="editor.menuItems.value" :x="menu.x" :y="menu.y" @pick="editor.pickMenu" @close="editor.closeMenu()" />
+    <InlineEdit
+      v-if="inline !== null && session !== null"
+      v-model="inlineValue"
+      v-model:choice="inlineChoice"
+      :title="inline.op === 'name' ? 'Rename' : 'Comment'"
+      :placeholder="editor.inlinePlaceholder.value"
+      :error="inline.error"
+      :choices="editor.inlineChoices.value"
+      :left="inline.left"
+      :top="inline.top"
+      @submit="editor.submitInline"
+      @cancel="editor.closeInline"
+    />
     <ConfirmDialog
       :open="pendingReplace !== null"
       title="Replace the open program?"

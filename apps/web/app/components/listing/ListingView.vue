@@ -6,7 +6,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch 
 import type { Row } from '@fugloy/disasm';
 import ListingRow from './ListingRow.vue';
 import { ROW_HEIGHT, rowAddr } from '../../utils/row-classes';
-import { rowLookup } from '../../utils/row-lookup';
+import { cursorRowIndex, rowLookup } from '../../utils/row-lookup';
 import type { FollowInfo } from '../../utils/xrefs';
 
 const props = defineProps<{
@@ -22,6 +22,8 @@ const emit = defineEmits<{
   select: [addr: number, extend: boolean];
   follow: [target: number, info: FollowInfo];
   context: [addr: number, x: number, y: number];
+  /** The context menu was asked for from the keyboard (the ContextMenu key, Shift+F10): open it on the cursor row. */
+  'context-key': [];
   'toggle-header': [];
 }>();
 
@@ -35,17 +37,19 @@ const viewRows = ref(40);
 
 const lookup = computed(() => rowLookup(props.rows));
 /** The cursor's row: the instruction or data row holding the address, not the label row above it. */
-function cursorRow(addr: number | null): number | null {
-  if (addr === null) return null;
-  let i = lookup.value(addr);
-  while (i !== null && props.rows[i]?.kind === 'label' && i + 1 < props.rows.length && rowAddr(props.rows[i + 1]!) === addr) i++;
-  return i;
-}
+const cursorRow = (addr: number | null): number | null => cursorRowIndex(props.rows, lookup.value, addr);
 const cursorIndex = shallowRef<number | null>(cursorRow(props.cursor));
 
 const first = computed(() => Math.max(0, top.value - OVERSCAN));
 const last = computed(() => Math.min(props.rows.length, top.value + viewRows.value + OVERSCAN));
 const shown = computed(() => props.rows.slice(first.value, last.value));
+/** Row ids, by index in the listing, so the scroller can name the cursor row for assistive technology. */
+const rowId = (index: number): string => `fg-row-${index}`;
+/** The cursor row's id while it is rendered (aria-activedescendant must name an element in the document). */
+const activeId = computed(() => {
+  const i = cursorIndex.value;
+  return i !== null && i >= first.value && i < last.value ? rowId(i) : undefined;
+});
 /** Empty room under the last row (two thirds of the view), so the last rows can scroll to a third of the way down like any other. */
 const tail = ref(0);
 const totalHeight = computed(() => `${props.rows.length * ROW_HEIGHT + tail.value}px`);
@@ -197,9 +201,24 @@ function onClick(e: MouseEvent): void {
 
 function onContextMenu(e: MouseEvent): void {
   const row = rowElement(e.target);
-  if (row === null) return;
-  e.preventDefault();
-  emit('context', Number(row.dataset.addr), e.clientX, e.clientY);
+  if (row !== null) {
+    e.preventDefault();
+    emit('context', Number(row.dataset.addr), e.clientX, e.clientY);
+  } else if (e.target === scroller.value) {
+    // From the keyboard the event lands on the focused scroller, not on a row.
+    e.preventDefault();
+    emit('context-key');
+  }
+}
+
+/** Shift-click extends the row selection; keep it from also selecting text. */
+function onMouseDown(e: MouseEvent): void {
+  if (e.shiftKey) e.preventDefault();
+}
+
+/** The cursor row's box on screen, for an editor or menu placed at it; null while it is not rendered. */
+function cursorRect(): DOMRect | null {
+  return scroller.value?.querySelector('.fg-row-cursor')?.getBoundingClientRect() ?? null;
 }
 
 let resize: ResizeObserver | null = null;
@@ -220,17 +239,20 @@ function focus(): void {
   scroller.value?.focus({ preventScroll: true });
 }
 
-defineExpose({ scrollToAddr, focus });
+defineExpose({ scrollToAddr, focus, cursorRect });
 </script>
 
 <template>
   <div
     ref="scroller"
     class="fg-listing"
-    role="region"
+    role="group"
     aria-label="Listing"
+    aria-roledescription="listing"
+    :aria-activedescendant="activeId"
     tabindex="0"
     @scroll.passive="onScroll"
+    @mousedown="onMouseDown"
     @click="onClick"
     @contextmenu="onContextMenu"
   >
@@ -238,6 +260,7 @@ defineExpose({ scrollToAddr, focus });
       <div class="fg-listing-window" :style="{ transform: offset }">
         <ListingRow
           v-for="(row, i) in shown"
+          :id="rowId(first + i)"
           :key="first + i"
           :row="row"
           :cursor="cursorIndex === first + i"

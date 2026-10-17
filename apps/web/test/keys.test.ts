@@ -46,3 +46,13 @@ describe('modalOpen', () => {
     expect(modalOpen(doc(false))).toBe(false);
   });
 });
+
+describe('keyId with shift and a modifier', () => {
+  it('names shift on a letter when ctrl or alt is held, so redo is apart from undo', () => {
+    expect(keyId(press('z', { metaKey: true, shiftKey: true }))).toBe('ctrl+shift+z');
+    expect(keyId(press('Z', { ctrlKey: true, shiftKey: true }))).toBe('ctrl+shift+z');
+    expect(keyId(press(';'))).toBe(';');
+    expect(keyId(press('ArrowDown', { shiftKey: true }))).toBe('shift+arrowdown');
+    expect(keyId(press('F10', { shiftKey: true }))).toBe('shift+f10');
+  });
+});

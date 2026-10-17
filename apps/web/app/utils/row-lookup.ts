@@ -55,3 +55,14 @@ export function rowLookup(rows: readonly Row[]): (addr: number) => number | null
     return firstAt(below).index;
   };
 }
+
+/**
+ * The cursor's row for an address: the instruction or data row holding it, not
+ * the label row above it. `lookup` is `rowLookup(rows)`.
+ */
+export function cursorRowIndex(rows: readonly Row[], lookup: (addr: number) => number | null, addr: number | null): number | null {
+  if (addr === null) return null;
+  let i = lookup(addr);
+  while (i !== null && rows[i]?.kind === 'label' && i + 1 < rows.length && 'addr' in rows[i + 1]! && (rows[i + 1] as { addr: number }).addr === addr) i++;
+  return i;
+}
