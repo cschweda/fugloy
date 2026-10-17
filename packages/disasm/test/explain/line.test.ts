@@ -72,7 +72,8 @@ describe('Sea Dragon goldens (Model III, TRSDOS 1.3, seadrg01.hints)', () => {
       'As text they read "er  ".',
     ]);
     expect(e.details).toBeUndefined();
-    expect(e.region).toBeUndefined();
+    expect(e.region?.start).toBeLessThanOrEqual(0x62fa);
+    expect(e.region?.end).toBeGreaterThanOrEqual(0x62fd);
   });
 
   it('an address inside a data row explains that row', () => {

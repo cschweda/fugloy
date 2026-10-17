@@ -6,8 +6,11 @@
  */
 import type { Instruction } from '@fugloy/z80';
 import { Kind } from '../analysis/map.js';
-import { formatRow, listingRows, rowIndex } from '../rows.js';
+import { formatRow } from '../rows.js';
 import type { Row } from '../rows.js';
+import { rowAt, rowsOf } from './listing.js';
+import type { ListRow, Rows } from './listing.js';
+import { dataRegion } from './region.js';
 import type { Analysis } from '../pipeline.js';
 import type { Session } from '../session.js';
 import { knownBefore, patchedBytes, walkBack, written } from './track.js';
@@ -18,40 +21,6 @@ import type { LineCtx } from './phrase.js';
 import { words } from './words.js';
 import { patternAt } from './patterns.js';
 import type { Explanation, Piece, Preview, Sentence } from './types.js';
-
-type ListRow = Extract<Row, { kind: 'code' | 'data' }>;
-
-interface Rows {
-  rows: Row[];
-  index: Map<number, number>;
-}
-
-const rowCache = new WeakMap<Analysis, Rows>();
-
-/** The listing's rows, built once per analysis. */
-function rowsOf(a: Analysis): Rows {
-  let hit = rowCache.get(a);
-  if (hit === undefined) {
-    const rows = listingRows(a);
-    hit = { rows, index: rowIndex(rows) };
-    rowCache.set(a, hit);
-  }
-  return hit;
-}
-
-/** The index of the code or data row that covers `addr`, or undefined. */
-function rowAt(r: Rows, addr: number): number | undefined {
-  for (let back = 0; back < 4; back++) {
-    const start = (addr - back) & 0xffff;
-    let i = r.index.get(start);
-    if (i === undefined) continue;
-    while (i < r.rows.length && r.rows[i]!.kind !== 'code' && r.rows[i]!.kind !== 'data') i++;
-    const row = r.rows[i] as ListRow | undefined;
-    if (row === undefined || row.addr !== start) continue;
-    if (addr - start < row.bytes.length) return i;
-  }
-  return undefined;
-}
 
 /** Up to `n` code and data rows from row `i` on, as the listing prints them. */
 function linesFrom(r: Rows, i: number, n: number): string[] {
@@ -266,7 +235,8 @@ export function explainLine(s: Session, addr: number): Explanation {
   const labelSym = a.symbols.get(at);
   const label = labelSym === undefined ? undefined : { name: labelSym.name, ...into(a, at), entry: rootSet.has(at) };
   if (row.kind === 'data') {
-    return { kind: 'data', addr: at, line, sentences: dataSentences(row), previews: [], ...(label === undefined ? {} : { label }) };
+    const region = dataRegion(s, at);
+    return { kind: 'data', addr: at, line, sentences: dataSentences(row), previews: [], ...(label === undefined ? {} : { label }), ...(region === null ? {} : { region }) };
   }
   const ins = a.pass1.instructions.get(at) as Instruction;
   const lc: LineCtx = { ...c, addr: at, ins, regs: knownBefore(a, at).regs, refs: [], needs: [], patched: patchedBytes(a, at, ins) };
