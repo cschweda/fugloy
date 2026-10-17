@@ -237,7 +237,7 @@
 **Interfaces:**
 - `Source` becomes `{ id; author; title; publisher; year: string; circa?: boolean; edition?; catalog?: string; url?: string; textUrl?: string; archiveId?: string; redistributable?: boolean }`.
   - `locator` is removed. A catalog number goes in `catalog`. A URL goes in `url`.
-  - `ldos51`'s second URL goes in `textUrl`. `soltoff`'s permission link is noted by `redistributable: true` plus `textUrl`.
+  - `ldos51`'s second URL goes in `textUrl`. `soltoff`'s permission link is kept in `permissionUrl` (required whenever `redistributable: true`), and its `url` stays the text, with no `textUrl`.
   - `archiveId` is the archive.org identifier, parsed from `url` when it is `archive.org/details/<id>`.
   - `year` holds digits or a range only (`1982`, `1983–84`), with `circa: true` for `ldos51`.
 - IR `tableNames` includes names used only by `.BAS` note lines.
