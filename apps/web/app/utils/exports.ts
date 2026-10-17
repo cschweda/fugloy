@@ -1,6 +1,6 @@
 // What Export ▾ downloads, as bytes. Pure: the menu does the Blob and the <a download>.
 import { exportName, programFacts, renderSession, writeBasicCas, writeCmd, writeHints, writeSystemCas } from '@fugloy/disasm';
-import type { Session } from '@fugloy/disasm';
+import type { ProgramFacts, Session } from '@fugloy/disasm';
 
 export type ExportKind = 'zmac' | 'hints' | 'ir' | 'cmd' | 'cas';
 
@@ -27,11 +27,14 @@ export function exportKinds(s: Session): ExportKind[] {
   return s.module.format === 'bas' ? all.filter((k) => k !== 'cmd') : all;
 }
 
-/** Why a `.CAS` of this program may not run, one phrase per reason. Empty for a BASIC tape. */
-export function casWarnings(s: Session): string[] {
+/**
+ * Why a `.CAS` of this program may not run, one phrase per reason. Empty for a BASIC tape.
+ * `facts` is the session's (the workbench keeps them computed); without it they are worked out here.
+ */
+export function casWarnings(s: Session, facts?: Pick<ProgramFacts, 'dosCalls'>): string[] {
   if (s.module.format === 'bas') return [];
   const out: string[] = [];
-  if (programFacts(s.analysis).dosCalls.length > 0) out.push(DOS_WARNING);
+  if ((facts ?? programFacts(s.analysis)).dosCalls.length > 0) out.push(DOS_WARNING);
   if (s.module.image.blocks.some((b) => b.start < 0x4200)) out.push(LOW_WARNING);
   return out;
 }

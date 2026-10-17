@@ -18,7 +18,8 @@ const LABELS: Record<ExportKind, { label: string; note: string }> = {
 };
 
 const kinds = computed(() => (wb.session.value === null ? [] : exportKinds(wb.session.value)));
-const warnings = computed(() => (wb.session.value === null ? [] : casWarnings(wb.session.value)));
+// The workbench's facts, computed once per session, not again here on every edit.
+const warnings = computed(() => (wb.session.value === null || wb.facts.value === null ? [] : casWarnings(wb.session.value, wb.facts.value)));
 const noEntry = computed(() => {
   const s = wb.session.value;
   return s !== null && s.module.format !== 'bas' && s.analysis.entry === null;

@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import vue from '@vitejs/plugin-vue';
 import { defineConfig } from 'vitest/config';
 import { fugloyAliases } from './aliases';
@@ -7,7 +8,8 @@ import { fugloyAliases } from './aliases';
 export default defineConfig({
   plugins: [vue()],
   resolve: {
-    alias: fugloyAliases,
+    // `~/` is Nuxt's app directory, for the components mounted in the tests.
+    alias: { ...fugloyAliases, '~': fileURLToPath(new URL('./app', import.meta.url)) },
   },
   test: { include: ['test/**/*.test.ts'], environment: 'node' },
 });

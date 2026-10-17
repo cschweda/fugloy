@@ -3,7 +3,8 @@
 import { nextTick, ref, watch } from 'vue';
 import { parseBase } from '~/utils/pickers';
 
-const props = defineProps<{ open: boolean; name: string }>();
+/** size: the file's length, so an address it would run past $FFFF from is refused. */
+const props = defineProps<{ open: boolean; name: string; size: number }>();
 const emit = defineEmits<{ load: [base: number]; close: [] }>();
 
 const dialog = ref<HTMLDialogElement | null>(null);
@@ -26,7 +27,7 @@ watch(
 );
 
 function submit(): void {
-  const r = parseBase(text.value);
+  const r = parseBase(text.value, props.size);
   if ('error' in r) {
     problem.value = r.error;
     return;

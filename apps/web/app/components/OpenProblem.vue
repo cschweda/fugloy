@@ -27,5 +27,5 @@ function onRawBase(base: number): void {
       This looks like a PDF. Manuals go on the <NuxtLink to="/manuals" class="fg-inline-link">Manuals</NuxtLink> page.
     </span>
   </div>
-  <RawBaseDialog :open="askBase" :name="wb.rawCandidate.value?.name ?? ''" @load="onRawBase" @close="askBase = false" />
+  <RawBaseDialog :open="askBase" :name="wb.rawCandidate.value?.name ?? ''" :size="wb.rawCandidate.value?.bytes.length ?? 0" @load="onRawBase" @close="askBase = false" />
 </template>

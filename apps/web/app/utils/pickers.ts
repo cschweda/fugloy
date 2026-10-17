@@ -33,8 +33,14 @@ export function selectionLabel(sel: SymbolSelection): string {
 }
 
 /** A load address typed as hex (`5200`, `$5200`, `0x5200`, `5200H`), from 0 to FFFF. */
-export function parseBase(text: string): { base: number } | { error: string } {
+export function parseBase(text: string, size?: number): { base: number } | { error: string } {
   const m = /^(?:\$|0x)?([0-9a-f]{1,4})h?$/i.exec(text.trim());
   if (m === null) return { error: 'Type a hex address from 0 to FFFF, such as 5200.' };
-  return { base: Number.parseInt(m[1]!, 16) };
+  const base = Number.parseInt(m[1]!, 16);
+  // A file that would run past $FFFF would wrap through low memory: refuse it, and say where it fits.
+  if (size !== undefined && base + size > 0x10000) {
+    const top = Math.max(0, 0x10000 - size).toString(16).toUpperCase().padStart(4, '0');
+    return { error: `A ${size.toLocaleString('en-US')}-byte file loaded at $${m[1]!.toUpperCase().padStart(4, '0')} runs past $FFFF. The highest address it fits at is $${top}.` };
+  }
+  return { base };
 }

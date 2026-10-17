@@ -2,6 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { dosChoices, MACHINES, parseBase, selectionLabel } from '../app/utils/pickers';
 
 describe('parseBase (the raw binary load address)', () => {
+  it('with the file size, refuses an address the file would run past $FFFF from, saying where it fits', () => {
+    expect(parseBase('F000', 0x1000)).toEqual({ base: 0xf000 });
+    expect(parseBase('F001', 0x1000)).toEqual({ error: 'A 4,096-byte file loaded at $F001 runs past $FFFF. The highest address it fits at is $F000.' });
+    expect(parseBase('5200', 0x10000)).toEqual({ error: 'A 65,536-byte file loaded at $5200 runs past $FFFF. The highest address it fits at is $0000.' });
+    expect(parseBase('0', 0x10000)).toEqual({ base: 0 });
+  });
+
   it('reads hex, with or without $, 0x, or a trailing H', () => {
     expect(parseBase('5200')).toEqual({ base: 0x5200 });
     expect(parseBase('$7000')).toEqual({ base: 0x7000 });

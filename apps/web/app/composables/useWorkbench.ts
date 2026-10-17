@@ -29,9 +29,12 @@ export type SymbolFocus = { kind: 'label'; addr: number } | { kind: 'table'; ent
 
 export const notAProgramMessage = (name: string): string => `${name} is not a .CMD or .BAS program.`;
 export const emptyMessage = (name: string): string => `${name} is empty (0 bytes).`;
+/** The most a raw binary can be: the Z80's 64K address space. */
+export const RAW_MAX = 0x10000;
+export const tooBigForRawMessage = (size: number): string => `At ${size.toLocaleString('en-US')} bytes it is bigger than the 64K a TRS-80 can address, so it cannot be loaded as a raw binary.`;
 
-/** Model III with its default DOS: the CLI's choice when nothing says otherwise. */
-const MODEL3: SymbolSelection = { machine: 3, dos: defaultDos(3) };
+/** Model III with its default DOS: the CLI's choice when nothing says otherwise. The one copy; the page uses it too. */
+export const MODEL3_DEFAULT: SymbolSelection = { machine: 3, dos: defaultDos(3) };
 
 const isPdf = (bytes: Uint8Array): boolean => bytes.length >= 5 && String.fromCharCode(...bytes.subarray(0, 5)) === '%PDF-';
 
@@ -118,11 +121,22 @@ export function createWorkbench(deps: { readExample: ExampleReader }): Workbench
       fail(emptyMessage(name));
       return null;
     }
+    // Over 64K a raw load would wrap through memory: refused before anything reads (or hashes) the bytes.
+    if (opts.base !== undefined && bytes.length > RAW_MAX) {
+      fail(`${name} cannot be loaded as a raw binary. ${tooBigForRawMessage(bytes.length)}`);
+      return null;
+    }
     let s: Session;
     try {
-      s = openProgram(bytes, { name, selection: opts.selection ?? MODEL3, ...(opts.base === undefined ? {} : { base: opts.base }) });
+      s = openProgram(bytes, { name, selection: opts.selection ?? MODEL3_DEFAULT, ...(opts.base === undefined ? {} : { base: opts.base }) });
     } catch (err) {
       if (err instanceof OpenError && err.kind === 'format') {
+        if (bytes.length > RAW_MAX) {
+          // A disk image, say: not a program, and too big to offer as a raw binary.
+          fail(`${notAProgramMessage(name)} ${tooBigForRawMessage(bytes.length)}`);
+          suggestManuals.value = isPdf(bytes);
+          return null;
+        }
         fail(notAProgramMessage(name));
         rawCandidate.value = { bytes, name };
         suggestManuals.value = isPdf(bytes);

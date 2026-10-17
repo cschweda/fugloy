@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { loadCmd, openProgram, renderSession, withHintText } from '@fugloy/disasm';
-import { exportFile, exportKinds } from '../app/utils/exports';
+import { loadCmd, openProgram, programFacts, renderSession, withHintText } from '@fugloy/disasm';
+import { casWarnings, DOS_WARNING, exportFile, exportKinds } from '../app/utils/exports';
 
 const ex = (p: string): string => fileURLToPath(new URL(`../../../examples/${p}`, import.meta.url));
 const selection = { machine: 3, dos: 'trsdos' } as const;
@@ -92,5 +92,13 @@ describe('exportKinds', () => {
     const f = exportFile(s, 'cas');
     expect(f.filename).toBe('HELLO.cas');
     expect(Array.from(f.bytes.subarray(256, 260))).toEqual([0xa5, 0xd3, 0xd3, 0xd3]);
+  });
+});
+
+describe('casWarnings', () => {
+  it('uses the facts it is handed (the workbench\'s, computed once), so the menu does not recompute them', () => {
+    const facts = programFacts(sea.analysis);
+    expect(casWarnings(sea, facts)).toEqual([]);
+    expect(casWarnings(sea, { ...facts, dosCalls: [{} as never] })).toEqual([DOS_WARNING]);
   });
 });

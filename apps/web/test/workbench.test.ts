@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { formatRow } from '@fugloy/disasm';
-import { createWorkbench, emptyMessage, notAProgramMessage } from '../app/composables/useWorkbench';
+import { createWorkbench, emptyMessage, notAProgramMessage, tooBigForRawMessage } from '../app/composables/useWorkbench';
 
 const examplesDir = (path: string): string => fileURLToPath(new URL(`../../../examples/${path}`, import.meta.url));
 /** The composable's file reader, over the repo's examples/ instead of fetch. */
@@ -45,6 +45,21 @@ describe('useWorkbench', () => {
     expect(wb.suggestManuals.value).toBe(false);
     wb.openRaw(0x7000);
     expect(wb.error.value).toBeNull();
+    expect(wb.session.value?.module.format).toBe('raw');
+  });
+
+  it('a non-program over 64K (a disk image) is not offered as a raw binary, and a raw load over 64K is refused before it is opened', () => {
+    const wb = createWorkbench({ readExample });
+    const dsk = new Uint8Array(200 * 1024).fill(0xe5);
+    wb.openBytes(dsk, 'game.dsk');
+    expect(wb.error.value).toBe(`${notAProgramMessage('game.dsk')} ${tooBigForRawMessage(dsk.length)}`);
+    expect(wb.error.value).toContain('204,800 bytes');
+    expect(wb.rawCandidate.value).toBeNull();
+    wb.openBytes(dsk, 'game.dsk', { base: 0 });
+    expect(wb.session.value).toBeNull();
+    expect(wb.error.value).toBe(`game.dsk cannot be loaded as a raw binary. ${tooBigForRawMessage(dsk.length)}`);
+    // Exactly 64K still loads, at 0.
+    wb.openBytes(new Uint8Array(0x10000), 'full.bin', { base: 0 });
     expect(wb.session.value?.module.format).toBe('raw');
   });
 
