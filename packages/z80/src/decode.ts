@@ -21,7 +21,7 @@ export function decode(read: Reader, address = 0): Instruction {
   };
   const truncated = (): Instruction => ({
     mnemonic: 'DB', operands: [{ kind: 'byte', value: b0 }], length: 1, bytes: [b0],
-    cycles: 0, flow: NEXT, documented: false, truncated: true,
+    cycles: 0, flow: NEXT, documented: false, flags: '', truncated: true,
   });
 
   let tpl: Template;
@@ -97,7 +97,7 @@ export function decode(read: Reader, address = 0): Instruction {
   }
 
   const ins: Instruction = {
-    mnemonic: tpl.mnemonic, operands, length: tpl.length, bytes, cycles: tpl.cycles, flow: tpl.flow, documented: tpl.documented,
+    mnemonic: tpl.mnemonic, operands, length: tpl.length, bytes, cycles: tpl.cycles, flow: tpl.flow, documented: tpl.documented, flags: tpl.flags,
   };
   if (tpl.cyclesNotTaken !== undefined) ins.cyclesNotTaken = tpl.cyclesNotTaken;
   return ins;

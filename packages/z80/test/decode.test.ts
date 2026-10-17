@@ -103,3 +103,43 @@ describe('decode', () => {
     expect(i.bytes).toEqual([0x3e, 0x42]);
   });
 });
+
+describe('flag effects', () => {
+  const f = (bytes: number[]) => d(bytes).flags;
+  it('lists the affected flags in SZHPNC order', () => {
+    expect(f([0x80])).toBe('SZHPNC'); // ADD A,B
+    expect(f([0x03])).toBe(''); // INC BC
+    expect(f([0x19])).toBe('HNC'); // ADD HL,DE
+    expect(f([0xcb, 0x47])).toBe('SZHPN'); // BIT 0,A
+    expect(f([0xfe, 0x01])).toBe('SZHPNC'); // CP n
+    expect(f([0xed, 0x57])).toBe('SZHPN'); // LD A,I
+    expect(f([0x37])).toBe('HNC'); // SCF
+    expect(f([0x27])).toBe('SZHPC'); // DAA
+    expect(f([0x78])).toBe(''); // LD A,B
+    expect(f([0x10, 0x00])).toBe(''); // DJNZ
+    expect(f([0x07])).toBe('HNC'); // RLCA
+    expect(f([0xcb, 0x00])).toBe('SZHPNC'); // RLC B
+    expect(f([0xed, 0xb0])).toBe('HPN'); // LDIR
+    expect(f([0xed, 0xb1])).toBe('SZHPN'); // CPIR
+    expect(f([0xdd, 0x34, 0x01])).toBe('SZHPN'); // INC (IX+d)
+    expect(f([0xed, 0x44])).toBe('SZHPNC'); // NEG
+  });
+  it('covers the other groups', () => {
+    expect(f([0x04])).toBe('SZHPN'); // INC B
+    expect(f([0x0b])).toBe(''); // DEC BC
+    expect(f([0xdd, 0x09])).toBe('HNC'); // ADD IX,BC
+    expect(f([0xed, 0x42])).toBe('SZHPNC'); // SBC HL,BC
+    expect(f([0xa0])).toBe('SZHPNC'); // AND B
+    expect(f([0x2f])).toBe('HN'); // CPL
+    expect(f([0xcb, 0x80])).toBe(''); // RES 0,B
+    expect(f([0xdd, 0xcb, 0x01, 0x46])).toBe('SZHPN'); // BIT 0,(IX+d)
+    expect(f([0xf1])).toBe('SZHPNC'); // POP AF
+    expect(f([0xc1])).toBe(''); // POP BC
+    expect(f([0xed, 0x78])).toBe('SZHPN'); // IN A,(C)
+    expect(f([0xdb, 0x00])).toBe(''); // IN A,(n)
+    expect(f([0xed, 0x67])).toBe('SZHPN'); // RRD
+    expect(f([0xed, 0xa2])).toBe('ZN'); // INI
+    expect(f([0xed, 0x4f])).toBe(''); // LD R,A
+    expect(f([0xdd, 0xdd])).toBe(''); // DB fallback
+  });
+});

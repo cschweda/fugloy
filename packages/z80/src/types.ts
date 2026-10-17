@@ -46,6 +46,8 @@ export interface Instruction {
   flow: Flow;
   /** False for undocumented forms (SLL, IXH/IXL) and for DB fallbacks. */
   documented: boolean;
+  /** Flags the instruction changes, in SZHPNC order, '' for none. Undocumented bits 3 and 5 are not listed. */
+  flags: string;
   /** True when the bytes ran out and a one-byte DB was returned instead. */
   truncated?: boolean;
 }
@@ -72,6 +74,8 @@ export interface Template {
   cyclesNotTaken?: number;
   flow: Flow;
   documented: boolean;
+  /** Affected flags in SZHPNC order; see Instruction.flags. */
+  flags: string;
   /** Set on the table slot of a prefix byte; the decoder dispatches to the prefixed table instead. */
   prefix?: 'CB' | 'DD' | 'ED' | 'FD';
 }

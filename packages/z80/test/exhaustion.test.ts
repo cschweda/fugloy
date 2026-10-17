@@ -56,3 +56,21 @@ it('decodes all 1792 encodings exactly as the independent reference table says',
   }
   expect(mismatches, `${mismatches.length} mismatches:\n${mismatches.join('\n')}`).toEqual([]);
 });
+
+it('gives every template and every decoded instruction a flags string in SZHPNC order', () => {
+  const shape = /^S?Z?H?P?N?C?$/;
+  const bad: string[] = [];
+  for (const section of SECTIONS) {
+    const table = TABLES[section.name];
+    for (let op = 0; op < 256; op++) {
+      const tpl = table[op]!;
+      if (typeof tpl.flags !== 'string' || !shape.test(tpl.flags)) bad.push(`${section.name} ${hex2(op)} template: ${String(tpl.flags)}`);
+      if (tpl.prefix !== undefined) continue;
+      const stream = section.cb ? [...section.prefix, 0x12, op] : [...section.prefix, op, 0x12, 0x34];
+      const ins = decodeAt(stream, 0, 0);
+      if (typeof ins.flags !== 'string' || !shape.test(ins.flags)) bad.push(`${section.name} ${hex2(op)} decoded: ${String(ins.flags)}`);
+      if (ins.flags !== tpl.flags) bad.push(`${section.name} ${hex2(op)} differs: ${tpl.flags} vs ${ins.flags}`);
+    }
+  }
+  expect(bad).toEqual([]);
+});

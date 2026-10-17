@@ -37,11 +37,48 @@ const X0Z7: readonly string[] = ['RLCA', 'RRCA', 'RLA', 'RRA', 'DAA', 'CPL', 'SC
 
 const SLOT_BYTES: Record<TemplateOperand['t'], number> = { fixed: 0, n: 1, nn: 2, '(nn)': 2, '(n)': 1, e: 1, '(ix+d)': 1, d: 1 };
 
+const isFixed = (o: TemplateOperand | undefined, kind: Operand['kind'], name?: string): boolean =>
+  o?.t === 'fixed' && o.op.kind === kind && (name === undefined || ('reg' in o.op && o.op.reg === name));
+
+/**
+ * Flag effects, one rule per group of mnemonics, after Zilog's instruction tables.
+ * Letters are in SZHPNC order; undocumented bits 3 and 5 are not listed. The first
+ * rule that matches wins, so the operand-sensitive rules come before the plain ones.
+ */
+const FLAG_RULES: readonly (readonly [(m: string, ops: readonly TemplateOperand[]) => boolean, string])[] = [
+  // Operand-sensitive cases first.
+  [(m, o) => (m === 'INC' || m === 'DEC') && isFixed(o[0], 'reg16'), ''], // 16-bit INC/DEC
+  [(m, o) => m === 'ADD' && isFixed(o[0], 'reg16'), 'HNC'], // ADD HL/IX/IY,rr
+  [(m, o) => (m === 'ADC' || m === 'SBC') && isFixed(o[0], 'reg16'), 'SZHPNC'], // ADC/SBC HL,rr
+  [(m, o) => m === 'POP' && isFixed(o[0], 'reg16', 'AF'), 'SZHPNC'], // POP AF loads F
+  [(m, o) => m === 'EX' && isFixed(o[1], 'reg16', "AF'"), 'SZHPNC'], // EX AF,AF'
+  [(m, o) => m === 'LD' && isFixed(o[0], 'reg', 'A') && (isFixed(o[1], 'reg', 'I') || isFixed(o[1], 'reg', 'R')), 'SZHPN'], // LD A,I / LD A,R
+  [(m, o) => m === 'IN' && o[1]?.t === 'fixed' && o[1].op.kind === 'ind', 'SZHPN'], // IN r,(C); IN A,(n) has none
+  // Plain mnemonic groups.
+  [(m) => ['ADD', 'ADC', 'SUB', 'SBC', 'CP', 'AND', 'OR', 'XOR', 'NEG'].includes(m), 'SZHPNC'], // 8-bit ALU
+  [(m) => m === 'INC' || m === 'DEC', 'SZHPN'], // 8-bit INC/DEC leave carry alone
+  [(m) => ['RLCA', 'RRCA', 'RLA', 'RRA', 'SCF', 'CCF'].includes(m), 'HNC'], // accumulator rotates, carry flag
+  [(m) => m === 'DAA', 'SZHPC'],
+  [(m) => m === 'CPL', 'HN'],
+  [(m) => ROT.includes(m), 'SZHPNC'], // CB rotates and shifts
+  [(m) => m === 'BIT', 'SZHPN'],
+  [(m) => m === 'RLD' || m === 'RRD', 'SZHPN'],
+  [(m) => ['LDI', 'LDD', 'LDIR', 'LDDR'].includes(m), 'HPN'],
+  [(m) => ['CPI', 'CPD', 'CPIR', 'CPDR'].includes(m), 'SZHPN'],
+  [(m) => ['INI', 'IND', 'INIR', 'INDR', 'OUTI', 'OUTD', 'OTIR', 'OTDR'].includes(m), 'ZN'], // S, H, P are undefined
+];
+
+/** Affected flags for a mnemonic with these operands; '' when none (including DB, RES, SET, loads, jumps). */
+function flagsOf(mnemonic: string, operands: readonly TemplateOperand[]): string {
+  for (const [matches, flags] of FLAG_RULES) if (matches(mnemonic, operands)) return flags;
+  return '';
+}
+
 interface Opts { notTaken?: number; flow?: Flow; documented?: boolean }
 
 function entry(prefixLen: number, mnemonic: string, operands: TemplateOperand[], cycles: number, opts: Opts = {}): Template {
   const length = prefixLen + 1 + operands.reduce((n, o) => n + SLOT_BYTES[o.t], 0);
-  const t: Template = { mnemonic, operands, length, cycles, flow: opts.flow ?? NEXT, documented: opts.documented ?? true };
+  const t: Template = { mnemonic, operands, length, cycles, flow: opts.flow ?? NEXT, documented: opts.documented ?? true, flags: flagsOf(mnemonic, operands) };
   if (opts.notTaken !== undefined) t.cyclesNotTaken = opts.notTaken;
   return t;
 }
@@ -49,11 +86,11 @@ function entry(prefixLen: number, mnemonic: string, operands: TemplateOperand[],
 /** An undocumented encoding rendered as DB with the bytes the CPU would consume. 'd' is the displacement slot. */
 function db(bytes: readonly (number | 'd')[], cycles: number): Template {
   const operands = bytes.map((b) => (b === 'd' ? ({ t: 'd' } as TemplateOperand) : byte(b)));
-  return { mnemonic: 'DB', operands, length: bytes.length, cycles, flow: NEXT, documented: false };
+  return { mnemonic: 'DB', operands, length: bytes.length, cycles, flow: NEXT, documented: false, flags: '' };
 }
 
 const prefixEntry = (prefix: 'CB' | 'DD' | 'ED' | 'FD'): Template => ({
-  mnemonic: 'PREFIX', operands: [], length: 1, cycles: 0, flow: NEXT, documented: true, prefix,
+  mnemonic: 'PREFIX', operands: [], length: 1, cycles: 0, flow: NEXT, documented: true, flags: '', prefix,
 });
 
 const isIndHL = (o: TemplateOperand): boolean => o.t === 'fixed' && o.op.kind === 'ind' && o.op.reg === 'HL';
@@ -216,7 +253,7 @@ function indexEntry(base: Template, ix: IndexReg): Template {
   let cycles = base.cycles + 4;
   if (indexed) cycles = base.mnemonic === 'LD' && operands.some((o) => o.t === 'n') ? 19 : base.cycles + 12;
   const t: Template = {
-    mnemonic: base.mnemonic, operands, cycles, flow: base.flow, documented: !halfReg,
+    mnemonic: base.mnemonic, operands, cycles, flow: base.flow, documented: !halfReg, flags: flagsOf(base.mnemonic, operands),
     length: base.length + 1 + (indexed ? 1 : 0),
   };
   if (base.cyclesNotTaken !== undefined) t.cyclesNotTaken = base.cyclesNotTaken;
@@ -229,7 +266,7 @@ function indexCbEntry(cb: Template, op: number, ix: IndexReg): Template {
   const cycles = x === 1 ? 20 : 23;
   if (z !== 6) return db([ix === 'IX' ? 0xdd : 0xfd, 0xcb, 'd', op], cycles);
   const operands = cb.operands.map((o): TemplateOperand => (isIndHL(o) ? { t: '(ix+d)', reg: ix } : o));
-  return { mnemonic: cb.mnemonic, operands, length: 4, cycles, flow: cb.flow, documented: cb.documented };
+  return { mnemonic: cb.mnemonic, operands, length: 4, cycles, flow: cb.flow, documented: cb.documented, flags: flagsOf(cb.mnemonic, operands) };
 }
 
 function table(make: (op: number) => Template): Template[] {
