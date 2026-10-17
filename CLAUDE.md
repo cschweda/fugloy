@@ -13,7 +13,7 @@ nor the MCP server (`packages/mcp`), before v1 ships. The recompiler and
 bundler stay in Part 2 until the plan's kill criteria have been reviewed. If a
 task seems to need machinery from a later step, stop and say so.
 
-Current phase: **disasm phase 4 built, not yet released** — the web workbench
+Current phase: **disasm phase 4 built and merged, not yet released** — the web workbench
 in `apps/web` (Nuxt 4 + Nuxt UI, static): facing pages, the four bundled
 games, keyboard editing through the hint file, the spec sheet, IndexedDB
 saving, exports (zmac, hints, IR, `.CMD`, `.CAS`), bring-your-own manuals, and
@@ -22,7 +22,7 @@ the Technical details and About pages with full SEO. Design:
 `docs/superpowers/plans/2026-10-17-phase4-web-workbench.md`. The v1
 done-criterion is met locally (asylum16 annotated and saved in Chromium under
 Model I, `apps/web/test/e2e/asylum.spec.ts`), and CI runs the browser flow on
-Sea Dragon. Next: merge `phase-4`, deploy to `app.fugloy.dev` on Netlify (ask
+Sea Dragon. Merged to `main` 2026-10-17. Next: deploy to `app.fugloy.dev` on Netlify (ask
 the user before the first deploy and before any DNS change), and release v1
 with phases 3 and 4 (see `[Unreleased]` in `CHANGELOG.md`); emu phase 2 and
 the MCP server resume after v1. Phase 3 (symbol tables: eight cited JSON
