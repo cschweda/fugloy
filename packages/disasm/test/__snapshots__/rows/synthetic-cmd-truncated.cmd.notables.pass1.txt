@@ -1,0 +1,15 @@
+; truncated.cmd: load module, 2 blocks, 2 runs, 14 bytes, entry $5200 (lowest loaded address)
+; pass 1: roots $5200; 6 of 14 bytes decoded as code (43%); 0 external targets; 0 notes
+; block 0: $5200-$5205 (6 bytes)
+; block 1: $5300-$5307 (8 bytes)
+; warning: truncated 01 record at offset 22: needs 18 bytes, 5 remain
+; warning: no transfer address record; using lowest loaded address $5200
+
+        ORG 5200H
+5200  21 00 3C      LD HL,3C00H             ; entry
+5203  36 41         LD (HL),41H
+5205  C9            RET
+
+        ORG 5300H
+5300  00 01 02 03   DB 00H,01H,02H,03H
+5304  04 05 06 07   DB 04H,05H,06H,07H

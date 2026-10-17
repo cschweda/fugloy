@@ -1,0 +1,14 @@
+; out-of-order.cmd: load module, 2 blocks, 2 runs, 8 bytes, entry $7000 (transfer address)
+; pass 1: roots $7000; 4 of 8 bytes decoded as code (50%); 0 external targets; 0 notes
+; symbols: Model III ROM, hardware, TRSDOS 1.3
+; block 0: $8000-$8003 (4 bytes)
+; block 1: $7000-$7003 (4 bytes)
+
+        ORG 7000H
+7000  70            LD (HL),B               ; entry
+7001  71            LD (HL),C
+7002  72            LD (HL),D
+7003  73            LD (HL),E
+
+        ORG 8000H
+8000  80 81 82 83   DB 80H,81H,82H,83H

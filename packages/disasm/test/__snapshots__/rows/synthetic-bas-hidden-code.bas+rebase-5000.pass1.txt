@@ -1,0 +1,12 @@
+; hidden-code.bas: tokenized BASIC, 3 lines, saved from $5000 to $501A, FF header, 1 unparsed
+; rebased from $7000 to $5000
+; pass 1: roots $500D; 3 of 28 bytes decoded as code (11%); 22 typed as data; 1 external target (1 named); 0 notes
+; symbols: Model III ROM, hardware, TRSDOS 1.3
+; table name $RESET = $0000: restart the whole system from the Cass? prompt, as at power-on (m3-basic 12/15)
+; code lines: 1; entries mined: 0
+
+10 GOTO 30
+; line 20: machine code, 6 bytes at $500D
+500D  C3 00 00      JP $RESET               ; entry; restart the whole system from the Cass? prompt, as at power-on
+5010  C9 00 3E      DB 0C9H,00H,3EH
+30 END

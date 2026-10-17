@@ -1,0 +1,8 @@
+; end-03-debris.cmd: load module, 1 block, 1 run, 6 bytes, no entry (03 record)
+; pass 1: no roots; use --entry <hex> or --sweep
+; block 0: $5200-$5205 (6 bytes)
+; warning: 03 record: end of load with no transfer address; not directly executable
+
+        ORG 5200H
+5200  21 00 3C 36   DB 21H,00H,3CH,36H
+5204  41 C9         DB 41H,0C9H

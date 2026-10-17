@@ -1,0 +1,20 @@
+; relocated-code.cmd: load module, 2 blocks, 2 runs, 25 bytes, entry $8100 (transfer address)
+; pass 1: roots $8100; 14 of 25 bytes decoded as code (56%); 1 external target; 0 notes
+; proposed move: LDIR at $8109 copies $8000-$800A to $5000-$500A; declare with:
+;   block 0:$0000 relocate $5000 $000B
+;   block 0:$0000 entry
+; block 0: $8000-$800A (11 bytes)
+; block 1: $8100-$810D (14 bytes)
+
+        ORG 8000H
+DATA_8000:
+8000  CD 08 50 18   DB 0CDH,08H,50H,18H
+8004  02 00 00 C9   DB 02H,00H,00H,0C9H
+8008  3E 01 C9      DB 3EH,01H,0C9H
+
+        ORG 8100H
+8100  21 00 80      LD HL,DATA_8000         ; entry
+8103  11 00 50      LD DE,5000H
+8106  01 0B 00      LD BC,000BH
+8109  ED B0         LDIR
+810B  C3 00 50      JP 5000H

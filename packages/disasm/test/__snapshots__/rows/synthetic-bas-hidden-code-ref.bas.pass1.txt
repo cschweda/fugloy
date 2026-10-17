@@ -1,0 +1,11 @@
+; hidden-code-ref.bas: tokenized BASIC, 3 lines, saved from $7000 to $7018, FF header, 1 unparsed
+; pass 1: roots $700D; 4 of 26 bytes decoded as code (15%); 22 typed as data; 0 external targets; 0 notes
+; symbols: Model III ROM, hardware, TRSDOS 1.3
+; code lines: 1; entries mined: 0
+
+10 GOTO 30
+; line 20: machine code, 4 bytes at $700D
+DATA_700D:
+700D  21 0D 70      LD HL,DATA_700D         ; entry
+7010  C9            RET
+30 END

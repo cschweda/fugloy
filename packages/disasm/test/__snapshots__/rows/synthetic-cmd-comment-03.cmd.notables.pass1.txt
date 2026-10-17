@@ -1,0 +1,9 @@
+; comment-03.cmd: load module, 1 block, 1 run, 6 bytes, entry $5200 (transfer address)
+; pass 1: roots $5200; 6 of 6 bytes decoded as code (100%); 0 external targets; 0 notes
+; block 0: $5200-$5205 (6 bytes)
+; warning: 03 record at offset 0 skipped as a comment, as TRSDOS 2.3 and NEWDOS/80 do when more records follow: THE MARK OF "ZORRO"{0D}
+
+        ORG 5200H
+5200  21 00 3C      LD HL,3C00H             ; entry
+5203  36 41         LD (HL),41H
+5205  C9            RET

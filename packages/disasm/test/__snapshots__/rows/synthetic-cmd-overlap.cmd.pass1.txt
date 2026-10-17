@@ -1,0 +1,15 @@
+; overlap.cmd: load module, 2 blocks, 1 run, 16 bytes, entry $7000 (transfer address)
+; pass 1: roots $7000; 7 of 16 bytes decoded as code (44%); 1 external target (0 named); 0 notes
+; symbols: Model III ROM, hardware, TRSDOS 1.3
+; block 0: $7000-$700F (16 bytes)
+; block 1: $7004-$7006 (3 bytes) patches block 0 at $7004-$7006
+
+        ORG 7000H
+L7000:
+7000  10 11         DJNZ 7013H              ; entry
+7002  12            LD (DE),A
+7003  13            INC DE
+7004  C3 00 70      JP L7000
+7007  17 18 19 1A   DB 17H,18H,19H,1AH
+700B  1B 1C 1D 1E   DB 1BH,1CH,1DH,1EH
+700F  1F            DB 1FH
