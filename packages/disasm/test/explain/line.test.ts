@@ -2,7 +2,9 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { explainLine, screenCell, sentenceText } from '../../src/explain/index.js';
+import { explainLine, explainRow, screenCell, sentenceText } from '../../src/explain/index.js';
+import { listingRows } from '../../src/rows.js';
+import type { Hint } from '../../src/hints/format.js';
 import type { Explanation } from '../../src/explain/index.js';
 import { openProgram, skeletonHints, withHintFile, withHintText } from '../../src/session.js';
 
@@ -101,6 +103,16 @@ describe('Sea Dragon goldens (Model III, TRSDOS 1.3, seadrg01.hints)', () => {
     expect(lead(explainLine(sea, 0x499a))).toEqual(['Call SUB_4B9E ($4B9E); when it returns, carry on with the next line.', 'Going in, A holds $01 and HL holds $4659.']);
   });
 
+  it('$49BF LD A,(IY+00H): the displacement DATA_49C1 is rewritten at $49BC, and the line says so', () => {
+    const e = explainLine(sea, 0x49bf);
+    expect(lead(e)).toEqual([
+      'Get the byte at IY+$00 and put it in A.',
+      'The program rewrites part of this instruction as it runs (DATA_49C1, written at $49BC), so the numbers shown are only where they start.',
+      'IY holds whatever it held when L49BC was reached: by falling through from $49BA, or by the jump at $49B6.',
+    ]);
+    expect(e.previews).toEqual([]);
+  });
+
   it('the entry point says so', () => {
     const e = explainLine(sea, 0x8881);
     expect(e.label).toBeUndefined();
@@ -131,6 +143,57 @@ describe('line sentences on synthetic code', () => {
     // 7000 LD IX,3C00H; 7004 LD (IX+05H),A; 7007 RET
     const e = explainLine(raw([0xdd, 0x21, 0x00, 0x3c, 0xdd, 0x77, 0x05, 0xc9]), 0x7004);
     expect(lead(e)).toEqual(['Store A in the byte at $3C05 (the screen, row 0, column 5; IX+$05).']);
+  });
+
+  it('patched: a rewritten displacement is never folded into an address', () => {
+    // 7000 LD IX,3C00H; 7004 LD (IX+05H),A; 7007 LD (7006H),A; 700A RET
+    const e = explainLine(raw([0xdd, 0x21, 0x00, 0x3c, 0xdd, 0x77, 0x05, 0x32, 0x06, 0x70, 0xc9]), 0x7004);
+    expect(lead(e)).toEqual([
+      'Store A in the byte at IX+$05.',
+      'The program rewrites part of this instruction as it runs (DATA_7006, written at $7007), so the numbers shown are only where they start.',
+    ]);
+    expect(e.previews).toEqual([]);
+    expect(lead(e).join(' ')).not.toContain('$3C05');
+  });
+
+  it('patched: a rewritten immediate keeps the listed value with the caveat', () => {
+    // 7000 LD A,05H; 7002 LD (7001H),A; 7005 RET
+    expect(lead(explainLine(raw([0x3e, 0x05, 0x32, 0x01, 0x70, 0xc9]), BASE)).slice(0, 2)).toEqual([
+      'Put $05 into A (the accumulator).',
+      'The program rewrites part of this instruction as it runs (DATA_7001, written at $7002), so the numbers shown are only where they start.',
+    ]);
+  });
+
+  it('patched: a rewritten jump target is named but not previewed', () => {
+    // 7000 LD HL,7009H; 7003 LD (7007H),HL; 7006 JP 7009H; 7009 RET
+    const e = explainLine(raw([0x21, 0x09, 0x70, 0x22, 0x07, 0x70, 0xc3, 0x09, 0x70, 0xc9]), 0x7006);
+    expect(lead(e)).toEqual([
+      'Jump to $7009 (L7009).',
+      'The program rewrites part of this instruction as it runs (DATA_7007, written at $7003), so the numbers shown are only where they start.',
+    ]);
+    expect(e.previews).toEqual([]);
+  });
+
+  it('patched without a store: the referring instruction is named', () => {
+    // 7000 LD HL,7004H; 7003 LD A,05H (7004 is its operand); 7005 RET
+    const e = explainLine(raw([0x21, 0x04, 0x70, 0x3e, 0x05, 0xc9]), 0x7003);
+    expect(lead(e)[1]).toBe('The program refers to a byte inside this instruction (DATA_7004, used at $7000), so it may rewrite the instruction as it runs; the numbers shown are only where they start.');
+  });
+
+  it('an unreferenced data label in straight code reports the fall-through', () => {
+    // 7000 LD HL,7006H; 7003 LD (7010H),HL; 7006 LD A,(DE); 7007 RET
+    const e = explainLine(raw([0x21, 0x06, 0x70, 0x22, 0x10, 0x70, 0x1a, 0xc9]), 0x7006);
+    expect(lead(e)[1]).toBe('DE holds whatever it held when DATA_7006 was reached: by falling through from $7003, or perhaps through a pointer, since the program refers to it as data.');
+  });
+
+  it('a table name that clashes with a program name is not used, as in the listing', () => {
+    // 7000 CALL 000BH; 7003 RET, with $7003 named GETPC (the Model III ROM name for $000B)
+    const bytes = new Uint8Array([0xcd, 0x0b, 0x00, 0xc9]);
+    const s0 = openProgram(bytes, { base: BASE, selection: { machine: 3, dos: 'trsdos' } });
+    expect(lead(explainLine(s0, BASE))[0]).toBe('Call the ROM routine GETPC ($000B): return with the return address in HL, so relocatable code can find where it sits.');
+    const name: Hint = { directive: 'name', name: 'GETPC', block: 0, offset: 3, line: 1 };
+    const s = withHintFile(s0, { ...skeletonHints(s0.module, bytes), hints: [name] });
+    expect(lead(explainLine(s, BASE))[0]).toBe('Call the routine at $000B; when it returns, carry on with the next line.');
   });
 
   it('a register changed on the way by an untracked load says where, without a value', () => {
@@ -182,6 +245,37 @@ describe('line sentences on synthetic code', () => {
     const e = explainLine(raw([0xed, 0x00, 0xc9]), BASE);
     expect(e.details?.documented).toBe(false);
     expect(lead(e)[0]).toMatch(/^The bytes \$ED, \$00 are not an instruction/);
+  });
+});
+
+describe('explainRow', () => {
+  const rows = listingRows(sea.analysis);
+  it('an ORG row says where the code starts', () => {
+    const org = rows.find((r) => r.kind === 'org')!;
+    const e = explainRow(sea, org);
+    expect(e.kind).toBe('other');
+    expect(e.line).toBe('        ORG 5200H');
+    expect(lead(e)).toEqual(['ORG tells the assembler that the code below starts at $5200.']);
+  });
+
+  it('header and blank rows get one line each', () => {
+    expect(lead(explainRow(sea, rows.find((r) => r.kind === 'header')!))).toEqual(['A comment line Fugløy adds to the top of the listing to describe the file; the program does not contain it.']);
+    expect(lead(explainRow(sea, { kind: 'blank' }))).toEqual(['A blank line that separates parts of the listing.']);
+  });
+
+  it('a user block comment is called yours; a listing note is Fugløy\'s', () => {
+    const bytes = new Uint8Array([0x00, 0xc9]);
+    const s0 = openProgram(bytes, { base: BASE });
+    const note: Hint = { directive: 'note', text: 'Starts here', block: 0, offset: 1, line: 1 };
+    const s = withHintFile(s0, { ...skeletonHints(s0.module, bytes), hints: [note] });
+    const row = listingRows(s.analysis).find((r) => r.kind === 'note')!;
+    expect(lead(explainRow(s, row))).toEqual(['Your block comment for $7001, kept in the hint file; the program does not contain it.']);
+    expect(lead(explainRow(s, { kind: 'note', text: '; relocated: something' }))).toEqual(['A comment line Fugløy adds to the listing; the program does not contain it.']);
+  });
+
+  it('code rows delegate to explainLine', () => {
+    const row = rows.find((r) => r.kind === 'code' && r.addr === 0x499f)!;
+    expect(explainRow(sea, row)).toEqual(explainLine(sea, 0x499f));
   });
 });
 

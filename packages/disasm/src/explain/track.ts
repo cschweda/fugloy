@@ -151,14 +151,23 @@ export function written(ins: Instruction): Reg8Name[] {
 }
 
 /**
+ * The labelled addresses inside an instruction's bytes (at+1..at+len-1): the
+ * program refers to them, so it may rewrite the instruction's operand as it
+ * runs, and the decoded number is only where it starts.
+ */
+export function patchedBytes(a: Analysis, at: number, ins: Instruction): number[] {
+  const out: number[] = [];
+  for (let i = 1; i < ins.length; i++) if (a.symbols.has((at + i) & 0xffff)) out.push((at + i) & 0xffff);
+  return out;
+}
+
+/**
  * One forward step of the replay. When a label lies inside the instruction's
  * bytes (at+1..at+len-1), the program may rewrite its operand, so whatever it
  * writes is unproven and becomes unknown instead of the decoded value.
  */
 function step(a: Analysis, at: number, ins: Instruction, regs: RegState): void {
-  let patched = false;
-  for (let i = 1; i < ins.length && !patched; i++) patched = a.symbols.has((at + i) & 0xffff);
-  if (!patched) return stepRegs(ins, regs);
+  if (patchedBytes(a, at, ins).length === 0) return stepRegs(ins, regs);
   stepRegs(ins, regs);
   for (const n of written(ins)) regs[n] = null;
 }

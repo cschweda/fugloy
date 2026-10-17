@@ -9,7 +9,7 @@ import type { Operand } from '@fugloy/z80';
 import { renderInstruction } from '../emit/operands.js';
 import { dataReference } from '../analysis/symbols.js';
 import { byte$, decimal, nameOf, say, screenText, word$ } from './machine.js';
-import { at, bitsText, isMemory, operand8, place, regPhrase, spell, valueOf } from './phrase.js';
+import { bitsText, isMemory, operand8, operandAt, place, regPhrase, spell, valueOf } from './phrase.js';
 import type { LineCtx, Words } from './phrase.js';
 import { flowWords } from './words-flow.js';
 import type { Piece } from './types.js';
@@ -28,7 +28,7 @@ const target = (c: LineCtx, op: Operand | undefined): Piece[] => (op !== undefin
 function wordValue(c: LineCtx, reg: string, v: number): Piece[] {
   const isAddress = dataReference(c.ins) === v;
   const named = isAddress && (nameOf(c, v, 'data') !== undefined || screenText(v) !== undefined);
-  if (named) return at(c, v);
+  if (named) return operandAt(c, v);
   const counts = reg === 'BC';
   return [{ text: counts ? `${word$(v)} (${decimal(v)})` : word$(v) }];
 }
@@ -52,7 +52,7 @@ function loadWords(c: LineCtx): Words | undefined {
   }
   if (d.kind === 'mem' && s.kind === 'reg16') {
     const who = s.reg === 'SP' ? [{ text: 'the stack pointer (SP)' }] : regPhrase(c, s.reg);
-    return [say('Store ', who, ' in the two bytes at ', at(c, d.addr), ', low byte first.')];
+    return [say('Store ', who, ' in the two bytes at ', operandAt(c, d.addr), ', low byte first.')];
   }
   // 8-bit loads.
   if (d.kind === 'reg') {

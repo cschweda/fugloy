@@ -10,8 +10,9 @@ import { formatRow, listingRows, rowIndex } from '../rows.js';
 import type { Row } from '../rows.js';
 import type { Analysis } from '../pipeline.js';
 import type { Session } from '../session.js';
-import { knownBefore, walkBack, written } from './track.js';
-import { addrPiece, andList, loaded, say, screenText, symbolSet, tableName, word$ } from './machine.js';
+import { knownBefore, patchedBytes, walkBack, written } from './track.js';
+import { dataReference } from '../analysis/symbols.js';
+import { addrPiece, andList, loaded, say, screenText, tableName, word$ } from './machine.js';
 import type { Ctx } from './machine.js';
 import type { LineCtx } from './phrase.js';
 import { words } from './words.js';
@@ -139,13 +140,56 @@ function fromSentences(c: LineCtx, isRoot: boolean): { sentences: Sentence[]; en
   } else if (w.stop === 'root') {
     out.push(say(`${subject} when ${w.at === c.a.entry ? 'the program started' : 'control entered'} at `, named, '.'));
   } else if (w.stop === 'label') {
-    out.push(say(`${subject} when `, named, ' was reached; no jump or call to it was found, so it may be reached through a pointer.'));
+    const kind = c.a.symbols.get(w.at)?.kind;
+    const why = kind === 'data' ? ', since the program refers to it as data' : kind === 'table' ? ', since a declared table lists it' : '';
+    if (w.pred !== undefined) {
+      const isCall = c.a.pass1.instructions.get(w.pred)?.flow.kind === 'call';
+      const way = isCall ? 'by coming back from the call at ' : 'by falling through from ';
+      out.push(say(`${subject} when `, named, ` was reached: ${way}`, addrPiece(c, w.pred), `, or perhaps through a pointer${why}.`));
+    } else out.push(say(`${subject} when `, named, ` was reached; no jump or call to it was found, so it may be reached through a pointer${why}.`));
   } else if (w.stop === 'call' && w.pred !== undefined) {
     out.push(say(`The lines leading here do not prove what ${regList(rest)} ${rest.length === 1 ? 'holds' : 'hold'}; the call at `, addrPiece(c, w.pred), ' just before may have changed ', rest.length === 1 ? 'it.' : 'them.'));
   } else {
     out.push(say(`The lines leading here do not prove what ${regList(rest)} ${rest.length === 1 ? 'holds' : 'hold'}.`));
   }
   return { sentences: out, entry: w.stop === 'root' && w.at === c.addr && isRoot };
+}
+
+/** The instructions that store into `b` ((nn) operands of LD, a 16-bit store covering it), and the ones that only refer to it. */
+function usersOf(a: Analysis, b: number): { writers: number[]; refs: number[] } {
+  const writers: number[] = [];
+  const refs: number[] = [];
+  for (const [at, ins] of a.pass1.instructions) {
+    const [d] = ins.operands;
+    if (ins.mnemonic === 'LD' && d?.kind === 'mem') {
+      const wide = ins.operands[1]?.kind === 'reg16';
+      if (d.addr === b || (wide && ((d.addr + 1) & 0xffff) === b)) {
+        writers.push(at);
+        continue;
+      }
+    }
+    if (dataReference(ins) === b) refs.push(at);
+  }
+  return { writers: writers.sort((p, q) => p - q), refs: refs.sort((p, q) => p - q) };
+}
+
+/** The caveat for an instruction whose bytes carry a label: the program may rewrite it, so its numbers are only where they start. */
+function patchedSentence(c: LineCtx): Sentence | undefined {
+  if (c.patched.length === 0) return undefined;
+  const names = andList(c.patched, (b) => [{ text: c.a.symbols.get(b)?.name ?? word$(b), addr: b }]);
+  const writers = new Set<number>();
+  const refs = new Set<number>();
+  for (const b of c.patched) {
+    const u = usersOf(c.a, b);
+    u.writers.forEach((x) => writers.add(x));
+    u.refs.forEach((x) => refs.add(x));
+  }
+  const sorted = (s: Set<number>): number[] => [...s].sort((p, q) => p - q);
+  if (writers.size > 0) {
+    return say('The program rewrites part of this instruction as it runs (', names, ', written at ', addrList(c, sorted(writers)), '), so the numbers shown are only where they start.');
+  }
+  const used = refs.size > 0 ? [{ text: ', used at ' }, ...addrList(c, sorted(refs))] : [];
+  return say('The program refers to a byte inside this instruction (', names, used, '), so it may rewrite the instruction as it runs; the numbers shown are only where they start.');
 }
 
 /** What is at an address the line uses: listing lines, or the table entry, or the screen cell. */
@@ -191,7 +235,7 @@ export function explainLine(s: Session, addr: number): Explanation {
   if (s.plainBasic || s.module.format === 'bas') {
     return { kind: 'basic', addr, line: '', sentences: [say('Explain covers machine code; BASIC comes later.')], previews: [] };
   }
-  const c: Ctx = { s, a, set: symbolSet(s) };
+  const c: Ctx = { s, a };
   const r = rowsOf(a);
   const i = rowAt(r, addr);
   if (i === undefined) {
@@ -224,8 +268,10 @@ export function explainLine(s: Session, addr: number): Explanation {
     return { kind: 'data', addr: at, line, sentences: dataSentences(row), previews: [], ...(label === undefined ? {} : { label }) };
   }
   const ins = a.pass1.instructions.get(at) as Instruction;
-  const lc: LineCtx = { ...c, addr: at, ins, regs: knownBefore(a, at).regs, refs: [], needs: [] };
+  const lc: LineCtx = { ...c, addr: at, ins, regs: knownBefore(a, at).regs, refs: [], needs: [], patched: patchedBytes(a, at, ins) };
   const sentences = words(lc);
+  const caveat = patchedSentence(lc);
+  if (caveat !== undefined) sentences.push(caveat);
   const isRoot = rootSet.has(at);
   const from = fromSentences(lc, isRoot);
   sentences.push(...from.sentences);
@@ -247,4 +293,32 @@ export function explainLine(s: Session, addr: number): Explanation {
     },
     ...(label === undefined ? {} : { label }),
   };
+}
+
+/**
+ * Explains any listing row: code, data, label and BASIC rows by their address
+ * (`explainLine`); ORG, header, note and blank rows in one line each.
+ */
+export function explainRow(s: Session, row: Row): Explanation {
+  if (s.plainBasic || s.module.format === 'bas') return { ...explainLine(s, 0), addr: 'addr' in row && row.addr !== undefined ? row.addr : null, line: formatRow(row) };
+  const line = formatRow(row);
+  const one = (addr: number | null, text: string): Explanation => ({ kind: 'other', addr, line, sentences: [say(text)], previews: [] });
+  switch (row.kind) {
+    case 'code':
+    case 'data':
+    case 'label':
+    case 'basic':
+      return explainLine(s, row.addr);
+    case 'org':
+      return one(row.addr, `ORG tells the assembler that the code below starts at ${word$(row.addr)}.`);
+    case 'blank':
+      return one(null, 'A blank line that separates parts of the listing.');
+    case 'header':
+      return one(null, 'A comment line Fugløy adds to the top of the listing to describe the file; the program does not contain it.');
+    case 'note': {
+      const mine = row.addr !== undefined && (s.analysis.annotations.notes.get(row.addr) ?? []).some((t) => (t === '' ? ';' : `; ${t}`) === row.text);
+      if (mine) return one(row.addr!, `Your block comment for ${word$(row.addr!)}, kept in the hint file; the program does not contain it.`);
+      return one(row.addr ?? null, 'A comment line Fugløy adds to the listing; the program does not contain it.');
+    }
+  }
 }

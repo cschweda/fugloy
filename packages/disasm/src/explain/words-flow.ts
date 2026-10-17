@@ -6,7 +6,7 @@
  */
 import { externalNote, previousInstruction } from '../emit/operands.js';
 import { addrPiece, andList, byte$, decimal, portPhrase, routineKind, say, tableName, word$ } from './machine.js';
-import { at, condition, count, need, operand8, pointer, portIn, ref, regPhrase, spell, valueOf } from './phrase.js';
+import { at, condition, count, need, operand8, operandAt, pointer, portIn, ref, regPhrase, spell, valueOf } from './phrase.js';
 import type { LineCtx, Words } from './phrase.js';
 import type { Piece, Sentence } from './types.js';
 
@@ -45,13 +45,13 @@ function jumpWords(c: LineCtx): Words | undefined {
   if (m === 'DJNZ') {
     const t = targetOf(c)!;
     const dir = t <= addr ? 'back' : 'ahead';
-    return [say(`Subtract 1 from B and, unless B is now 0, jump ${dir} to `, at(c, t, 'code'), '; when B reaches 0, carry on with the next line (DJNZ, decrement and jump if not zero).')];
+    return [say(`Subtract 1 from B and, unless B is now 0, jump ${dir} to `, operandAt(c, t, 'code'), '; when B reaches 0, carry on with the next line (DJNZ, decrement and jump if not zero).')];
   }
   if (m !== 'JP' && m !== 'JR') return undefined;
   const t = targetOf(c);
   if (t === undefined) return undefined;
   const cond = condition(ins);
-  const where = at(c, t, 'code');
+  const where = operandAt(c, t, 'code');
   const purpose = purposeOf(c, t);
   if (t === addr) {
     return cond === undefined
@@ -92,7 +92,7 @@ function callWords(c: LineCtx): Words | undefined {
   if (m === 'RST') return rstWords(c);
   if (m === 'CALL') {
     const t = targetOf(c)!;
-    ref(c, t, 'code');
+    if (c.patched.length === 0) ref(c, t, 'code');
     const own = c.a.symbols.get(t);
     const table = own === undefined ? tableName(c, t, 'code') : undefined;
     const cond = condition(ins);
@@ -123,7 +123,7 @@ function rstWords(c: LineCtx): Words {
   const op = ins.operands[0];
   const vector = op?.kind === 'rst' ? op.addr : 0;
   ref(c, vector, 'code');
-  const note = c.set === undefined ? undefined : externalNote(ins, previousInstruction(c.a.pass1.instructions, c.a.symbols, addr), c.a.externals, c.a.symbols);
+  const note = c.a.externals.selection === undefined ? undefined : externalNote(ins, previousInstruction(c.a.pass1.instructions, c.a.symbols, addr), c.a.externals, c.a.symbols);
   const rst = `RST ${byte$(vector).slice(1)}H, a one-byte call`;
   const out: Sentence[] = [];
   if (note?.entry.kind === 'svc') {

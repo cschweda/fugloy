@@ -4,31 +4,15 @@
  * selected symbol tables, and the program's own labels. Everything comes back
  * as sentence pieces, so names link to the listing or the Symbol tab.
  */
-import { hexWord } from '@fugloy/z80';
 import type { Analysis } from '../pipeline.js';
 import type { Session } from '../session.js';
-import { selectSymbols } from '../symbols/select.js';
-import type { SymbolSet } from '../symbols/select.js';
 import type { TableEntry } from '../symbols/types.js';
 import type { Piece, Sentence } from './types.js';
 
-const sets = new WeakMap<Session, SymbolSet | null>();
-
-/** The selection's symbol set, built once per session; undefined without a selection. */
-export function symbolSet(s: Session): SymbolSet | undefined {
-  let hit = sets.get(s);
-  if (hit === undefined) {
-    hit = s.selection === undefined ? null : selectSymbols(s.selection);
-    sets.set(s, hit);
-  }
-  return hit ?? undefined;
-}
-
-/** What a sentence needs from the session: the analysis, and the symbol tables when a machine is selected. */
+/** What a sentence needs from the session: the analysis, whose external names (`analysis.externals`) give the table names the listing gives. */
 export interface Ctx {
   s: Session;
   a: Analysis;
-  set: SymbolSet | undefined;
 }
 
 export const hex2 = (n: number): string => (n & 0xff).toString(16).toUpperCase().padStart(2, '0');
@@ -89,16 +73,13 @@ export const loaded = (c: Ctx, addr: number): boolean => c.a.space.image.isLoade
 /** A `$3C00` piece, linking the listing when the program loads that address. */
 export const addrPiece = (c: Ctx, addr: number): Piece => (loaded(c, addr) ? { text: word$(addr), addr: addr & 0xffff } : { text: word$(addr) });
 
-/** The table entry for an address outside the program: a routine or vector for code, a variable, vector or region for data. */
+/**
+ * The table entry for an address outside the program, as the listing names it
+ * (`analysis.externals`, which drops entries whose names clash with the
+ * program's own): a routine or vector for code; a variable, vector or region for data.
+ */
 export function tableName(c: Ctx, addr: number, use: 'code' | 'data'): { entry: TableEntry; text: string } | undefined {
-  if (c.set === undefined || loaded(c, addr)) return undefined;
-  if (use === 'code') {
-    const entry = c.set.code(addr);
-    return entry === undefined ? undefined : { entry, text: entry.name };
-  }
-  const found = c.set.data(addr);
-  if (found === undefined) return undefined;
-  return { entry: found.entry, text: found.offset === 0 ? found.entry.name : `${found.entry.name}+${hexWord(found.offset)}` };
+  return use === 'code' ? c.a.externals.code(addr & 0xffff) : c.a.externals.data(addr & 0xffff);
 }
 
 /** The name an address goes by: the program's own label, else a table name. */
@@ -132,7 +113,7 @@ const andJoin = (pieces: Piece[], sep: string): Piece[] => pieces.flatMap((p, i)
 
 /** `port $EC (MODEPORT)` and its table entry, when the tables name it. */
 export function portPhrase(c: Ctx, n: number): { pieces: Piece[]; entry?: TableEntry } {
-  const entry = c.set?.port(n);
+  const entry = c.a.externals.port(n)?.entry;
   const pieces: Piece[] = [{ text: `port ${byte$(n)}` }];
   if (entry === undefined) return { pieces };
   return { pieces: [...pieces, { text: ' (' }, { text: entry.name, entry }, { text: ')' }], entry };

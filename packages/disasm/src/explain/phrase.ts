@@ -21,6 +21,8 @@ export interface LineCtx extends Ctx {
   refs: { addr: number; use: 'code' | 'data' }[];
   /** Registers the line uses as an address, count or port whose value is not proven. */
   needs: string[];
+  /** Labelled addresses inside the instruction's bytes: the program may rewrite its operand, so its numbers are only where they start. */
+  patched: number[];
 }
 
 /** The result of a template: the lead sentences. */
@@ -73,6 +75,15 @@ export function at(c: LineCtx, addr: number, use: 'code' | 'data' = 'data', how?
   return addrPhrase(c, addr, use, how);
 }
 
+/**
+ * An address taken from the instruction's own operand bytes: `at`, unless the
+ * program may rewrite the operand, when it is named as listed but not
+ * previewed (the line's caveat sentence says why).
+ */
+export function operandAt(c: LineCtx, addr: number, use: 'code' | 'data' = 'data'): Piece[] {
+  return c.patched.length > 0 ? addrPhrase(c, addr, use) : at(c, addr, use);
+}
+
 /** `the address in HL`, or the proven address with `the address in HL` in its parentheses. */
 export function pointer(c: LineCtx, r: string): Piece[] {
   const v = valueOf(c, r);
@@ -93,15 +104,15 @@ export function place(c: LineCtx, op: Operand, unit: 'byte' | 'word' = 'byte'): 
   const the: Piece = { text: `the ${unit} at ` };
   switch (op.kind) {
     case 'mem':
-      return [the, ...at(c, op.addr)];
+      return [the, ...operandAt(c, op.addr)];
     case 'ind':
       if (op.reg === 'SP') return [{ text: `the ${unit} on top of the stack` }];
       if (op.reg === 'C') return portIn(c).pieces;
       return [the, ...pointer(c, op.reg)];
     case 'idx': {
       const base = valueOf(c, op.reg);
-      if (base === null) {
-        need(c, op.reg);
+      if (base === null || c.patched.length > 0) {
+        if (base === null) need(c, op.reg);
         return [the, { text: `${op.reg}${disp(op.disp)}` }];
       }
       return [the, ...at(c, (base + op.disp) & 0xffff, 'data', `${op.reg}${disp(op.disp)}`)];

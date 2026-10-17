@@ -45,7 +45,8 @@ describe('explainLine on every opcode form', () => {
           const e = explainLine(s, BASE);
           const texts = e.sentences.map(sentenceText);
           if (texts.length === 0 || texts.some((t) => t.trim() === '')) bad.push(`${label}: empty sentence`);
-          if (e.kind !== 'code' && e.kind !== 'data') bad.push(`${label}: kind ${e.kind}`);
+          if (e.kind !== 'code') bad.push(`${label}: kind ${e.kind}`);
+          if (texts[0]?.startsWith('Run ')) bad.push(`${label}: no template (${texts[0]})`);
         } catch (err) {
           bad.push(`${label}: threw ${String(err)}`);
         }
