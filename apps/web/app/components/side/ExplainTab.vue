@@ -7,11 +7,11 @@
 // Symbol tab (table). The engine is @fugloy/disasm's explain; the cache is
 // utils/explain-view.
 import { computed } from 'vue';
-import type { Explanation, Preview, Row, RoutineSummary, TableEntry } from '@fugloy/disasm';
+import type { Explanation, Preview, Row, RoutineSummary, Sentence, TableEntry } from '@fugloy/disasm';
 import { hex4 } from '@fugloy/z80';
 import ExplainText from './ExplainText.vue';
 import RegionPicture from './RegionPicture.vue';
-import { detailsText, explainAt, explainRowAt, pictureBytes, summaryAt } from '../../utils/explain-view';
+import { detailsText, explainAt, explainRowAt, patternSentences, pictureBytes, summaryAt, summaryParts } from '../../utils/explain-view';
 
 /** What to explain: the clicked row when the cursor is still on it, otherwise the cursor's line. */
 export interface ExplainTarget {
@@ -28,6 +28,9 @@ const wb = useWorkbench();
 interface View {
   e: Explanation;
   summary: RoutineSummary | null;
+  /** The summary's first sentences (length, who reaches it, how it ends) and the rest, behind a disclosure. */
+  parts: { head: Sentence[]; more: Sentence[] } | null;
+  pattern: Sentence[] | null;
   picture: Uint8Array | null;
 }
 
@@ -40,7 +43,7 @@ const view = computed<View | null>(() => {
   const e = t.row === undefined ? explainAt(s, t.addr) : explainRowAt(s, t.row);
   const summary = e.kind === 'code' && e.addr !== null ? summaryAt(s, e.addr) : null;
   const picture = e.region === undefined ? null : pictureBytes(s, e.region);
-  return (last = { e, summary, picture });
+  return (last = { e, summary, parts: summary === null ? null : summaryParts(summary), pattern: patternSentences(e), picture });
 });
 
 const $ = (n: number): string => `$${hex4(n)}`;
@@ -51,6 +54,7 @@ function openPreview(p: Preview): void {
   if (p.entry !== undefined) emit('table', p.entry);
   else emit('go', p.addr);
 }
+
 </script>
 
 <template>
@@ -63,14 +67,18 @@ function openPreview(p: Preview): void {
       </div>
       <p v-if="view.e.details" class="fg-explain-details" data-testid="explain-details">{{ detailsText(view.e.details) }}</p>
 
-      <section v-if="view.e.pattern" data-testid="explain-pattern">
+      <section v-if="view.e.pattern && view.pattern" data-testid="explain-pattern">
         <h3 class="fg-sec">What these lines do <span class="fg-explain-range fg-mono">{{ range(view.e.pattern.from, view.e.pattern.to) }}</span></h3>
-        <ExplainText :sentences="view.e.pattern.sentences" @go="emit('go', $event)" @table="emit('table', $event)" />
+        <ExplainText :sentences="view.pattern" @go="emit('go', $event)" @table="emit('table', $event)" />
       </section>
 
-      <section v-if="view.summary" data-testid="explain-routine">
+      <section v-if="view.summary && view.parts" data-testid="explain-routine">
         <h3 class="fg-sec">The routine <button type="button" class="fg-inline-link fg-mono fg-explain-range" @click="emit('go', view.summary.start)">{{ view.summary.name }}</button></h3>
-        <ExplainText :sentences="view.summary.sentences" @go="emit('go', $event)" @table="emit('table', $event)" />
+        <ExplainText :sentences="view.parts.head" @go="emit('go', $event)" @table="emit('table', $event)" />
+        <details v-if="view.parts.more.length > 0" class="fg-explain-more" data-testid="explain-routine-more">
+          <summary>More about this routine</summary>
+          <ExplainText :sentences="view.parts.more" @go="emit('go', $event)" @table="emit('table', $event)" />
+        </details>
         <slot name="summary-actions" :summary="view.summary" />
       </section>
 
@@ -83,11 +91,11 @@ function openPreview(p: Preview): void {
       <section v-if="view.e.previews.length > 0" data-testid="explain-previews">
         <h3 class="fg-sec">What’s at these addresses</h3>
         <ul class="fg-uses fg-previews">
-          <li v-for="p in view.e.previews" :key="`${p.addr}:${p.title}`">
-            <button type="button" class="fg-preview" data-testid="explain-preview" @click="openPreview(p)">
+          <li v-for="(p, k) in view.e.previews" :key="`${p.addr}:${p.title}`">
+            <button type="button" class="fg-preview" data-testid="explain-preview" :aria-describedby="p.lines.length > 0 ? `fg-preview-lines-${k}` : undefined" @click="openPreview(p)">
               <span class="fg-preview-title"><span class="fg-mono fg-explain-addr">{{ $(p.addr) }}</span> <span class="fg-mono fg-strong">{{ p.title }}</span><span v-if="p.entry" class="fg-muted"> · in the Symbol tab</span></span>
-              <span v-for="(l, i) in p.lines" :key="i" class="fg-preview-line" :class="p.entry ? '' : 'fg-mono'">{{ l }}</span>
               <span v-if="p.comment" class="fg-preview-line fg-muted">; {{ p.comment }}</span>
+              <span :id="`fg-preview-lines-${k}`" class="fg-preview-lines" aria-hidden="true"><span v-for="(l, i) in p.lines" :key="i" class="fg-preview-line" :class="p.entry ? '' : 'fg-mono'">{{ l }}</span></span>
             </button>
           </li>
         </ul>

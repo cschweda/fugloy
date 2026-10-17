@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { openProgram, sentenceText, withHintText } from '@fugloy/disasm';
 import type { Row } from '@fugloy/disasm';
-import { detailsText, explainAt, explainRowAt, pictureBytes, PICTURE_MAX, summaryAt, warmExplain } from '../app/utils/explain-view';
+import { detailsText, explainAt, explainRowAt, patternSentences, pictureBytes, PICTURE_MAX, summaryAt, summaryParts, thinLinks, warmExplain } from '../app/utils/explain-view';
 
 const ex = (p: string): string => fileURLToPath(new URL(`../../../examples/${p}`, import.meta.url));
 const open = () =>
@@ -73,5 +73,42 @@ describe('explain-view helpers', () => {
     expect(b.length).toBe(0x7fff - 0x7399 + 1);
     expect(b[0]).toBe(s.analysis.space.image.bytes[0x7399]);
     expect(pictureBytes(s, { start: 0x4000, end: 0xffff }).length).toBe(PICTURE_MAX);
+    // The same array for the same region, so stepping through its rows does not redraw the picture.
+    expect(pictureBytes(s, { start: 0x7399, end: 0x7fff })).toBe(b);
+  });
+
+  it('links an address once when adjacent pieces link it again ("$5200 (L5200)")', () => {
+    const s = open();
+    const lead = explainAt(s, 0x888b).sentences[0]!;
+    const thin = thinLinks(lead);
+    expect(sentenceText(thin)).toBe(sentenceText(lead));
+    expect(lead.filter((p) => p.addr !== undefined).length).toBe(4);
+    expect(thin.filter((p) => p.addr !== undefined).map((p) => p.text)).toEqual(['$5200', '$497F']);
+    // Different addresses, or the same one after other words, stay links.
+    expect(thinLinks([{ text: 'A', addr: 1 }, { text: ' and ' }, { text: 'B', addr: 1 }]).filter((p) => p.addr !== undefined).length).toBe(2);
+    const plain = [{ text: 'no links' }];
+    expect(thinLinks(plain)).toBe(plain);
+  });
+
+  it('on the copy pattern\'s own LDIR, shows only what the lead lacks; elsewhere in the span, the whole pattern', () => {
+    const s = open();
+    const ldir = explainAt(s, 0x888b);
+    expect(patternSentences(ldir)!.map(sentenceText)).toEqual(['This moves the program to where it runs.']);
+    const loop = explainAt(s, 0x49b1);
+    expect(patternSentences(loop)).toBe(loop.pattern!.sentences);
+    expect(patternSentences(explainAt(s, 0x49a7))).toBeNull();
+  });
+
+  it('splits a routine summary into its length, who reaches it and how it ends, and the rest', () => {
+    const s = open();
+    const { head, more } = summaryParts(summaryAt(s, 0x49a7)!);
+    expect(head.map(sentenceText)).toEqual([
+      'The routine L497F ($497F) is 53 instructions (139 bytes), counting the code it jumps to but not the routines it calls.',
+      'This is an entry point the analysis starts from.',
+      'It is jumped to from $4CC6, $602D, $6042 and $888D.',
+      'None of its paths returns or jumps out of it: it loops forever, unless a routine it calls leaves it.',
+    ]);
+    expect(more.length).toBe(summaryAt(s, 0x49a7)!.sentences.length - 4);
+    expect(more.map(sentenceText)[0]).toContain('MODEPORT');
   });
 });

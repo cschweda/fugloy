@@ -31,6 +31,12 @@ function onField(): void {
   if (Number.isFinite(n)) width.value = Math.min(MAX, Math.max(MIN, n));
 }
 
+/** On change or leaving the field: show the width actually used (clamped to MIN–MAX). */
+function settleField(): void {
+  onField();
+  field.value = String(width.value);
+}
+
 function draw(): void {
   const el = canvas.value;
   if (el === null) return;
@@ -43,6 +49,8 @@ function draw(): void {
   el.height = cssH * dpr;
   el.style.width = `${cssW}px`;
   el.style.height = `${cssH}px`;
+  // Counts redraws, so the browser checks can tell that stepping through a region's rows does not repeat one.
+  el.dataset.draws = String(Number(el.dataset.draws ?? 0) + 1);
   const g = el.getContext('2d');
   if (g === null) return;
   const css = getComputedStyle(el);
@@ -104,6 +112,8 @@ onMounted(draw);
         :max="MAX"
         inputmode="numeric"
         @input="onField"
+        @change="settleField"
+        @blur="settleField"
       />
     </div>
     <div class="fg-picture-frame" tabindex="0" role="group" :aria-label="`Picture of ${name}`">

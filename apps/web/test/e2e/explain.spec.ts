@@ -55,7 +55,9 @@ test('a table name in a sentence opens the Symbol tab; an address in one moves t
   await page.getByRole('tab', { name: 'Explain' }).click();
   await page.keyboard.press('ArrowDown');
   await (await row(page, 0x49ab)).click();
-  await page.getByTestId('explain-lead').getByRole('button', { name: 'DATA_628F' }).click();
+  // "$628F (DATA_628F)": one link for the address, not two.
+  await expect(page.getByTestId('explain-lead').getByRole('button')).toHaveText(['$628F']);
+  await page.getByTestId('explain-lead').getByRole('button', { name: '$628F' }).click();
   await cursorAt(page, 0x628f);
   await expect(page.getByTestId('explain-line')).toContainText('628F');
 });
@@ -75,7 +77,7 @@ test('with Program showing, ArrowDown moves the cursor and leaves Program showin
 test('a preview click moves the cursor to its address', async ({ page }) => {
   await open(page);
   await (await row(page, 0x49ab)).click();
-  const preview = page.getByTestId('explain-preview').filter({ hasText: 'DATA_628F' });
+  const preview = page.getByRole('button', { name: '$628F DATA_628F', exact: true });
   await expect(preview).toContainText('628F  83 87 8B 8C');
   await preview.click();
   await cursorAt(page, 0x628f);
@@ -116,7 +118,40 @@ test('a data row shows its region, DATA_7399, and a picture with width buttons',
   expect(await canvas.evaluate((c: HTMLCanvasElement) => c.style.width)).toBe(`${32 * 8}px`);
   await region.getByLabel('Other').fill('40');
   await expect.poll(() => canvas.evaluate((c: HTMLCanvasElement) => c.style.width)).toBe(`${40 * 8}px`);
+  // Out of range: clamped, and the field shows the width used once it is left.
+  await region.getByLabel('Other').fill('3');
+  await region.getByLabel('Other').blur();
+  await expect(region.getByLabel('Other')).toHaveValue('8');
+  expect(await canvas.evaluate((c: HTMLCanvasElement) => c.style.width)).toBe(`${8 * 8}px`);
   await expect(page.getByTestId('explain-lead')).toContainText('Press C to decode them as code');
+});
+
+test('the $888B LDIR says each fact once: one link per address, the pattern adds only what the lead lacks, routine facts fold away', async ({ page }) => {
+  await open(page);
+  await (await row(page, 0x888b)).click();
+  const lead = page.getByTestId('explain-lead');
+  await expect(lead).toContainText('Copy $3681 (13,953) bytes from $5200 (L5200) to $497F (L497F)');
+  await expect(lead.getByRole('button')).toHaveText(['$5200', '$497F']);
+  const pattern = page.getByTestId('explain-pattern');
+  await expect(pattern).toHaveText(/This moves the program to where it runs\./);
+  await expect(pattern).not.toContainText('Copies');
+  const routine = page.getByTestId('explain-routine');
+  await expect(routine).toContainText('It ends by jumping on to L497F.');
+  const more = routine.getByTestId('explain-routine-more');
+  await expect(more.getByText('It copies 13,953 bytes')).toBeHidden();
+  await more.getByText('More about this routine').click();
+  await expect(more.getByText('It copies 13,953 bytes', { exact: false })).toBeVisible();
+  // One line up, inside the copy's setup, the pattern shows in full.
+  await page.locator('.fg-listing').focus();
+  await page.keyboard.press('ArrowUp');
+  await cursorAt(page, 0x8888);
+  await expect(page.getByTestId('explain-pattern')).toContainText('Copies 13,953 bytes');
+});
+
+test('a shift-click extends the selection and does not open Explain', async ({ page }) => {
+  await open(page);
+  await (await row(page, 0x49a7)).click({ modifiers: ['Shift'] });
+  await expect(page.getByRole('tab', { name: 'Program' })).toHaveAttribute('aria-selected', 'true');
 });
 
 test('a .BAS program gets the BASIC note', async ({ page }) => {

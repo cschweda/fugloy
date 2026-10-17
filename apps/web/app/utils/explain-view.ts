@@ -3,8 +3,8 @@
 // session and address, and each routine summary per session and routine start,
 // so stepping back and forth through lines costs a map lookup. A new session
 // (a hint edit, another symbol table) gets fresh entries: its analysis differs.
-import { explainLine, explainRow, summarizeRoutine } from '@fugloy/disasm';
-import type { Details, Explanation, Row, RoutineSummary, Session } from '@fugloy/disasm';
+import { explainLine, explainRow, sentenceText, summarizeRoutine } from '@fugloy/disasm';
+import type { Details, Explanation, Row, RoutineSummary, Sentence, Session } from '@fugloy/disasm';
 
 const lines = new WeakMap<Session, Map<number, Explanation>>();
 /** Rows that are not lines of the program (ORG, notes, header), by kind, address and text. */
@@ -98,8 +98,75 @@ export function detailsText(d: Details): string {
 /** The most bytes a region picture draws (16K). */
 export const PICTURE_MAX = 0x4000;
 
-/** The bytes a region picture draws, from the runtime image (where relocated code runs), at most PICTURE_MAX. */
+const pictures = new WeakMap<Session, Map<string, Uint8Array>>();
+
+/**
+ * The bytes a region picture draws, from the runtime image (where relocated
+ * code runs), at most PICTURE_MAX. Cached per session and region, so stepping
+ * through a region's rows hands the picture the same array and it does not redraw.
+ */
 export function pictureBytes(s: Session, region: { start: number; end: number }): Uint8Array {
-  const end = Math.min(region.end, region.start + PICTURE_MAX - 1);
-  return s.analysis.space.image.bytes.slice(region.start, end + 1);
+  const cache = mapOf(pictures, s);
+  const key = `${region.start}:${region.end}`;
+  let b = cache.get(key);
+  if (b === undefined) {
+    const end = Math.min(region.end, region.start + PICTURE_MAX - 1);
+    b = s.analysis.space.image.bytes.slice(region.start, end + 1);
+    cache.set(key, b);
+  }
+  return b;
+}
+
+/** A piece that is only punctuation or space, such as " (" or ")": it does not separate two links to the same address. */
+const PUNCT = /^[\s()[\],;:.\u2013-]*$/;
+
+/**
+ * The sentence with repeated links thinned: when adjacent pieces (ignoring
+ * punctuation-only pieces) link the same address, only the first stays a link
+ * ("$5200 (L5200)" links once).
+ */
+export function thinLinks(s: Sentence): Sentence {
+  let last: number | undefined;
+  let changed = false;
+  const out = s.map((p) => {
+    if (p.addr === undefined) {
+      if (!PUNCT.test(p.text)) last = undefined;
+      return p;
+    }
+    if (p.addr === last) {
+      changed = true;
+      const { addr: _drop, ...plain } = p;
+      return plain;
+    }
+    last = p.addr;
+    return p;
+  });
+  return changed ? out : s;
+}
+
+/** Sentences of a routine summary that say what it is, how it is reached and how it ends; the rest go behind "More about this routine". */
+const HEAD = ['This is where the program starts', 'This is an entry point', 'It is called from', 'It is jumped to from', 'A jump table entry', 'Jump table entries', 'It ends by', 'None of its paths', 'It is longer than'];
+
+/** A routine summary split into what shows at once (its length, who reaches it, how it ends) and the facts behind a disclosure. */
+export function summaryParts(r: RoutineSummary): { head: Sentence[]; more: Sentence[] } {
+  const head: Sentence[] = [];
+  const more: Sentence[] = [];
+  r.sentences.forEach((s, i) => {
+    const text = sentenceText(s);
+    (i === 0 || HEAD.some((h) => text.startsWith(h)) ? head : more).push(s);
+  });
+  return { head, more };
+}
+
+/**
+ * The pattern's sentences to show. On a block copy's own LDIR the lead already
+ * says the count, source and destination, so only what it lacks remains (such
+ * as "This moves the program to where it runs."); null when nothing does.
+ */
+export function patternSentences(e: Explanation): Sentence[] | null {
+  const p = e.pattern;
+  if (p === undefined) return null;
+  if (p.name !== 'copy' || e.addr !== p.to) return p.sentences;
+  const rest = p.sentences.filter((x) => !sentenceText(x).startsWith('Copies '));
+  return rest.length === 0 ? null : rest;
 }

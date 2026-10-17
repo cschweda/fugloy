@@ -27,7 +27,7 @@ const emit = defineEmits<{
   /** The context menu was asked for from the keyboard (the ContextMenu key, Shift+F10): open it on the cursor row. */
   'context-key': [];
   'toggle-header': [];
-  /** A mouse click on a row, not on a link in it (it also emits select): the page opens Explain on it. */
+  /** A mouse click on a row, not on a link in it and not shift-extended (it also emits select): the page opens Explain on it. */
   'row-click': [row: Row];
 }>();
 
@@ -208,6 +208,8 @@ function onClick(e: MouseEvent): void {
   const row = rowElement(e.target);
   if (row === null) return;
   emit('select', Number(row.dataset.addr), e.shiftKey);
+  // A shift-click extends the selection; it does not open Explain.
+  if (e.shiftKey) return;
   const index = Number(row.id.slice(ROW_ID.length));
   const clicked = props.rows[index];
   if (clicked !== undefined) emit('row-click', clicked);
