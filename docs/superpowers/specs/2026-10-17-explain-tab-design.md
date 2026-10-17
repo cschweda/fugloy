@@ -119,14 +119,17 @@ Explain runs a small, local value tracker. My call on its scope:
   propose a move whose setup Explain cannot prove on every path. Explain
   then states no values, and says the loader analysis proposes this
   move.
-- **Loops.** One exception to "stop at a jump target": a loop's own head.
-  When the only jumps into the head are the loop's own backward jumps
-  (the `DJNZ` or the wait loop's jump), and the only other way in is
-  falling through from the line before, the walk skips the loop body and
-  carries on from the line before the loop. Registers the body writes
-  are unknown on later trips round. Only the count register's value on
-  entry is used (B for DJNZ). If anything else jumps into the loop, the
-  count is unknown.
+- **Loops.** A `DJNZ` loop's count is B on entry: what the walk proves
+  just before the loop's head. It is used only when three things hold:
+  - every jump into the head comes from that `DJNZ`;
+  - nothing outside the loop jumps into its body;
+  - nothing in the body changes B or calls out.
+
+  Inside the loop, the head is still a merge point, so the body's
+  registers stay unknown. (This narrower rule replaced a general "skip the
+  loop" exception while the plan was written: a forward branch inside a
+  body, as at Sea Dragon's $49B1–$49CA, would have stopped that exception
+  from ever proving a count.)
 - At a merge point, a value is known only if the walk proved it; otherwise
   Explain says where control comes from (callers and jumpers, as links).
 - Memory contents are not tracked, except to name what an address *is*

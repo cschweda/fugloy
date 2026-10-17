@@ -101,7 +101,7 @@
   - a note on a data address starts a new data row at that address;
   - zmac output has the lines above the label;
   - IR `notes`;
-  - Sea Dragon with `block 0:$3197 note test` added (the run offset of `L497F`; compute it with `addressKey`) still assembles byte-identically through zmac in the existing round-trip harness;
+  - Sea Dragon with a `note` added at `L497F`'s key (from `addressKey(session, 0x497F)`) still assembles byte-identically through zmac in the existing round-trip harness;
   - a note at an address that also has `name` and `comment` prints above the label, with the comment still in the comment column.
 - [ ] **Step 2: Run** them; expect FAIL.
 - [ ] **Step 3: Implement.** Parsing follows the `comment` case. `writeHints` already sorts stably, so input order holds within an address. The note rows reuse the `note` row kind, so `formatRow` and the web need no new kind.
@@ -123,30 +123,37 @@
     regs: RegState;
     /** Where control can come from when the walk stopped at a merge point: callers and jumpers of that address. */
     from?: { addr: number; callers: number[]; jumpers: number[] };
-    /** Set when the walk skipped a loop whose only other way in is the fall-through: its head and the count register's value on entry (B for DJNZ), when known. */
-    loop?: { head: number; end: number; count: number | null };
   }
   /** What is proven about registers just before the instruction at `addr` runs. */
   export function knownBefore(a: Analysis, addr: number): Known;
+  /** For a DJNZ at `addr`: its loop (head = target, end = addr) and B's value on entry when proven, else count null. */
+  export function djnzLoop(a: Analysis, addr: number): { head: number; end: number; count: number | null } | null;
   ```
   Walk rules, exactly as in the spec:
   - Go backward along the fall-through predecessor.
   - Stop at a call target or entry point, at any xref target (a merge point), after a CALL/RST, after 32 instructions, or at the start of a run.
-  - **Loop exception:** if the merge point's only xrefs are backward jumps from inside a single loop that ends at or after `addr`, and the only other way in is the fall-through, skip to the line before the head. Everything the body writes becomes unknown, and `loop.count` is the count register on entry.
   - Then replay `stepRegs` forward to `addr`.
+  - **Loop counts (`djnzLoop`).** `count` is B as `knownBefore` proves it at the line before the head, plus that line's own step. All of these must hold:
+    - every xref into the head comes from this DJNZ;
+    - no xref from outside head..end targets an address inside the body (jumps inside the body are fine);
+    - no instruction in the body writes B, or is a CALL, RST or EXX.
+
+    Otherwise `count` is null.
+  - **Ruling:** this replaces the spec's general "skip the loop body" exception. With that exception, a forward branch inside a body (such as Sea Dragon's `JR Z,L49BC` inside the loop at `$49B1`–`$49CA`) stops the walk, so no count could ever be proven there. The narrower rule is sound and covers the DJNZ counts the patterns need. A line inside a loop still stops at the head, which is a merge point, so the body's registers stay unknown, as the anti-goal requires. The spec's "Loops" paragraph is already updated to match.
 
 - [ ] **Step 1: Write failing tests.** Use synthetic images built with the test helpers in `test/images.ts`:
   - `straight`: `LD HL,3C00H; LD A,20H; LD (HL),A` → before the third instruction, HL is $3C00 and A is $20;
   - `merge-point`: `JR Z,x; LD HL,1; x: LD A,(HL)` → HL unknown before `x`, with `from.jumpers` = [the JR];
-  - `loop-count`: `LD B,40H; loop: …; DJNZ loop` → before the DJNZ, `loop.count` = $40;
-  - `loop-body-writes`: `LD HL,3FD0H; LD B,5; l: LD (HL),8CH; INC HL; DJNZ l` → before `LD (HL),8CH`, HL unknown and `loop.count` = 5;
-  - `second-entry`: a loop with another jump into its body → `loop` undefined, B unknown;
+  - `loop-count`: `LD B,40H; loop: …; JR Z,skip; …; skip: …; DJNZ loop` → `djnzLoop` count = $40, with an inner forward branch;
+  - `loop-body-writes`: `LD HL,3FD0H; LD B,5; l: LD (HL),8CH; INC HL; DJNZ l` → before `LD (HL),8CH`, HL is unknown, and `djnzLoop` count = 5;
+  - `second-entry`: a loop with another jump into its body → count null;
+  - `body-writes-b`: a body containing `LD B,A` → count null;
   - `after-call`: everything unknown;
   - `cap`: 40 straight `NOP`s then a use → stops at 32.
 
   Sea Dragon, with hints:
   - before `$888B`, HL is $5200, DE is $497F, BC is $3681;
-  - before `$49CA`, `loop.count` is $40;
+  - `djnzLoop` at `$49CA` gives head $49B1 and count $40;
   - before `$5FC4`, HL is unknown.
 - [ ] **Step 2: Run**; expect FAIL.
 - [ ] **Step 3: Implement** `knownBefore`. Build a predecessor index once per `Analysis`, cached in a `WeakMap<Analysis, …>`, and look up xref targets from `pass1.xrefs`.
@@ -219,7 +226,7 @@
 - Produces: `Explanation.pattern`, for the four patterns in the spec. Each has `name` (`'copy'`, `'fill'`, `'counted-loop'`, `'wait'`), the address span, and sentences:
   - **copy:** `LDIR`/`LDDR` with known HL, DE and BC → "Copies N bytes ($nnnn) from $X to $Y." It adds "This moves the program to where it runs." when a movers proposal has this `ldir`, or an applied relocation has `fileAddr`=src, `runAddr`=dst, `length`≥N. When movers proposed it but the tracker cannot prove the values, it says "Fugløy's loader analysis proposes this copies …" and states no values.
   - **fill:** `LD (HL),n` / `LD D,H; LD E,L; INC DE` / `LD BC,len` / `LDIR`. Over screen memory with n=$20 it says "clears the screen", or the rows it covers.
-  - **counted-loop:** DJNZ with `loop.count`. "Repeats the lines from $head to here N times."
+  - **counted-loop:** DJNZ with `djnzLoop`. "Repeats the lines from $head to here N times."
   - **wait:** a loop with no memory writes and no I/O, made only of `DEC`, `LD A,r`/`OR r` tests and a backward conditional jump. "A delay loop", with a T-state total when the count is known.
 
 - [ ] **Step 1: Write failing tests:**
