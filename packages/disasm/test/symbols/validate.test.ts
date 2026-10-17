@@ -14,6 +14,8 @@ const entry = (over: Raw = {}): Raw => ({ addr: '0049', name: '$KBWAIT', kind: '
 const port = (over: Raw = {}): Raw => entry({ addr: undefined, port: 'EC', kind: 'port', name: 'MODEPORT', coined: true, purpose: 'cassette and display mode', ...over });
 const svc = (over: Raw = {}): Raw => entry({ addr: undefined, svc: 10, kind: 'svc', name: '@DSPLY', cite: cite('soltoff', '101'), ...over });
 const file = (table: string, ...entries: Raw[]): TableFile => ({ file: `${table}.json`, json: { table, entries } });
+/** What every uncoined name that breaks the naming rule is told (spec 4.3). */
+const SOURCE_RULE = 'must be capitals, digits, and _, starting with a letter, after an optional $ or @, and ending in at most one $';
 const run = (...files: TableFile[]) => validateTables(files, sources);
 const errorsOf = (table: string, over: Raw = {}): string[] => run(file(table, entry(over))).errors;
 
@@ -167,12 +169,17 @@ describe('validateTables', () => {
       ['a coined name starting with @', { name: '@FOO', coined: true }, 'coined name "@FOO" may not start with $ or @ (those mark names a source prints)'],
       ['a coined name of 13 characters', { name: 'ABCDEFGHIJKLM', coined: true }, 'coined name "ABCDEFGHIJKLM" is longer than 12 characters'],
       ['a coined name in lower case', { name: 'foo', coined: true }, 'coined name "foo" must be capitals, digits, and _, starting with a letter'],
-      ['an uncoined name in lower case', { name: 'kbwait' }, 'name "kbwait" must be capitals, digits, and _, starting with a letter, after an optional $ or @'],
-      ['a name starting with a digit', { name: '1ABC' }, 'name "1ABC" must be capitals, digits, and _, starting with a letter, after an optional $ or @'],
-      ['a name starting with an underscore', { name: '_ABC' }, 'name "_ABC" must be capitals, digits, and _, starting with a letter, after an optional $ or @'],
-      ['a prefix followed by a digit', { name: '$1ABC' }, 'name "$1ABC" must be capitals, digits, and _, starting with a letter, after an optional $ or @'],
-      ['a prefix alone', { name: '@' }, 'name "@" must be capitals, digits, and _, starting with a letter, after an optional $ or @'],
-      ['two prefixes', { name: '$@ABC' }, 'name "$@ABC" must be capitals, digits, and _, starting with a letter, after an optional $ or @'],
+      ['an uncoined name in lower case', { name: 'kbwait' }, `name "kbwait" ${SOURCE_RULE}`],
+      ['a name starting with a digit', { name: '1ABC' }, `name "1ABC" ${SOURCE_RULE}`],
+      ['a name starting with an underscore', { name: '_ABC' }, `name "_ABC" ${SOURCE_RULE}`],
+      ['a prefix followed by a digit', { name: '$1ABC' }, `name "$1ABC" ${SOURCE_RULE}`],
+      ['a prefix alone', { name: '@' }, `name "@" ${SOURCE_RULE}`],
+      ['two prefixes', { name: '$@ABC' }, `name "$@ABC" ${SOURCE_RULE}`],
+      ['two trailing $', { name: '@FLAGS$$' }, `name "@FLAGS$$" ${SOURCE_RULE}`],
+      ['a $ in the middle', { name: 'TIME$X' }, `name "TIME$X" ${SOURCE_RULE}`],
+      ['a prefix and a $ with no letter between', { name: '@$' }, `name "@$" ${SOURCE_RULE}`],
+      ['a $ alone', { name: '$' }, `name "$" ${SOURCE_RULE}`],
+      ['a coined name ending in $', { name: 'FLAGS$', coined: true }, 'coined name "FLAGS$" may not end in $ (a trailing $ marks names a source prints)'],
       ['a mnemonic', { name: 'LD', coined: true }, 'name "LD" is reserved (a mnemonic, register, condition, or zmac word)'],
       ['a register', { name: 'HL' }, 'name "HL" is reserved (a mnemonic, register, condition, or zmac word)'],
       ['a condition', { name: 'NZ' }, 'name "NZ" is reserved (a mnemonic, register, condition, or zmac word)'],
@@ -189,6 +196,11 @@ describe('validateTables', () => {
       for (const over of [{ name: '$KBWAIT' }, { name: '@EXIT' }, { name: 'KBWAIT' }, { name: '$A' }, { name: '@HIGH_2' }, { name: '$L5210' }, { name: 'ABCDEFGHIJKL', coined: true }, { name: 'VIDEO', coined: true }]) {
         expect(errorsOf('rom-model3', over)).toEqual([]);
       }
+    });
+
+    // LS-DOS and LDOS print names that end in a dollar sign: the system flags and high-memory calls, and LDOS's storage names (design spec 4.3, a source's own spelling).
+    it('accepts a source spelling that ends in one $: @FLAGS$, @HIGH$, TIME$, and LDRIV$', () => {
+      for (const name of ['@FLAGS$', '@HIGH$', 'TIME$', 'LDRIV$', 'S1DCB$', '$A$', 'A$']) expect(errorsOf('rom-model3', { name }), name).toEqual([]);
     });
 
     it('rejects a missing name', () => {
@@ -224,6 +236,43 @@ describe('validateTables', () => {
         file('dos-ldos51-model1', entry({ name: '@EXIT', addr: '402D', cite: cite('ldos51', '6-29') })),
         file('dos-ldos51-model3', entry({ name: '$JP2DOS', addr: '402D', cite: cite('ldos51', '6-33') })),
       ).errors).toEqual([]);
+    });
+  });
+
+  describe('one entry per port number and per service call number within a table', () => {
+    const portTwice = (here: string, there: string): string => `${here}: port EC is already used by ${there} (a table has one entry per port number; its purpose covers IN and OUT)`;
+    const svcTwice = (here: string, there: string): string => `${here}: service call 10 is already used by ${there} (a table has one entry per service call number)`;
+
+    it('rejects two ports with one number in one table, against the first', () => {
+      expect(run(file('hardware-model3', port(), port({ name: 'MODEPORT2' }))).errors).toEqual([
+        portTwice('hardware-model3.json entry 1 "MODEPORT2"', 'hardware-model3.json entry 0 "MODEPORT"'),
+      ]);
+    });
+
+    it('rejects two service calls with one number in one table, against the first', () => {
+      expect(run(file('svc-lsdos6', svc(), svc({ name: '@DISPLAY' }))).errors).toEqual([
+        svcTwice('svc-lsdos6.json entry 1 "@DISPLAY"', 'svc-lsdos6.json entry 0 "@DSPLY"'),
+      ]);
+    });
+
+    it('reports every repeat against the first entry with that number', () => {
+      expect(run(file('svc-lsdos6', svc(), svc({ name: '@ONE' }), svc({ name: '@TWO' }))).errors).toEqual([
+        svcTwice('svc-lsdos6.json entry 1 "@ONE"', 'svc-lsdos6.json entry 0 "@DSPLY"'),
+        svcTwice('svc-lsdos6.json entry 2 "@TWO"', 'svc-lsdos6.json entry 0 "@DSPLY"'),
+      ]);
+    });
+
+    it('lets different numbers, and the Model I and Model III tables, use the same ones', () => {
+      expect(run(file('svc-lsdos6', svc(), svc({ name: '@KEY', svc: 1 }))).errors).toEqual([]);
+      expect(run(file('hardware-model3', port(), port({ name: 'FDC_CMD', port: 'F0' }))).errors).toEqual([]);
+      // Port EC in both hardware tables: the two are never in one selection.
+      expect(run(file('hardware-model1', port()), file('hardware-model3', port())).errors).toEqual([]);
+    });
+
+    it('does not count a port number against a service call of the same value, which could never share a table', () => {
+      expect(run(file('svc-lsdos6', svc(), port({ port: '0A', name: 'STRAYPORT' }))).errors).toEqual([
+        'svc-lsdos6.json entry 1 "STRAYPORT": kind "port" is not allowed in svc-lsdos6 (allowed: svc)',
+      ]);
     });
   });
 

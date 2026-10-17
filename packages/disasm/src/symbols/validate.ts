@@ -36,8 +36,8 @@ const ENTRY_FIELDS = new Set(['addr', 'port', 'svc', 'name', 'kind', 'purpose', 
 const KEY_FIELDS = ['addr', 'port', 'svc'] as const;
 const SOURCE_FIELDS = new Set(['id', 'author', 'title', 'publisher', 'year', 'edition', 'locator']);
 
-/** A name a source prints may start with `$` or `@`; a name we coin may not. */
-const SOURCE_NAME = /^[$@]?[A-Z][A-Z0-9_]*$/;
+/** A name a source prints may start with `$` or `@` and end in one `$` (LS-DOS and LDOS print `@FLAGS$`, `@HIGH$`, `TIME$`); a name we coin may do neither. */
+const SOURCE_NAME = /^[$@]?[A-Z][A-Z0-9_]*\$?$/;
 const COINED_NAME = /^[A-Z][A-Z0-9_]*$/;
 const COINED_MAX = 12;
 /** A purpose, note, or page is printed into a zmac `EQU` line and a listing comment, where a line break would end the line early. */
@@ -47,10 +47,11 @@ const LINE_BREAK = /[\r\n]/;
 function nameProblem(name: string, coined: boolean): string | null {
   if (coined) {
     if (/^[$@]/.test(name)) return `coined name "${name}" may not start with $ or @ (those mark names a source prints)`;
+    if (name.endsWith('$')) return `coined name "${name}" may not end in $ (a trailing $ marks names a source prints)`;
     if (name.length > COINED_MAX) return `coined name "${name}" is longer than ${COINED_MAX} characters`;
     if (!COINED_NAME.test(name)) return `coined name "${name}" must be capitals, digits, and _, starting with a letter`;
   } else if (!SOURCE_NAME.test(name)) {
-    return `name "${name}" must be capitals, digits, and _, starting with a letter, after an optional $ or @`;
+    return `name "${name}" must be capitals, digits, and _, starting with a letter, after an optional $ or @, and ending in at most one $`;
   }
   if (RESERVED.has(name.toUpperCase())) return `name "${name}" is reserved (a mnemonic, register, condition, or zmac word)`;
   if (SYNTH_NAME.test(name)) return `name "${name}" has the shape of a generated label`;
@@ -219,10 +220,38 @@ function readSources(raw: unknown, errors: string[]): { sources: Source[]; known
   return { sources, known };
 }
 
+/** How an error names an entry: its file, index, and name. */
+const labelOf = (labels: ReadonlyMap<TableEntry, string>, e: TableEntry): string => labels.get(e) ?? e.name;
+
+/**
+ * A port number or a service call number is entered once per table. A lookup
+ * answers with the first entry for a number, so a second one would never be
+ * named, and an entry's purpose already covers every use of its number (IN and
+ * OUT for a port). One message per repeat, against the first entry.
+ */
+function repeatedNumbers(tables: Readonly<Record<TableId, readonly TableEntry[]>>, labels: ReadonlyMap<TableEntry, string>): string[] {
+  const found: string[] = [];
+  for (const id of TABLE_IDS) {
+    const first = new Map<string, TableEntry>();
+    for (const e of tables[id]) {
+      if (e.kind !== 'port' && e.kind !== 'svc') continue;
+      const earlier = first.get(`${e.kind}:${e.key}`);
+      if (earlier === undefined) {
+        first.set(`${e.kind}:${e.key}`, e);
+      } else if (e.kind === 'port') {
+        found.push(`${labelOf(labels, e)}: port ${e.key.toString(16).toUpperCase().padStart(2, '0')} is already used by ${labelOf(labels, earlier)} (a table has one entry per port number; its purpose covers IN and OUT)`);
+      } else {
+        found.push(`${labelOf(labels, e)}: service call ${e.key} is already used by ${labelOf(labels, earlier)} (a table has one entry per service call number)`);
+      }
+    }
+  }
+  return found;
+}
+
 /** Names and memory must be unique within each machine-and-DOS selection; one message per offending pair. */
 function crossChecks(tables: Readonly<Record<TableId, readonly TableEntry[]>>, labels: ReadonlyMap<TableEntry, string>): string[] {
   const found = new Set<string>();
-  const label = (e: TableEntry): string => labels.get(e) ?? e.name;
+  const label = (e: TableEntry): string => labelOf(labels, e);
   for (const { tables: ids } of SELECTIONS) {
     const entries = ids.flatMap((id) => tables[id]);
     const names = new Map<string, TableEntry>();
@@ -285,6 +314,6 @@ export function validateTables(
     });
   }
 
-  errors.push(...crossChecks(tables, labels));
+  errors.push(...repeatedNumbers(tables, labels), ...crossChecks(tables, labels));
   return { tables, sources: registry.sources, errors };
 }
