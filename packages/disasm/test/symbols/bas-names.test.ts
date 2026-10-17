@@ -358,3 +358,61 @@ describe('the pass 1 listing of a .BAS with hidden code', () => {
     expect(notes(renderPass1Listing(analyze(prog)).split('\n'))).toEqual([]);
   });
 });
+
+describe('the machine tag on a note', () => {
+  // Spec section 4.6: a ROM name whose address differs between the machines carries the tag, as an RST comment does.
+  const poke: BasicLineSpec[] = [{ number: 10, text: 'POKE 16526,0:POKE 16527,82' }];
+  const MODEL_III: SymbolSelection = { machine: 3, dos: 'trsdos' };
+
+  it('follows the parenthesized name of a ROM entry the other machine does not share: (USRVEC) [Model I]', () => {
+    const names = tables({ 'rom-model1': [usrvec] }, { '408E': 'model1-only' });
+    expect(listing(poke, names).slice(1)).toEqual([
+      '10 POKE 16526,0:POKE 16527,82',
+      ';   16526 = $408E USR vector (USRVEC) [Model I]',
+      ';   16527 = $408F USR vector (USRVEC+1) [Model I]',
+      '',
+    ]);
+  });
+
+  it('leaves a shared ROM name untagged, and tags a different one and one the comparison does not list', () => {
+    expect(notes(listing(poke, tables({ 'rom-model1': [usrvec] }, { '408E': 'shared' })))).toEqual([
+      ';   16526 = $408E USR vector (USRVEC)',
+      ';   16527 = $408F USR vector (USRVEC+1)',
+    ]);
+    expect(notes(listing(poke, tables({ 'rom-model1': [usrvec] }, { '408E': 'different' })))).toEqual([
+      ';   16526 = $408E USR vector (USRVEC) [Model I]',
+      ';   16527 = $408F USR vector (USRVEC+1) [Model I]',
+    ]);
+    expect(notes(listing(poke, tables({ 'rom-model1': [usrvec] }, {})))).toEqual([
+      ';   16526 = $408E USR vector (USRVEC) [Model I]',
+      ';   16527 = $408F USR vector (USRVEC+1) [Model I]',
+    ]);
+  });
+
+  it('tags a DEFUSR address named from the code names too, and a Model III name [Model III]', () => {
+    const routine = tables({ 'rom-model1': [kbwait] }, { '0049': 'model1-only' });
+    expect(notes(listing([{ number: 10, text: 'DEFUSR1=73' }], routine))).toEqual([';   73 = $0049 wait for a key ($KBWAIT) [Model I]']);
+    const curblink = entry('rom-model3', 'variable', 0x401c, 'CURBLINK', { purpose: 'cursor blink switch' });
+    const model3 = selectSymbols(MODEL_III, tablesOf({ 'rom-model3': [curblink] }), { '401C': 'model3-only' });
+    expect(listing([{ number: 10, text: 'POKE 16412,1' }], model3).slice(1)).toEqual([
+      '10 POKE 16412,1',
+      ';   16412 = $401C cursor blink switch (CURBLINK) [Model III]',
+      '',
+    ]);
+  });
+
+  it('never tags a hardware name, whatever the comparison says', () => {
+    expect(notes(listing([{ number: 10, text: 'POKE 15360,65:X=PEEK(14400)' }], tables({ 'hardware-model1': [video, keyboard] }, {})))).toEqual([
+      ';   15360 = $3C00 video display memory (VIDEO)',
+      ';   14400 = $3840 memory-mapped keyboard (KEYBOARD+64)',
+    ]);
+  });
+
+  it('puts the same tags in the pass 1 listing, with a hidden line to make it one', () => {
+    const own = loadBas(writeBasic([...poke, { number: 20, raw: [0xc3, 0x00, 0x00, 0xc9, 0x00, 0x3e] }], BASE));
+    const names = tables({ 'rom-model1': [usrvec] }, { '408E': 'model1-only' });
+    const lines = renderPass1Listing(analyze(own, { tables: names })).split('\n');
+    expect(notes(lines)).toEqual([';   16526 = $408E USR vector (USRVEC) [Model I]', ';   16527 = $408F USR vector (USRVEC+1) [Model I]']);
+    expect(notes(renderBasListing(own, { tables: names }).split('\n'))).toEqual(notes(lines));
+  });
+});

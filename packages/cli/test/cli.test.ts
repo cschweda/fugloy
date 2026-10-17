@@ -554,6 +554,13 @@ describe('--machine and --dos', () => {
     expect(lines[lines.indexOf('30 FOR I=PEEK(15360) TO 10') + 1]).toMatch(VIDEO_NOTE);
   });
 
+  it('tags the note of a ROM name that differs on the other machine, as an RST comment is, and not one both ROMs share', async () => {
+    // USRVEC is in the Model I ROM table only; PRTPAGELEN is in both (data/symbols/COMPARISON.md).
+    const { lines } = await listBasic([{ number: 10, text: 'X=PEEK(16526)' }, { number: 20, text: 'X=PEEK(16424)' }], '--machine', '1');
+    expect(lines[lines.indexOf('10 X=PEEK(16526)') + 1]).toMatch(/^; {3}16526 = \$408E .+ \(USRVEC\) \[Model I\]$/);
+    expect(lines[lines.indexOf('20 X=PEEK(16424)') + 1]).toMatch(/^; {3}16424 = \$4028 .+ \(PRTPAGELEN\)$/);
+  });
+
   it('notes nothing in a BASIC listing under --machine 4, which names service calls only, nor with --sweep', async () => {
     const program: BasicLineSpec[] = [{ number: 10, text: 'POKE 15360,65' }, { number: 20, text: 'X=PEEK(14400)' }];
     expect(noteLines((await listBasic(program, '--machine', '4')).lines)).toEqual([]);

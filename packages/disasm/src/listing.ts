@@ -147,18 +147,25 @@ function legendLine(e: TableEntry): string {
   return `; table name ${e.name} = ${legendWhere(e)}: ${e.purpose} (${e.cite.map((c) => `${c.source} ${c.page}`).join(', ')})`;
 }
 
-/** What the notes under a BASIC line ask of the tables: the name covering an address as data, with the offset into it, and the name at an address as code. */
+/**
+ * What the notes under a BASIC line ask of the tables: the name covering an
+ * address as data, with the offset into it, the name at an address as code, and
+ * the machine tag of an entry.
+ */
 interface BasNames {
   data(addr: number): { entry: TableEntry; offset: number } | undefined;
   code(addr: number): TableEntry | undefined;
+  tag(entry: TableEntry): string | undefined;
 }
 
 /**
  * The note lines under a BASIC line (design spec §5.4): one for each distinct
  * constant address its PEEKs, POKEs, and DEFUSRs use that the tables name, in
  * the order the line reads them, as `;   16526 = $408E USR vector (USRVEC)`: the
- * address in decimal and in hex, the purpose, and the name. A note line and not
- * a trailing comment, because `;` is BASIC's PRINT separator and would read as
+ * address in decimal and in hex, the purpose, and the name. A ROM name whose
+ * address differs between the machines ends with its machine tag, as a comment
+ * on an instruction does (§4.6): `(USRVEC) [Model I]`. A note line and not a
+ * trailing comment, because `;` is BASIC's PRINT separator and would read as
  * program text. A PEEK or POKE takes a data name and else a code name, a DEFUSR
  * the reverse; inside a span the name carries the decimal offset, `USRVEC+1`.
  */
@@ -171,7 +178,8 @@ function basNotes(line: BasLine, names: BasNames): string[] {
     const found = use === 'data' ? (asData ?? asCode) : (asCode ?? asData);
     if (found === undefined) continue;
     const { entry, offset } = found;
-    notes.push(`;   ${addr} = ${$(addr)} ${entry.purpose} (${offset === 0 ? entry.name : `${entry.name}+${offset}`})`);
+    const tag = names.tag(entry);
+    notes.push(`;   ${addr} = ${$(addr)} ${entry.purpose} (${offset === 0 ? entry.name : `${entry.name}+${offset}`})${tag === undefined ? '' : ` ${tag}`}`);
   }
   return notes;
 }
@@ -312,6 +320,7 @@ export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {})
         return found === undefined ? undefined : { entry: found.entry, offset: addr - found.entry.key };
       },
       code: (addr) => free.code(addr)?.entry,
+      tag: (entry) => free.machineTag(entry),
     };
     out.push('');
     for (const line of mod.lines) {
@@ -363,6 +372,7 @@ export function renderBasListing(prog: BasProgram, opts: RenderOptions = {}): st
       : {
           data: (addr) => (prog.image.isLoaded(addr) ? undefined : tables.data(addr)),
           code: (addr) => (prog.image.isLoaded(addr) ? undefined : tables.code(addr)),
+          tag: (entry) => tables.machineTag(entry),
         };
   for (const line of prog.lines) {
     out.push(line.parsed ? `${line.number} ${line.text}` : `${line.number} [unparsed: ${plural(line.body.length, 'byte')} at ${$(line.bodyAddr)}: ${line.reason}]`);
