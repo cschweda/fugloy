@@ -342,3 +342,16 @@ html.dark body {
   color: var(--fg-text);
 }
 .fg-dialog::backdrop { background: #0009; }
+
+.fg-uses { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.fg-input {
+  background: var(--fg-bg);
+  color: var(--fg-text-strong);
+  border: 1px solid var(--fg-border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+.fg-input:focus-visible { outline: 2px solid var(--fg-accent); outline-offset: 1px; }
+.fg-goto { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--fg-surface); border-bottom: 1px solid var(--fg-border); font-size: 13px; }
+.fg-goto-error { color: #ff7b72; }

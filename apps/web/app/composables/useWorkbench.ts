@@ -6,7 +6,7 @@
 import { computed, ref, shallowRef } from 'vue';
 import type { ComputedRef, Ref, ShallowRef } from 'vue';
 import { basRows, defaultDos, detectFormat, listingRows, OpenError, openProgram, programFacts, selectSymbols, withHintText, withSelection } from '@fugloy/disasm';
-import type { ProgramFacts, Row, Session, SymbolSelection } from '@fugloy/disasm';
+import type { ProgramFacts, Row, Session, SymbolSelection, TableEntry } from '@fugloy/disasm';
 import { exampleById } from '../data/examples';
 import type { Example, ExampleId } from '../data/examples';
 import { fetchExample } from '../utils/example-files';
@@ -23,6 +23,9 @@ export interface OpenOpts {
   /** The symbol tables to use; without it the machine verdict picks them. */
   selection?: SymbolSelection;
 }
+
+/** What the Symbol tab shows: a program label, or a ROM, hardware or DOS name. */
+export type SymbolFocus = { kind: 'label'; addr: number } | { kind: 'table'; entry: TableEntry };
 
 export const notAProgramMessage = (name: string): string => `${name} is not a .CMD or .BAS program.`;
 export const emptyMessage = (name: string): string => `${name} is empty (0 bytes).`;
@@ -46,6 +49,8 @@ export interface Workbench {
   example: ShallowRef<Example | null>;
   cursor: Ref<number | null>;
   selection: Ref<{ from: number; to: number } | null>;
+  /** The name the Symbol tab describes; cleared when another program opens. */
+  symbolFocus: ShallowRef<SymbolFocus | null>;
   error: Ref<string | null>;
   /** Lines under the error, such as a hint file's parse errors. */
   errorDetails: Ref<readonly string[]>;
@@ -74,6 +79,7 @@ export function createWorkbench(deps: { readExample: ExampleReader }): Workbench
   const example = shallowRef<Example | null>(null);
   const cursor = ref<number | null>(null);
   const selection = ref<{ from: number; to: number } | null>(null);
+  const symbolFocus = shallowRef<SymbolFocus | null>(null);
   const error = ref<string | null>(null);
   const errorDetails = ref<readonly string[]>([]);
   const rawCandidate = shallowRef<{ bytes: Uint8Array; name: string } | null>(null);
@@ -101,6 +107,7 @@ export function createWorkbench(deps: { readExample: ExampleReader }): Workbench
     example.value = from;
     cursor.value = null;
     selection.value = null;
+    symbolFocus.value = null;
     openCount.value++;
   }
 
@@ -195,6 +202,8 @@ export function createWorkbench(deps: { readExample: ExampleReader }): Workbench
     if (s === null) return;
     try {
       session.value = withSelection(s, sel);
+      // A table entry belongs to the tables just replaced.
+      if (symbolFocus.value?.kind === 'table') symbolFocus.value = null;
     } catch (err) {
       fail(err instanceof Error ? err.message : String(err));
     }
@@ -206,10 +215,11 @@ export function createWorkbench(deps: { readExample: ExampleReader }): Workbench
     example.value = null;
     cursor.value = null;
     selection.value = null;
+    symbolFocus.value = null;
     openCount.value++;
   }
 
-  return { session, rows, facts, example, cursor, selection, error, errorDetails, rawCandidate, suggestManuals, openCount, busy, openBytes, openRaw, openExample, report, wouldReplace, setSelection, close };
+  return { session, rows, facts, example, cursor, selection, symbolFocus, error, errorDetails, rawCandidate, suggestManuals, openCount, busy, openBytes, openRaw, openExample, report, wouldReplace, setSelection, close };
 }
 
 let shared: Workbench | null = null;

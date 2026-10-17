@@ -5,6 +5,7 @@
 import type { Row } from '@fugloy/disasm';
 import { hexWord } from '@fugloy/z80';
 import { hexAddr, hexBytes, isFollowable, spanClass } from '../../utils/row-classes';
+import { spanUseKind } from '../../utils/xrefs';
 
 defineProps<{ row: Row; cursor: boolean; selected: boolean }>();
 </script>
@@ -22,6 +23,10 @@ defineProps<{ row: Row; cursor: boolean; selected: boolean }>();
         v-if="isFollowable(span)"
         :href="`#$${hexAddr(span.target)}`"
         :data-target="span.target"
+        :data-span="span.kind"
+        :data-use="spanUseKind(span)"
+        :data-table="span.entry?.table"
+        :data-key="span.entry?.key"
         :class="`${spanClass(span.kind)} fg-follow`"
       >{{ span.text }}</a><span v-else :class="spanClass(span.kind)">{{ span.text }}</span></template></span>
       <span v-if="row.comment !== undefined" class="fg-col-comment fg-tok-comment">; {{ row.comment }}</span>

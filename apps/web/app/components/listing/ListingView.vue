@@ -7,6 +7,7 @@ import type { Row } from '@fugloy/disasm';
 import ListingRow from './ListingRow.vue';
 import { ROW_HEIGHT, rowAddr } from '../../utils/row-classes';
 import { rowLookup } from '../../utils/row-lookup';
+import type { FollowInfo } from '../../utils/xrefs';
 
 const props = defineProps<{
   rows: readonly Row[];
@@ -17,7 +18,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   select: [addr: number, extend: boolean];
-  follow: [target: number];
+  follow: [target: number, info: FollowInfo];
   context: [addr: number, x: number, y: number];
 }>();
 
@@ -161,7 +162,12 @@ function onClick(e: MouseEvent): void {
   const link = e.target instanceof Element ? e.target.closest<HTMLElement>('a.fg-follow') : null;
   if (link !== null) {
     e.preventDefault();
-    emit('follow', Number(link.dataset.target));
+    const d = link.dataset;
+    emit('follow', Number(d.target), {
+      span: d.span === 'table' ? 'table' : 'label',
+      use: d.use === 'port' || d.use === 'svc' ? d.use : 'addr',
+      ...(d.table === undefined ? {} : { table: d.table, key: Number(d.key) }),
+    });
     return;
   }
   const row = rowElement(e.target);

@@ -4,12 +4,18 @@
 // companion tabs on the right, and the status line under them.
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { addressKey, withHintFile, withSelection } from '@fugloy/disasm';
-import type { Row } from '@fugloy/disasm';
+import type { Row, TableEntry } from '@fugloy/disasm';
 import ListingView from '~/components/listing/ListingView.vue';
 import FirstScreen from '~/components/FirstScreen.vue';
 import ConfirmDialog from '~/components/ConfirmDialog.vue';
 import OpenProblem from '~/components/OpenProblem.vue';
 import StatusLine from '~/components/StatusLine.vue';
+import IndexTab from '~/components/side/IndexTab.vue';
+import SymbolTab from '~/components/side/SymbolTab.vue';
+import { resolveGoTo } from '~/utils/goto';
+import { isTyping, keyId } from '~/utils/keys';
+import { entryOf } from '~/utils/symbol-info';
+import type { FollowInfo } from '~/utils/xrefs';
 import FacingPages from '~/components/workbench/FacingPages.vue';
 import PageTabs from '~/components/workbench/PageTabs.vue';
 import type { PageTab } from '~/components/workbench/PageTabs.vue';
@@ -32,6 +38,7 @@ const RIGHT_TABS: PageTab<RightTab>[] = [
 ];
 const leftTab = ref<LeftTab>('listing');
 const rightTab = ref<RightTab>('program');
+const nav = useNavigation(scrollTo);
 const listing = ref<InstanceType<typeof ListingView> | null>(null);
 
 function firstCodeAddr(list: readonly Row[]): number | null {
@@ -104,10 +111,77 @@ function onSelect(addr: number, extend: boolean): void {
   }
 }
 
-function onFollow(target: number): void {
-  cursor.value = target;
-  selection.value = null;
-  listing.value?.scrollToAddr(target);
+/** A label opens in the Symbol tab and the cursor goes there (a step back can undo); a table name only fills the panel. */
+function showLabel(addr: number): void {
+  wb.symbolFocus.value = { kind: 'label', addr };
+  rightTab.value = 'symbol';
+  go(addr);
+}
+
+function showTable(entry: TableEntry): void {
+  wb.symbolFocus.value = { kind: 'table', entry };
+  rightTab.value = 'symbol';
+}
+
+function onFollow(target: number, info: FollowInfo): void {
+  if (info.span === 'table') {
+    const entry = entryOf(info.table, info.key);
+    if (entry !== undefined) showTable(entry);
+  } else showLabel(target);
+}
+
+/** Goes to an address in the listing, as a followed link: the cursor moves and the step is remembered. */
+function go(addr: number): void {
+  leftTab.value = 'listing';
+  nav.goTo(addr);
+}
+
+// The G box, an inline input above the listing.
+const goOpen = ref(false);
+const goText = ref('');
+const goError = ref<string | null>(null);
+const goInput = ref<HTMLInputElement | null>(null);
+
+function openGo(): void {
+  leftTab.value = 'listing';
+  goOpen.value = true;
+  goText.value = '';
+  goError.value = null;
+  void nextTick(() => goInput.value?.focus());
+}
+
+function closeGo(): void {
+  goOpen.value = false;
+  goError.value = null;
+}
+
+function submitGo(): void {
+  const s = session.value;
+  if (s === null) return;
+  const r = resolveGoTo(s.analysis, goText.value);
+  if (!r.ok) {
+    goError.value = r.reason;
+    return;
+  }
+  closeGo();
+  go(r.addr);
+  // A program label also fills the Symbol tab, as clicking it would.
+  if (s.analysis.symbols.has(r.addr)) wb.symbolFocus.value = { kind: 'label', addr: r.addr };
+}
+
+/** Every workbench key binding, by `keyId`. Editing keys (C, D, W, S, T, N, ;, undo, redo) join in Task 12. */
+const KEYS: Record<string, () => void> = {
+  g: openGo,
+  'alt+arrowleft': () => nav.back(),
+  'alt+arrowright': () => nav.forward(),
+};
+
+function onKeydown(e: KeyboardEvent): void {
+  if (session.value === null || isTyping(e.target) || e.defaultPrevented) return;
+  const action = KEYS[keyId(e)];
+  if (action === undefined) return;
+  e.preventDefault();
+  action();
 }
 
 const MODEL3 = { machine: 3, dos: 'trsdos' } as const;
@@ -153,6 +227,7 @@ declare global {
 
 onMounted(() => {
   document.addEventListener('drop', onDocumentDrop);
+  document.addEventListener('keydown', onKeydown);
   // Back from another page with a program still open: show it where it was.
   if (session.value !== null) showOpened();
   window.__fugloyTest = {
@@ -176,6 +251,7 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   document.removeEventListener('drop', onDocumentDrop);
+  document.removeEventListener('keydown', onKeydown);
   delete window.__fugloyTest;
 });
 </script>
@@ -190,6 +266,23 @@ onBeforeUnmount(() => {
         <template #left>
           <PageTabs v-model="leftTab" :tabs="LEFT_TABS" label="Left page" id-prefix="left" />
           <div id="left-panel-listing" v-show="leftTab === 'listing'" role="tabpanel" aria-labelledby="left-tab-listing" class="flex min-h-0 flex-1 flex-col">
+            <form v-if="goOpen" class="fg-goto" data-testid="goto-box" @submit.prevent="submitGo">
+              <label for="goto-input" class="fg-muted">Go to</label>
+              <input
+                id="goto-input"
+                ref="goInput"
+                v-model="goText"
+                class="fg-input fg-mono"
+                placeholder="$4B9E or a label"
+                autocomplete="off"
+                spellcheck="false"
+                data-testid="goto-input"
+                :aria-invalid="goError !== null"
+                aria-describedby="goto-error"
+                @keydown.esc.stop.prevent="closeGo"
+              />
+              <span id="goto-error" class="fg-goto-error" role="alert" data-testid="goto-error">{{ goError }}</span>
+            </form>
             <ListingView
               :key="wb.openCount.value"
               ref="listing"
@@ -209,10 +302,10 @@ onBeforeUnmount(() => {
         <template #right>
           <PageTabs v-model="rightTab" :tabs="RIGHT_TABS" label="Right page" id-prefix="right" />
           <div id="right-panel-symbol" v-show="rightTab === 'symbol'" role="tabpanel" aria-labelledby="right-tab-symbol" class="fg-panel">
-            <p class="fg-muted">Select a name in the listing to see what it is and where it is used.</p>
+            <SymbolTab @go="go" />
           </div>
           <div id="right-panel-index" v-show="rightTab === 'index'" role="tabpanel" aria-labelledby="right-tab-index" class="fg-panel">
-            <p class="fg-muted">Every label, routine, and table name, each a link into the listing.</p>
+            <IndexTab @label="showLabel" @table="showTable" @go="go" />
           </div>
           <div id="right-panel-program" v-show="rightTab === 'program'" role="tabpanel" aria-labelledby="right-tab-program" class="fg-panel" data-testid="program-panel">
             <template v-if="example !== null">
