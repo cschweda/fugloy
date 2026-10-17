@@ -6,7 +6,7 @@
       "name": "COMSTATUS",
       "kind": "region",
       "purpose": "communication interface status",
-      "cite": [{ "source": "l2-1979", "page": "D-2" }, { "source": "decker", "page": "62" }],
+      "cite": [{ "source": "l2-1979", "page": "D-2" }, { "source": "decker", "page": "63" }],
       "coined": true
     },
     {
@@ -14,7 +14,7 @@
       "name": "COMDATA",
       "kind": "region",
       "purpose": "communication interface data",
-      "cite": [{ "source": "l2-1979", "page": "D-2" }, { "source": "decker", "page": "62" }],
+      "cite": [{ "source": "l2-1979", "page": "D-2" }, { "source": "decker", "page": "63" }],
       "coined": true
     },
     {
@@ -22,7 +22,7 @@
       "name": "INTLATCH",
       "kind": "region",
       "purpose": "interrupt latch",
-      "cite": [{ "source": "l2-1979", "page": "D-2" }, { "source": "decker", "page": "62" }],
+      "cite": [{ "source": "l2-1979", "page": "D-2" }, { "source": "decker", "page": "63" }],
       "coined": true
     },
     {
@@ -30,7 +30,7 @@
       "name": "FDC_DRVSEL",
       "kind": "region",
       "purpose": "disk drive select latch",
-      "cite": [{ "source": "l2-1979", "page": "D-2" }, { "source": "decker", "page": "62" }],
+      "cite": [{ "source": "l2-1979", "page": "D-2" }, { "source": "decker", "page": "63" }],
       "coined": true
     },
     {
@@ -38,7 +38,7 @@
       "name": "CAS_SELECT",
       "kind": "region",
       "purpose": "cassette drive select latch",
-      "cite": [{ "source": "l2-1979", "page": "D-2" }, { "source": "decker", "page": "62" }],
+      "cite": [{ "source": "l2-1979", "page": "D-2" }, { "source": "decker", "page": "63" }],
       "coined": true
     },
     {
@@ -46,7 +46,7 @@
       "name": "PRINTER",
       "kind": "region",
       "purpose": "line printer: status (read), data (write)",
-      "cite": [{ "source": "l2-1979", "page": "D-2" }, { "source": "decker", "page": "63" }],
+      "cite": [{ "source": "l2-1979", "page": "D-2" }, { "source": "decker", "page": "63" }, { "source": "decker", "page": "64" }],
       "coined": true
     },
     {
@@ -54,7 +54,7 @@
       "name": "FDC_CMDSTAT",
       "kind": "region",
       "purpose": "disk controller status (read), command (write)",
-      "cite": [{ "source": "l2-1979", "page": "D-2" }, { "source": "decker", "page": "62" }],
+      "cite": [{ "source": "l2-1979", "page": "D-2" }, { "source": "decker", "page": "63" }],
       "coined": true
     },
     {
@@ -62,7 +62,7 @@
       "name": "FDC_TRACK",
       "kind": "region",
       "purpose": "disk controller track register",
-      "cite": [{ "source": "decker", "page": "62" }, { "source": "paay", "page": "24" }],
+      "cite": [{ "source": "decker", "page": "63" }, { "source": "paay", "page": "24" }],
       "coined": true
     },
     {
@@ -70,7 +70,7 @@
       "name": "FDC_SECTOR",
       "kind": "region",
       "purpose": "disk controller sector register",
-      "cite": [{ "source": "decker", "page": "62" }, { "source": "paay", "page": "24" }],
+      "cite": [{ "source": "decker", "page": "63" }, { "source": "paay", "page": "24" }],
       "coined": true
     },
     {
@@ -78,7 +78,7 @@
       "name": "FDC_DATA",
       "kind": "region",
       "purpose": "disk controller data register",
-      "cite": [{ "source": "decker", "page": "62" }, { "source": "paay", "page": "24" }],
+      "cite": [{ "source": "decker", "page": "63" }, { "source": "paay", "page": "24" }],
       "coined": true
     },
     {

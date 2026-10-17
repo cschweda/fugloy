@@ -97,7 +97,7 @@ describe('the hardware tables', () => {
     expect(memory(model3)).toEqual([[0x37e8, 'PRTSTATUS', 2], [0x3800, 'KEYBOARD', 1024], [0x3c00, 'VIDEO', 1024]]);
   });
 
-  it('enters the Model I memory-mapped devices (Level II manual D-2, Decker 62) and the one port, FF', () => {
+  it('enters the Model I memory-mapped devices (Level II manual D-2, Decker 63) and the one port, FF', () => {
     expect(memory(model1)).toEqual([
       [0x37de, 'COMSTATUS', 1], [0x37df, 'COMDATA', 1], [0x37e0, 'INTLATCH', 1], [0x37e1, 'FDC_DRVSEL', 1], [0x37e4, 'CAS_SELECT', 1], [0x37e8, 'PRINTER', 1],
       [0x37ec, 'FDC_CMDSTAT', 1], [0x37ed, 'FDC_TRACK', 1], [0x37ee, 'FDC_SECTOR', 1], [0x37ef, 'FDC_DATA', 1], [0x3800, 'KEYBOARD', 256], [0x3c00, 'VIDEO', 1024],
@@ -110,6 +110,15 @@ describe('the hardware tables', () => {
     for (const e of model1) expect(e.cite.some((c) => ['m1-trh', 'l2-1979', 'decker'].includes(c.source)), e.name).toBe(true);
     // What the handbook itself documents: the keyboard and video maps and port FF.
     for (const name of ['KEYBOARD', 'VIDEO', 'CASSETTE']) expect(named(model1, name)?.cite.some((c) => c.source === 'm1-trh'), name).toBe(true);
+  });
+
+  // Decker's "Page N" line closes page N: its contents puts chapter 5 at p. 63, and the chapter heading sits after the "Page 62" line. Its own address
+  // index lists 37DE-37EF, 3800, 3BFF, and 3C00 under p. 63, and 37E8 and 37EC also under p. 64. Each purpose comes from the table on p. 63, except the
+  // printer's read-status and write-data behavior, which is p. 64 prose.
+  it('cites Decker on the printed page its address index gives: 63 for the device table, and 64 as well for the printer prose', () => {
+    const pages = (name: string): string[] => (named(model1, name)?.cite ?? []).filter((c) => c.source === 'decker').map((c) => c.page);
+    for (const name of ['COMSTATUS', 'COMDATA', 'INTLATCH', 'FDC_DRVSEL', 'CAS_SELECT', 'FDC_CMDSTAT', 'FDC_TRACK', 'FDC_SECTOR', 'FDC_DATA']) expect(pages(name), name).toEqual(['63']);
+    expect(pages('PRINTER')).toEqual(['63', '64']);
   });
 
   it('coins every hardware name, since the manuals name signals, not symbols', () => {
