@@ -21,6 +21,7 @@ declare global {
       scrollToAddr: (addr: number) => void;
       setCursor: (addr: number | null) => void;
       rerender: (kind: 'tables' | 'names') => void;
+      load: (bytes: number[], name: string, hints?: string) => void;
     };
   }
 }
@@ -28,6 +29,8 @@ declare global {
 interface Case {
   name: string;
   url: string;
+  /** A program the test reads itself and hands to the open demo (the page fetches nothing but its bundled examples). */
+  input?: () => { bytes: number[]; name: string; hints: string };
   /** Addresses to jump to: row starts and addresses inside rows. */
   jumps: number[];
   available: boolean;
@@ -37,24 +40,28 @@ const spread = (from: number, to: number, n: number): number[] => Array.from({ l
 
 const CASES: Case[] = [
   { name: 'raw 48K load of seadrg01', url: '/?demo=raw48', jumps: spread(0x4000, 0xffff, 12), available: true },
-  { name: 'asylum16 with its hints', url: '/?file=/__local/asylum16.cmd&hints=/__local/asylum16.hints', jumps: spread(0x42f3, 0x7ff6, 12), available: existsSync(ASYLUM) && existsSync(ASYLUM_HINTS) },
+  {
+    name: 'asylum16 with its hints',
+    url: '/?demo=seadrg01',
+    input: () => ({ bytes: Array.from(readFileSync(ASYLUM)), name: 'asylum16.cmd', hints: readFileSync(ASYLUM_HINTS, 'utf8') }),
+    jumps: spread(0x42f3, 0x7ff6, 12),
+    available: existsSync(ASYLUM) && existsSync(ASYLUM_HINTS),
+  },
 ];
 
-async function openDemo(page: Page, url: string): Promise<number> {
+async function openDemo(page: Page, c: Case): Promise<number> {
   await page.addInitScript(() => {
     window.__longTasks = [];
     new PerformanceObserver((list) => {
       for (const e of list.getEntries()) window.__longTasks.push(e.duration);
     }).observe({ type: 'longtask', buffered: true });
   });
-  // Match on the path: the page's own URL carries /__local/ in its query.
-  await page.route((url) => url.pathname.startsWith('/__local/'), (route) => {
-    const name = new URL(route.request().url()).pathname.split('/').pop();
-    const path = name === 'asylum16.cmd' ? ASYLUM : name === 'asylum16.hints' ? ASYLUM_HINTS : null;
-    return path === null ? route.fulfill({ status: 404 }) : route.fulfill({ status: 200, body: readFileSync(path) });
-  });
-  await page.goto(url);
+  await page.goto(c.url);
   await page.waitForFunction(() => window.__fugloyDemo !== undefined, undefined, { timeout: 30_000 });
+  if (c.input !== undefined) {
+    await page.evaluate(({ bytes, name, hints }) => window.__fugloyDemo!.load(bytes, name, hints), c.input());
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  }
   return page.evaluate(() => window.__fugloyDemo!.rowCount());
 }
 
@@ -97,7 +104,7 @@ for (const c of CASES) {
       // FUGLOY_CPU_THROTTLE=4 runs the same check on a CPU slowed fourfold (Chromium's DevTools throttling).
       const throttle = Number(process.env.FUGLOY_CPU_THROTTLE ?? 1);
       if (throttle > 1) await (await page.context().newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: throttle });
-      const count = await openDemo(page, c.url);
+      const count = await openDemo(page, c);
       expect(count).toBeGreaterThan(c.name.startsWith('raw') ? 8000 : 1000);
       const listing = page.locator('.fg-listing');
       await listing.hover();

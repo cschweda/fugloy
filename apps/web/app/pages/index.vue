@@ -2,20 +2,21 @@
 // Temporary: a way to view the listing until Task 9 builds the first screen.
 //   /?demo=seadrg01         a bundled example, with its hints when it has them
 //   /?demo=raw48            seadrg01's loaded image repeated over 48K, loaded raw at $4000 (over 8,000 rows)
-//   /?file=/x.cmd&hints=/x.hints   any same-origin file (the perf check serves local samples this way)
 //   &at=499F                 put the cursor there and scroll to it (default: the first instruction)
-// With a demo open, window.__fugloyDemo drives it for the Playwright perf check.
+// Only the fixed EXAMPLES below are fetched; nothing in the URL names a path. With a
+// demo open, window.__fugloyDemo drives it for the Playwright perf check, which hands
+// its own inputs (a local sample) to `load` rather than through the URL.
 import { computed, nextTick, onMounted, ref, shallowRef } from 'vue';
 import { listingRows, basRows, openProgram, selectSymbols, withHintFile, withHintText, withSelection, addressKey } from '@fugloy/disasm';
 import type { Row, Session, SymbolSelection } from '@fugloy/disasm';
 import ListingView from '~/components/listing/ListingView.vue';
 
-const EXAMPLES: Record<string, string> = {
-  seadrg01: 'sea-dragon/seadrg01.cmd',
-  seadrg02: 'sea-dragon/seadrg02.cmd',
-  reargrd1: 'rear-guard/reargrd1.cmd',
-  elimin8a: 'eliminator/elimin8a.cmd',
-  armour: 'armored-patrol/ARMOUR.III',
+const EXAMPLES: Record<string, { file: string; hints?: string }> = {
+  seadrg01: { file: 'sea-dragon/seadrg01.cmd', hints: 'sea-dragon/seadrg01.hints' },
+  seadrg02: { file: 'sea-dragon/seadrg02.cmd' },
+  reargrd1: { file: 'rear-guard/reargrd1.cmd' },
+  elimin8a: { file: 'eliminator/elimin8a.cmd' },
+  armour: { file: 'armored-patrol/ARMOUR.III' },
 };
 const MODEL3: SymbolSelection = { machine: 3, dos: 'trsdos' };
 const route = useRoute();
@@ -55,9 +56,8 @@ async function open(): Promise<void> {
     return typeof v === 'string' ? v : null;
   };
   const demo = param('demo');
-  const file = param('file');
   if (demo === 'raw48') {
-    const bytes = await fetchBytes(`/examples/${EXAMPLES.seadrg01}`);
+    const bytes = await fetchBytes(`/examples/${EXAMPLES.seadrg01!.file}`);
     if (bytes === null) return;
     const image = openProgram(bytes).module.image;
     const loaded = image.runs().flatMap((r) => Array.from(image.bytes.subarray(r.start, r.end + 1)));
@@ -66,19 +66,27 @@ async function open(): Promise<void> {
     show(openProgram(raw, { name: 'seadrg01 x 48K (raw)', base: 0x4000, selection: MODEL3 }));
     return;
   }
-  const path = demo !== null && EXAMPLES[demo] !== undefined ? `/examples/${EXAMPLES[demo]}` : file !== null && file.startsWith('/') ? file : null;
-  if (path === null) return;
-  const bytes = await fetchBytes(path);
+  const example = demo === null || !Object.hasOwn(EXAMPLES, demo) ? undefined : EXAMPLES[demo];
+  if (example === undefined) return;
+  const bytes = await fetchBytes(`/examples/${example.file}`);
   if (bytes === null) {
-    status.value = `could not load ${path}`;
+    status.value = `could not load ${example.file}`;
     return;
   }
-  let s = openProgram(bytes, { name: path.split('/').pop(), selection: MODEL3 });
-  const hintsPath = demo !== null ? path.replace(/\.[^.]+$/, '.hints') : param('hints');
-  if (hintsPath !== null && hintsPath.startsWith('/')) {
-    const res = await fetch(hintsPath);
-    if (res.ok) s = withHintText(s, await res.text(), hintsPath.split('/').pop());
+  let hints: string | undefined;
+  if (example.hints !== undefined) {
+    const res = await fetch(`/examples/${example.hints}`);
+    if (res.ok) hints = await res.text();
   }
+  load(bytes, example.file.split('/').pop()!, hints);
+}
+
+/** Open bytes (and hint text) the page was handed: a fixed example, or the perf check's own input. */
+function load(bytes: Uint8Array, name: string, hints?: string): void {
+  let s = openProgram(bytes, { name, selection: MODEL3 });
+  if (hints !== undefined) s = withHintText(s, hints, name.replace(/\.[^.]+$/, '.hints'));
+  cursor.value = null;
+  selection.value = null;
   show(s);
 }
 
@@ -129,6 +137,7 @@ declare global {
       scrollToAddr: (addr: number) => void;
       setCursor: (addr: number | null) => void;
       rerender: (kind: 'tables' | 'names') => void;
+      load: (bytes: number[], name: string, hints?: string) => void;
     };
   }
 }
@@ -154,6 +163,7 @@ onMounted(async () => {
       cursor.value = addr;
     },
     rerender,
+    load: (bytes, name, hints) => load(Uint8Array.from(bytes), name, hints),
   };
 });
 </script>
