@@ -67,6 +67,13 @@ describe('fill', () => {
     expect(explainLine(raw([0x21, 0x00, 0x3c, 0x36, 0x20, 0x54, 0x5d, 0x13, 0x01, 0xff, 0x03, 0xed, 0xb0, 0xc9]), 0x7003).pattern?.name).toBe('fill');
   });
 
+  it('LD (HL),A spans from the line that set A', () => {
+    // LD A,20H / LD HL,3C00H / LD (HL),A / LD D,H / LD E,L / INC DE / LD BC,03FFH / LDIR / RET
+    const e = explainLine(raw([0x3e, 0x20, 0x21, 0x00, 0x3c, 0x77, 0x54, 0x5d, 0x13, 0x01, 0xff, 0x03, 0xed, 0xb0, 0xc9]), 0x700c);
+    expect(e.pattern).toMatchObject({ name: 'fill', from: 0x7000, to: 0x700c });
+    expect(pat(e)[1]).toBe('This clears the screen.');
+  });
+
   it('LD DE,nn proven to be HL+1 counts too; two rows of the screen', () => {
     // LD HL,3C40H / LD (HL),20H / LD DE,3C41H / LD BC,007FH / LDIR / RET
     const e = explainLine(raw([0x21, 0x40, 0x3c, 0x36, 0x20, 0x11, 0x41, 0x3c, 0x01, 0x7f, 0x00, 0xed, 0xb0, 0xc9]), 0x700b);
@@ -127,6 +134,24 @@ describe('wait', () => {
     expect(e.pattern?.name).toBe('wait');
     // 16 passes of 13, less the 5 the last DJNZ does not take.
     expect(pat(e)).toEqual(['A delay loop: it does nothing but count B down from $10 (16) to zero, which takes 203 T-states.']);
+  });
+
+  it('DEC BC / LD A,B / DEC C / JR NZ states no count and is not called a delay', () => {
+    // LD BC,1000H / L: DEC BC / LD A,B / DEC C / JR NZ,L / RET: the jump tests C after its own DEC, not BC.
+    const e = explainLine(raw([0x01, 0x00, 0x10, 0x0b, 0x78, 0x0d, 0x20, 0xfb, 0xc9]), 0x7006);
+    expect(e.pattern?.name).toBe('wait');
+    expect(pat(e).join(' ')).not.toMatch(/\$|[0-9]|T-states/);
+  });
+
+  it('DEC BC / LD A,C / DEC B / JR NZ states no count', () => {
+    const e = explainLine(raw([0x01, 0x00, 0x10, 0x0b, 0x79, 0x05, 0x20, 0xfb, 0xc9]), 0x7006);
+    expect(pat(e).join(' ')).not.toMatch(/\$|[0-9]|T-states/);
+  });
+
+  it('a body whose jump tests flags from before the loop is not called a delay', () => {
+    // LD BC,1000H / L: DEC BC / LD A,B / JR NZ,L / RET: nothing in the body sets Z.
+    const e = explainLine(raw([0x01, 0x00, 0x10, 0x0b, 0x78, 0x20, 0xfc, 0xc9]), 0x7005);
+    expect(pat(e)).toEqual(['A loop that only counts and tests registers, writing no memory and using no ports.']);
   });
 
   it('a loop that writes memory is not a delay', () => {

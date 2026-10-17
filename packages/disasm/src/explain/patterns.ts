@@ -170,6 +170,8 @@ function fill(c: Ctx, at: number): Pattern | undefined {
     else sentences.push(say(r.whole ? `This fills the screen with ${byte$(value)}.` : r.aligned ? `This fills ${r.rows} of the screen with ${byte$(value)}.` : `This fills part of the screen, ${r.rows}, with ${byte$(value)}.`));
   }
   const regsSet: Reg8Name[] = [...(hl === null ? [] : (['H', 'L'] as const)), ...(bc === null ? [] : (['B', 'C'] as const))];
+  // The line that set the register LD (HL),r stores belongs to the fill too.
+  if (src?.kind === 'reg' && value !== null) regsSet.push(src.reg as Reg8Name);
   return { name: 'fill', from: Math.min(store.at, setupStart(c, at, regsSet)), to: at, sentences };
 }
 
@@ -220,11 +222,43 @@ function counterOf(body: Instruction[]): string | null {
   if (body.length !== 3 || reg?.kind !== 'reg16') return null;
   const halves = COUNTERS[reg.reg];
   if (halves === undefined || ld === undefined || or === undefined) return null;
+  // LD A,x / OR y: A gets x, then OR tests x | y.
+  if (ld.mnemonic !== 'LD' || !isReg(ld.operands[0], 'A') || or.mnemonic !== 'OR' || or.operands.length !== 1) return null;
   const x = ld.operands[1];
   const y = or.operands[0];
   if (x?.kind !== 'reg' || y?.kind !== 'reg') return null;
   const ok = (x.reg === halves[0] && y.reg === halves[1]) || (x.reg === halves[1] && y.reg === halves[0]);
   return ok ? reg.reg : null;
+}
+
+/** The index of the last item matching `f`, or -1 (Array.prototype.findLastIndex is ES2023, past the target). */
+function lastIndex<T>(xs: readonly T[], f: (x: T) => boolean): number {
+  for (let i = xs.length - 1; i >= 0; i--) if (f(xs[i]!)) return i;
+  return -1;
+}
+
+/**
+ * True when the flags the loop's jump tests come from a register the body
+ * counts down: the last flag-setter is `DEC r`, or `OR y` after `LD A,x` where
+ * x and y are the halves of a pair the body decrements with `DEC rr` and
+ * nothing else in the body changes x or y.
+ */
+function testsCounter(body: Instruction[]): boolean {
+  const setter = lastIndex(body, (b) => b.mnemonic === 'OR' || (b.mnemonic === 'DEC' && b.operands[0]?.kind === 'reg'));
+  if (setter < 0) return false;
+  const last = body[setter]!;
+  if (last.mnemonic === 'DEC') return true;
+  const y = last.operands[0];
+  const ldAt = lastIndex(body.slice(0, setter), (b) => b.mnemonic === 'LD');
+  const x = ldAt < 0 ? undefined : body[ldAt]!.operands[1];
+  if (x?.kind !== 'reg' || y?.kind !== 'reg') return false;
+  for (const [p, halves] of Object.entries(COUNTERS)) {
+    const pairOk = (x.reg === halves[0] && y.reg === halves[1]) || (x.reg === halves[1] && y.reg === halves[0]);
+    if (!pairOk || !body.some((b) => b.mnemonic === 'DEC' && isReg(b.operands[0], p))) continue;
+    const other = body.some((b) => b.mnemonic === 'DEC' && b.operands[0]?.kind === 'reg' && halves.includes(b.operands[0].reg));
+    if (!other) return true;
+  }
+  return false;
 }
 
 /** True for the instructions a delay body is made of: DEC of a register, LD A,r and OR r. */
@@ -270,7 +304,10 @@ function wait(c: Ctx, at: number, ins: Instruction): Pattern | undefined {
   const counter = ins.mnemonic === 'DJNZ' ? 'B' : counterOf(body);
   const span = { name: 'wait', from: head, to: at };
   if (counter === null) {
-    return { ...span, sentences: [say('A delay loop: it only counts down and tests, writing no memory and using no ports, so all it does is spend time.')] };
+    const text = testsCounter(body)
+      ? 'A delay loop: it only counts down and tests, writing no memory and using no ports, so all it does is spend time.'
+      : 'A loop that only counts and tests registers, writing no memory and using no ports.';
+    return { ...span, sentences: [say(text)] };
   }
   const wide = counter.length === 2;
   const entry: RegState | null = loopEntry(a, head, at);
