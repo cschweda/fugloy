@@ -58,8 +58,8 @@ confirmed as out of scope for phase 4.)
 - No assembler, no editable source, no reassembly in the browser. Round-trip
   proof stays in the test suite via zmac.
 - No `.DSK` export (needs a DOS on the disk; the user chose `.CMD` and `.CAS`).
-- No machine detector. The plan's "detected machine" becomes "selected
-  machine" (see "Machine and DOS").
+- No guessing heuristic for the machine. The Program tab's machine verdict
+  comes only from cited table evidence (see "Machine and DOS").
 - No phone layout. Desktop first; mobile is a later phase. The site must not
   break on a narrow screen (it can show a "best on desktop" notice and one
   page at a time), but nothing is designed for touch.
@@ -131,10 +131,37 @@ C: listing only).
     readers).
   - *Index:* every label, routine, table name, and proposal, filterable,
     each a link into the listing.
-  - *Program:* format, blocks, entry and roots, selected machine, coverage
-    (bytes decoded as code), relocations, the CLI header's diagnostics, and
-    the heuristic **proposals** (proposed tables, movers) with a one-click
-    "apply" that adds the proposal's hint line.
+  - *Program:* a **spec sheet** for the program, educational and historical
+    in tone (the user approved a mockup of it on Sea Dragon). Sections:
+    - **History** (bundled examples only): title, authors, publisher, year,
+      rights (for example "public domain 1995"). A dropped file shows its
+      `.CMD` name record if it has one.
+    - **Machine:** runs on Model I, Model III, or both, with the evidence in
+      plain words. For example: "Writes port `$EC` (MODEPORT), which only the
+      Model III has. Its one ROM call, `$0060` $DELAY, exists on both, but
+      the code differs between the two ROMs." Built from phase 3's data: the
+      ROM comparison (shared / different / Model I only / Model III only)
+      and the per-machine hardware tables. "Unknown" is a valid answer.
+    - **Loading:** format and record count, name record, load range and
+      size, entry and how it was found (transfer address, hint, mined),
+      relocations in words ("a 15-byte stub copies the game down to `$497F`
+      and jumps there"), and the memory needed (16K / 32K / 48K from the
+      highest address used). A 64K memory-map strip shows ROM, keyboard and
+      video, and the program's ranges.
+    - **Talks to:** the hardware, ROM calls, and DOS calls it uses, each a
+      link to the Symbol tab. "No DOS calls: needs no DOS once loaded" when
+      that is so.
+    - **Code:** bytes decoded as code, routine count, and other facts the
+      analysis already has. The builder picks which ones. Each must be
+      computed, not estimated.
+    - **Analysis:** the CLI header's diagnostics and the heuristic
+      **proposals** (proposed tables, movers), with a one-click "apply" that
+      adds the proposal's hint line.
+
+    The spec-sheet facts are computed in `@fugloy/disasm` (a function from an
+    analysis to a plain object), not in the UI, so the CLI could print them
+    later and the tests can check them on the examples. The Sea Dragon facts
+    above are the test.
 - **Status line:** size and blocks, percent decoded as code, entry, and the
   save state of the hints ("saved", "unsaved", "no hints yet").
 - The divider between the pages can be dragged.
@@ -150,6 +177,10 @@ Dragon, Rear Guard, Eliminator, Armored Patrol. One click loads the game and
 shows its listing with the right page populated.
 
 My calls:
+- The examples are described by a small manifest in `apps/web` (game, builds,
+  main build, machine, the history fields, the README's rights quote and
+  source link), copied from the example READMEs. The `.CMD` files are served
+  from `examples/` at build time, not duplicated in git.
 - Each game gets one button, opening a chosen build: `seadrg01.cmd` with its
   committed `seadrg01.hints`, and for the others the build their README
   presents as the main one. A small menu on the button lists the other
@@ -216,12 +247,18 @@ edits then save over them locally.
 
 ### Machine and DOS
 
-There is no machine detector, and building one would be new disassembler
-scope. So (my call): the pickers default to Model III and its default DOS,
-as the CLI does. Each bundled example opens with the machine its README
-gives. The choice is remembered per program in IndexedDB, as a workbench
+The spec sheet's machine verdict (above) is evidence from the cited tables,
+not a guessing heuristic. My calls: when a program is first opened, the
+picker is set to the verdict if it names exactly one machine, otherwise
+to Model III and its default DOS, as the CLI does. Each bundled example opens
+with the machine its manifest gives. The verdict never overrides the picker.
+The picker's choice is remembered per program in IndexedDB, as a workbench
 preference beside the hints. It is not a hint directive, because it changes
 names, not analysis. The status line shows the selected machine and DOS.
+
+A program opened as one machine can still be looked at as the other. The
+verdict is computed from what the program touches, which is the same under
+either picker setting.
 
 ### Export
 
@@ -361,8 +398,9 @@ Not built now, but phase 4 must not block it:
 - Plan, "Hint file": add the address-keyed name/comment directive. Reword
   "Identity" to block-paired application, refusing only when nothing
   matches.
-- Plan, "Web app": "detected machine" becomes "selected machine". Add the
-  `.CMD` and `.CAS` exports to step 5.
+- Plan, "Web app": the header's "detected machine" becomes the spec sheet's
+  evidence-based machine verdict. Add the spec sheet to the side panel and
+  the `.CMD` and `.CAS` exports to step 5.
 - Plan, "Stack": `apps/web` confirmed. `CLAUDE.md`: drop the "settle the name
   before phase 4" note.
 - `CLAUDE.md` "Current phase" updated as phase 4 progresses.
