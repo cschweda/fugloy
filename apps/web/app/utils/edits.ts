@@ -138,7 +138,7 @@ export function applyEdit(s: Session, e: Edit): EditResult {
     if ('error' in key) return key;
     if ('at' in key) return { error: 'notes describe loaded code' };
     // One note per line: tabs become spaces; blank lines inside stay, blank lines at the end go.
-    const lines = e.lines.map((l) => l.replace(/\s+/g, ' ').trim());
+    const lines = e.lines.map((l) => l.replace(/\t/g, ' ').trim());
     while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
     const kept = remove(blocks.file, 'note', key);
     const notes: Hint[] = lines.map((text) => ({ block: key.block, offset: key.offset, line: 0, directive: 'note', text }));

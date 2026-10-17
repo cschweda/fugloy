@@ -2,13 +2,16 @@
 // The Block comment box (`:` or Use as comment): a multi-line field for the
 // prose printed above an address, opened under the cursor row. Ctrl+Enter or
 // Save applies, Esc cancels; a refused edit keeps the box open with the
-// reason. When the cursor is inside a routine, a choice puts the comment above
+// reason. Focus leaving does not cancel (Safari gives a clicked button no
+// focus, so a blur would close the box before Save lands). When the cursor is inside a routine, a choice puts the comment above
 // the routine or above the line.
 import { nextTick, onMounted, ref } from 'vue';
 
 const props = defineProps<{
   title: string;
   error: string | null;
+  /** Lines already above the address that Use as comment keeps. */
+  keeps?: number;
   /** The routine the cursor is in, when the comment can go above it; null when there is no choice. */
   routine: { start: number; name: string } | null;
   /** Where the cursor row is on screen. */
@@ -23,12 +26,6 @@ const form = ref<HTMLFormElement | null>(null);
 const area = ref<HTMLTextAreaElement | null>(null);
 const x = ref(props.left);
 const y = ref(props.top);
-
-/** Focus leaving the box altogether cancels it. */
-function onFocusOut(e: FocusEvent): void {
-  if (e.relatedTarget instanceof Node && form.value?.contains(e.relatedTarget) === true) return;
-  emit('cancel');
-}
 
 onMounted(async () => {
   await nextTick();
@@ -52,7 +49,6 @@ onMounted(async () => {
     @keydown.esc.stop.prevent="emit('cancel')"
     @keydown.ctrl.enter.prevent="emit('submit')"
     @keydown.meta.enter.prevent="emit('submit')"
-    @focusout="onFocusOut"
   >
     <span id="notes-edit-title" class="fg-muted">{{ title }}</span>
     <fieldset v-if="routine !== null" class="fg-notes-scope">
@@ -72,6 +68,7 @@ onMounted(async () => {
       :aria-invalid="error !== null"
       aria-describedby="notes-edit-error"
     />
+    <span v-if="keeps" class="fg-muted" data-testid="notes-edit-keeps">Keeps the {{ keeps }} existing {{ keeps === 1 ? 'line' : 'lines' }} above.</span>
     <span id="notes-edit-error" class="fg-inline-error" role="alert" data-testid="notes-edit-error">{{ error }}</span>
     <div class="fg-notes-actions">
       <button type="submit" class="fg-button fg-button-primary" data-testid="notes-edit-save">Save</button>

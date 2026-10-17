@@ -569,6 +569,7 @@ onBeforeUnmount(() => {
       :title="notes.title"
       :routine="notes.routine"
       :error="notes.error"
+      :keeps="notes.keeps"
       :left="notes.left"
       :top="notes.top"
       @submit="editor.submitNotes"

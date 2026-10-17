@@ -40,6 +40,10 @@ export interface Notes {
   scope: 'routine' | 'line';
   title: string;
   text: string;
+  /** What the field started with, so a scope switch can tell an edited draft from the prefill. */
+  prefill: string;
+  /** Existing lines Use as comment kept above the summary. */
+  keeps: number;
   error: string | null;
   left: number;
   top: number;
@@ -186,14 +190,17 @@ export function useListingEditor(opts: {
     if (place === null) return;
     const where = { left: place.left, top: place.bottom + 2, error: null };
     if (use !== undefined) {
-      notes.value = { ...where, line: use.start, routine: null, scope: 'line', title: `Block comment above the routine ${use.name}`, text: use.text };
+      // Notes already there stay first; Save keeps them unless they are deleted.
+      const kept = s.analysis.annotations.notes.get(use.start) ?? [];
+      const text = kept.length === 0 ? use.text : `${kept.join('\n')}\n\n${use.text}`;
+      notes.value = { ...where, line: use.start, routine: null, scope: 'line', title: `Block comment above the routine ${use.name}`, text, prefill: text, keeps: kept.length };
       return;
     }
     const r = summarizeRoutine(s, at);
     const routine = r !== null && r.start !== at ? { start: r.start, name: r.name } : null;
     const scope = routine === null ? 'line' : 'routine';
     const addr = routine === null ? at : routine.start;
-    notes.value = { ...where, line: at, routine, scope, title: `Block comment above ${$a(addr)}`, text: notesText(addr) };
+    notes.value = { ...where, line: at, routine, scope, title: `Block comment above ${$a(addr)}`, text: notesText(addr), prefill: notesText(addr), keeps: 0 };
   }
 
   const notesValue = computed({
@@ -210,7 +217,9 @@ export function useListingEditor(opts: {
       if (n === null) return;
       const next = { ...n, scope, error: null };
       const addr = notesAddr(next);
-      notes.value = { ...next, title: `Block comment above ${$a(addr)}`, text: notesText(addr) };
+      // A draft the user has edited stays; only an untouched prefill is swapped for the other address's notes.
+      const untouched = n.text === n.prefill;
+      notes.value = { ...next, title: `Block comment above ${$a(addr)}`, text: untouched ? notesText(addr) : n.text, prefill: notesText(addr) };
     },
   });
 

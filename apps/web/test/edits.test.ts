@@ -76,6 +76,21 @@ describe('applyEdit', () => {
     expect(writeHints(edited(s2, { op: 'notes', addr: 0x4b9e, lines: [] }).hintFile)).toBe(writeHints(s0.hintFile));
   });
 
+  it('notes: keeps internal spacing, and leaves other hints at the key and notes at other keys alone', () => {
+    let s = seaDragon();
+    s = edited(s, { op: 'comment', addr: 0x4b9e, text: 'a comment' });
+    s = edited(s, { op: 'name', addr: 0x4b9e, name: 'INIT' });
+    s = edited(s, { op: 'mark', from: 0x4b9e, to: 0x4b9e, as: 'code' });
+    s = edited(s, { op: 'notes', addr: 0x497f, lines: ['other'] });
+    const before = writeHints(s.hintFile).split('\n').filter((l) => l !== '');
+    s = edited(s, { op: 'notes', addr: 0x4b9e, lines: ['a  b\tc'] });
+    expect(s.analysis.annotations.notes.get(0x4b9e)).toEqual(['a  b c']);
+    const after = writeHints(s.hintFile);
+    for (const l of before) expect(after).toContain(l);
+    expect(s.analysis.annotations.notes.get(0x497f)).toEqual(['other']);
+    expect(s.analysis.annotations.comments.get(0x4b9e)).toBe('a comment');
+  });
+
   it('notes: refuses an address the program does not load', () => {
     expect(errorOf(seaDragon(), { op: 'notes', addr: 0x9000, lines: ['x'] })).toBe('notes describe loaded code');
   });
