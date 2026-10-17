@@ -1077,11 +1077,13 @@ describe('buildSymbolOutputs on an edited copy of the data', () => {
   afterAll(() => {
     for (const dir of copies) rmSync(dir, { recursive: true, force: true });
   });
-  /** Builds from a fresh copy of the data after `edit` has changed it. */
+  /** Builds from a fresh copy of the data (data/symbols, with data/manuals beside it) after `edit` has changed the symbols copy. */
   const buildWith = (edit: (dir: string) => void) => {
-    const dir = mkdtempSync(join(tmpdir(), 'fugloy-symbols-'));
-    copies.push(dir);
+    const root = mkdtempSync(join(tmpdir(), 'fugloy-symbols-'));
+    copies.push(root);
+    const dir = join(root, 'symbols');
     cpSync(dataDir, dir, { recursive: true });
+    cpSync(fileURLToPath(new URL('../../data/manuals/', import.meta.url)), join(root, 'manuals'), { recursive: true });
     edit(dir);
     return buildSymbolOutputs(dir);
   };

@@ -7,7 +7,7 @@
 import { hex4 } from '@fugloy/z80';
 import { RESERVED, SYNTH_NAME } from '../hints/format.js';
 import { ENTRY_KINDS, SELECTIONS, TABLE_IDS } from './types.js';
-import type { Cite, EntryKind, Source, TableEntry, TableId } from './types.js';
+import type { Cite, EntryKind, ManualScan, Source, TableEntry, TableId } from './types.js';
 
 type Json = Record<string, unknown>;
 
@@ -350,4 +350,52 @@ export function validateTables(
 
   errors.push(...repeatedNumbers(tables, labels), ...crossChecks(tables, labels));
   return { tables, sources: registry.sources, errors };
+}
+
+const MANUAL_FIELDS = new Set(['source', 'archiveId', 'pdfSha256', 'pdfPages', 'pages']);
+
+/**
+ * Validates the parsed manual page tables, one per source with an archiveId
+ * (`file` is how errors name it, `source` the id it is named for), and returns
+ * the ones that pass with every error found. A manual with any error is left
+ * out.
+ */
+export function validateManuals(
+  files: readonly { source: string; file: string; json: unknown }[],
+  sources: readonly Source[],
+): { manuals: ManualScan[]; errors: string[] } {
+  const errors: string[] = [];
+  const manuals: ManualScan[] = [];
+  for (const { source, file, json } of files) {
+    const before = errors.length;
+    const fail = (message: string): void => {
+      errors.push(`${file}: ${message}`);
+    };
+    if (!isObject(json)) {
+      fail('expected an object with "source", "archiveId", "pdfSha256", "pdfPages", and "pages"');
+      continue;
+    }
+    for (const field of Object.keys(json)) if (!MANUAL_FIELDS.has(field)) fail(`unknown field "${field}"`);
+    const registered = sources.find((s) => s.id === source);
+    if (json.source !== source) fail(`source ${show(json.source)} is not ${source}, the source this file is named for`);
+    if (registered?.archiveId === undefined) fail(`${source} has no archiveId in sources.json`);
+    else if (json.archiveId !== registered.archiveId) fail(`archiveId ${show(json.archiveId)} is not ${source}'s archiveId "${registered.archiveId}"`);
+    const shas = json.pdfSha256;
+    if (!Array.isArray(shas) || shas.length === 0) fail('pdfSha256 must list at least one hash');
+    else for (const sha of shas) if (typeof sha !== 'string' || !/^[0-9a-f]{64}$/.test(sha)) fail(`pdfSha256 ${show(sha)} is not 64 lowercase hex digits`);
+    const pdfPages = json.pdfPages;
+    const countOk = typeof pdfPages === 'number' && Number.isInteger(pdfPages) && pdfPages > 0;
+    if (!countOk) fail(`pdfPages ${show(pdfPages)} is not a positive whole number`);
+    const pages = json.pages;
+    if (!isObject(pages)) fail('pages must be an object of printed page to PDF page');
+    else if (countOk) {
+      for (const [printed, pdf] of Object.entries(pages)) {
+        if (!isText(printed)) fail(`page ${show(printed)} is empty`);
+        if (typeof pdf !== 'number' || !Number.isInteger(pdf) || pdf < 1 || pdf > pdfPages) fail(`page "${printed}" maps to ${show(pdf)}, outside the PDF's 1..${pdfPages}`);
+      }
+    }
+    if (errors.length > before) continue;
+    manuals.push({ source, archiveId: json.archiveId as string, pdfSha256: [...(shas as string[])], pdfPages: pdfPages as number, pages: { ...(pages as Record<string, number>) } });
+  }
+  return { manuals, errors };
 }

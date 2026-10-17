@@ -68,6 +68,24 @@ export interface Source {
   redistributable?: boolean;
 }
 
+/**
+ * Where each cited page of a source sits in its archive.org scan, from
+ * data/manuals/<source>.json. Scans open with covers and blanks, so printed
+ * page N is rarely PDF page N; each mapping was read off the page itself.
+ */
+export interface ManualScan {
+  /** The source's id in sources.json. */
+  source: string;
+  /** The archive.org item the PDF comes from (the source's archiveId). */
+  archiveId: string;
+  /** SHA-256 of each PDF in the item that this mapping is for, lowercase hex; every one listed has the same pages. */
+  pdfSha256: string[];
+  /** The PDF's page count. */
+  pdfPages: number;
+  /** The printed page as cited (`12/10`, `6-29`, `D-2`, `15`) to its 1-based PDF page. */
+  pages: Record<string, number>;
+}
+
 /** How an address in either ROM table compares across the Model I and Model III ROMs. */
 export type RomClass = 'shared' | 'different' | 'model1-only' | 'model3-only';
 /** Keyed by the address as four uppercase hex digits. */
