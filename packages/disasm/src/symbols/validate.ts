@@ -40,6 +40,8 @@ const SOURCE_FIELDS = new Set(['id', 'author', 'title', 'publisher', 'year', 'ed
 const SOURCE_NAME = /^[$@]?[A-Z][A-Z0-9_]*$/;
 const COINED_NAME = /^[A-Z][A-Z0-9_]*$/;
 const COINED_MAX = 12;
+/** A purpose, note, or page is printed into a zmac `EQU` line and a listing comment, where a line break would end the line early. */
+const LINE_BREAK = /[\r\n]/;
 
 /** Why a name breaks the naming rule (spec §4.3), or null when it keeps it. */
 function nameProblem(name: string, coined: boolean): string | null {
@@ -127,6 +129,7 @@ function readEntry(table: TableId, file: string, index: number, raw: unknown, kn
 
   const purpose = isText(raw.purpose) ? raw.purpose : undefined;
   if (purpose === undefined) reject('purpose is missing or empty');
+  else if (LINE_BREAK.test(purpose)) flag('purpose may not contain a line break');
 
   const cite: Cite[] = [];
   if (!Array.isArray(raw.cite) || raw.cite.length === 0) {
@@ -140,15 +143,23 @@ function readEntry(table: TableId, file: string, index: number, raw: unknown, kn
       for (const field of Object.keys(item)) if (field !== 'source' && field !== 'page') flag(`cite ${i} has unknown field "${field}"`);
       if (!isText(item.source)) reject(`cite ${i} has no source`);
       else if (known !== undefined && !known.has(item.source)) reject(`cite ${i} names unknown source "${item.source}"`);
-      if (!isText(item.page)) reject(`cite ${i} has no page`);
-      else if (isText(item.source)) cite.push({ source: item.source, page: item.page });
+      if (!isText(item.page)) {
+        reject(`cite ${i} has no page`);
+      } else {
+        if (LINE_BREAK.test(item.page)) flag(`cite ${i} page may not contain a line break`);
+        if (isText(item.source)) cite.push({ source: item.source, page: item.page });
+      }
     });
   }
 
   let note: string | undefined;
   if (raw.note !== undefined) {
-    if (isText(raw.note)) note = raw.note;
-    else reject('note must be non-empty text');
+    if (!isText(raw.note)) {
+      reject('note must be non-empty text');
+    } else {
+      note = raw.note;
+      if (LINE_BREAK.test(note)) flag('note may not contain a line break');
+    }
   }
 
   if (!usable || name === undefined || kind === undefined || key === undefined || purpose === undefined) return undefined;

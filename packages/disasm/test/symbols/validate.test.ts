@@ -270,6 +270,24 @@ describe('validateTables', () => {
       expect(run({ file: 'rom-model3.json', json: { table: 'rom-model3', entries: [5] } }).errors).toEqual(['rom-model3.json entry 0: not an object']);
     });
 
+    // A purpose, note, or page is printed into a zmac EQU line and a listing comment; a line break would end that line early and break the round trip.
+    it.each([
+      ['a line feed', '\n'],
+      ['a carriage return', '\r'],
+      ['a carriage return and line feed', '\r\n'],
+    ])('rejects %s in a purpose, a note, or a cite page', (_what, lineBreak) => {
+      const name = '"$KBWAIT"';
+      expect(errorsOf('rom-model3', { purpose: `wait for a key${lineBreak}and return it in A` })).toEqual([`rom-model3.json entry 0 ${name}: purpose may not contain a line break`]);
+      expect(errorsOf('rom-model3', { purpose: `wait for a key${lineBreak}` })).toEqual([`rom-model3.json entry 0 ${name}: purpose may not contain a line break`]);
+      expect(errorsOf('rom-model3', { note: `Model III renamed it${lineBreak}in 1980` })).toEqual([`rom-model3.json entry 0 ${name}: note may not contain a line break`]);
+      expect(errorsOf('rom-model3', { cite: cite('m3-basic', `12/${lineBreak}12`) })).toEqual([`rom-model3.json entry 0 ${name}: cite 0 page may not contain a line break`]);
+      expect(errorsOf('rom-model3', { cite: [{ source: 'm3-basic', page: '12/12' }, { source: 'paay', page: `5${lineBreak}` }] })).toEqual([`rom-model3.json entry 0 ${name}: cite 1 page may not contain a line break`]);
+    });
+
+    it('accepts a purpose, note, and cite page on one line, with other punctuation and spaces', () => {
+      expect(errorsOf('rom-model3', { purpose: 'wait for a key (A = key); tab or space', note: 'Model III: "renamed", it\'s 1980', cite: cite('m3-basic', '12/12 and 12/13') })).toEqual([]);
+    });
+
     it('rejects a file that is not { table, entries }', () => {
       expect(run({ file: 'rom-model3.json', json: [] }).errors).toEqual(['rom-model3.json: expected an object with "table" and "entries"']);
       expect(run({ file: 'rom-model3.json', json: { table: 'rom-model3', entries: {} } }).errors).toEqual(['rom-model3.json: entries is not an array']);
