@@ -91,11 +91,9 @@ These would make it a failure even if it technically works:
   "Click a line to have it explained."
 - A **label row** explains the label: who calls it or jumps to it (links),
   and whether it is the entry point.
-- A **data row** says these are bytes the code is not known to run. It
-  shows them as text when they are printable (TRS-80 character set), and
-  as numbers otherwise. It lists the instructions that refer into this
-  data, using the uses the Symbol tab already computes. It reminds the
-  reader of the key that turns data into code, and back.
+- A **data row** says these are bytes the code is not known to run, and
+  then explains the **data region** the row belongs to (see below). It
+  reminds the reader of the key that turns data into code, and back.
 - An **ORG or header row** gets a one-line explanation of what it is.
 
 ## How the tutor knows values
@@ -171,6 +169,52 @@ More patterns can be added later as one entry each.
   "send A to port $EC (MODEPORT): …purpose".
 - **RST.** `RST 08H` and the rest read through their table entries; RST 08H
   also mentions its inline byte.
+
+## Data regions
+
+Added the same day. The user pointed at Sea Dragon's 1,988 data rows and
+asked what they are. They are one region, DATA_7399 ($7399–$8880). Its
+address is loaded at $4C42 and stored in DATA_624A, which serves as a
+pointer, and the loop at L5FB9 walks it. Bytes $00–$0F are control codes
+there. Explain says all of this without being told:
+
+- **Extent.** The region is the run of data bytes containing the row,
+  from the nearest label at or before it (or the start of the run) to
+  the next code or the next label that code refers to. It gets a name,
+  a size, and its first and last address.
+- **Who uses it.** Every instruction whose operand points into the
+  region (`LD HL,DATA_7399`, `LD A,(…)`, DW words in tables), as links.
+- **Kept as a pointer.** When the instruction after a load of the
+  region's address stores that register into a variable
+  (`LD (DATA_624A),HL`), it says the address is kept in that variable,
+  and lists the instructions that read the variable back.
+- **How it is read**, when one of those users loads HL with the region and
+  falls into a loop that reads `(HL)`. Explain names that loop, says
+  whether it steps forward or back, and mentions any test that splits the
+  bytes into kinds (an `AND` mask with a conditional jump, a `CP n`
+  split). An example sentence: "bytes $00–$0F are treated differently
+  (AND 0F0H at $5FC5)". This reports only the instructions it saw; it
+  never guesses what the kinds mean.
+- **Picture.** The region's bytes are drawn in the TRS-80 character set,
+  with $80–$BF as the machine's 2×3 block graphics, in a small canvas at a
+  width the user can change: 64 (screen width) by default, with buttons
+  for 8, 16, 32 and 64 and a free field for any other width. Graphics,
+  maps and title screens often become recognizable this way. Text bytes
+  ($20–$7F) draw as characters; anything else draws as a dim dot.
+  Showing the region costs nothing until it is drawn, and drawing is
+  limited to the region (at most 16K).
+- A block comment above the region's first address is how the user
+  records what it is ("sea-floor map, one column per scroll step").
+
+## Showcase: an annotated Sea Dragon
+
+As part of this work, Sea Dragon's committed hint file
+(`examples/sea-dragon/seadrg01.hints`) gets block comments and names for
+its main routines and data regions. These are researched with the new
+Explain tab, marked as interpretation where they are, and written in the
+same voice as the tutor. Sea Dragon is public domain, so the annotated
+listing ships as the example of a fully commented program. The other three
+games follow later.
 
 ## Block comments
 
@@ -330,6 +374,10 @@ Check these while reading:
 14. What counts as a routine, its 2,000-instruction cap, and the list of
     facts the summary reports.
 15. Use as comment opens the box prefilled and never saves on its own.
+16. The data-region rules (extent, pointer variable, read loop), and the
+    picture view's widths and 16K limit.
+17. Sea Dragon's hint file gets researched comments as a showcase; the
+    other games later.
 
 ## Left to the builder
 
