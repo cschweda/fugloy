@@ -255,18 +255,18 @@
 ### Task 7: `apps/web` scaffold
 
 **Files:**
-- Create: `apps/web/package.json` (`@fugloy/web`, scripts `dev`, `generate`, `test`, `prepare-examples`), `apps/web/nuxt.config.ts`, `apps/web/app/app.vue`, `apps/web/app/app.config.ts`, `apps/web/app/assets/css/main.css`, `apps/web/app/layouts/default.vue`, `apps/web/app/components/TopBar.vue`, `apps/web/app/pages/{index,about,manuals,technical-details}.vue` (stubs), `apps/web/scripts/prepare-examples.ts`, `apps/web/vitest.config.ts`, `apps/web/tsconfig.json`
+- Create: `apps/web/package.json` (`@fugloy/web`, scripts `dev`, `generate`, `test`, `prepare-assets`), `apps/web/nuxt.config.ts`, `apps/web/app/app.vue`, `apps/web/app/app.config.ts`, `apps/web/app/assets/css/main.css`, `apps/web/app/layouts/default.vue`, `apps/web/app/components/TopBar.vue`, `apps/web/app/pages/{index,about,manuals,technical-details}.vue` (stubs), `apps/web/scripts/prepare-examples.ts`, `apps/web/vitest.config.ts`, `apps/web/tsconfig.json`
 - Modify: `pnpm-workspace.yaml` (add `apps/*`), root `package.json` (`web:dev`, `web:generate`), root `vitest.config.ts` (`include` gains `apps/web/test/**/*.test.ts`), `.gitignore` (`apps/web/.nuxt`, `apps/web/.output`, `apps/web/public/examples`), `netlify.toml` (comment only; the command already targets `@fugloy/web`), `CLAUDE.md` (drop the "settle the name" note)
 
 **Interfaces:**
 - Produces:
   - `@fugloy/disasm` and `@fugloy/z80` resolve to their `src/index.ts` through a Vite alias in `nuxt.config.ts`, as in the root `vitest.config.ts`, so the site needs no prior `pnpm build`.
-  - `prepare-examples.ts` (run by `predev` and `pregenerate`) copies `examples/*/*.{cmd,hints,III}` into `apps/web/public/examples/<game>/`.
+  - `prepare-assets.ts` (run by `predev` and `pregenerate`) copies `examples/*/*.{cmd,hints,III}` into `apps/web/public/examples/<game>/`.
   - Theme tokens in `main.css`: background, surface, border, text, muted, accent (`#f78166`), and the syntax colors from the approved mockup (mnemonic `#ff7b72`, register `#79c0ff`, number `#a5d6ff`, label `#d2a8ff`, table name `#7ee787`, comment `#8b949e` italic). The mockup is `.superpowers/brainstorm/*/content/layout.html`, option A. Monospace font: JetBrains Mono, or the system monospace stack.
   - `TopBar.vue`: wordmark `fuglø` + accent `y`; slots for file name and pickers; Export slot; links to Technical details, Manuals, About.
 
 - [ ] **Step 1: Scaffold Nuxt 4 + Nuxt UI** in `apps/web` (`ssr: true` with `nitro.preset: 'static'` or `nuxi generate`; color mode default `dark`). Add the stub pages and the top bar.
-- [ ] **Step 2: Write the failing test** `apps/web/test/disasm-import.test.ts`: importing `openProgram` from `@fugloy/disasm` inside the web's Vitest config opens `public/examples/sea-dragon/seadrg01.cmd` (after `prepare-examples`).
+- [ ] **Step 2: Write the failing test** `apps/web/test/disasm-import.test.ts`: importing `openProgram` from `@fugloy/disasm` inside the web's Vitest config opens `public/examples/sea-dragon/seadrg01.cmd` (after `prepare-assets`).
 - [ ] **Step 3: Run** `pnpm --filter @fugloy/web test`. Expected: FAIL, then wire the alias and the script until it passes.
 - [ ] **Step 4: Run** `pnpm --filter @fugloy/web generate`. Expected: success, and `apps/web/.output/public/index.html` exists with the top bar.
 - [ ] **Step 5: Run** `pnpm typecheck && pnpm test`. Expected: PASS.
@@ -542,7 +542,7 @@
 ### Task 17: Technical details, About, SEO, favicons
 
 **Files:**
-- Create: `apps/web/app/pages/technical-details.vue`, `apps/web/app/pages/about.vue` (replace stubs), `apps/web/app/composables/usePageSeo.ts`, `apps/web/public/robots.txt`, `apps/web/public/og-image.png` (copied from `docs/images/og-image.png` by `prepare-examples.ts`, renamed `prepare-assets.ts`), favicons generated from `docs/images/og-image.svg`'s ø tile into `apps/web/public/` (`favicon.svg`, `favicon.ico`, `apple-touch-icon.png`)
+- Create: `apps/web/app/pages/technical-details.vue`, `apps/web/app/pages/about.vue` (replace stubs), `apps/web/app/composables/usePageSeo.ts`, `apps/web/public/robots.txt`, `apps/web/public/og-image.png` (copied from `docs/images/og-image.png` by `prepare-assets.ts`, renamed `prepare-assets.ts`), favicons generated from `docs/images/og-image.svg`'s ø tile into `apps/web/public/` (`favicon.svg`, `favicon.ico`, `apple-touch-icon.png`)
 - Modify: `docs/technical-details/inside-fugloy.html` (numbers and sample output as of phase 3), `docs/images/og-image.svg` and its rendered `og-image.png` (the social card's sample listing as of phase 3, with names), `README.md` where it shows pre-phase-3 output, `apps/web/nuxt.config.ts` (sitemap)
 - Test: `apps/web/test/seo.test.ts` (reads `.output/public/*.html` after `generate`)
 

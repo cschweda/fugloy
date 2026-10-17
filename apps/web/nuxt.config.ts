@@ -14,7 +14,8 @@ export default defineNuxtConfig({
   modules: ['@nuxt/ui'],
   css: ['~/assets/css/main.css'],
   ssr: true,
-  nitro: { preset: 'static', publicAssets: pdfjsAssets },
+  // The crawler must not follow the About page's link to /pdfjs/LICENSE: the file is copied in after prerendering.
+  nitro: { preset: 'static', publicAssets: pdfjsAssets, prerender: { ignore: ['/pdfjs/'] } },
   hooks: {
     // After the public assets are copied: pdf.js's licence beside its files
     // (Apache-2.0 §4(a); the minified chunk loses its header), and no QuickJS
@@ -35,8 +36,15 @@ export default defineNuxtConfig({
       htmlAttrs: { lang: 'en' },
       title: 'Fugløy',
       meta: [
-        { name: 'description', content: 'A TRS-80 Model I/III disassembler that runs in your browser.' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+        { name: 'theme-color', content: '#0d1117' },
+      ],
+      // Favicons are the card's o-slash tile (scripts/render-brand.ts). usePageSeo sets each page's
+      // title, description, canonical URL and social tags; sitemap.xml and robots.txt are in public/.
+      link: [
+        { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+        { rel: 'icon', type: 'image/x-icon', sizes: 'any', href: '/favicon.ico' },
+        { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
       ],
     },
   },

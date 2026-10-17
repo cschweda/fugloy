@@ -44,7 +44,8 @@ onBeforeUnmount(() => {
       </template>
     </TopBar>
     <p class="fg-muted px-4 py-1 text-xs md:hidden">Fugløy is best on a desktop.</p>
-    <main class="flex min-h-0 flex-1 flex-col overflow-x-hidden">
+    <!-- overflow-x-clip, not hidden, on the explainer's page: hidden would make <main> the scroll container and stop its sticky section rail from sticking. -->
+    <main class="flex min-h-0 flex-1 flex-col" :class="route.path.startsWith('/technical-details') ? 'overflow-x-clip' : 'overflow-x-hidden'">
       <slot />
     </main>
   </div>

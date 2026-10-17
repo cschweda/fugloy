@@ -47,8 +47,9 @@ test-results/
 # Pinned zmac built by scripts/install-zmac.sh
 tools/
 
-# Web workbench (phase 4): Nuxt output and the examples copied in by prepare-examples
+# Web workbench (phase 4): Nuxt output and the examples copied in by prepare-assets
 apps/web/.nuxt
 apps/web/.output
 apps/web/public/examples
+apps/web/public/og-image.png
 apps/web/dist

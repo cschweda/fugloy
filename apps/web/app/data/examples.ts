@@ -1,6 +1,6 @@
 // The four public-domain games bundled with the site, copied from each
 // examples/<id>/README.md (test/examples.test.ts checks the files and the quote).
-// prepare-examples serves examples/<id>/ at /examples/<id>/; nothing else is fetched.
+// prepare-assets serves examples/<id>/ at /examples/<id>/; nothing else is fetched.
 import type { Machine } from '@fugloy/disasm';
 
 export type ExampleId = 'sea-dragon' | 'rear-guard' | 'eliminator' | 'armored-patrol';

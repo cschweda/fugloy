@@ -42,7 +42,7 @@ const evidence = computed(() => splitEvidence(props.facts.machine.evidence));
 <template>
   <div data-testid="program-tab" class="fg-spec">
     <section v-if="example !== null || facts.name !== undefined || name !== undefined" data-testid="spec-history">
-      <h3 class="fg-sec">History</h3>
+      <h2 class="fg-sec">History</h2>
       <template v-if="example !== null">
         <h2 class="fg-strong text-base font-bold">{{ example.title }}</h2>
         <p class="fg-muted">
@@ -60,7 +60,7 @@ const evidence = computed(() => splitEvidence(props.facts.machine.evidence));
     </section>
 
     <section data-testid="spec-machine">
-      <h3 class="fg-sec">Machine</h3>
+      <h2 class="fg-sec">Machine</h2>
       <p>
         <span class="fg-badge" :class="facts.machine.fit === 'conflict' ? 'fg-badge-conflict' : FIT[facts.machine.fit].three ? 'fg-badge-on' : 'fg-badge-off'">Model III</span>
         <span class="fg-badge" :class="facts.machine.fit === 'conflict' ? 'fg-badge-conflict' : FIT[facts.machine.fit].one ? 'fg-badge-on' : 'fg-badge-off'">Model I</span>
@@ -80,7 +80,7 @@ const evidence = computed(() => splitEvidence(props.facts.machine.evidence));
     </section>
 
     <section data-testid="spec-loading">
-      <h3 class="fg-sec">Loading</h3>
+      <h2 class="fg-sec">Loading</h2>
       <dl class="fg-dl">
         <dt>Format</dt>
         <dd>
@@ -109,7 +109,7 @@ const evidence = computed(() => splitEvidence(props.facts.machine.evidence));
     </section>
 
     <section data-testid="spec-talks">
-      <h3 class="fg-sec">Talks to</h3>
+      <h2 class="fg-sec">Talks to</h2>
       <dl class="fg-dl">
         <template v-for="g in talks()" :key="g.label">
           <dt>{{ g.label }}</dt>
@@ -126,7 +126,7 @@ const evidence = computed(() => splitEvidence(props.facts.machine.evidence));
     </section>
 
     <section data-testid="spec-code">
-      <h3 class="fg-sec">Code</h3>
+      <h2 class="fg-sec">Code</h2>
       <dl class="fg-dl">
         <dt>Decoded as code</dt>
         <dd>{{ facts.code.bytes.toLocaleString('en-US') }} of {{ facts.code.of.toLocaleString('en-US') }} bytes ({{ facts.code.percent }}%)</dd>
@@ -136,7 +136,7 @@ const evidence = computed(() => splitEvidence(props.facts.machine.evidence));
     </section>
 
     <section data-testid="spec-analysis">
-      <h3 class="fg-sec">Analysis</h3>
+      <h2 class="fg-sec">Analysis</h2>
       <p v-if="diagnostics.length === 0 && proposals.length === 0" class="fg-muted">Nothing to report.</p>
       <ul v-if="diagnostics.length > 0" class="fg-uses" data-testid="diagnostics">
         <li v-for="(d, i) in diagnostics" :key="i" class="fg-muted">{{ d.message }}</li>

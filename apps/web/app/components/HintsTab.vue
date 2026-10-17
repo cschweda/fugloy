@@ -44,26 +44,26 @@ const plural = (n: number, one: string, many = `${one}s`): string => `${n.toLoca
       </div>
     </div>
     <section v-if="view.unmatched.length > 0" data-testid="hints-unmatched">
-      <h3 class="fg-sec">Not applied: no block of this program matches</h3>
+      <h2 class="fg-sec">Not applied: no block of this program matches</h2>
       <div v-for="u in view.unmatched" :key="u.index">
         <p class="fg-muted">block {{ u.index }}: {{ plural(u.lines.length, 'hint') }}</p>
         <pre class="fg-hints-text">{{ u.lines.join('\n') }}</pre>
       </div>
     </section>
     <section v-if="persistence.hintErrors.value.length > 0" data-testid="hints-errors">
-      <h3 class="fg-sec">Carried over, but not read</h3>
+      <h2 class="fg-sec">Carried over, but not read</h2>
       <ul class="fg-hints-warnings">
         <li v-for="(e, i) in persistence.hintErrors.value" :key="i">{{ e }}</li>
       </ul>
     </section>
     <section v-if="view.warnings.length > 0" data-testid="hints-warnings">
-      <h3 class="fg-sec">Warnings</h3>
+      <h2 class="fg-sec">Warnings</h2>
       <ul class="fg-hints-warnings">
         <li v-for="(w, i) in view.warnings" :key="i">{{ w }}</li>
       </ul>
     </section>
     <section>
-      <h3 class="fg-sec">The hint file</h3>
+      <h2 class="fg-sec">The hint file</h2>
       <pre class="fg-hints-text" tabindex="0" aria-label="The hint file" data-testid="hint-text">{{ view.text }}</pre>
     </section>
   </div>

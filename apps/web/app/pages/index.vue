@@ -31,6 +31,32 @@ import FacingPages from '~/components/workbench/FacingPages.vue';
 import PageTabs from '~/components/workbench/PageTabs.vue';
 import type { PageTab } from '~/components/workbench/PageTabs.vue';
 
+usePageSeo({
+  title: 'Fugløy',
+  description: 'Open a TRS-80 .CMD or .BAS program and read it as Z80 assembly with named ROM and DOS routines, in your browser. Free, and your files never leave your machine.',
+  path: '/',
+});
+useHead({
+  script: [
+    {
+      type: 'application/ld+json',
+      innerHTML: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'SoftwareApplication',
+        name: 'Fugløy',
+        description: 'A TRS-80 Model I and III disassembler workbench that runs in the browser.',
+        applicationCategory: 'DeveloperApplication',
+        operatingSystem: 'Any (web browser)',
+        url: `${SITE_ORIGIN}/`,
+        image: `${SITE_ORIGIN}/og-image.png`,
+        offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+        license: 'https://spdx.org/licenses/MIT.html',
+        codeRepository: 'https://github.com/cschweda/fugloy',
+      }),
+    },
+  ],
+});
+
 const wb = useWorkbench();
 const { session, rows, cursor, selection, example, facts } = wb;
 
@@ -373,6 +399,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="flex min-h-0 flex-1 flex-col">
     <div v-if="session !== null" class="flex min-h-0 flex-1 flex-col" data-testid="workbench">
+      <h1 class="sr-only">{{ session.name }}, disassembled</h1>
       <OpenProblem bar />
       <FacingPages ref="pages">
         <template #left-name>Listing</template>

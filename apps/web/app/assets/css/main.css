@@ -113,6 +113,8 @@ html.dark body {
 .fg-tok-string { color: var(--fg-string); }
 .fg-tok-punct { color: var(--fg-text); }
 .fg-tok-label { color: var(--fg-label); }
+/* A label that is a link is underlined, so it is not told apart from the text around it by color alone. */
+a.fg-tok-label { text-decoration: underline dotted; text-underline-offset: 3px; }
 .fg-tok-table { color: var(--fg-table); }
 .fg-tok-comment { color: var(--fg-comment); font-style: italic; }
 .fg-follow { text-decoration: none; border-radius: 2px; }
@@ -383,8 +385,10 @@ html.dark body {
 .fg-header-toggle:focus-visible { outline: 2px solid var(--fg-accent); outline-offset: -2px; }
 .fg-badge-conflict { background: #5a3a14; color: #ffa657; }
 
-/* Editing: the right-click menu, the inline editor, a refused edit's message, the Hints tab. */
-.fg-menu {
+/* Editing: the right-click menu, the inline editor, a refused edit's message, the Hints tab.
+   div.fg-menu is the right-click popup; the top bar's Export and Your work are details.fg-menu (below),
+   whose trigger must not take the popup's width. */
+div.fg-menu {
   position: fixed;
   z-index: 50;
   min-width: 190px;
@@ -446,9 +450,9 @@ html.dark body {
 .fg-hints-warnings { margin: 6px 0 0; padding-left: 18px; list-style: disc; color: var(--fg-text); }
 
 /* Your work: Back up and Restore in the top bar */
-.fg-menu { position: relative; }
-.fg-menu > summary { cursor: pointer; list-style: none; }
-.fg-menu > summary::-webkit-details-marker { display: none; }
+details.fg-menu { position: relative; }
+details.fg-menu > summary { cursor: pointer; list-style: none; }
+details.fg-menu > summary::-webkit-details-marker { display: none; }
 .fg-menu-panel {
   position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; width: 260px;
   display: flex; flex-direction: column; gap: 8px; padding: 10px;
@@ -489,3 +493,17 @@ html.dark body {
 .fg-manual-view { overflow: auto; min-height: 0; flex: 1; border: 1px solid var(--fg-border); border-radius: 4px; background: #0b0e13; }
 .fg-manual-canvas { display: block; margin: 0 auto; background: #fff; }
 @media (max-width: 640px) { .fg-manuals { padding: 16px; } .fg-manual { gap: 10px; } }
+
+/* About (Task 17): prose on the dark theme. Links are underlined, so they are not told apart by color alone. */
+.fg-prose { max-width: 760px; width: 100%; margin: 0 auto; padding: 32px 24px 64px; font-size: 15px; line-height: 1.65; }
+.fg-prose > * + * { margin-top: 12px; }
+.fg-prose h2 { margin-top: 32px; font-size: 19px; font-weight: 700; color: var(--fg-text-strong); }
+.fg-prose h3 { margin-top: 20px; font-size: 15px; font-weight: 700; color: var(--fg-text-strong); }
+.fg-prose a { color: var(--fg-register); text-decoration: underline; text-underline-offset: 2px; border-radius: 2px; }
+.fg-prose a:hover { color: var(--fg-text-strong); }
+.fg-prose a:focus-visible { outline: 2px solid var(--fg-accent); outline-offset: 2px; }
+.fg-prose code { font-family: var(--fg-mono); font-size: 0.9em; color: var(--fg-text-strong); }
+.fg-lede { font-size: 17px; color: var(--fg-text-strong); }
+.fg-quote { margin-left: 0; padding: 8px 16px; border-left: 3px solid var(--fg-accent); background: var(--fg-surface); color: var(--fg-text-strong); }
+.fg-credits { list-style: disc; padding-left: 20px; display: grid; gap: 6px; }
+.fg-credits cite { color: var(--fg-text-strong); }

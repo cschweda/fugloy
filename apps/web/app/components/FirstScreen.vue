@@ -69,7 +69,7 @@ const credit = (e: Example): string => [e.authors, e.publisher, e.year].filter((
             <span class="fg-muted fg-mono text-xs">{{ e.mainBuild }}<template v-if="e.hints"> + {{ e.hints }}</template></span>
           </button>
           <details v-if="e.builds.length > 1" class="fg-builds">
-            <summary :aria-label="`Other builds of ${e.title}`">{{ e.builds.length }} builds ▾</summary>
+            <summary :aria-label="`${e.builds.length} builds ▾, other builds of ${e.title}`">{{ e.builds.length }} builds ▾</summary>
             <ul>
               <li v-for="b in e.builds" :key="b">
                 <button type="button" class="fg-mono" :disabled="wb.busy.value" @click="openBuild(e, b, $event)">{{ b }}</button>

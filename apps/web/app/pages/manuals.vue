@@ -13,9 +13,10 @@ import type { ManualEntry } from '~/composables/useManuals';
 import { coverUrl } from '~/utils/manuals';
 import { catalogLabel } from '~/utils/symbol-info';
 
-useHead({
-  title: 'Manuals · Fugløy',
-  meta: [{ name: 'description', content: 'The TRS-80 manuals Fugløy cites. Add your own PDF copies; they stay in your browser and open at the cited page.' }],
+usePageSeo({
+  title: 'Manuals',
+  description: 'The TRS-80 manuals Fugløy cites. Add your own PDF copies; they stay in your browser and open at the cited page.',
+  path: '/manuals',
 });
 
 const manuals = useManuals();
