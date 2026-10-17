@@ -35,3 +35,30 @@ jobs:
       - run: pnpm build
       - name: fixtures and symbol tables are in sync with their sources
         run: pnpm fixtures && pnpm symbols && git diff --exit-code -- fixtures/synthetic packages/disasm/src/symbols/tables.generated.ts packages/disasm/data/symbols/COMPARISON.md
+
+  web:
+    name: web workbench (typecheck, generate, unit, SEO, browser)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The browser specs import @fugloy/disasm and @fugloy/cli as Node resolves them, from dist/.
+      - run: pnpm build
+      - run: pnpm --filter @fugloy/web exec playwright install --with-deps chromium
+      - run: pnpm --filter @fugloy/web typecheck
+      - run: pnpm --filter @fugloy/web generate
+      - run: pnpm --filter @fugloy/web test
+      - run: pnpm --filter @fugloy/web test:seo
+      # Timing limits in listing-perf.spec.ts apply only with FUGLOY_PERF=1, so a slow runner cannot fail the build.
+      - run: pnpm --filter @fugloy/web test:e2e
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: apps/web/test-results
+          if-no-files-found: ignore

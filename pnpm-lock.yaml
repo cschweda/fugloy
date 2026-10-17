@@ -54,6 +54,12 @@ importers:
       '@fontsource/jetbrains-mono':
         specifier: ^5.3.0
         version: 5.3.0
+      '@fugloy/cli':
+        specifier: workspace:*
+        version: link:../../packages/cli
+      '@fugloy/emu':
+        specifier: workspace:*
+        version: link:../../packages/emu
       '@nuxt/test-utils':
         specifier: ^4.3.4
         version: 4.3.4(a5b9654cbdd8c72cc0fe8f50e2ac895b)
