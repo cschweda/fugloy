@@ -1,0 +1,36 @@
+# Fugløy hints for volcano.cmd (Volcano Hunter, Model III). Identities from `fugloy --write-hints`.
+# Numbers: $hex or decimal. Offsets are relative to their block: block 0 loads at $3C00 (the title screen,
+# and six bytes past it), block 1 at $52E9 (the game and its loader).
+#
+# What the file does, read from the pass 1 listing:
+#   $9134  the transfer address: DI, then an LDIR with HL = DE = $52E9 that copies each byte onto itself
+#          (it changes nothing), then JP $9126.
+#   $9126  LDIR $3D14 bytes from $52E9 down to $42E9, then JP $6132: the game moves down $1000 and runs there.
+# Without the relocate below, pass 1 follows that JP to the file's $6132, which holds data, decodes it as code,
+# and ends with 26% of the program decoded and 37 notes; with it, the game decodes at its runtime address.
+#
+# The game itself calls no ROM or DOS routine: it writes video memory, reads the keyboard at $3800 and port $00
+# (a joystick, merged with the arrow-key row at $3840), and writes port $EC (modes) and port $FF (sound). The only
+# ROM routine in the file is the CALL 0060H pair that the title block leaves in the RST 08H and RST 10H RAM vectors.
+#
+# Left alone, with reasons:
+#   - pass 1's three table proposals ($3DD6, $3F8A, $3F92) are title-screen graphics bytes that happen to point into code.
+#   - $903D-$905A (save the screen at $9134, copy the six bytes at $905B to $43E8, show a message through CALL 4467H, loop)
+#     is reached from nowhere in the file, and its CALL 4467H lands inside the relocated game, so no table could name it.
+#     $911B (restore the screen, fall into $9126) is jumped to only by those six bytes. Both stay data.
+fugloy-hints 1
+program sha256 e64e0096a9961ab6a59eb997fc1f65787cc9f83a2e0924594a890d4e5a1c2854
+block 0 length $0406 hash a298eb43d6f4d7d6    # start $3C00
+block 1 length $3E5A hash b1f71879b636452d    # start $52E9
+block 0:$0400 entry
+block 0:$0400 comment the RST 08H RAM vector (the Model I table's SYNCHKVEC): the title block's six bytes past video RAM leave CALL 0060H here, until the routine at $6886 fills $4000-$407F with 80H
+block 0:$0403 entry
+block 0:$0403 comment the RST 10H RAM vector (NEXTCHARVEC): the second CALL 0060H of the title block's overrun; the same fill ends it
+block 1:$0000 relocate $42E9 $3D14
+block 1:$0000 comment the game as saved at $52E9; the LDIR at $9126 moves it down $1000 to $42E9 before it runs
+block 1:$1E49 name GAME
+block 1:$1E49 comment game start: the JP at $9131 lands here at its runtime address after the move; it disables interrupts and writes mode port $EC
+block 1:$3E3D name MOVE_GAME
+block 1:$3E3D comment moves $3D14 bytes from $52E9 down to $42E9, then starts the game at $6132
+block 1:$3E4B name LOADER
+block 1:$3E4B comment the file's transfer address: the LDIR copies $52E9 onto itself and changes nothing; the JP continues at the real move
