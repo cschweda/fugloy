@@ -1,11 +1,11 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { run } from '../src/index.js';
 import type { Io } from '../src/index.js';
-import { loadBas } from '@fugloy/disasm';
+import { loadBas, loadRaw } from '@fugloy/disasm';
 import { assemble, expectSameImage, skipIfNoZmac } from '../../disasm/test/roundtrip/zmac.js';
 
 const fixtures = fileURLToPath(new URL('../../../fixtures/synthetic/', import.meta.url));
@@ -384,5 +384,200 @@ describe('hint flags', () => {
     const b = capture();
     expect(await run([file, '--hints', hints, '--write-hints', '/virtual/x.hints'], b.io)).toBe(2);
     expect(b.err.join('')).toContain('--write-hints');
+  });
+});
+
+describe('--machine and --dos', () => {
+  // The 27-byte routine from the social card, at $5200: clear the screen, wait for Enter with a ROM call
+  // (CALL 0049H), and return to the DOS with a jump (JP 402DH).
+  const ROUTINE = Uint8Array.from([
+    0xf3, 0x31, 0x00, 0x70, 0x21, 0x00, 0x3c, 0x11, 0x01, 0x3c, 0x01, 0xff, 0x03, 0x36, 0x20, 0xed, 0xb0, 0xcd, 0x49, 0x00, 0xfe, 0x0d, 0x20, 0xf9, 0xc3, 0x2d, 0x40,
+  ]);
+  let dir: string;
+  let program: string;
+  beforeAll(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'fugloy-tables-'));
+    program = join(dir, 'routine.bin');
+    await writeFile(program, ROUTINE);
+  });
+  afterAll(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  /** Runs the CLI on the routine at $5200 with these flags. */
+  async function list(...flags: string[]): Promise<{ code: number; text: string; err: string }> {
+    const { io, out, err } = capture();
+    const code = await run([program, '--base', '5200', ...flags], io);
+    return { code, text: out.join(''), err: err.join('') };
+  }
+  const headerOf = (text: string): string | undefined => text.split('\n').find((l) => l.startsWith('; symbols:'));
+
+  /** Every way to choose a machine and DOS that names tables, with what the header calls them. */
+  const CHOICES: { flags: string[]; tables: string }[] = [
+    { flags: [], tables: 'Model III ROM, hardware, TRSDOS 1.3' },
+    { flags: ['--machine', '3'], tables: 'Model III ROM, hardware, TRSDOS 1.3' },
+    { flags: ['--dos', 'trsdos'], tables: 'Model III ROM, hardware, TRSDOS 1.3' },
+    { flags: ['--machine', '3', '--dos', 'trsdos'], tables: 'Model III ROM, hardware, TRSDOS 1.3' },
+    { flags: ['--dos', 'ldos'], tables: 'Model III ROM, hardware, LDOS 5.1' },
+    { flags: ['--dos', 'none'], tables: 'Model III ROM, hardware, no DOS' },
+    { flags: ['--machine', '1'], tables: 'Model I ROM, hardware, LDOS 5.1' },
+    { flags: ['--machine', '1', '--dos', 'ldos'], tables: 'Model I ROM, hardware, LDOS 5.1' },
+    { flags: ['--machine', '1', '--dos', 'none'], tables: 'Model I ROM, hardware, no DOS' },
+    { flags: ['--machine', '4'], tables: 'Model 4 service calls (LS-DOS 6)' },
+    { flags: ['--machine', '4', '--dos', 'none'], tables: 'Model 4 service calls (LS-DOS 6)' },
+  ];
+  const given = (flags: string[]): string => (flags.length === 0 ? 'no flags' : flags.join(' '));
+
+  it('names ROM and DOS addresses from the Model III and TRSDOS tables by default, and the header says so', async () => {
+    const { code, text, err } = await list();
+    expect(code).toBe(0);
+    expect(err).toBe('');
+    expect(headerOf(text)).toBe('; symbols: Model III ROM, hardware, TRSDOS 1.3');
+    expect(text).toContain('5211  CD 49 00      CALL $KBWAIT');
+    expect(text).toContain('5218  C3 2D 40      JP $JP2DOS');
+    expect(text).not.toContain('CALL 0049H');
+    expect(text).not.toContain('JP 402DH');
+  });
+
+  it('names Model I and LDOS addresses with --machine 1, where the DOS defaults to LDOS', async () => {
+    const { code, text, err } = await list('--machine', '1');
+    expect(code).toBe(0);
+    expect(err).toBe('');
+    expect(headerOf(text)).toBe('; symbols: Model I ROM, hardware, LDOS 5.1');
+    expect(text).toContain('5218  C3 2D 40      JP @EXIT');
+    expect(text).not.toContain('$JP2DOS');
+  });
+
+  it('switches the DOS names with --dos: JP $JP2DOS by default, JP @EXIT with --machine 1 --dos ldos', async () => {
+    expect((await list()).text).toContain('JP $JP2DOS');
+    const ldos = await list('--machine', '1', '--dos', 'ldos');
+    expect(ldos.text).toContain('JP @EXIT');
+    expect(ldos.text).not.toContain('$JP2DOS');
+    // With no DOS there are no DOS names, and a Model III on LDOS takes none of TRSDOS's but keeps its ROM names.
+    const none = await list('--machine', '1', '--dos', 'none');
+    expect(none.text).not.toContain('@EXIT');
+    expect(none.text).not.toContain('$JP2DOS');
+    const model3 = await list('--dos', 'ldos');
+    expect(model3.text).toContain('CALL $KBWAIT');
+    expect(model3.text).not.toContain('$JP2DOS');
+    const bare = await list('--dos', 'none');
+    expect(bare.text).toContain('CALL $KBWAIT');
+    expect(bare.text).not.toContain('$JP2DOS');
+  });
+
+  for (const { flags, tables } of CHOICES) {
+    it(`uses ${tables} for ${given(flags)}, and the header says so`, async () => {
+      const { code, text, err } = await list(...flags);
+      expect(code).toBe(0);
+      expect(err).toBe('');
+      expect(headerOf(text)).toBe(`; symbols: ${tables}`);
+    });
+  }
+
+  it('refuses a value or a pair that names no tables, with the valid values, exit 2, and nothing on stdout', async () => {
+    const cases: [string[], string][] = [
+      [['--machine', '2'], 'fugloy: --machine must be 1, 3, or 4\n'],
+      [['--machine', '0'], 'fugloy: --machine must be 1, 3, or 4\n'],
+      [['--machine', '03'], 'fugloy: --machine must be 1, 3, or 4\n'],
+      [['--machine', 'III'], 'fugloy: --machine must be 1, 3, or 4\n'],
+      [['--machine', ''], 'fugloy: --machine must be 1, 3, or 4\n'],
+      [['--dos', 'msdos'], 'fugloy: --dos must be trsdos, ldos, or none\n'],
+      [['--dos', 'TRSDOS'], 'fugloy: --dos must be trsdos, ldos, or none\n'],
+      [['--dos', ''], 'fugloy: --dos must be trsdos, ldos, or none\n'],
+      [['--machine', '1', '--dos', 'trsdos'], 'fugloy: --dos trsdos is the Model III DOS; use --machine 3 or --dos ldos\n'],
+      [['--machine', '4', '--dos', 'ldos'], 'fugloy: --machine 4 names LS-DOS 6 service calls only; leave out --dos\n'],
+      [['--machine', '4', '--dos', 'trsdos'], 'fugloy: --machine 4 names LS-DOS 6 service calls only; leave out --dos\n'],
+    ];
+    for (const [flags, message] of cases) {
+      const { code, text, err } = await list(...flags);
+      expect(code, flags.join(' ')).toBe(2);
+      expect(err, flags.join(' ')).toBe(message);
+      expect(text, flags.join(' ')).toBe('');
+    }
+  });
+
+  it('reports a bad selection before it reads the file', async () => {
+    const { io, out, err } = capture();
+    expect(await run(['/nonexistent/x.cmd', '--machine', '2'], io)).toBe(2);
+    expect(out).toEqual([]);
+    expect(err.join('')).toBe('fugloy: --machine must be 1, 3, or 4\n');
+  });
+
+  it('names nothing in the --sweep listing or the plain BASIC listing', async () => {
+    const sweep = await list('--sweep');
+    expect(sweep.code).toBe(0);
+    expect(sweep.text).not.toContain('; symbols:');
+    expect(sweep.text).toContain('5211  CD 49 00      CALL 0049H');
+    expect(sweep.text).toContain('5218  C3 2D 40      JP 402DH');
+    const bas = capture();
+    expect(await run([`${fixtures}bas/prog-62c8.bas`], bas.io)).toBe(0);
+    expect(bas.out.join('')).not.toContain('; symbols:');
+  });
+
+  it('names the same addresses in --format zmac and defines each name with an EQU', async () => {
+    const { code, text } = await list('--format', 'zmac');
+    expect(code).toBe(0);
+    expect(text).toContain('$KBWAIT\tEQU\t0049H\t');
+    expect(text).toContain('$JP2DOS\tEQU\t402DH\t');
+    expect(text).toContain('\tCALL\t$KBWAIT');
+    expect(text).toContain('\tJP\t$JP2DOS');
+    const model1 = await list('--machine', '1', '--format', 'zmac');
+    expect(model1.text).toContain('@EXIT\tEQU\t402DH\t');
+    expect(model1.text).toContain('\tJP\t@EXIT');
+    expect(model1.text).not.toContain('$JP2DOS');
+  });
+
+  it('colors a listing that carries table names without changing a character of it', async () => {
+    const { io, out } = capture();
+    io.stdoutIsTerminal = true;
+    io.env = {};
+    expect(await run([program, '--base', '5200', '--color'], io)).toBe(0);
+    const colored = out.join('');
+    expect(colored).toContain('\x1b[');
+    // eslint-disable-next-line no-control-regex
+    expect(colored.replace(/\x1b\[[0-9;]*m/g, '')).toBe((await list()).text);
+  });
+
+  it('records the machine, the DOS, and the table names used in --format ir', async () => {
+    interface NamedIr {
+      machine?: number;
+      dos?: string;
+      tableNames?: { name: string }[];
+    }
+    const names = (ir: NamedIr): string[] => (ir.tableNames ?? []).map((n) => n.name);
+    const byDefault = JSON.parse((await list('--format', 'ir')).text) as NamedIr;
+    expect([byDefault.machine, byDefault.dos]).toEqual([3, 'trsdos']);
+    expect(names(byDefault)).toEqual(expect.arrayContaining(['$KBWAIT', '$JP2DOS']));
+    const model1 = JSON.parse((await list('--machine', '1', '--format', 'ir')).text) as NamedIr;
+    expect([model1.machine, model1.dos]).toEqual([1, 'ldos']);
+    expect(names(model1)).toContain('@EXIT');
+    expect(names(model1)).not.toContain('$JP2DOS');
+    const bare = JSON.parse((await list('--dos', 'none', '--format', 'ir')).text) as NamedIr;
+    expect([bare.machine, bare.dos]).toEqual([3, 'none']);
+    expect(names(bare)).toContain('$KBWAIT');
+    expect(names(bare)).not.toContain('$JP2DOS');
+  });
+
+  for (const { flags } of CHOICES) {
+    skipIfNoZmac()(`reassembles --format zmac output into the same image for ${given(flags)}`, async () => {
+      const { text } = await list('--format', 'zmac', ...flags);
+      expectSameImage(assemble(text).module.image, loadRaw(ROUTINE, 0x5200).image);
+    });
+  }
+
+  it('documents both flags in --help', async () => {
+    const { io, out } = capture();
+    expect(await run(['--help'], io)).toBe(0);
+    const help = out.join('');
+    expect(help).toContain('[--machine 1|3|4] [--dos trsdos|ldos|none]');
+    expect(help).toContain(
+      [
+        '  --machine <n>    name ROM, hardware, and DOS addresses for Model 1, 3',
+        '                   (the default), or 4 (LS-DOS 6 service calls only)',
+        '  --dos <name>     the DOS whose names to use: trsdos (Model III default),',
+        '                   ldos (Model I default), or none',
+        '',
+      ].join('\n'),
+    );
   });
 });

@@ -1,6 +1,7 @@
 /**
  * The fugloy command: `fugloy <file> [--base <hex>] [--entry <hex>]... [--format listing|zmac|ir] [--sweep] [-o <path>]`.
- * Reads one file, detects its format from content, runs Pass 1, and prints a
+ * Reads one file, detects its format from content, runs Pass 1 with the ROM,
+ * hardware, and DOS tables that `--machine` and `--dos` choose, and prints a
  * listing, zmac source, or the JSON IR. Only this package touches the file
  * system; `run()` takes an Io so tests can capture output.
  */
@@ -13,6 +14,7 @@ import {
   basIdentityNormalizer,
   blockIdentities,
   buildIr,
+  defaultDos,
   detectFormat,
   emitZmac,
   emptyAnnotations,
@@ -26,9 +28,11 @@ import {
   renderCmdListing,
   renderPass1Listing,
   renderRawListing,
+  SelectionError,
+  selectSymbols,
   writeHints,
 } from '@fugloy/disasm';
-import type { Hint, HintFile, HintsSummary, Module } from '@fugloy/disasm';
+import type { Dos, Hint, HintFile, HintsSummary, Machine, Module, SymbolSet } from '@fugloy/disasm';
 import { colorListing } from './color.js';
 
 export const VERSION = '0.2.0';
@@ -45,7 +49,7 @@ export interface Io {
   env?: Record<string, string | undefined>;
 }
 
-export const USAGE = `Usage: fugloy <file> [--base <hex> | --rebase <hex>] [--entry <hex>]... [--hints <path> | --write-hints <path>] [--format listing|zmac|ir] [--sweep] [--color] [-o <path>]
+export const USAGE = `Usage: fugloy <file> [--base <hex> | --rebase <hex>] [--entry <hex>]... [--hints <path> | --write-hints <path>] [--machine 1|3|4] [--dos trsdos|ldos|none] [--format listing|zmac|ir] [--sweep] [--color] [-o <path>]
 
 Prints a listing of a TRS-80 .CMD load module, raw binary, or tokenized Level
 II .BAS program. The format is detected from the file's content, never its
@@ -66,6 +70,10 @@ listing instead, with each code line disassembled at its true address.
   --write-hints <path>
                    write a hint-file skeleton for this program (identities and
                    any --entry addresses) and exit; refuses to overwrite
+  --machine <n>    name ROM, hardware, and DOS addresses for Model 1, 3
+                   (the default), or 4 (LS-DOS 6 service calls only)
+  --dos <name>     the DOS whose names to use: trsdos (Model III default),
+                   ldos (Model I default), or none
   --format <kind>  listing (default), zmac (assembler source that reassembles
                    to the same image), or ir (JSON)
   --sweep          the phase-1 linear sweep listing instead of pass 1
@@ -87,12 +95,39 @@ export function parseBase(text: string): number | null {
 
 const hex4 = (n: number): string => n.toString(16).toUpperCase().padStart(4, '0');
 
+const MACHINES: readonly Machine[] = [1, 3, 4];
+const DOSES: readonly Dos[] = ['trsdos', 'ldos', 'none'];
+
+/**
+ * The tables `--machine` and `--dos` choose: Model III, and the DOS that machine
+ * has by default, unless told otherwise. A value, or a machine and DOS together,
+ * that no tables exist for is the usage error to print, never a listing named
+ * from the wrong tables. Which pairs have tables is `selectSymbols`' to say.
+ */
+function chooseTables(machineText: string | undefined, dosText: string | undefined): { tables: SymbolSet } | { error: string } {
+  const machine = machineText === undefined ? 3 : MACHINES.find((m) => String(m) === machineText);
+  if (machine === undefined) return { error: '--machine must be 1, 3, or 4' };
+  const dos = dosText === undefined ? defaultDos(machine) : DOSES.find((d) => d === dosText);
+  if (dos === undefined) return { error: '--dos must be trsdos, ldos, or none' };
+  try {
+    return { tables: selectSymbols({ machine, dos }) };
+  } catch (e) {
+    if (!(e instanceof SelectionError)) throw e;
+    // The error's own wording is for callers of the library; a command line is told what to type instead.
+    if (machine === 4) return { error: '--machine 4 names LS-DOS 6 service calls only; leave out --dos' };
+    if (dos === 'trsdos') return { error: '--dos trsdos is the Model III DOS; use --machine 3 or --dos ldos' };
+    return { error: e.message };
+  }
+}
+
 export async function run(argv: string[], io: Io): Promise<number> {
   const options = {
     base: { type: 'string' },
     rebase: { type: 'string' },
     entry: { type: 'string', multiple: true },
     format: { type: 'string' },
+    machine: { type: 'string' },
+    dos: { type: 'string' },
     sweep: { type: 'boolean' },
     color: { type: 'boolean' },
     hints: { type: 'string' },
@@ -174,6 +209,12 @@ export async function run(argv: string[], io: Io): Promise<number> {
     io.stderr('fugloy: use either --hints or --write-hints, not both\n');
     return 2;
   }
+  const chosen = chooseTables(values.machine, values.dos);
+  if ('error' in chosen) {
+    io.stderr(`fugloy: ${chosen.error}\n`);
+    return 2;
+  }
+  const { tables } = chosen;
 
   let bytes: Uint8Array;
   try {
@@ -289,7 +330,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
   if (values.sweep === true && format === 'listing') {
     text = mod.format === 'cmd' ? renderCmdListing(mod, { source }) : mod.format === 'raw' ? renderRawListing(mod, { source }) : renderBasListing(mod, { source });
   } else {
-    const analysis = analyze(mod, { entries, annotations, ...(hints === undefined ? {} : { hints }), ...(rebasedFrom === undefined ? {} : { rebasedFrom }) });
+    const analysis = analyze(mod, { entries, annotations, tables, ...(hints === undefined ? {} : { hints }), ...(rebasedFrom === undefined ? {} : { rebasedFrom }) });
     // A .BAS with neither hidden code nor a planted entry lists as plain BASIC unless pass 1 was asked for.
     const plainBasic =
       mod.format === 'bas' && entries.length === 0 && hints === undefined && rebasedFrom === undefined && analysis.entries.length === 0 && mod.lines.every((l) => l.parsed);
