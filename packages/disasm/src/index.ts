@@ -29,6 +29,8 @@ export type { BasicBlock, Region, RegionKind, Successor } from './analysis/regio
 export { buildIr } from './ir.js';
 export type { Ir, IrTableName, Module } from './ir.js';
 export { analyze } from './pipeline.js';
+export { programFacts } from './facts.js';
+export type { MachineEvidence, MachineFit, ProgramFacts } from './facts.js';
 export type { Analysis, AnalyzeOptions } from './pipeline.js';
 export { renderPass1Listing } from './listing.js';
 export { basRows, formatRow, listingRows, rowIndex } from './rows.js';
