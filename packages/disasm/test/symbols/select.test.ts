@@ -1,38 +1,12 @@
 /** Choosing the tables for a machine and DOS (design spec §4.4), and the lookups over them (§5.1). */
 import { describe, expect, it } from 'vitest';
 import * as disasm from '../../src/index.js';
-import type { Cite, Dos, EntryKind, Machine, RomClass, RomComparison, Source, SymbolSelection, TableEntry, TableId } from '../../src/index.js';
+import type { Dos, Machine, RomClass, RomComparison, Source, SymbolSelection, TableEntry, TableId } from '../../src/index.js';
 import { defaultDos, describeSelection, SelectionError, selectSymbols, SymbolSet, tablesFor } from '../../src/symbols/select.js';
 import { SOURCES, TABLES } from '../../src/symbols/tables.generated.js';
 import { SELECTIONS, TABLE_IDS } from '../../src/symbols/types.js';
-
-type Tables = Readonly<Record<TableId, readonly TableEntry[]>>;
-
-const NO_TABLES: Tables = {
-  'rom-model1': [],
-  'rom-model3': [],
-  'hardware-model1': [],
-  'hardware-model3': [],
-  'dos-trsdos13': [],
-  'dos-ldos51-model1': [],
-  'dos-ldos51-model3': [],
-  'svc-lsdos6': [],
-};
-/** Every table empty except the lists given. */
-const tablesOf = (lists: Partial<Tables>): Tables => ({ ...NO_TABLES, ...lists });
-
-const CITE: Cite = { source: 'm3-basic', page: '1' };
-const entry = (table: TableId, kind: EntryKind, key: number, name: string, over: Partial<TableEntry> = {}): TableEntry => ({
-  table,
-  kind,
-  key,
-  name,
-  length: 1,
-  purpose: `purpose of ${name}`,
-  cite: [CITE],
-  coined: false,
-  ...over,
-});
+import { entry, NO_TABLES, tablesOf } from './helpers.js';
+import type { Tables } from './helpers.js';
 
 const MACHINES: readonly Machine[] = [1, 3, 4];
 const DOSES: readonly Dos[] = ['trsdos', 'ldos', 'none'];
@@ -373,10 +347,15 @@ describe('the package exports', () => {
     expect(disasm.describeSelection).toBe(describeSelection);
     expect(disasm.SymbolSet).toBe(SymbolSet);
     expect(disasm.SelectionError).toBe(SelectionError);
-    const sources: readonly Source[] = disasm.SOURCES;
-    const tables: Tables = disasm.TABLES;
+    const sources: readonly Source[] = disasm.SYMBOL_SOURCES;
+    const tables: Tables = disasm.SYMBOL_TABLES;
     expect(sources).toBe(SOURCES);
     expect(tables).toBe(TABLES);
+  });
+
+  it('does not export the generated tables as TABLES or SOURCES, which @fugloy/z80 already uses for its opcode tables', () => {
+    expect('TABLES' in disasm).toBe(false);
+    expect('SOURCES' in disasm).toBe(false);
   });
 
   it('exports the comparison types a caller passes to selectSymbols', () => {

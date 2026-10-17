@@ -5,6 +5,7 @@
  */
 import { recursiveDescent } from './analysis/descent.js';
 import type { Pass1 } from './analysis/descent.js';
+import { ExternalNames, externalUses } from './analysis/externals.js';
 import { findStrings, proposeTables } from './analysis/heuristics.js';
 import type { TableProposal } from './analysis/heuristics.js';
 import { Kind } from './analysis/map.js';
@@ -22,6 +23,8 @@ import { emptyAnnotations } from './hints/apply.js';
 import type { Annotations, Override } from './hints/apply.js';
 import { blockIdentities } from './hints/identity.js';
 import type { Module } from './ir.js';
+import type { SymbolSet } from './symbols/select.js';
+import type { TableEntry } from './symbols/types.js';
 
 /** A heuristic suggestion: reported with the hint line that would declare it, never applied. */
 export type Proposal = TableProposal | MoverProposal;
@@ -44,6 +47,8 @@ export interface AnalyzeOptions {
   hints?: HintsSummary;
   /** The base a rebased .BAS program was saved from; operands into the old range are then stale. */
   rebasedFrom?: number;
+  /** The ROM, hardware, and DOS names to give addresses outside the image, from `selectSymbols`; without it nothing is named. */
+  tables?: SymbolSet;
 }
 
 export interface Analysis {
@@ -57,6 +62,10 @@ export interface Analysis {
   annotations: Annotations;
   /** Pass 2: names for referenced addresses, user names on top. */
   symbols: SymbolTable;
+  /** Table names for addresses outside the image, minus any the program already uses as its own; names nothing without `tables`. */
+  externals: ExternalNames;
+  /** The table entries the instructions are named with, in table order then by key; empty without `tables`. */
+  tablesUsed: TableEntry[];
   hints?: HintsSummary;
   /** Entry points a .BAS program's text plants, with evidence (null address when unresolved); empty for other formats. */
   entries: MinedEntry[];
@@ -125,7 +134,10 @@ export function analyze(mod: Module, opts: AnalyzeOptions = {}): Analysis {
   }
   const identities = blockIdentities(mod.image);
   const proposals: Proposal[] = [...proposeTables(space.image, pass1, identities, space.toFile), ...proposeMovers(mod.image, pass1, identities, space.relocations)];
-  const analysis: Analysis = { module: mod, pass1, entry, roots: pass1.roots, transfer, annotations, symbols, entries, proposals, space, relocationErrors };
+  // Table names come last: they give way to the loaded image and to every name above, so those must be final.
+  const externals = new ExternalNames(opts.tables, (addr) => space.image.isLoaded(addr), symbols.list().map((s) => s.name));
+  const tablesUsed = externalUses(pass1.instructions.values(), externals, symbols);
+  const analysis: Analysis = { module: mod, pass1, entry, roots: pass1.roots, transfer, annotations, symbols, externals, tablesUsed, entries, proposals, space, relocationErrors };
   if (opts.hints !== undefined) analysis.hints = opts.hints;
   if (opts.rebasedFrom !== undefined) analysis.rebasedFrom = opts.rebasedFrom & 0xffff;
   return analysis;

@@ -40,6 +40,8 @@ export { applyHints, emptyAnnotations } from './hints/apply.js';
 export type { Annotations, Applied, Override, OverrideKind, TableHint } from './hints/apply.js';
 export { dataReference, SymbolTable, synthesizeSymbols } from './analysis/symbols.js';
 export type { Symbol, SymbolKind } from './analysis/symbols.js';
+export { ExternalNames, externalUses } from './analysis/externals.js';
+export type { ExternalName } from './analysis/externals.js';
 export { renderInstruction, renderOperands } from './emit/operands.js';
 export type { HintsSummary, Proposal } from './pipeline.js';
 export { lexLine } from './basic/lexer.js';
@@ -62,5 +64,6 @@ export { basIdentityNormalizer } from './hints/identity.js';
 export type { IdentityNormalizer } from './hints/identity.js';
 export { defaultDos, describeSelection, SelectionError, selectSymbols, SymbolSet, tablesFor } from './symbols/select.js';
 export type { SymbolSelection } from './symbols/select.js';
-export { SOURCES, TABLES } from './symbols/tables.generated.js';
+// Renamed at the package edge: @fugloy/z80 already exports an unrelated TABLES (its opcode tables), and the workbench imports both.
+export { SOURCES as SYMBOL_SOURCES, TABLES as SYMBOL_TABLES } from './symbols/tables.generated.js';
 export type { Cite, Dos, EntryKind, Machine, RomClass, RomComparison, Source, TableEntry, TableId } from './symbols/types.js';
