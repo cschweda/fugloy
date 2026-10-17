@@ -13,6 +13,11 @@ const printable = (b: number): boolean => b >= 0x20 && b <= 0x7e;
 
 /** The DB operand list for `bytes`: `'IT''S',0DH`. */
 export function dbItems(bytes: ArrayLike<number>): string {
+  return dbItemList(bytes).join(',');
+}
+
+/** The items of `dbItems`, each a quoted run (`'IT''S'`) or a hex byte (`0DH`). */
+export function dbItemList(bytes: ArrayLike<number>): string[] {
   const items: string[] = [];
   let run = '';
   for (let i = 0; i < bytes.length; i++) {
@@ -26,7 +31,7 @@ export function dbItems(bytes: ArrayLike<number>): string {
     items.push(hexByte(b));
   }
   if (run !== '') items.push(`'${run}'`);
-  return items.join(',');
+  return items;
 }
 
 /** `\tDB\t` rows for `bytes`, a new row after 16 bytes or 8 items. */

@@ -1,0 +1,14 @@
+; prog-7000.bas: tokenized BASIC, 6 lines, saved from $5000 to $5092, FF header, 0 unparsed
+; rebased from $7000 to $5000
+; pass 1: no roots; use --entry <hex> or --sweep
+; symbols: Model III ROM, hardware, TRSDOS 1.3
+; code lines: 0; entries mined: 0
+
+10 CLS:PRINT"VOYAGE OF THE VALKYRIE"
+20 FOR I=1 TO 10:PRINT I;:NEXT
+30 X=PEEK(16548)+256*PEEK(16549)
+;   16548 = $40A4 where the BASIC program's text begins in memory, low byte first (PROGSTART)
+;   16549 = $40A5 where the BASIC program's text begins in memory, low byte first (PROGSTART+1)
+40 IF X>0 THEN GOSUB 100 ELSE END
+100 DATA 1,2,"A:B":RETURN
+250 ' END OF PROGRAM

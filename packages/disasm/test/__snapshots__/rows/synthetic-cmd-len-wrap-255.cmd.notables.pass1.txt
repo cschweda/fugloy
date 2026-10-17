@@ -1,0 +1,138 @@
+; len-wrap-255.cmd: load module, 1 block, 1 run, 255 bytes, entry $6000 (transfer address)
+; pass 1: roots $6000; 110 of 255 bytes decoded as code (43%); 0 external targets; 1 note
+; symbol L6033 = $6033 (inside the instruction at $6032)
+; note: target $6033 is inside the instruction at $6032
+; block 0: $6000-$60FE (255 bytes)
+
+        ORG 6000H
+6000  00            NOP                     ; entry
+6001  01 02 03      LD BC,0302H
+6004  04            INC B
+6005  05            DEC B
+6006  06 07         LD B,07H
+6008  08            EX AF,AF'
+6009  09            ADD HL,BC
+600A  0A            LD A,(BC)
+600B  0B            DEC BC
+600C  0C            INC C
+600D  0D            DEC C
+600E  0E 0F         LD C,0FH
+6010  10 11         DJNZ L6023
+6012  12            LD (DE),A
+6013  13            INC DE
+6014  14            INC D
+6015  15            DEC D
+6016  16 17         LD D,17H
+6018  18 19         JR L6033
+601A  1A 1B 1C 1D   DB 1AH,1BH,1CH,1DH
+601E  1E 1F 20 21   DB 1EH,1FH,20H,21H
+6022  22            DB 22H
+L6023:
+6023  23            INC HL
+6024  24            INC H
+6025  25            DEC H
+6026  26 27         LD H,27H
+6028  28 29         JR Z,L6053
+602A  2A 2B 2C      LD HL,(2C2BH)
+602D  2D            DEC L
+602E  2E 2F         LD L,2FH
+6030  30 31         JR NC,L6063
+6032  32 33 34      LD (3433H),A
+6035  35            DEC (HL)
+6036  36 37         LD (HL),37H
+6038  38 39         JR C,L6073
+603A  3A 3B 3C      LD A,(3C3BH)
+603D  3D            DEC A
+603E  3E 3F         LD A,3FH
+6040  40            LD B,B
+6041  41            LD B,C
+6042  42            LD B,D
+6043  43            LD B,E
+6044  44            LD B,H
+6045  45            LD B,L
+6046  46            LD B,(HL)
+6047  47            LD B,A
+6048  48            LD C,B
+6049  49            LD C,C
+604A  4A            LD C,D
+604B  4B            LD C,E
+604C  4C            LD C,H
+604D  4D            LD C,L
+604E  4E            LD C,(HL)
+604F  4F            LD C,A
+6050  50            LD D,B
+6051  51            LD D,C
+6052  52            LD D,D
+L6053:
+6053  53            LD D,E
+6054  54            LD D,H
+6055  55            LD D,L
+6056  56            LD D,(HL)
+6057  57            LD D,A
+6058  58            LD E,B
+6059  59            LD E,C
+605A  5A            LD E,D
+605B  5B            LD E,E
+605C  5C            LD E,H
+605D  5D            LD E,L
+605E  5E            LD E,(HL)
+605F  5F            LD E,A
+6060  60            LD H,B
+6061  61            LD H,C
+6062  62            LD H,D
+L6063:
+6063  63            LD H,E
+6064  64            LD H,H
+6065  65            LD H,L
+6066  66            LD H,(HL)
+6067  67            LD H,A
+6068  68            LD L,B
+6069  69            LD L,C
+606A  6A            LD L,D
+606B  6B            LD L,E
+606C  6C            LD L,H
+606D  6D            LD L,L
+606E  6E            LD L,(HL)
+606F  6F            LD L,A
+6070  70            LD (HL),B
+6071  71            LD (HL),C
+6072  72            LD (HL),D
+L6073:
+6073  73            LD (HL),E
+6074  74            LD (HL),H
+6075  75            LD (HL),L
+6076  76            HALT
+6077  77 78 79 7A   DB 77H,78H,79H,7AH
+607B  7B 7C 7D 7E   DB 7BH,7CH,7DH,7EH
+607F  7F 80 81 82   DB 7FH,80H,81H,82H
+6083  83 84 85 86   DB 83H,84H,85H,86H
+6087  87 88 89 8A   DB 87H,88H,89H,8AH
+608B  8B 8C 8D 8E   DB 8BH,8CH,8DH,8EH
+608F  8F 90 91 92   DB 8FH,90H,91H,92H
+6093  93 94 95 96   DB 93H,94H,95H,96H
+6097  97 98 99 9A   DB 97H,98H,99H,9AH
+609B  9B 9C 9D 9E   DB 9BH,9CH,9DH,9EH
+609F  9F A0 A1 A2   DB 9FH,0A0H,0A1H,0A2H
+60A3  A3 A4 A5 A6   DB 0A3H,0A4H,0A5H,0A6H
+60A7  A7 A8 A9 AA   DB 0A7H,0A8H,0A9H,0AAH
+60AB  AB AC AD AE   DB 0ABH,0ACH,0ADH,0AEH
+60AF  AF B0 B1 B2   DB 0AFH,0B0H,0B1H,0B2H
+60B3  B3 B4 B5 B6   DB 0B3H,0B4H,0B5H,0B6H
+60B7  B7 B8 B9 BA   DB 0B7H,0B8H,0B9H,0BAH
+60BB  BB BC BD BE   DB 0BBH,0BCH,0BDH,0BEH
+60BF  BF C0 C1 C2   DB 0BFH,0C0H,0C1H,0C2H
+60C3  C3 C4 C5 C6   DB 0C3H,0C4H,0C5H,0C6H
+60C7  C7 C8 C9 CA   DB 0C7H,0C8H,0C9H,0CAH
+60CB  CB CC CD CE   DB 0CBH,0CCH,0CDH,0CEH
+60CF  CF D0 D1 D2   DB 0CFH,0D0H,0D1H,0D2H
+60D3  D3 D4 D5 D6   DB 0D3H,0D4H,0D5H,0D6H
+60D7  D7 D8 D9 DA   DB 0D7H,0D8H,0D9H,0DAH
+60DB  DB DC DD DE   DB 0DBH,0DCH,0DDH,0DEH
+60DF  DF E0 E1 E2   DB 0DFH,0E0H,0E1H,0E2H
+60E3  E3 E4 E5 E6   DB 0E3H,0E4H,0E5H,0E6H
+60E7  E7 E8 E9 EA   DB 0E7H,0E8H,0E9H,0EAH
+60EB  EB EC ED EE   DB 0EBH,0ECH,0EDH,0EEH
+60EF  EF F0 F1 F2   DB 0EFH,0F0H,0F1H,0F2H
+60F3  F3 F4 F5 F6   DB 0F3H,0F4H,0F5H,0F6H
+60F7  F7 F8 F9 FA   DB 0F7H,0F8H,0F9H,0FAH
+60FB  FB FC FD FE   DB 0FBH,0FCH,0FDH,0FEH

@@ -1,0 +1,9 @@
+; hidden-code.bas: tokenized BASIC, 3 lines, saved from $7000 to $701A, FF header, 1 unparsed
+; pass 1: roots $700D; 3 of 28 bytes decoded as code (11%); 22 typed as data; 1 external target; 0 notes
+; code lines: 1; entries mined: 0
+
+10 GOTO 30
+; line 20: machine code, 6 bytes at $700D
+700D  C3 00 00      JP 0000H                ; entry
+7010  C9 00 3E      DB 0C9H,00H,3EH
+30 END

@@ -1,0 +1,25 @@
+; relocated-code.cmd: load module, 2 blocks, 2 runs, 25 bytes, entry $8100 (transfer address)
+; pass 1: roots $8100; 23 of 25 bytes decoded as code (92%); 0 external targets; 0 notes
+; symbols: Model III ROM, hardware, TRSDOS 1.3
+; hints: relocated-code.hints: 2 blocks matched, 0 unmatched, 3 hints applied
+; block 0: $8000-$800A (11 bytes)
+; block 1: $8100-$810D (14 bytes)
+
+        ORG 8000H
+; relocated: file $8000-$800A executes at $5000-$500A
+L5000:
+5000  CD 08 50      CALL SETONE
+5003  18 02         JR L5007                ; skip the padding
+5005  00 00         DB 00H,00H
+L5007:
+5007  C9            RET
+SETONE:
+5008  3E 01         LD A,01H
+500A  C9            RET
+
+        ORG 8100H
+8100  21 00 80      LD HL,8000H             ; entry
+8103  11 00 50      LD DE,L5000
+8106  01 0B 00      LD BC,000BH
+8109  ED B0         LDIR
+810B  C3 00 50      JP L5000

@@ -1,11 +1,19 @@
-/** Operand text with symbol names where a symbol exists and the operand is a reference; shared by the emitter and the listing. */
-import { formatOperand } from '@fugloy/z80';
+/** Operand text and spans with symbol names where a symbol exists and the operand is a reference; shared by the emitter and the listing. */
+import { hexByte, hexWord } from '@fugloy/z80';
 import type { Instruction, Operand } from '@fugloy/z80';
 import { inTableOrder } from '../analysis/externals.js';
 import type { ExternalNames } from '../analysis/externals.js';
 import { operandUse, operandValue } from '../analysis/symbols.js';
 import type { SymbolTable } from '../analysis/symbols.js';
+import type { Span } from '../rows.js';
 import type { TableEntry } from '../symbols/types.js';
+
+/** A name an operand takes: its text, the address, port, or service call it stands for, and the table entry when it is a table name. */
+export interface OperandName {
+  text: string;
+  target: number;
+  entry?: TableEntry;
+}
 
 /**
  * The name an operand takes, if any: the program's own symbol at its address
@@ -13,31 +21,83 @@ import type { TableEntry } from '../symbols/types.js';
  * address, so only the port names apply to it. Which lookup an operand uses is
  * `operandUse`, which `externalUses` follows too.
  */
-function operandName(ins: Instruction, op: Operand, symbols: SymbolTable | undefined, externals: ExternalNames | undefined): string | undefined {
+function operandName(ins: Instruction, op: Operand, symbols: SymbolTable | undefined, externals: ExternalNames | undefined): OperandName | undefined {
   const use = operandUse(ins, op);
   const value = operandValue(op);
   if (use === undefined || value === undefined) return undefined;
-  if (use === 'port') return externals?.port(value)?.text;
-  const own = symbols?.get(value);
-  if (own !== undefined) return own.name;
-  return (use === 'code' ? externals?.code(value) : externals?.data(value))?.text;
+  const own = use === 'port' ? undefined : symbols?.get(value);
+  if (own !== undefined) return { text: own.name, target: value };
+  const table = use === 'port' ? externals?.port(value) : use === 'code' ? externals?.code(value) : externals?.data(value);
+  return table === undefined ? undefined : { text: table.text, target: value, entry: table.entry };
 }
 
+const punct = (text: string): Span => ({ text, kind: 'punct' });
+const num = (text: string): Span => ({ text, kind: 'number' });
+
+/** A program name is a `label` span, a table name a `table` span; both carry what they stand for. */
+export function nameSpan(name: OperandName): Span {
+  return name.entry === undefined ? { text: name.text, kind: 'label', target: name.target } : { text: name.text, kind: 'table', target: name.target, entry: name.entry };
+}
+
+/** The spans of one operand, spelled as `formatOperand` spells it unless a name replaces the number. */
+function operandSpans(op: Operand, name: OperandName | undefined): Span[] {
+  if (name !== undefined) return op.kind === 'mem' || op.kind === 'port' ? [punct('('), nameSpan(name), punct(')')] : [nameSpan(name)];
+  switch (op.kind) {
+    case 'reg':
+    case 'reg16':
+      return [{ text: op.reg, kind: 'register' }];
+    case 'ind':
+      return [punct('('), { text: op.reg, kind: 'register' }, punct(')')];
+    case 'idx':
+      return [punct('('), { text: op.reg, kind: 'register' }, punct(op.disp < 0 ? '-' : '+'), num(hexByte(Math.abs(op.disp))), punct(')')];
+    case 'imm8':
+    case 'byte':
+      return [num(hexByte(op.value))];
+    case 'imm16':
+      return [num(hexWord(op.value))];
+    case 'mem':
+      return [punct('('), num(hexWord(op.addr)), punct(')')];
+    case 'port':
+      return [punct('('), num(hexByte(op.value)), punct(')')];
+    case 'rel':
+      return [num(hexWord(op.target))];
+    case 'cc':
+      return [{ text: op.cond, kind: 'condition' }];
+    case 'bit':
+      return [num(String(op.bit))];
+    case 'rst':
+      return [num(hexByte(op.addr))];
+    case 'im':
+      return [num(String(op.mode))];
+  }
+}
+
+/** `items` with a `,` span between each two. */
+export function commaSeparated(items: Span[][]): Span[] {
+  return items.flatMap((spans, i) => (i === 0 ? spans : [punct(','), ...spans]));
+}
+
+/** The operand spans of `ins`, comma-separated, with symbol and table names. */
+export function operandListSpans(ins: Instruction, symbols?: SymbolTable, externals?: ExternalNames): Span[] {
+  return commaSeparated(ins.operands.map((op) => operandSpans(op, operandName(ins, op, symbols, externals))));
+}
+
+/** `LD`, ` `, `HL`, `,`, `DATA_7000`: the spans of `renderInstruction`. An undocumented form's `DB` is a directive. */
+export function instructionSpans(ins: Instruction, symbols?: SymbolTable, externals?: ExternalNames): Span[] {
+  const operands = operandListSpans(ins, symbols, externals);
+  const mnemonic: Span = { text: ins.mnemonic, kind: ins.mnemonic === 'DB' ? 'directive' : 'mnemonic' };
+  return operands.length === 0 ? [mnemonic] : [mnemonic, punct(' '), ...operands];
+}
+
+export const spanText = (spans: readonly Span[]): string => spans.map((s) => s.text).join('');
+
 export function renderOperands(ins: Instruction, symbols?: SymbolTable, externals?: ExternalNames): string {
-  if (symbols === undefined && externals === undefined) return ins.operands.map(formatOperand).join(',');
-  return ins.operands
-    .map((op) => {
-      const name = operandName(ins, op, symbols, externals);
-      if (name === undefined) return formatOperand(op);
-      return op.kind === 'mem' || op.kind === 'port' ? `(${name})` : name;
-    })
-    .join(',');
+  return spanText(operandListSpans(ins, symbols, externals));
 }
 
 /** `LD HL,DATA_7000` — mnemonic and operands with symbol names. */
 export function renderInstruction(ins: Instruction, symbols?: SymbolTable, externals?: ExternalNames): string {
-  const operands = renderOperands(ins, symbols, externals);
-  return operands === '' ? ins.mnemonic : `${ins.mnemonic} ${operands}`;
+  return spanText(instructionSpans(ins, symbols, externals));
 }
 
 /** What a comment says about an instruction, and the table entry it speaks of. */
@@ -119,16 +179,29 @@ export function previousInstruction(instructions: ReadonlyMap<number, Instructio
 }
 
 /**
+ * `externalNote` of every instruction, by address, worked out once: the
+ * comment column of a listing and the legend of its header both read it.
+ */
+export function externalNotes(instructions: ReadonlyMap<number, Instruction>, externals: ExternalNames, symbols?: SymbolTable): Map<number, ExternalNote> {
+  const notes = new Map<number, ExternalNote>();
+  for (const [addr, ins] of instructions) {
+    const note = externalNote(ins, previousInstruction(instructions, symbols, addr), externals, symbols);
+    if (note !== undefined) notes.set(addr, note);
+  }
+  return notes;
+}
+
+/** The table entries `notes` speak of, in table order, each once. */
+export function noteEntries(notes: ReadonlyMap<number, ExternalNote>): TableEntry[] {
+  return inTableOrder([...notes.values()].map((n) => n.entry));
+}
+
+/**
  * The table entries the comments of these instructions speak of, in table order,
  * each once: the routines named after transfers, RST vectors, and service calls.
  * An RST or service call is named only in its comment, so these are the entries
  * a legend needs beyond `externalUses`.
  */
 export function commentEntries(instructions: ReadonlyMap<number, Instruction>, externals: ExternalNames, symbols?: SymbolTable): TableEntry[] {
-  const found: TableEntry[] = [];
-  for (const [addr, ins] of instructions) {
-    const note = externalNote(ins, previousInstruction(instructions, symbols, addr), externals, symbols);
-    if (note !== undefined) found.push(note.entry);
-  }
-  return inTableOrder(found);
+  return noteEntries(externalNotes(instructions, externals, symbols));
 }

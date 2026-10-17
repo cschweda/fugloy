@@ -1,0 +1,251 @@
+// The listing's editing UI: the marking keys, the inline editor N and ; open
+// under the cursor row, the right-click menu, and the message a refused edit
+// leaves under the listing. The edits themselves go through useEditing, so
+// each is a hint-file change. The page hands in the listing and how to move
+// the cursor; this returns the key bindings to merge into the page's map.
+import { computed, nextTick, ref } from 'vue';
+import type { ComputedRef, Ref } from 'vue';
+import { editTargets, markRange } from '../utils/edit-targets';
+import type { EditTarget } from '../utils/edit-targets';
+import type { Edit, MarkKind } from '../utils/edits';
+import type { MenuItem } from '../components/listing/RowMenu.vue';
+import type { InlineChoice } from '../components/listing/InlineEdit.vue';
+import { useEditing } from './useEditing';
+import { useWorkbench } from './useWorkbench';
+import type { KeyBinding } from './useWorkbenchKeys';
+
+/** What the editor needs of ListingView. */
+export interface ListingHandle {
+  scrollToAddr(addr: number): void;
+  cursorRect(): DOMRect | null;
+  focus(): void;
+}
+
+export interface Inline {
+  op: 'name' | 'comment';
+  targets: EditTarget[];
+  addr: number;
+  text: string;
+  error: string | null;
+  left: number;
+  top: number;
+}
+
+/** Where the inline editor and the keyboard-opened menu sit: past the address and bytes columns, where the row's text starts. */
+const TEXT_COLUMN = 140;
+
+const $a = (addr: number): string => `$${addr.toString(16).toUpperCase().padStart(4, '0')}`;
+
+export function useListingEditor(opts: {
+  listing: Ref<ListingHandle | null>;
+  /** Moves the cursor to a row, as a click on it would; the menu uses it for a right-click outside the selection. */
+  select: (addr: number) => void;
+  /** Shows the listing (the left page's Listing tab). */
+  showListing: () => void;
+}) {
+  const wb = useWorkbench();
+  const { session, rows, cursor, selection } = wb;
+  const ed = useEditing();
+  const editMessage = ref<string | null>(null);
+
+  function edit(e: Edit): void {
+    editMessage.value = ed.apply(e);
+  }
+
+  /** A proposal's hint lines, from the Program tab's Apply. */
+  function applyHintLines(lines: string[]): void {
+    editMessage.value = ed.applyLines(lines);
+  }
+
+  /** C, D, W, S on the selection (or the cursor row); T declares a jump table there. */
+  function mark(as: MarkKind | 'table'): void {
+    const r = markRange(rows.value, cursor.value, selection.value);
+    if (r === null) return;
+    edit(as === 'table' ? { op: 'table', ...r } : { op: 'mark', as, ...r });
+  }
+
+  function undo(): void {
+    editMessage.value = null;
+    ed.undo();
+  }
+
+  function redo(): void {
+    editMessage.value = null;
+    ed.redo();
+  }
+
+  // The inline editor.
+  const inline = ref<Inline | null>(null);
+
+  /** What the field starts with: the address's user name, or its comment. */
+  function inlineText(op: Inline['op'], addr: number): string {
+    const s = session.value;
+    if (s === null) return '';
+    if (op === 'comment') return s.analysis.annotations.comments.get(addr) ?? '';
+    const sym = s.analysis.symbols.get(addr);
+    return sym?.source === 'user' ? sym.name : '';
+  }
+
+  const inlinePlaceholder = computed(() => {
+    const i = inline.value;
+    if (i === null) return '';
+    if (i.op === 'comment') return 'a comment (empty removes it)';
+    const sym = session.value?.analysis.symbols.get(i.addr);
+    return sym === undefined || sym.source === 'user' ? 'a name (empty removes it)' : `a name for ${sym.name}`;
+  });
+
+  const inlineChoices: ComputedRef<InlineChoice[]> = computed(() =>
+    (inline.value?.targets ?? []).map((t) => ({ value: t.addr, label: `${$a(t.addr)} (${t.what === 'row' ? 'this row' : 'operand'})` })),
+  );
+
+  const inlineChoice = computed({
+    get: () => inline.value?.addr ?? 0,
+    set: (addr: number) => {
+      const i = inline.value;
+      if (i !== null) inline.value = { ...i, addr, text: inlineText(i.op, addr), error: null };
+    },
+  });
+
+  const inlineValue = computed({
+    get: () => inline.value?.text ?? '',
+    set: (text: string) => {
+      if (inline.value !== null) inline.value = { ...inline.value, text, error: null };
+    },
+  });
+
+  /** The cursor row's place on screen, after scrolling it into view. */
+  async function cursorPlace(): Promise<{ left: number; bottom: number } | null> {
+    const at = cursor.value;
+    if (at === null) return null;
+    opts.listing.value?.scrollToAddr(at);
+    // One tick for the scroll, one for the rows it renders.
+    await nextTick();
+    await nextTick();
+    const r = opts.listing.value?.cursorRect();
+    return r === null || r === undefined ? null : { left: r.left, bottom: r.bottom };
+  }
+
+  async function openInline(op: Inline['op']): Promise<void> {
+    const s = session.value;
+    const at = cursor.value;
+    if (s === null || at === null) return;
+    closeMenu(false);
+    opts.showListing();
+    editMessage.value = null;
+    const place = await cursorPlace();
+    if (place === null) return;
+    inline.value = { op, targets: editTargets(s, at), addr: at, text: inlineText(op, at), error: null, left: place.left + TEXT_COLUMN, top: place.bottom + 2 };
+  }
+
+  function closeInline(): void {
+    if (inline.value === null) return;
+    inline.value = null;
+    void nextTick(() => opts.listing.value?.focus());
+  }
+
+  /** Applies the inline edit; a refused one keeps the editor open with the reason, and the hint file as it was. */
+  function submitInline(): void {
+    const i = inline.value;
+    if (i === null) return;
+    const error = ed.apply(i.op === 'name' ? { op: 'name', addr: i.addr, name: i.text } : { op: 'comment', addr: i.addr, text: i.text });
+    if (error !== null) {
+      inline.value = { ...i, error };
+      return;
+    }
+    editMessage.value = null;
+    closeInline();
+  }
+
+  // The right-click menu.
+  const menu = ref<{ x: number; y: number } | null>(null);
+  const isMac = ref(false);
+  const MENU_ACTIONS: Record<string, () => void> = {
+    code: () => mark('code'),
+    bytes: () => mark('bytes'),
+    words: () => mark('words'),
+    string: () => mark('string'),
+    table: () => mark('table'),
+    name: () => void openInline('name'),
+    comment: () => void openInline('comment'),
+    undo,
+    redo,
+  };
+  const menuItems = computed<MenuItem[]>(() => [
+    { id: 'code', label: 'Code', keys: 'C', accel: 'c' },
+    { id: 'bytes', label: 'Bytes', keys: 'D', accel: 'd' },
+    { id: 'words', label: 'Words', keys: 'W', accel: 'w' },
+    { id: 'string', label: 'String', keys: 'S', accel: 's' },
+    { id: 'table', label: 'Jump table', keys: 'T', accel: 't' },
+    { id: 'name', label: 'Rename…', keys: 'N', accel: 'n', rule: true },
+    { id: 'comment', label: 'Comment…', keys: ';', accel: ';' },
+    { id: 'undo', label: 'Undo', keys: isMac.value ? '⌘Z' : 'Ctrl+Z', disabled: !ed.canUndo.value, rule: true },
+    { id: 'redo', label: 'Redo', keys: isMac.value ? '⇧⌘Z' : 'Ctrl+Y', disabled: !ed.canRedo.value },
+  ]);
+
+  function openMenu(x: number, y: number): void {
+    inline.value = null;
+    menu.value = { x, y };
+  }
+
+  function closeMenu(refocus = true): void {
+    if (menu.value === null) return;
+    menu.value = null;
+    if (refocus) void nextTick(() => opts.listing.value?.focus());
+  }
+
+  function pickMenu(id: string): void {
+    // Rename and Comment move focus to the inline editor instead.
+    closeMenu(id !== 'name' && id !== 'comment');
+    MENU_ACTIONS[id]?.();
+  }
+
+  /** A right-click on a row: outside the selection, it moves the cursor there first. */
+  function onContext(addr: number, x: number, y: number): void {
+    const sel = selection.value;
+    if (sel === null || addr < sel.from || addr > sel.to) opts.select(addr);
+    openMenu(x, y);
+  }
+
+  /** The ContextMenu key or Shift+F10: the menu opens on the cursor row. */
+  async function menuAtCursor(): Promise<void> {
+    const place = await cursorPlace();
+    if (place !== null) openMenu(place.left + TEXT_COLUMN, place.bottom);
+  }
+
+  const keys: Record<string, KeyBinding> = {
+    c: { run: () => mark('code') },
+    d: { run: () => mark('bytes') },
+    w: { run: () => mark('words') },
+    s: { run: () => mark('string') },
+    t: { run: () => mark('table') },
+    n: { run: () => void openInline('name') },
+    ';': { run: () => void openInline('comment') },
+    'ctrl+z': { run: undo },
+    'ctrl+shift+z': { run: redo },
+    'ctrl+y': { run: redo },
+    contextmenu: { run: () => void menuAtCursor(), listing: true },
+    'shift+f10': { run: () => void menuAtCursor(), listing: true },
+  };
+
+  return {
+    editMessage,
+    applyHintLines,
+    inline,
+    inlineValue,
+    inlineChoice,
+    inlineChoices,
+    inlinePlaceholder,
+    submitInline,
+    closeInline,
+    menu,
+    menuItems,
+    isMac,
+    pickMenu,
+    closeMenu,
+    onContext,
+    menuAtCursor,
+    keys,
+    /** True while the menu or the inline editor has the keys. */
+    busy: computed(() => menu.value !== null || inline.value !== null),
+  };
+}

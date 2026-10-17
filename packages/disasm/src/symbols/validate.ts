@@ -7,7 +7,7 @@
 import { hex4 } from '@fugloy/z80';
 import { RESERVED, SYNTH_NAME } from '../hints/format.js';
 import { ENTRY_KINDS, SELECTIONS, TABLE_IDS } from './types.js';
-import type { Cite, EntryKind, Source, TableEntry, TableId } from './types.js';
+import type { Cite, EntryKind, ManualScan, Source, TableEntry, TableId } from './types.js';
 
 type Json = Record<string, unknown>;
 
@@ -34,7 +34,7 @@ const ALLOWED_KINDS: Readonly<Record<TableId, readonly EntryKind[]>> = {
 
 const ENTRY_FIELDS = new Set(['addr', 'port', 'svc', 'name', 'kind', 'purpose', 'cite', 'length', 'coined', 'note']);
 const KEY_FIELDS = ['addr', 'port', 'svc'] as const;
-const SOURCE_FIELDS = new Set(['id', 'author', 'title', 'publisher', 'year', 'edition', 'locator']);
+const SOURCE_FIELDS = new Set(['id', 'author', 'title', 'publisher', 'year', 'circa', 'edition', 'catalog', 'url', 'textUrl', 'permissionUrl', 'redistributable']);
 
 /** A name a source prints may start with `$` or `@` and end in one `$` (LS-DOS and LDOS print `@FLAGS$`, `@HIGH$`, `TIME$`); a name we coin may do neither. */
 const SOURCE_NAME = /^[$@]?[A-Z][A-Z0-9_]*\$?$/;
@@ -208,14 +208,48 @@ function readSources(raw: unknown, errors: string[]): { sources: Source[]; known
     const title = text('title');
     const publisher = text('publisher');
     const year = text('year');
-    const locator = text('locator');
-    let edition: string | undefined;
-    if (item.edition !== undefined) {
-      if (isText(item.edition)) edition = item.edition;
-      else fail('edition must be non-empty text');
-    }
-    if (!usable || id === undefined || author === undefined || title === undefined || publisher === undefined || year === undefined || locator === undefined) return;
-    sources.push({ id, author, title, publisher, year, ...(edition === undefined ? {} : { edition }), locator });
+    if (year !== undefined && !/^\d{4}(–\d{2,4})?$/.test(year)) fail('year must be digits or a range of digits, like 1982 or 1983–84 (circa is its own flag)');
+    const optional = (field: string): string | undefined => {
+      const value = item[field];
+      if (value === undefined) return undefined;
+      if (isText(value)) return value;
+      fail(`${field} must be non-empty text`);
+      return undefined;
+    };
+    const link = (field: string): string | undefined => {
+      const value = optional(field);
+      if (value !== undefined && !/^https?:\/\/\S+$/.test(value)) fail(`${field} must start with http:// or https://`);
+      return value;
+    };
+    const flag = (field: string): true | undefined => {
+      const value = item[field];
+      if (value === undefined) return undefined;
+      if (value === true) return true;
+      fail(`${field} must be true or false`);
+      return undefined;
+    };
+    const edition = optional('edition');
+    const catalog = optional('catalog');
+    const url = link('url');
+    const textUrl = link('textUrl');
+    const permissionUrl = link('permissionUrl');
+    const circa = flag('circa');
+    const redistributable = flag('redistributable');
+    if (redistributable === true && permissionUrl === undefined && item.permissionUrl === undefined) fail('redistributable needs a permissionUrl');
+    if (url === undefined && catalog === undefined && item.url === undefined) fail('needs a url or a catalog number');
+    const archiveId = url === undefined ? undefined : /^https?:\/\/archive\.org\/details\/([^/?#\s]+)$/.exec(url)?.[1];
+    if (!usable || id === undefined || author === undefined || title === undefined || publisher === undefined || year === undefined) return;
+    sources.push({
+      id, author, title, publisher, year,
+      ...(circa === undefined ? {} : { circa }),
+      ...(edition === undefined ? {} : { edition }),
+      ...(catalog === undefined ? {} : { catalog }),
+      ...(url === undefined ? {} : { url }),
+      ...(textUrl === undefined ? {} : { textUrl }),
+      ...(permissionUrl === undefined ? {} : { permissionUrl }),
+      ...(archiveId === undefined ? {} : { archiveId }),
+      ...(redistributable === undefined ? {} : { redistributable }),
+    });
   });
   return { sources, known };
 }
@@ -316,4 +350,52 @@ export function validateTables(
 
   errors.push(...repeatedNumbers(tables, labels), ...crossChecks(tables, labels));
   return { tables, sources: registry.sources, errors };
+}
+
+const MANUAL_FIELDS = new Set(['source', 'archiveId', 'pdfSha256', 'pdfPages', 'pages']);
+
+/**
+ * Validates the parsed manual page tables, one per source with an archiveId
+ * (`file` is how errors name it, `source` the id it is named for), and returns
+ * the ones that pass with every error found. A manual with any error is left
+ * out.
+ */
+export function validateManuals(
+  files: readonly { source: string; file: string; json: unknown }[],
+  sources: readonly Source[],
+): { manuals: ManualScan[]; errors: string[] } {
+  const errors: string[] = [];
+  const manuals: ManualScan[] = [];
+  for (const { source, file, json } of files) {
+    const before = errors.length;
+    const fail = (message: string): void => {
+      errors.push(`${file}: ${message}`);
+    };
+    if (!isObject(json)) {
+      fail('expected an object with "source", "archiveId", "pdfSha256", "pdfPages", and "pages"');
+      continue;
+    }
+    for (const field of Object.keys(json)) if (!MANUAL_FIELDS.has(field)) fail(`unknown field "${field}"`);
+    const registered = sources.find((s) => s.id === source);
+    if (json.source !== source) fail(`source ${show(json.source)} is not ${source}, the source this file is named for`);
+    if (registered?.archiveId === undefined) fail(`${source} has no archiveId in sources.json`);
+    else if (json.archiveId !== registered.archiveId) fail(`archiveId ${show(json.archiveId)} is not ${source}'s archiveId "${registered.archiveId}"`);
+    const shas = json.pdfSha256;
+    if (!Array.isArray(shas) || shas.length === 0) fail('pdfSha256 must list at least one hash');
+    else for (const sha of shas) if (typeof sha !== 'string' || !/^[0-9a-f]{64}$/.test(sha)) fail(`pdfSha256 ${show(sha)} is not 64 lowercase hex digits`);
+    const pdfPages = json.pdfPages;
+    const countOk = typeof pdfPages === 'number' && Number.isInteger(pdfPages) && pdfPages > 0;
+    if (!countOk) fail(`pdfPages ${show(pdfPages)} is not a positive whole number`);
+    const pages = json.pages;
+    if (!isObject(pages)) fail('pages must be an object of printed page to PDF page');
+    else if (countOk) {
+      for (const [printed, pdf] of Object.entries(pages)) {
+        if (!isText(printed)) fail(`page ${show(printed)} is empty`);
+        if (typeof pdf !== 'number' || !Number.isInteger(pdf) || pdf < 1 || pdf > pdfPages) fail(`page "${printed}" maps to ${show(pdf)}, outside the PDF's 1..${pdfPages}`);
+      }
+    }
+    if (errors.length > before) continue;
+    manuals.push({ source, archiveId: json.archiveId as string, pdfSha256: [...(shas as string[])], pdfPages: pdfPages as number, pages: { ...(pages as Record<string, number>) } });
+  }
+  return { manuals, errors };
 }

@@ -1,0 +1,10 @@
+; bad-token.bas: tokenized BASIC, 3 lines, saved from $7000 to $7014, FF header, 1 unparsed
+; pass 1: roots $700A; 1 of 22 bytes decoded as code (5%); 19 typed as data; 0 external targets; 1 note
+; code lines: 1; entries mined: 0
+; note: instruction at $700B would overlap data at $700D
+
+10 CLS
+; line 20: machine code, 3 bytes at $700A
+700A  B2            OR D                    ; entry
+700B  FC 41         DB 0FCH,41H
+30 END

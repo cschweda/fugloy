@@ -1,0 +1,13 @@
+; wraps-ffff.cmd: load module, 1 block, 2 runs, 4 bytes, entry $FFFE (transfer address)
+; pass 1: roots $FFFE; 4 of 4 bytes decoded as code (100%); 0 external targets; 0 notes
+; symbols: Model III ROM, hardware, TRSDOS 1.3
+; block 0: $FFFE-$0001 (4 bytes) wraps past $FFFF
+; warning: block at $FFFE (4 bytes) wraps past $FFFF
+
+        ORG 0000H
+0000  03            DB 03H
+0001  04            INC B
+
+        ORG 0FFFEH
+FFFE  01            DB 01H                  ; entry
+FFFF  02            DB 02H

@@ -1,0 +1,4 @@
+; trailing-bytes.bas: tokenized BASIC, 2 lines, saved from $7000 to $700C, FF header, 0 unparsed
+; warning: 3 bytes after the program end ignored
+10 CLS
+20 END

@@ -16,6 +16,8 @@ export interface Symbol {
   name: string;
   kind: SymbolKind;
   source: 'synth' | 'user';
+  /** The `at` comment of a user name at an address the program does not load. */
+  comment?: string;
 }
 
 /** Higher wins when two uses meet at one address. */
@@ -102,6 +104,14 @@ export function operandValue(op: Operand): number | undefined {
   }
 }
 
+/** `at` comments on addresses the program does not load and no user name takes: nothing else would show them. */
+export function outsideComments(annotations: Annotations, symbols: SymbolTable, image: MemoryImage): { addr: number; text: string }[] {
+  return [...annotations.comments]
+    .filter(([addr]) => !image.isLoaded(addr) && !symbols.has(addr))
+    .map(([addr, text]) => ({ addr, text }))
+    .sort((a, b) => a.addr - b.addr);
+}
+
 export function synthesizeSymbols(pass1: Pass1, annotations: Annotations, image: MemoryImage): SymbolTable {
   const table = new SymbolTable();
   const propose = (addr: number, kind: SymbolKind): void => {
@@ -121,7 +131,8 @@ export function synthesizeSymbols(pass1: Pass1, annotations: Annotations, image:
   }
   for (const [addr, name] of annotations.names) {
     const current = table.get(addr);
-    table.set({ addr: addr & 0xffff, name, kind: current?.kind ?? 'data', source: 'user' });
+    const comment = image.isLoaded(addr) ? undefined : annotations.comments.get(addr);
+    table.set({ addr: addr & 0xffff, name, kind: current?.kind ?? 'data', source: 'user', ...(comment === undefined ? {} : { comment }) });
   }
   return table;
 }

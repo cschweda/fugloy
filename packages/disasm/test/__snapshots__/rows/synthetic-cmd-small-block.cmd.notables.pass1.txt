@@ -1,0 +1,6 @@
+; small-block.cmd: load module, 1 block, 1 run, 1 byte, entry $6000 (transfer address)
+; pass 1: roots $6000; 1 of 1 bytes decoded as code (100%); 0 external targets; 0 notes
+; block 0: $6000-$6000 (1 byte)
+
+        ORG 6000H
+6000  C9            RET                     ; entry

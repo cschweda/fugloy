@@ -1,0 +1,45 @@
+; hint-paths.cmd: load module, 1 block, 1 run, 91 bytes, entry $6000 (transfer address)
+; pass 1: roots $6000; 31 of 91 bytes decoded as code (34%); 6 typed as data; 1 external target (1 named); 0 notes
+; symbols: Model III ROM, hardware, TRSDOS 1.3
+; table name $VDCHAR = $0033: display the character in A at the cursor (m3-basic 12/20)
+; block 0: $6000-$605A (91 bytes)
+
+        ORG 6000H
+6000  CD 20 60      CALL SUB_6020           ; entry
+6003  21 40 60      LD HL,DATA_6040
+6006  3A 50 60      LD A,(DATA_6050)
+6009  32 50 60      LD (DATA_6050),A
+600C  21 30 60      LD HL,DATA_6030
+600F  5F            LD E,A
+6010  16 00         LD D,00H
+6012  19            ADD HL,DE
+6013  19            ADD HL,DE
+6014  7E            LD A,(HL)
+6015  23            INC HL
+6016  66            LD H,(HL)
+6017  6F            LD L,A
+6018  E9            JP (HL)
+6019  18 FE C9 00   DB 18H,0FEH,0C9H,00H
+601D  00 00 00      DB 00H,00H,00H
+SUB_6020:
+6020  3E 41         LD A,41H
+6022  CD 33 00      CALL $VDCHAR            ; display the character in A at the cursor
+6025  C9            RET
+6026  00 00 00 00   DB 00H,00H,00H,00H
+602A  00 00 00 00   DB 00H,00H,00H,00H
+602E  00 00         DB 00H,00H
+DATA_6030:
+6030  19 60 1B 60   DB 19H,60H,1BH,60H
+6034  00 00 00 00   DB 00H,00H,00H,00H
+6038  00 00 00 00   DB 00H,00H,00H,00H
+603C  00 00 00 00   DB 00H,00H,00H,00H
+DATA_6040:
+6040  34 12 78 56   DB 34H,12H,78H,56H
+6044  BB AA 00 00   DB 0BBH,0AAH,00H,00H
+6048  00 00 00 00   DB 00H,00H,00H,00H
+604C  00 00 00 00   DB 00H,00H,00H,00H
+DATA_6050:
+6050  01 02 03 04   DB 01H,02H,03H,04H
+6054  48 45 4C 4C   DB 'HELL'
+6058  4F 0D         DB 'O',0DH
+605A  FF            DB 0FFH

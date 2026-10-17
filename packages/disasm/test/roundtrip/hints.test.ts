@@ -3,6 +3,7 @@ import { expect } from 'vitest';
 import { loadCmd } from '../../src/cmd.js';
 import { emitZmac } from '../../src/emit/zmac.js';
 import { applyHints } from '../../src/hints/apply.js';
+import { parseHints } from '../../src/hints/format.js';
 import { emptyAnnotations } from '../../src/hints/apply.js';
 import { analyze } from '../../src/pipeline.js';
 import { loadRaw } from '../../src/raw.js';
@@ -42,5 +43,16 @@ test('an instruction split across two relocated regions reassembles byte for byt
   expect(a.pass1.instructions.get(0x5000)?.length).toBe(2);
   const source = emitZmac(mod.image, a.pass1, a.transfer, { symbols: a.symbols, annotations: a.annotations, space: a.space });
   expect(source).toContain('\t.PHASE\t5000H\n\tDB\t3EH\n\t.DEPHASE\n\tDB\t0FFH,0FFH\n\t.PHASE\t5001H\n\tDB\t41H\n\tRET\n\t.DEPHASE\n');
+  expectSameImage(assemble(source).module.image, mod.image);
+});
+
+test('a user name outside the image is defined by an EQU and reassembles to the same image', () => {
+  const mod = loadRaw(Uint8Array.from([0x3a, 0x00, 0x7f, 0x32, 0x01, 0x7f, 0xc9]), 0x7000);
+  const parsed = parseHints('fugloy-hints 1\nat $7F00 name SCORE\nat $7F00 comment player score\nat $7F01 name LIVES\n');
+  const applied = applyHints(parsed.file, mod.image);
+  const a = analyze(mod, { entries: [0x7000], annotations: applied.annotations });
+  const source = emitZmac(mod.image, a.pass1, a.transfer, { symbols: a.symbols, annotations: a.annotations });
+  expect(source).toContain('SCORE\tEQU\t7F00H\t; player score\nLIVES\tEQU\t7F01H\n');
+  expect(source).toContain('\tLD\tA,(SCORE)\n\tLD\t(LIVES),A\n');
   expectSameImage(assemble(source).module.image, mod.image);
 });

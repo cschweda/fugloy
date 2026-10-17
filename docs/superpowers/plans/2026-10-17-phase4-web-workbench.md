@@ -237,7 +237,7 @@
 **Interfaces:**
 - `Source` becomes `{ id; author; title; publisher; year: string; circa?: boolean; edition?; catalog?: string; url?: string; textUrl?: string; archiveId?: string; redistributable?: boolean }`.
   - `locator` is removed. A catalog number goes in `catalog`. A URL goes in `url`.
-  - `ldos51`'s second URL goes in `textUrl`. `soltoff`'s permission link is noted by `redistributable: true` plus `textUrl`.
+  - `ldos51`'s second URL goes in `textUrl`. `soltoff`'s permission link is kept in `permissionUrl` (required whenever `redistributable: true`), and its `url` stays the text, with no `textUrl`.
   - `archiveId` is the archive.org identifier, parsed from `url` when it is `archive.org/details/<id>`.
   - `year` holds digits or a range only (`1982`, `1983–84`), with `circa: true` for `ldos51`.
 - IR `tableNames` includes names used only by `.BAS` note lines.
@@ -255,18 +255,18 @@
 ### Task 7: `apps/web` scaffold
 
 **Files:**
-- Create: `apps/web/package.json` (`@fugloy/web`, scripts `dev`, `generate`, `test`, `prepare-examples`), `apps/web/nuxt.config.ts`, `apps/web/app/app.vue`, `apps/web/app/app.config.ts`, `apps/web/app/assets/css/main.css`, `apps/web/app/layouts/default.vue`, `apps/web/app/components/TopBar.vue`, `apps/web/app/pages/{index,about,manuals,technical-details}.vue` (stubs), `apps/web/scripts/prepare-examples.ts`, `apps/web/vitest.config.ts`, `apps/web/tsconfig.json`
+- Create: `apps/web/package.json` (`@fugloy/web`, scripts `dev`, `generate`, `test`, `prepare-assets`), `apps/web/nuxt.config.ts`, `apps/web/app/app.vue`, `apps/web/app/app.config.ts`, `apps/web/app/assets/css/main.css`, `apps/web/app/layouts/default.vue`, `apps/web/app/components/TopBar.vue`, `apps/web/app/pages/{index,about,manuals,technical-details}.vue` (stubs), `apps/web/scripts/prepare-examples.ts`, `apps/web/vitest.config.ts`, `apps/web/tsconfig.json`
 - Modify: `pnpm-workspace.yaml` (add `apps/*`), root `package.json` (`web:dev`, `web:generate`), root `vitest.config.ts` (`include` gains `apps/web/test/**/*.test.ts`), `.gitignore` (`apps/web/.nuxt`, `apps/web/.output`, `apps/web/public/examples`), `netlify.toml` (comment only; the command already targets `@fugloy/web`), `CLAUDE.md` (drop the "settle the name" note)
 
 **Interfaces:**
 - Produces:
   - `@fugloy/disasm` and `@fugloy/z80` resolve to their `src/index.ts` through a Vite alias in `nuxt.config.ts`, as in the root `vitest.config.ts`, so the site needs no prior `pnpm build`.
-  - `prepare-examples.ts` (run by `predev` and `pregenerate`) copies `examples/*/*.{cmd,hints,III}` into `apps/web/public/examples/<game>/`.
+  - `prepare-assets.ts` (run by `predev` and `pregenerate`) copies `examples/*/*.{cmd,hints,III}` into `apps/web/public/examples/<game>/`.
   - Theme tokens in `main.css`: background, surface, border, text, muted, accent (`#f78166`), and the syntax colors from the approved mockup (mnemonic `#ff7b72`, register `#79c0ff`, number `#a5d6ff`, label `#d2a8ff`, table name `#7ee787`, comment `#8b949e` italic). The mockup is `.superpowers/brainstorm/*/content/layout.html`, option A. Monospace font: JetBrains Mono, or the system monospace stack.
   - `TopBar.vue`: wordmark `fuglø` + accent `y`; slots for file name and pickers; Export slot; links to Technical details, Manuals, About.
 
 - [ ] **Step 1: Scaffold Nuxt 4 + Nuxt UI** in `apps/web` (`ssr: true` with `nitro.preset: 'static'` or `nuxi generate`; color mode default `dark`). Add the stub pages and the top bar.
-- [ ] **Step 2: Write the failing test** `apps/web/test/disasm-import.test.ts`: importing `openProgram` from `@fugloy/disasm` inside the web's Vitest config opens `public/examples/sea-dragon/seadrg01.cmd` (after `prepare-examples`).
+- [ ] **Step 2: Write the failing test** `apps/web/test/disasm-import.test.ts`: importing `openProgram` from `@fugloy/disasm` inside the web's Vitest config opens `public/examples/sea-dragon/seadrg01.cmd` (after `prepare-assets`).
 - [ ] **Step 3: Run** `pnpm --filter @fugloy/web test`. Expected: FAIL, then wire the alias and the script until it passes.
 - [ ] **Step 4: Run** `pnpm --filter @fugloy/web generate`. Expected: success, and `apps/web/.output/public/index.html` exists with the top bar.
 - [ ] **Step 5: Run** `pnpm typecheck && pnpm test`. Expected: PASS.
@@ -282,7 +282,7 @@
 - Consumes: `Row`, `Span`, `rowIndex` (Task 3).
 - Produces:
   - `ListingView` props: `{ rows: readonly Row[]; cursor: number | null; selection: { from: number; to: number } | null }`. Emits `select(addr, extend: boolean)`, `follow(target: number)`, `context(addr, x, y)`. Exposes `scrollToAddr(addr: number): void`.
-  - Fixed row height, monospace grid columns: address 6ch, bytes 13ch, then the text and comment.
+  - Fixed row height, monospace grid columns: address 6ch, bytes 14ch (the text starts at column 20, as in `formatListingLine`; 13ch was an error, corrected in Task 8 review), then the text and comment.
   - `spanClass(kind: SpanKind): string` maps each kind to a theme class.
 
 - [ ] **Step 1: Write the failing test.** `spanClass` gives a distinct class for each of the nine `SpanKind`s, and `label`/`table` spans are rendered as focusable links.
@@ -440,7 +440,7 @@
 - Hint-file drop: a dropped text file that `parseHints` accepts is applied to the open program through `withHintText`. If no block matched, refuse with "these hints are for another program (no block matched)". Unmatched blocks are listed in the Hints tab.
 - Carry-over: when a program has no saved hints, scan `allHints()` for files whose blocks pair with this program's (`applyHints(...).matched.length > 0`), and offer the best one (most matched blocks) in `CarryOverDialog`.
 - `backup.ts`:
-  - `makeBackup(store): Promise<string>` gives JSON `{ fugloyBackup: 1, exportedAt, programs: [{ hash, name, hints, prefs? }] }`.
+  - `makeBackup(store): Promise<string>` gives JSON `{ fugloyBackup: 1, exportedAt, programs: [{ hash, name, hints?, prefs? }] }`. A program with settings but no hints is included (ruling during execution).
   - `restoreBackup(store, json, confirm: (name: string) => Promise<boolean>): Promise<{ added: number; replaced: number; skipped: number }>`.
   - Never includes manuals.
 
@@ -501,7 +501,7 @@
 - [ ] **Step 3: Build each table by hand.**
   - Source: the archive.org PDFs in the gitignored `docs/reference/`. Download any missing one there; never commit it.
   - Find each cited printed page by its printed number, and record its PDF page and the file's SHA-256 and page count.
-  - About 130 distinct pages across `m3-trm`, `m3-basic`, `ldos51`, `paay`, `decker`, `l2-1979`, `trsdos13`, `soltoff`.
+  - 118 distinct pages across `m3-trm`, `m3-basic`, `ldos51`, `paay`, `decker`, `l2-1979`, `trsdos13` (as built; `soltoff` has no `archiveId` after Task 6, so it has no table).
   - Check each by reading the page, as phase 3 did.
 - [ ] **Step 4: Run** `pnpm symbols && pnpm typecheck && pnpm test`. Expected: PASS, generated module in sync.
 - [ ] **Step 5: Commit** `p4: map every cited page to its page in the archive.org scan`
@@ -542,21 +542,21 @@
 ### Task 17: Technical details, About, SEO, favicons
 
 **Files:**
-- Create: `apps/web/app/pages/technical-details.vue`, `apps/web/app/pages/about.vue` (replace stubs), `apps/web/app/composables/usePageSeo.ts`, `apps/web/public/robots.txt`, `apps/web/public/og-image.png` (copied from `docs/images/og-image.png` by `prepare-examples.ts`, renamed `prepare-assets.ts`), favicons generated from `docs/images/og-image.svg`'s ø tile into `apps/web/public/` (`favicon.svg`, `favicon.ico`, `apple-touch-icon.png`)
+- Create: `apps/web/app/pages/technical-details.vue`, `apps/web/app/pages/about.vue` (replace stubs), `apps/web/app/composables/usePageSeo.ts`, `apps/web/public/robots.txt`, `apps/web/public/og-image.png` (copied from `docs/images/og-image.png` by `prepare-assets.ts`, renamed `prepare-assets.ts`), favicons generated from `docs/images/og-image.svg`'s ø tile into `apps/web/public/` (`favicon.svg`, `favicon.ico`, `apple-touch-icon.png`)
 - Modify: `docs/technical-details/inside-fugloy.html` (numbers and sample output as of phase 3), `docs/images/og-image.svg` and its rendered `og-image.png` (the social card's sample listing as of phase 3, with names), `README.md` where it shows pre-phase-3 output, `apps/web/nuxt.config.ts` (sitemap)
 - Test: `apps/web/test/seo.test.ts` (reads `.output/public/*.html` after `generate`)
 
 **Interfaces:**
 - `usePageSeo({ title: string; description: string; path: string })` sets:
   - `<title>` (`<title> · Fugløy`, except the home page `Fugløy — TRS-80 disassembler workbench`) and the meta description;
-  - canonical `https://app.fugloy.dev<path>`;
+  - canonical `https://app.fugloy.dev<path>`, with a trailing slash on every page but the home page (`/about/`), since each page is generated as a directory that Netlify serves there (final review, 2026-10-17; `og:url` and `sitemap.xml` match);
   - `og:title`, `og:description`, `og:url`, `og:type=website`, `og:image=https://app.fugloy.dev/og-image.png`, `og:image:width=1200`, `og:image:height=630`, `og:image:alt`;
   - `twitter:card=summary_large_image` with the same image and alt.
 - Home page JSON-LD:
   - `@type: SoftwareApplication`, `name: Fugløy`, `applicationCategory: DeveloperApplication`;
   - `operatingSystem: Any (web browser)`, `url`;
   - `offers` price `0`, `license` MIT.
-- `sitemap.xml` lists `/`, `/technical-details`, `/manuals`, `/about`. `robots.txt` allows all and names the sitemap.
+- `sitemap.xml` lists `/`, `/technical-details/`, `/manuals/`, `/about/` (trailing slashes, as built, matching the generated `index.html` folders). `robots.txt` allows all and names the sitemap.
 - Technical details hosts the explainer fragment unchanged in structure, wrapped by the layout, with its own `<title>` moved into `usePageSeo`.
 - About: what Fugløy is; files never leave your machine and nothing is hosted; storage is per browser, with Back up / Restore; credits (each source by title, zmac, the Westmoreland and Gilman 1995 release with the trs-80.org quote and link); repository link.
 
@@ -591,6 +591,7 @@
   8. Export `.CMD`: reloading it through `loadCmd` gives seadrg01's image.
   9. Drop a JPEG: the not-a-program message appears.
   10. ⌘Z twice: both edits undone.
+  (As built, Task 18: step 10 runs before the reload, then ⇧⌘Z twice restores the edits, because undo history is per page session and a reload starts a new one; the saved hint file survives it. After the exports, the spec checks ⌘Z and ⇧⌘Z again in the reloaded page's own history. The story lives in `done-criterion.spec.ts`, beside the existing `workbench.spec.ts`.)
 - `asylum.spec.ts`: skipped unless `sample/` holds asylum16.cmd (reuse `resolveSample` logic). Opens it with `fixtures/hints/asylum16.hints` under Model I, checks that named ROM calls are shown, renames one label, reloads, and sees it kept.
 
 - [ ] **Step 1: Write both specs.** Run `pnpm --filter @fugloy/web e2e`. Expected: workbench passes, and asylum passes locally (or skips in a clean worktree).

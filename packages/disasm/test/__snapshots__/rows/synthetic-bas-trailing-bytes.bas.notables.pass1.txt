@@ -1,0 +1,6 @@
+; trailing-bytes.bas: tokenized BASIC, 2 lines, saved from $7000 to $700C, FF header, 0 unparsed
+; pass 1: no roots; use --entry <hex> or --sweep
+; code lines: 0; entries mined: 0
+
+10 CLS
+20 END

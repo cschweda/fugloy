@@ -6,6 +6,8 @@
  */
 import type { Diagnostic, Pass1, Xref } from './analysis/descent.js';
 import { inTableOrder } from './analysis/externals.js';
+import type { ExternalNames } from './analysis/externals.js';
+import { outsideComments } from './analysis/symbols.js';
 import type { Symbol } from './analysis/symbols.js';
 import type { MinedEntry } from './basic/entries.js';
 import type { Relocation } from './analysis/relocate.js';
@@ -14,9 +16,11 @@ import type { BasicBlock, Region } from './analysis/regions.js';
 import type { BasProgram } from './bas.js';
 import type { CmdModule } from './cmd.js';
 import { commentEntries } from './emit/operands.js';
+import { basNoteEntries } from './listing-header.js';
+import type { BasNames } from './listing-header.js';
 import type { Analysis, HintsSummary, Proposal } from './pipeline.js';
 import type { RawModule } from './raw.js';
-import type { Cite, Dos, EntryKind, Machine, TableId } from './symbols/types.js';
+import type { Cite, Dos, EntryKind, Machine, TableEntry, TableId } from './symbols/types.js';
 
 export type Module = CmdModule | BasProgram | RawModule;
 
@@ -58,20 +62,37 @@ export interface Ir {
   proposals: Proposal[];
   /** Regions that execute elsewhere; `regions` and every address but `loaded` are runtime addresses. */
   relocations: Relocation[];
+  /** `at` comments on addresses no name takes; present only when there are some. */
+  outsideComments?: { addr: number; text: string }[];
   hints?: HintsSummary;
+}
+
+/** The table names the note lines of a .BAS listing speak of; the same lookup `basRows` makes, which counts a name the program took for a symbol of its own. */
+function basEntries(mod: Module, externals: ExternalNames): TableEntry[] {
+  if (mod.format !== 'bas') return [];
+  const free = externals.ignoringCollisions();
+  const names: BasNames = {
+    data: (addr) => {
+      const found = free.data(addr);
+      return found === undefined ? undefined : { entry: found.entry, offset: addr - found.entry.key };
+    },
+    code: (addr) => free.code(addr)?.entry,
+    tag: (entry) => free.machineTag(entry),
+  };
+  return mod.lines.flatMap((line) => basNoteEntries(line, names));
 }
 
 export function buildIr(
   mod: Module,
   pass1: Pass1,
   source?: string,
-  analysis?: Pick<Analysis, 'symbols' | 'hints' | 'entries' | 'proposals' | 'space'> & Partial<Pick<Analysis, 'externals' | 'tablesUsed'>>,
+  analysis?: Pick<Analysis, 'symbols' | 'annotations' | 'hints' | 'entries' | 'proposals' | 'space'> & Partial<Pick<Analysis, 'externals' | 'tablesUsed'>>,
 ): Ir {
   const selection = analysis?.externals?.selection;
   const tableNames: IrTableName[] | undefined =
     analysis?.externals === undefined || selection === undefined
       ? undefined
-      : inTableOrder([...(analysis.tablesUsed ?? []), ...commentEntries(pass1.instructions, analysis.externals, analysis.symbols)]).map((e) => ({
+      : inTableOrder([...(analysis.tablesUsed ?? []), ...commentEntries(pass1.instructions, analysis.externals, analysis.symbols), ...basEntries(mod, analysis.externals)]).map((e) => ({
           key: e.key,
           name: e.name,
           kind: e.kind,
@@ -79,6 +100,7 @@ export function buildIr(
           purpose: e.purpose,
           cite: e.cite,
         }));
+  const outside = analysis === undefined ? [] : outsideComments(analysis.annotations, analysis.symbols, analysis.space.image);
   return {
     fugloyIr: 1,
     ...(source === undefined ? {} : { source }),
@@ -98,6 +120,7 @@ export function buildIr(
     ...(tableNames === undefined ? {} : { tableNames }),
     proposals: analysis?.proposals ?? [],
     relocations: analysis?.space.relocations ?? [],
+    ...(outside.length === 0 ? {} : { outsideComments: outside }),
     ...(analysis?.hints === undefined ? {} : { hints: analysis.hints }),
   };
 }

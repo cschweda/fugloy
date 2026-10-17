@@ -1,0 +1,10 @@
+; transfer-len-00.cmd: load module, 1 block, 1 run, 6 bytes, entry $5203 (transfer address)
+; pass 1: roots $5203; 3 of 6 bytes decoded as code (50%); 0 external targets; 0 notes
+; symbols: Model III ROM, hardware, TRSDOS 1.3
+; block 0: $5200-$5205 (6 bytes)
+; warning: transfer record at offset 10 has length byte 0, expected 2; address read anyway
+
+        ORG 5200H
+5200  21 00 3C      DB 21H,00H,3CH
+5203  36 41         LD (HL),41H             ; entry
+5205  C9            RET

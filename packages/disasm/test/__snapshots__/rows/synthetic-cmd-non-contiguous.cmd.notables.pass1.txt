@@ -1,0 +1,13 @@
+; non-contiguous.cmd: load module, 2 blocks, 2 runs, 14 bytes, entry $6000 (transfer address)
+; pass 1: roots $6000; 6 of 14 bytes decoded as code (43%); 0 external targets; 0 notes
+; block 0: $6000-$6005 (6 bytes)
+; block 1: $7000-$7007 (8 bytes)
+
+        ORG 6000H
+6000  21 00 3C      LD HL,3C00H             ; entry
+6003  36 41         LD (HL),41H
+6005  C9            RET
+
+        ORG 7000H
+7000  00 01 02 03   DB 00H,01H,02H,03H
+7004  04 05 06 07   DB 04H,05H,06H,07H

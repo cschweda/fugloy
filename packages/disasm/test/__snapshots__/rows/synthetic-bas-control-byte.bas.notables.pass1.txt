@@ -1,0 +1,9 @@
+; control-byte.bas: tokenized BASIC, 3 lines, saved from $7000 to $7013, FF header, 1 unparsed
+; pass 1: roots $700A; 0 of 21 bytes decoded as code (0%); 19 typed as data; 0 external targets; 1 note
+; code lines: 1; entries mined: 0
+; note: instruction at $700A would overlap data at $700C
+
+10 CLS
+; line 20: machine code, 2 bytes at $700A
+700A  01 41         DB 01H,41H              ; entry
+30 END

@@ -1,0 +1,18 @@
+{
+  "source": "ldos51",
+  "archiveId": "LDOS_v5.1_for_Model_I_and_III_19xx_Tandy",
+  "pdfSha256": [
+    "c88ed8f54761c824e0696b850637d306c7a550a8ab123412fe9a0a8e92c27f67",
+    "f04dcddcc82a4c7cb6dd8cecce3ebaf7b4081cef9a01bc618d99f304a58547c1"
+  ],
+  "pdfPages": 372,
+  "pages": {
+    "6-29": 291,
+    "6-30": 292,
+    "6-31": 293,
+    "6-32": 294,
+    "6-33": 295,
+    "6-34": 296,
+    "6-35": 297
+  }
+}

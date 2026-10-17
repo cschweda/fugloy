@@ -36,9 +36,9 @@
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation: none !important; transition: none !important; } }
-body { background: var(--night); color: var(--phosphor); font-family: var(--f-body); font-size: var(--s0); line-height: 1.6; margin: 0; overflow-x: hidden; }
+body { background: var(--night); color: var(--phosphor); font-family: var(--f-body); font-size: var(--s0); line-height: 1.6; margin: 0; overflow-x: clip; }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--night); }
-a { color: var(--code); text-underline-offset: 3px; }
+a { color: var(--code); text-decoration: underline; text-underline-offset: 3px; }
 :focus-visible { outline: 3px solid var(--signal); outline-offset: 3px; border-radius: 6px; }
 .wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 h1, h2, h3 { font-family: var(--f-display); font-stretch: 125%; line-height: 1.02; text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
@@ -121,7 +121,7 @@ details.deep p + p { margin-top: 10px; }
 
 /* Memory map */
 .mem { display: flex; height: 64px; border-radius: 10px; overflow: hidden; border: 1px solid var(--rule); }
-.mem button { border: 0; padding: 0 6px; min-width: 0; cursor: pointer; font: 600 0.66rem var(--f-mono); color: var(--night); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; border-right: 2px solid var(--night); }
+.mem button { border: 0; padding: 0 6px; min-width: 24px; cursor: pointer; font: 600 0.66rem var(--f-mono); color: var(--night); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; border-right: 2px solid var(--night); }
 .mem button:last-child { border-right: 0; }
 .mem button[aria-pressed="true"] { box-shadow: inset 0 -6px 0 var(--phosphor); }
 .memscale { display: flex; justify-content: space-between; font: 0.66rem var(--f-mono); color: var(--dim); }
@@ -273,6 +273,7 @@ footer .wrap { padding-block: 32px 56px; color: var(--dim); font-size: 0.86rem; 
       <a class="chip" href="#moving">Moving code</a>
       <a class="chip" href="#proof">Proof</a>
       <a class="chip" href="#hints">Hints</a>
+      <a class="chip" href="#names">Names</a>
       <a class="chip" href="#build">How it was built</a>
       <a class="chip" href="#beyond">Beyond</a>
       <a class="chip" href="#next">Next</a>
@@ -481,7 +482,7 @@ footer .wrap { padding-block: 32px 56px; color: var(--dim); font-size: 0.86rem; 
           <div class="seg" id="flowView" role="group" aria-label="Method"><button type="button" aria-pressed="true" data-v="sweep">Linear sweep</button><button type="button" aria-pressed="false" data-v="descent">Recursive descent</button></div>
         </div>
         <div class="bytes" id="flowBytes"></div>
-        <pre class="listing" id="flowOut"></pre>
+        <pre class="listing" tabindex="0" id="flowOut"></pre>
         <div class="syntaxkey" aria-label="Syntax colors"><span class="k-code">mnemonic</span><span class="k-data">register</span><span class="k-basic">number</span><span>label</span><span style="color:var(--str)">string</span><span class="dim"><i>comment</i></span><span class="k-frame">directive</span></div>
       </div>
     </div>
@@ -507,14 +508,14 @@ footer .wrap { padding-block: 32px 56px; color: var(--dim); font-size: 0.86rem; 
       <div class="copy">
         <p>Fugløy's answer is a <code>relocate</code> hint: these file bytes execute over there. It analyzes them at the address they run at, then writes them back where they load, inside zmac's <code>.PHASE</code>, so labels take the running addresses and the bytes still land in their original place.</p>
         <p>For Asylum the 123 hints are generated from the loader's own record stream. With them, 61% of the game decodes as code at its running address.</p>
-        <pre class="listing" id="phase"></pre>
+        <pre class="listing" tabindex="0" id="phase"></pre>
       </div>
     </div>
     <div class="split">
       <div class="copy">
         <h3>The five-instruction mover</h3>
         <p>Most of the other games use a simpler copier, like this one from Sea Dragon (1982), which its author released into the public domain in 1995. Fugløy spots it, works out what moves where, and proposes the exact hint lines, without applying anything on its own.</p>
-        <pre class="listing" id="mover"></pre>
+        <pre class="listing" tabindex="0" id="mover"></pre>
       </div>
       <div class="panel">
         <div class="row" style="justify-content:space-between">
@@ -539,13 +540,13 @@ footer .wrap { padding-block: 32px 56px; color: var(--dim); font-size: 0.86rem; 
     <div class="split">
       <div class="panel">
         <div class="row" style="justify-content:space-between"><span class="panel-title">What the proof catches</span><button type="button" class="btn" id="bug">Plant an emitter bug</button></div>
-        <pre class="listing" id="proofSrc"></pre>
+        <pre class="listing" tabindex="0" id="proofSrc"></pre>
         <p class="mono" id="proofOut" aria-live="polite"></p>
       </div>
       <div class="stats">
         <div class="stat"><b>1,786</b><span>Z80 encodings, each reassembled to its own bytes</span></div>
         <div class="stat"><b>83</b><span>real programs that round-trip exactly</span></div>
-        <div class="stat"><b>673</b><span>automated tests, all passing</span></div>
+        <div class="stat"><b>2,149</b><span>automated tests, all passing</span></div>
         <div class="stat"><b>0</b><span>bytes allowed to differ</span></div>
       </div>
     </div>
@@ -563,11 +564,30 @@ footer .wrap { padding-block: 32px 56px; color: var(--dim); font-size: 0.86rem; 
       </div>
       <div class="panel">
         <span class="panel-title">game.hints</span>
-        <pre class="listing" id="hintsrc"></pre>
+        <pre class="listing" tabindex="0" id="hintsrc"></pre>
         <details class="deep"><summary>Go deeper: moving a BASIC program</summary>
           <p>A tokenized BASIC file records the address it was saved from, inside every line pointer. <code>--rebase 7000</code> rewrites the pointers so the program reads as if saved at $7000, and flags any machine code that still points at the old addresses as stale.</p>
           <p>For BASIC the fingerprint reads each pointer as an offset from the start, so hints written before a rebase still match after it.</p>
         </details>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cart" id="names">
+  <div class="wrap">
+    <div class="split">
+      <div class="copy">
+        <p class="eyebrow">Phase 3 · Names</p>
+        <h2>From numbers to names</h2>
+        <p>A TRS-80 program talks to the machine by address: $0049 waits for a key, $3C00 is the screen, port $FF is the cassette. Fugløy knows those addresses for the Model I and III, and Model 4's DOS calls, from eight tables, and the listing says what they are.</p>
+        <p>Nothing here is guessed. Every entry in every table cites the manual and the page it came from, and the workbench opens your own copy of that page if you have added one. Where two manuals name one address differently, as TRSDOS and LDOS do, you choose which DOS's names to use.</p>
+        <p class="dim">These five rows are from Eliminator, one of the four public-domain games that ship with Fugløy.</p>
+      </div>
+      <div class="panel">
+        <div class="row" style="justify-content:space-between"><span class="panel-title">Five rows of Eliminator</span><div class="seg" id="namesView" role="group" aria-label="View"><button type="button" aria-pressed="true" data-v="numbers">Numbers</button><button type="button" aria-pressed="false" data-v="names">Names</button></div></div>
+        <pre class="listing" tabindex="0" id="namesOut"></pre>
+        <p class="dim" style="font-size:.86rem" id="namesNote"></p>
       </div>
     </div>
   </div>
@@ -586,6 +606,9 @@ footer .wrap { padding-block: 32px 56px; color: var(--dim); font-size: 0.86rem; 
       <div class="tl"><span class="when">Phase 2A</span><div><h3>Follow the flow, prove the round trip</h3><p class="dim">Recursive descent, a JSON description of the program, and the zmac emitter, with a harness that reassembles every output and compares images.</p></div></div>
       <div class="tl"><span class="when">Phase 2B</span><div><h3>Names and notes</h3><p class="dim">Labels for every jump, call, and data reference, and the hint file with content-based block identity.</p></div></div>
       <div class="tl"><span class="when">Phase 2C</span><div><h3>Hidden code and moving code</h3><p class="dim">The BASIC grammar, the planted-pointer evaluator, strings, table and loader proposals, rebasing, and relocation with .PHASE; Asylum's generated hints and a ROM smoke test.</p></div></div>
+      <div class="tl"><span class="when">Phase 3</span><div><h3>Names for the ROM, hardware, and DOS</h3><p class="dim">Eight tables of named addresses, 634 entries, each citing the manual and page it came from. A listing says <code>CALL $KBWAIT</code> where it used to say <code>CALL 0049H</code>, and a comment says what the routine does.</p></div></div>
+      <div class="tl"><span class="when">Emulator · phases 0–1</span><div><h3>A Z80 that passes the exercisers</h3><p class="dim">A headless core, with no screen and no clock of its own, that runs ZEXDOC and ZEXALL to the end and agrees with the disassembler's tables on every opcode's timing.</p></div></div>
+      <div class="tl"><span class="when">Phase 4</span><div><h3>The workbench</h3><p class="dim">This site: the listing in your browser with names, notes, jumps, exports, and your own manuals opening at the cited page. Nothing leaves your machine.</p></div></div>
     </div>
     <ol class="steps" id="buildMethod" hidden>
       <li><div><h3>Write the spec</h3><p class="dim">What must be true when the work is done, and what is deliberately left out.</p></div></li>
@@ -638,7 +661,7 @@ footer .wrap { padding-block: 32px 56px; color: var(--dim); font-size: 0.86rem; 
           <li>Some games are free to share. Wayne Westmoreland released the TRS-80 games he wrote with Terry Gilman into the public domain in 1995: Sea Dragon, Armored Patrol and its original Tank Zone, Eliminator, Rear Guard, Zaxxon, and a Donkey Kong that was never sold. They make natural first candidates, and four of them already ship with Fugløy.</li>
         </ul>
         <span class="panel-title">When</span>
-        <p class="dim">After phase 3's ROM and DOS names exist and the plan's kill criteria have been reviewed. The emulator comes first, because it is the oracle every translation is checked against.</p>
+        <p class="dim">After the workbench ships as v1 and the plan's kill criteria have been reviewed. The emulator comes first, because it is the oracle every translation is checked against.</p>
       </div>
     </div>
   </div>
@@ -651,10 +674,9 @@ footer .wrap { padding-block: 32px 56px; color: var(--dim); font-size: 0.86rem; 
       <h2>From bytes to names, and beyond</h2>
     </div>
     <div class="next">
-      <div><span class="eyebrow">Phase 3</span><h3>Names for the ROM</h3><p class="dim">Tables of ROM and DOS routines, each with its source, so <code>CALL 0033H</code> reads as printing a character.</p></div>
-      <div><span class="eyebrow">Emulator</span><h3>Watch it run</h3><p class="dim">A headless TRS-80 that records which bytes really execute, feeding that back into the listing.</p></div>
+      <div><span class="eyebrow">Emulator</span><h3>Watch it run</h3><p class="dim">A headless TRS-80 that records which bytes really execute, feeding that back into the listing. Its Z80 core already passes the standard ZEXDOC and ZEXALL instruction exercisers; the TRS-80's devices come next.</p></div>
       <div><span class="eyebrow">MCP server</span><h3>An assistant at the keyboard</h3><p class="dim">Lets an AI assistant drive the emulator: break, step, trace, and label.</p></div>
-      <div><span class="eyebrow">Phase 4</span><h3>The workbench</h3><p class="dim">A web app for exploring and annotating listings in the browser. This page moves there as its technical details.</p></div>
+      <div><span class="eyebrow">Phase 5</span><h3>An assembler and IDE</h3><p class="dim">Edit the zmac source Fugløy writes, assemble it in the browser, and keep the result next to your notes. It comes after the workbench.</p></div>
       <div><span class="eyebrow">Part 2</span><h3>Recompilation</h3><p class="dim">Translating a game from your own collection into TypeScript that plays in any browser. <a href="#beyond">How it would work</a>.</p></div>
     </div>
   </div>
@@ -676,7 +698,8 @@ const hex2 = (n) => n.toString(16).toUpperCase().padStart(2, '0');
 const hex4 = (n) => n.toString(16).toUpperCase().padStart(4, '0');
 const fmt = (n) => n.toLocaleString('en-US');
 const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const topEl = $('#top');
+const css = (name) => getComputedStyle(topEl).getPropertyValue(name).trim();
 function h(tag, attrs, ...kids) {
   const e = document.createElement(tag);
   if (attrs) for (const [k, v] of Object.entries(attrs)) {
@@ -761,8 +784,9 @@ const SCREEN = [
 const TOTAL = SCREEN.reduce((n, l) => n + l.length, 0);
 let shown = reduce ? TOTAL : 0;
 let cursorOn = true;
+const crtEl = $('#crt');
 function drawCRT() {
-  const cv = $('#crt');
+  const cv = crtEl;
   const ctx = cv.getContext('2d');
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const w = Math.max(320, Math.round(cv.clientWidth * dpr));
@@ -806,11 +830,11 @@ function startCRT() {
     const t0 = performance.now();
     const tick = (t) => { shown = Math.min(TOTAL, Math.floor((t - t0) / 14)); drawCRT(); if (shown < TOTAL) requestAnimationFrame(tick); };
     requestAnimationFrame(tick);
-    setInterval(() => { if (shown >= TOTAL) { cursorOn = !cursorOn; drawCRT(); } }, 530);
+    const blink = setInterval(() => { if (!crtEl.isConnected) { clearInterval(blink); return; } if (shown >= TOTAL) { cursorOn = !cursorOn; drawCRT(); } }, 530);
   }
 }
 (document.fonts && document.fonts.load ? document.fonts.load('16px VT323').catch(() => {}) : Promise.resolve()).then(startCRT);
-window.addEventListener('resize', () => drawCRT());
+new ResizeObserver(() => drawCRT()).observe(crtEl);
 
 /* ---------- Memory map ---------- */
 const MEM = [
@@ -867,9 +891,9 @@ function renderCmd() {
   if (cmdMode === 'records') {
     out.append(h('p', { text: CMD[cmdSel].text }));
   } else {
-    const pre = h('pre', { class: 'listing' });
+    const pre = h('pre', { class: 'listing', tabindex: '0' });
     renderAsm(pre, [
-      { addr: '7000', bytes: '21 00 3C', mn: 'LD', ops: 'HL,3C00H', comment: 'the top-left of the screen' },
+      { addr: '7000', bytes: '21 00 3C', mn: 'LD', ops: 'HL,VIDEO', comment: 'the top-left of the screen' },
       { addr: '7003', bytes: '36 41', mn: 'LD', ops: '(HL),41H', comment: 'the letter A' },
       { addr: '7005', bytes: 'C9', mn: 'RET', comment: 'back to whoever called' },
     ]);
@@ -972,7 +996,7 @@ seg('l2View', (v) => {
   const out = $('#l2out');
   out.textContent = '';
   if (v === 'list') {
-    const pre = h('pre', { class: 'listing' });
+    const pre = h('pre', { class: 'listing', tabindex: '0' });
     pre.append('2 Dy', h('span', { class: 'wrong', text: '{FE}{0D}' }), 'MEM*GET@');
     out.append(pre, h('p', { class: 'dim', text: 'What LIST would make of it: two letters, two bytes it cannot print, and two keywords that happen to match.', style: 'margin-top:10px' }));
   } else if (v === 'tokens') {
@@ -980,7 +1004,7 @@ seg('l2View', (v) => {
     [['D', 'letter', ''], ['y', 'letter', ''], ['FE', 'not a token', 'bad'], ['0D', 'control', 'bad'], ['MEM', 'C8', 'basic'], ['*', '2A', ''], ['GET', 'A4', 'basic'], ['@', '40', '']].forEach(([t, l, k]) => row.append(tile(t, l, k === 'bad' ? 'b bad' : k)));
     out.append(row, h('p', { class: 'mono', text: 'Verdict: invalid token FEH at +2. Not BASIC.', style: 'margin-top:10px;color:var(--bad)' }));
   } else {
-    const pre = h('pre', { class: 'listing' });
+    const pre = h('pre', { class: 'listing', tabindex: '0' });
     renderAsm(pre, [
       { addr: '62D5', bytes: '44', mn: 'LD', ops: 'B,H' },
       { addr: '62D6', bytes: '79', mn: 'LD', ops: 'A,C', comment: 'entry, planted by line 250', cls: 'row-hot' },
@@ -1172,11 +1196,11 @@ renderAsm($('#phase'), [
   { src: true, mn: 'JP', ops: 'L5000' },
 ]);
 renderAsm($('#mover'), [
-  { src: true, mn: 'LD', ops: 'HL,5200H', comment: 'source: where the file put the game' },
-  { src: true, mn: 'LD', ops: 'DE,497FH', comment: 'destination: where it runs' },
-  { src: true, mn: 'LD', ops: 'BC,3681H', comment: 'how many bytes: 13,953' },
-  { src: true, mn: 'LDIR', comment: 'copy them all' },
-  { src: true, mn: 'JP', ops: '497FH', comment: 'and jump into the copy' },
+  { addr: '8882', bytes: '21 00 52', mn: 'LD', ops: 'HL,DATA_5200', comment: 'source: where the file put the game' },
+  { addr: '8885', bytes: '11 7F 49', mn: 'LD', ops: 'DE,497FH', comment: 'destination: where it runs' },
+  { addr: '8888', bytes: '01 81 36', mn: 'LD', ops: 'BC,3681H', comment: 'how many bytes: 13,953' },
+  { addr: '888B', bytes: 'ED B0', mn: 'LDIR', comment: 'copy them all' },
+  { addr: '888D', bytes: 'C3 7F 49', mn: 'JP', ops: '497FH', comment: 'and jump into the copy' },
 ]);
 const COV = [['Space Warp', 26, 2699, 3941], ['Asylum 1a', 90, 9631, 15719], ['Deathmaze 5000', 15, 9364, 15650], ['Sea Dragon 01', 15, 6260, 13968], ['Armored Patrol', 15, 5642, 14592], ["Pirate's Adventure", 15, 3018, 15631]];
 seg('covView', (v) => {
@@ -1247,6 +1271,27 @@ renderProof();
     if (i < lines.length - 1) pre.append('\n');
   });
 })();
+
+/* ---------- Names ---------- */
+seg('namesView', (v) => {
+  const named = v === 'names';
+  renderAsm($('#namesOut'), named ? [
+    { addr: '8D74', bytes: '3A 40 38', mn: 'LD', ops: 'A,(KEYBOARD+0040H)' },
+    { addr: '8DB2', bytes: 'CD 49 00', mn: 'CALL', ops: '$KBWAIT', comment: 'wait for a key and return it in A' },
+    { addr: '9826', bytes: 'D3 FF', mn: 'OUT', ops: '(CASSETTE),A' },
+    { addr: 'ADAC', bytes: 'CD 60 00', mn: 'CALL', ops: '$DELAY', comment: 'pause for a time set by BC' },
+    { addr: 'AEBC', bytes: 'CD 20 44', mn: 'CALL', ops: '$INIT', comment: 'open a file, creating it if it does not exist' },
+  ] : [
+    { addr: '8D74', bytes: '3A 40 38', mn: 'LD', ops: 'A,(3840H)' },
+    { addr: '8DB2', bytes: 'CD 49 00', mn: 'CALL', ops: '0049H' },
+    { addr: '9826', bytes: 'D3 FF', mn: 'OUT', ops: '(0FFH),A' },
+    { addr: 'ADAC', bytes: 'CD 60 00', mn: 'CALL', ops: '0060H' },
+    { addr: 'AEBC', bytes: 'CD 20 44', mn: 'CALL', ops: '4420H' },
+  ]);
+  $('#namesNote').textContent = named
+    ? 'The keyboard is a block of memory at $3800, the cassette is port $FF, $0049 and $0060 are ROM routines, and $4420 is a TRSDOS routine. The comment is the table entry\'s own words.'
+    : 'What the program says, and what pass 1 printed before there were tables. The --sweep listing still reads like this.';
+});
 
 /* ---------- How it was built ---------- */
 seg('buildView', (v) => {
@@ -1329,7 +1374,7 @@ renderOp();
 const KINDS = {
   emu: [['Built to', 'Run the program on a simulated TRS-80.'], ['You get', 'The program, running, and a debugger that shows each instruction as it executes.'], ['Left to you', 'Turning what you watched into a listing you can keep, edit, and rebuild.']],
   dis: [['Built to', 'Decode Z80 instructions for any Z80 system.'], ['You get', 'Instructions from a raw dump, decoded from wherever you point it.'], ['Left to you', 'The TRS-80’s file formats, its BASIC, code that moves itself, telling data from code, and checking the result.']],
-  fug: [['Built to', 'Read TRS-80 programs the way the machine stored them.'], ['You get', 'A labeled listing, source that rebuilds the identical bytes, and notes that outlast any one build.'], ['Left to you', 'What the code means. Phase 3 will name the ROM and DOS calls for you.']],
+  fug: [['Built to', 'Read TRS-80 programs the way the machine stored them.'], ['You get', 'A labeled listing, source that rebuilds the identical bytes, and notes that outlast any one build.'], ['Left to you', 'What the code means. It names the ROM, hardware, and DOS addresses it recognizes; reading the rest is up to you.']],
 };
 seg('kindView', (v) => {
   const out = $('#kindOut');
@@ -1350,8 +1395,9 @@ seg('kindView', (v) => {
 /* ---------- Beyond disassembly ---------- */
 const STAGES = [
   ['Disassembler', 'Labeled source that rebuilds the identical bytes.', 'done', 'Built · phases 1–2'],
-  ['ROM and DOS names', 'Every ROM and DOS call named, per machine, with sources.', 'plan', 'Phase 3'],
-  ['Emulator', 'A headless TRS-80, and the oracle for everything after it.', 'next', 'Next · emu phase 0'],
+  ['ROM and DOS names', 'ROM, hardware, and DOS addresses named, per machine, each with its source.', 'done', 'Built · phase 3'],
+  ['Workbench', 'This site: the listing in your browser, with notes, exports, and your manuals.', 'done', 'Built · phase 4'],
+  ['Emulator', 'A headless TRS-80, and the oracle for everything after it. The Z80 core is done.', 'next', 'Next · emu phase 2'],
   ['Recompiler', 'The game’s logic as readable TypeScript functions.', 'plan', 'Part 2'],
   ['Runtime', 'Screen, keyboard, ROM routines, sound, and the 30 Hz heartbeat.', 'plan', 'Part 2'],
   ['Bundler', 'One HTML file or ES module, with no original binary or ROM inside.', 'plan', 'Part 2'],

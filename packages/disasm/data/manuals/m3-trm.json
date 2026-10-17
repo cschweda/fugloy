@@ -1,0 +1,15 @@
+{
+  "source": "m3-trm",
+  "archiveId": "Model_III_Technical_Reference_Manual_1981_Tandy",
+  "pdfSha256": [
+    "754d20b5dc22b752ecd1dc1a173b66e6553aaf542a0f56b9577872c0fc6e55de",
+    "76f666b4fd8db2e73b9c9593fb08f97f6ee05af51e887e2fbfdadef0a2a510a0"
+  ],
+  "pdfPages": 154,
+  "pages": {
+    "14": 25,
+    "15": 26,
+    "21": 32,
+    "22": 33
+  }
+}

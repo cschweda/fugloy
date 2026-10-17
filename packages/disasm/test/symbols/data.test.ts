@@ -33,6 +33,17 @@ describe('the committed symbol data', () => {
     expect(SOURCES.map((s) => s.id)).toEqual(['m3-basic', 'paay', 'decker', 'l2-1979', 'm1-trh', 'm3-trm', 'trsdos13', 'ldos51', 'soltoff', 'm4-trm']);
   });
 
+  it('gives every archive.org source its archiveId, and every source a url or catalog number', () => {
+    for (const s of SOURCES) {
+      expect(s.url !== undefined || s.catalog !== undefined, s.id).toBe(true);
+      const m = /^https?:\/\/archive\.org\/details\/([^/?#\s]+)$/.exec(s.url ?? '');
+      expect(s.archiveId, s.id).toBe(m?.[1]);
+    }
+    expect(SOURCES.find((s) => s.id === 'ldos51')).toMatchObject({ year: '1982', circa: true, textUrl: 'http://www.tim-mann.org/trs80/doc/ld51man3.txt' });
+    expect(SOURCES.find((s) => s.id === 'soltoff')).toMatchObject({ redistributable: true, permissionUrl: 'http://www.tim-mann.org/misosys.html', url: 'http://www.tim-mann.org/trs80/doc/Guide.txt' });
+    expect(SOURCES.find((s) => s.id === 'm4-trm')).toMatchObject({ catalog: '26-2110' });
+  });
+
   it('keeps titles with apostrophes and dashes whole through the generated literals', () => {
     expect(SOURCES.find((s) => s.id === 'trsdos13')?.title).toBe("TRS-80 Model III Disk System Owner's Manual");
     expect(SOURCES.find((s) => s.id === 'soltoff')).toMatchObject({ title: "The Programmer's Guide to LDOS/TRSDOS Version 6", year: '1983–84' });
@@ -1066,11 +1077,13 @@ describe('buildSymbolOutputs on an edited copy of the data', () => {
   afterAll(() => {
     for (const dir of copies) rmSync(dir, { recursive: true, force: true });
   });
-  /** Builds from a fresh copy of the data after `edit` has changed it. */
+  /** Builds from a fresh copy of the data (data/symbols, with data/manuals beside it) after `edit` has changed the symbols copy. */
   const buildWith = (edit: (dir: string) => void) => {
-    const dir = mkdtempSync(join(tmpdir(), 'fugloy-symbols-'));
-    copies.push(dir);
+    const root = mkdtempSync(join(tmpdir(), 'fugloy-symbols-'));
+    copies.push(root);
+    const dir = join(root, 'symbols');
     cpSync(dataDir, dir, { recursive: true });
+    cpSync(fileURLToPath(new URL('../../data/manuals/', import.meta.url)), join(root, 'manuals'), { recursive: true });
     edit(dir);
     return buildSymbolOutputs(dir);
   };

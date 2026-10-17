@@ -1,0 +1,5380 @@
+; seadrg01.cmd: load module, 56 blocks, 1 run, 13968 bytes, entry $8881 (transfer address)
+; pass 1: roots $8881, $497F; 6260 of 13968 bytes decoded as code (45%); 36 typed as data; 1 external target (1 named); 0 notes
+; symbols: Model III ROM, hardware, TRSDOS 1.3
+; table name $DELAY = $0060: pause for a time set by BC (m3-basic 12/10)
+; table name MODEPORT = port $EC: clear clock interrupt (in), video, cassette motor, and I/O bus modes (out) (m3-trm 15, m3-trm 21)
+; table name CASSETTE = port $FF: cassette input (in), cassette output level (out) (m3-trm 21, m3-trm 22)
+; table name KEYBOARD = $3800: memory-mapped keyboard (m3-trm 14)
+; table name VIDEO = $3C00: video display memory (m3-trm 14)
+; hints: seadrg01.hints: 1 block matched, 0 unmatched, 2 hints applied
+; symbol DATA_49C1 = $49C1 (inside the instruction at $49BF)
+; symbol DATA_4F41 = $4F41 (inside the instruction at $4F3F)
+; symbol DATA_509B = $509B (inside the instruction at $509A)
+; symbol DATA_5AD0 = $5AD0 (inside the instruction at $5ACE)
+; symbol DATA_5ADD = $5ADD (inside the instruction at $5ADB)
+; proposed table at $63AB, 3 entries, all in code; declare with: block 0:$1A2C table 3 2
+; proposed table at $63FF, 3 entries, all in code; declare with: block 0:$1A80 table 3 2
+; proposed table at $6434, 3 entries, all in code; declare with: block 0:$1AB5 table 3 2
+; proposed table at $646F, 3 entries, all in code; declare with: block 0:$1AF0 table 3 2
+; proposed table at $66ED, 3 entries, all in code; declare with: block 0:$1D6E table 3 2
+; proposed table at $66F5, 3 entries, all in code; declare with: block 0:$1D76 table 3 2
+; proposed table at $6716, 3 entries, all in code; declare with: block 0:$1D97 table 3 2
+; proposed table at $6DEF, 3 entries, all in code; declare with: block 0:$2470 table 3 2
+; proposed table at $6E7A, 3 entries, all in code; declare with: block 0:$24FB table 3 2
+; proposed table at $7645, 3 entries, all in code; declare with: block 0:$2CC6 table 3 2
+; proposed table at $795F, 5 entries, all in code; declare with: block 0:$2FE0 table 5 2
+; proposed table at $7A6F, 4 entries, all in code; declare with: block 0:$30F0 table 4 2
+; proposed table at $7A7B, 7 entries, all in code; declare with: block 0:$30FC table 7 2
+; proposed table at $7AD1, 5 entries, all in code; declare with: block 0:$3152 table 5 2
+; proposed table at $7B7B, 3 entries, all in code; declare with: block 0:$31FC table 3 2
+; block 0: $5200-$52FF (256 bytes)
+; block 1: $5300-$53FF (256 bytes)
+; block 2: $5400-$54FF (256 bytes)
+; block 3: $5500-$55FF (256 bytes)
+; block 4: $5600-$56FF (256 bytes)
+; block 5: $5700-$57FF (256 bytes)
+; block 6: $5800-$58FF (256 bytes)
+; block 7: $5900-$59FF (256 bytes)
+; block 8: $5A00-$5AFF (256 bytes)
+; block 9: $5B00-$5BFF (256 bytes)
+; block 10: $5C00-$5CFF (256 bytes)
+; block 11: $5D00-$5DFF (256 bytes)
+; block 12: $5E00-$5EFF (256 bytes)
+; block 13: $5F00-$5FFF (256 bytes)
+; block 14: $6000-$60FF (256 bytes)
+; block 15: $6100-$61FF (256 bytes)
+; block 16: $6200-$62FF (256 bytes)
+; block 17: $6300-$63FF (256 bytes)
+; block 18: $6400-$64FF (256 bytes)
+; block 19: $6500-$65FF (256 bytes)
+; block 20: $6600-$66FF (256 bytes)
+; block 21: $6700-$67FF (256 bytes)
+; block 22: $6800-$68FF (256 bytes)
+; block 23: $6900-$69FF (256 bytes)
+; block 24: $6A00-$6AFF (256 bytes)
+; block 25: $6B00-$6BFF (256 bytes)
+; block 26: $6C00-$6CFF (256 bytes)
+; block 27: $6D00-$6DFF (256 bytes)
+; block 28: $6E00-$6EFF (256 bytes)
+; block 29: $6F00-$6FFF (256 bytes)
+; block 30: $7000-$70FF (256 bytes)
+; block 31: $7100-$71FF (256 bytes)
+; block 32: $7200-$72FF (256 bytes)
+; block 33: $7300-$73FF (256 bytes)
+; block 34: $7400-$74FF (256 bytes)
+; block 35: $7500-$75FF (256 bytes)
+; block 36: $7600-$76FF (256 bytes)
+; block 37: $7700-$77FF (256 bytes)
+; block 38: $7800-$78FF (256 bytes)
+; block 39: $7900-$79FF (256 bytes)
+; block 40: $7A00-$7AFF (256 bytes)
+; block 41: $7B00-$7BFF (256 bytes)
+; block 42: $7C00-$7CFF (256 bytes)
+; block 43: $7D00-$7DFF (256 bytes)
+; block 44: $7E00-$7EFF (256 bytes)
+; block 45: $7F00-$7FFF (256 bytes)
+; block 46: $8000-$80FF (256 bytes)
+; block 47: $8100-$81FF (256 bytes)
+; block 48: $8200-$82FF (256 bytes)
+; block 49: $8300-$83FF (256 bytes)
+; block 50: $8400-$84FF (256 bytes)
+; block 51: $8500-$85FF (256 bytes)
+; block 52: $8600-$86FF (256 bytes)
+; block 53: $8700-$87FF (256 bytes)
+; block 54: $8800-$8880 (129 bytes)
+; block 55: $8881-$888F (15 bytes)
+
+        ORG 5200H
+; relocated: file $5200-$8880 executes at $497F-$7FFF
+L497F:
+497F  F3            DI                      ; entry
+4980  31 95 44      LD SP,4495H
+4983  AF            XOR A
+4984  32 FB 65      LD (DATA_65FB),A
+4987  32 58 62      LD (DATA_6258),A
+498A  3C            INC A
+498B  32 FC 65      LD (DATA_65FC),A
+498E  21 6C 46      LD HL,466CH
+4991  22 FE 65      LD (DATA_65FE),HL
+4994  21 59 46      LD HL,4659H
+4997  22 00 66      LD (DATA_6600),HL
+499A  CD 9E 4B      CALL SUB_4B9E
+499D  3E 30         LD A,30H
+499F  D3 EC         OUT (MODEPORT),A
+49A1  21 02 66      LD HL,DATA_6602
+49A4  11 40 00      LD DE,0040H
+49A7  DD 21 80 3F   LD IX,VIDEO+0380H
+49AB  FD 21 8F 62   LD IY,DATA_628F
+49AF  06 40         LD B,40H
+L49B1:
+49B1  7E            LD A,(HL)
+49B2  DD E5         PUSH IX
+49B4  CB 7F         BIT 7,A
+49B6  28 04         JR Z,L49BC
+49B8  DD 19         ADD IX,DE
+49BA  CB BF         RES 7,A
+L49BC:
+49BC  32 C1 49      LD (DATA_49C1),A
+49BF  FD 7E 00      LD A,(IY+00H)
+49C2  DD 77 00      LD (IX+00H),A
+49C5  DD E1         POP IX
+49C7  DD 23         INC IX
+49C9  23            INC HL
+49CA  10 E5         DJNZ L49B1
+49CC  ED 5B 96 71   LD DE,(DATA_7196)
+49D0  21 C5 3E      LD HL,VIDEO+02C5H
+49D3  DD 21 00 00   LD IX,0000H
+49D7  CD 4E 51      CALL SUB_514E
+49DA  ED 5B 98 71   LD DE,(DATA_7198)
+49DE  21 32 3F      LD HL,VIDEO+0332H
+49E1  CD 4E 51      CALL SUB_514E
+49E4  3E 96         LD A,96H
+49E6  32 3C 5B      LD (DATA_5B3C),A
+49E9  3E 14         LD A,14H
+49EB  32 3D 5B      LD (DATA_5B3D),A
+L49EE:
+49EE  21 29 45      LD HL,4529H
+49F1  11 2A 45      LD DE,452AH
+49F4  01 9A 02      LD BC,029AH
+49F7  36 80         LD (HL),80H
+49F9  ED B0         LDIR
+49FB  CD 0A 4A      CALL SUB_4A0A
+49FE  CD A5 4A      CALL SUB_4AA5
+4A01  CD 1F 4B      CALL SUB_4B1F
+4A04  CD 5E 4B      CALL SUB_4B5E
+4A07  C3 EE 49      JP L49EE
+SUB_4A0A:
+4A0A  3A FB 65      LD A,(DATA_65FB)
+4A0D  FE 0E         CP 0EH
+4A0F  F8            RET M
+4A10  3A 3D 5B      LD A,(DATA_5B3D)
+4A13  FE 64         CP 64H
+4A15  F2 21 4A      JP P,L4A21
+4A18  3C            INC A
+4A19  32 3D 5B      LD (DATA_5B3D),A
+4A1C  06 03         LD B,03H
+4A1E  CD 12 62      CALL SUB_6212
+L4A21:
+4A21  2A 00 66      LD HL,(DATA_6600)
+4A24  ED 5B 94 71   LD DE,(DATA_7194)
+4A28  E5            PUSH HL
+4A29  DD 21 00 00   LD IX,0000H
+4A2D  CD 4E 51      CALL SUB_514E
+4A30  E1            POP HL
+4A31  3A FB 65      LD A,(DATA_65FB)
+4A34  FE 5D         CP 5DH
+4A36  CA 8A 4A      JP Z,L4A8A
+4A39  F0            RET P
+4A3A  11 2E 00      LD DE,002EH
+4A3D  19            ADD HL,DE
+4A3E  11 42 66      LD DE,DATA_6642
+4A41  E5            PUSH HL
+4A42  CD 4E 51      CALL SUB_514E
+4A45  E1            POP HL
+4A46  11 51 00      LD DE,0051H
+4A49  19            ADD HL,DE
+4A4A  ED 5B 1E 67   LD DE,(DATA_671E)
+4A4E  CD 4E 51      CALL SUB_514E
+4A51  3A FB 65      LD A,(DATA_65FB)
+4A54  3C            INC A
+4A55  32 FB 65      LD (DATA_65FB),A
+4A58  ED 4B 00 66   LD BC,(DATA_6600)
+4A5C  21 96 46      LD HL,4696H
+4A5F  B7            OR A
+4A60  ED 42         SBC HL,BC
+4A62  FA 82 4A      JP M,L4A82
+4A65  CA 82 4A      JP Z,L4A82
+4A68  44            LD B,H
+4A69  4D            LD C,L
+4A6A  2A 00 66      LD HL,(DATA_6600)
+4A6D  3E 04         LD A,04H
+L4A6F:
+4A6F  C5            PUSH BC
+4A70  E5            PUSH HL
+4A71  54            LD D,H
+4A72  5D            LD E,L
+4A73  13            INC DE
+4A74  36 80         LD (HL),80H
+4A76  ED B0         LDIR
+4A78  E1            POP HL
+4A79  11 4A 00      LD DE,004AH
+4A7C  19            ADD HL,DE
+4A7D  C1            POP BC
+4A7E  3D            DEC A
+4A7F  C2 6F 4A      JP NZ,L4A6F
+L4A82:
+4A82  2A 00 66      LD HL,(DATA_6600)
+4A85  23            INC HL
+4A86  22 00 66      LD (DATA_6600),HL
+4A89  C9            RET
+L4A8A:
+4A8A  3C            INC A
+4A8B  32 FB 65      LD (DATA_65FB),A
+4A8E  21 51 66      LD HL,DATA_6651
+4A91  11 8D 3E      LD DE,VIDEO+028DH
+4A94  06 25         LD B,25H
+4A96  CD 40 61      CALL SUB_6140
+4A99  21 76 66      LD HL,DATA_6676
+4A9C  11 D6 3E      LD DE,VIDEO+02D6H
+4A9F  06 12         LD B,12H
+4AA1  CD 40 61      CALL SUB_6140
+4AA4  C9            RET
+SUB_4AA5:
+4AA5  3A FB 65      LD A,(DATA_65FB)
+4AA8  FE 04         CP 04H
+4AAA  F2 B8 4A      JP P,L4AB8
+4AAD  21 FD 65      LD HL,DATA_65FD
+4AB0  CB 46         BIT 0,(HL)
+4AB2  C8            RET Z
+4AB3  3C            INC A
+4AB4  32 FB 65      LD (DATA_65FB),A
+4AB7  C9            RET
+L4AB8:
+4AB8  2A FE 65      LD HL,(DATA_65FE)
+4ABB  3A FC 65      LD A,(DATA_65FC)
+4ABE  FD 21 8E 71   LD IY,DATA_718E
+4AC2  CB 27         SLA A
+4AC4  4F            LD C,A
+4AC5  06 00         LD B,00H
+4AC7  FD 09         ADD IY,BC
+4AC9  FD 56 01      LD D,(IY+01H)
+4ACC  FD 5E 00      LD E,(IY+00H)
+4ACF  DD 21 00 00   LD IX,0000H
+4AD3  CD 4E 51      CALL SUB_514E
+4AD6  3A FB 65      LD A,(DATA_65FB)
+4AD9  FE 0E         CP 0EH
+4ADB  F0            RET P
+4ADC  21 B6 46      LD HL,46B6H
+4ADF  11 B7 46      LD DE,46B7H
+4AE2  01 F2 00      LD BC,00F2H
+4AE5  36 80         LD (HL),80H
+4AE7  ED B0         LDIR
+4AE9  3A FD 65      LD A,(DATA_65FD)
+4AEC  CB 47         BIT 0,A
+4AEE  C8            RET Z
+4AEF  3A FC 65      LD A,(DATA_65FC)
+4AF2  3D            DEC A
+4AF3  F2 04 4B      JP P,L4B04
+4AF6  2A FE 65      LD HL,(DATA_65FE)
+4AF9  11 4A 00      LD DE,004AH
+4AFC  B7            OR A
+4AFD  ED 52         SBC HL,DE
+4AFF  22 FE 65      LD (DATA_65FE),HL
+4B02  3E 02         LD A,02H
+L4B04:
+4B04  32 FC 65      LD (DATA_65FC),A
+4B07  3A FB 65      LD A,(DATA_65FB)
+4B0A  3C            INC A
+4B0B  32 FB 65      LD (DATA_65FB),A
+4B0E  3A 3C 5B      LD A,(DATA_5B3C)
+4B11  FE 28         CP 28H
+4B13  C8            RET Z
+4B14  D6 0A         SUB 0AH
+4B16  32 3C 5B      LD (DATA_5B3C),A
+4B19  06 03         LD B,03H
+4B1B  CD 12 62      CALL SUB_6212
+4B1E  C9            RET
+SUB_4B1F:
+4B1F  06 08         LD B,08H
+4B21  3A FD 65      LD A,(DATA_65FD)
+4B24  3C            INC A
+4B25  32 FD 65      LD (DATA_65FD),A
+4B28  21 56 46      LD HL,4656H
+L4B2B:
+4B2B  C5            PUSH BC
+4B2C  3A FD 65      LD A,(DATA_65FD)
+4B2F  11 EF 65      LD DE,DATA_65EF
+4B32  CB 5F         BIT 3,A
+4B34  28 03         JR Z,L4B39
+4B36  11 F3 65      LD DE,DATA_65F3
+L4B39:
+4B39  06 08         LD B,08H
+L4B3B:
+4B3B  1A            LD A,(DE)
+4B3C  0E 80         LD C,80H
+4B3E  FE 83         CP 83H
+4B40  28 08         JR Z,L4B4A
+4B42  0E 83         LD C,83H
+4B44  FE 8C         CP 8CH
+4B46  28 02         JR Z,L4B4A
+4B48  0E 8F         LD C,8FH
+L4B4A:
+4B4A  F5            PUSH AF
+4B4B  79            LD A,C
+4B4C  A6            AND (HL)
+4B4D  77            LD (HL),A
+4B4E  F1            POP AF
+4B4F  B6            OR (HL)
+4B50  77            LD (HL),A
+4B51  13            INC DE
+4B52  23            INC HL
+4B53  10 E6         DJNZ L4B3B
+4B55  C1            POP BC
+4B56  10 D3         DJNZ L4B2B
+4B58  3E 80         LD A,80H
+4B5A  32 56 46      LD (4656H),A
+4B5D  C9            RET
+SUB_4B5E:
+4B5E  3E 09         LD A,09H
+4B60  21 2E 45      LD HL,452EH
+4B63  11 00 3C      LD DE,VIDEO
+L4B66:
+4B66  01 40 00      LD BC,0040H
+4B69  ED B0         LDIR
+4B6B  01 0A 00      LD BC,000AH
+4B6E  09            ADD HL,BC
+4B6F  3D            DEC A
+4B70  20 F4         JR NZ,L4B66
+4B72  3A FB 65      LD A,(DATA_65FB)
+4B75  FE 5E         CP 5EH
+4B77  20 15         JR NZ,L4B8E
+4B79  3A FD 65      LD A,(DATA_65FD)
+4B7C  21 88 66      LD HL,DATA_6688
+4B7F  CB 57         BIT 2,A
+4B81  28 03         JR Z,L4B86
+4B83  21 9C 66      LD HL,DATA_669C
+L4B86:
+4B86  11 15 3F      LD DE,VIDEO+0315H
+4B89  06 14         LD B,14H
+4B8B  CD 40 61      CALL SUB_6140
+L4B8E:
+4B8E  01 00 01      LD BC,0100H
+L4B91:
+4B91  3A 40 38      LD A,(KEYBOARD+0040H)
+4B94  FE 01         CP 01H
+4B96  28 14         JR Z,L4BAC
+4B98  0B            DEC BC
+4B99  78            LD A,B
+4B9A  B1            OR C
+4B9B  20 F4         JR NZ,L4B91
+4B9D  C9            RET
+SUB_4B9E:
+4B9E  21 00 3C      LD HL,VIDEO
+4BA1  11 01 3C      LD DE,VIDEO+0001H
+4BA4  01 FF 03      LD BC,03FFH
+4BA7  36 80         LD (HL),80H
+4BA9  ED B0         LDIR
+4BAB  C9            RET
+L4BAC:
+4BAC  F1            POP AF
+4BAD  CD 59 60      CALL SUB_6059
+4BB0  CD 9E 4B      CALL SUB_4B9E
+4BB3  21 D4 62      LD HL,DATA_62D4
+4BB6  11 58 3F      LD DE,VIDEO+0358H
+4BB9  06 0F         LD B,0FH
+4BBB  CD 40 61      CALL SUB_6140
+L4BBE:
+4BBE  3A 10 38      LD A,(KEYBOARD+0010H)
+4BC1  FE 02         CP 02H
+4BC3  28 08         JR Z,L4BCD
+4BC5  FE 04         CP 04H
+4BC7  C2 BE 4B      JP NZ,L4BBE
+4BCA  32 58 62      LD (DATA_6258),A
+L4BCD:
+4BCD  CB 3F         SRL A
+4BCF  32 43 62      LD (DATA_6243),A
+4BD2  21 58 3F      LD HL,VIDEO+0358H
+4BD5  11 59 3F      LD DE,VIDEO+0359H
+4BD8  01 0E 00      LD BC,000EH
+4BDB  36 80         LD (HL),80H
+4BDD  ED B0         LDIR
+4BDF  47            LD B,A
+4BE0  11 0B 3F      LD DE,VIDEO+030BH
+4BE3  3E 31         LD A,31H
+L4BE5:
+4BE5  C5            PUSH BC
+4BE6  D5            PUSH DE
+4BE7  F5            PUSH AF
+4BE8  21 F6 62      LD HL,DATA_62F6
+4BEB  06 29         LD B,29H
+4BED  CD 40 61      CALL SUB_6140
+4BF0  F1            POP AF
+4BF1  E1            POP HL
+4BF2  F5            PUSH AF
+4BF3  E5            PUSH HL
+4BF4  11 07 00      LD DE,0007H
+4BF7  19            ADD HL,DE
+4BF8  77            LD (HL),A
+4BF9  06 0A         LD B,0AH
+L4BFB:
+4BFB  3A 10 38      LD A,(KEYBOARD+0010H)
+4BFE  B7            OR A
+4BFF  20 FA         JR NZ,L4BFB
+4C01  05            DEC B
+4C02  20 F7         JR NZ,L4BFB
+L4C04:
+4C04  3A 10 38      LD A,(KEYBOARD+0010H)
+4C07  CB 47         BIT 0,A
+4C09  20 04         JR NZ,L4C0F
+4C0B  CB 4F         BIT 1,A
+4C0D  28 F5         JR Z,L4C04
+L4C0F:
+4C0F  E1            POP HL
+4C10  E5            PUSH HL
+4C11  11 2B 00      LD DE,002BH
+4C14  19            ADD HL,DE
+4C15  C6 2F         ADD A,2FH
+4C17  77            LD (HL),A
+4C18  D6 30         SUB 30H
+4C1A  47            LD B,A
+4C1B  E1            POP HL
+4C1C  11 40 00      LD DE,0040H
+4C1F  19            ADD HL,DE
+4C20  EB            EX DE,HL
+4C21  0E 0C         LD C,0CH
+4C23  B7            OR A
+4C24  28 02         JR Z,L4C28
+4C26  0E 03         LD C,03H
+L4C28:
+4C28  F1            POP AF
+4C29  21 2D 62      LD HL,DATA_622D
+4C2C  FE 31         CP 31H
+4C2E  28 03         JR Z,L4C33
+4C30  21 3F 62      LD HL,DATA_623F
+L4C33:
+4C33  70            LD (HL),B
+4C34  23            INC HL
+4C35  36 02         LD (HL),02H
+4C37  23            INC HL
+4C38  71            LD (HL),C
+4C39  3C            INC A
+4C3A  C1            POP BC
+4C3B  10 A8         DJNZ L4BE5
+4C3D  3E 31         LD A,31H
+4C3F  32 42 62      LD (DATA_6242),A
+4C42  21 99 73      LD HL,DATA_7399
+4C45  22 4A 62      LD (DATA_624A),HL
+4C48  AF            XOR A
+4C49  21 00 00      LD HL,0000H
+4C4C  22 2A 62      LD (DATA_622A),HL
+4C4F  22 27 62      LD (DATA_6227),HL
+4C52  32 29 62      LD (DATA_6229),A
+4C55  32 55 62      LD (DATA_6255),A
+4C58  32 60 62      LD (DATA_6260),A
+4C5B  3C            INC A
+4C5C  32 5F 62      LD (DATA_625F),A
+4C5F  32 BF 62      LD (DATA_62BF),A
+4C62  32 44 62      LD (DATA_6244),A
+4C65  32 45 62      LD (DATA_6245),A
+4C68  32 54 62      LD (DATA_6254),A
+4C6B  3C            INC A
+4C6C  32 53 62      LD (DATA_6253),A
+4C6F  3E 04         LD A,04H
+4C71  32 2C 62      LD (DATA_622C),A
+4C74  3E 2D         LD A,2DH
+4C76  32 3E 5B      LD (DATA_5B3E),A
+4C79  3E 10         LD A,10H
+4C7B  32 3F 5B      LD (DATA_5B3F),A
+4C7E  32 41 5B      LD (DATA_5B41),A
+4C81  3E 32         LD A,32H
+4C83  32 40 5B      LD (DATA_5B40),A
+4C86  21 27 62      LD HL,DATA_6227
+4C89  11 39 62      LD DE,DATA_6239
+4C8C  01 06 00      LD BC,0006H
+4C8F  ED B0         LDIR
+4C91  21 35 45      LD HL,4535H
+4C94  22 5B 62      LD (DATA_625B),HL
+4C97  21 2D 45      LD HL,452DH
+4C9A  22 51 62      LD (DATA_6251),HL
+4C9D  3E A0         LD A,0A0H
+4C9F  32 BE 62      LD (DATA_62BE),A
+4CA2  21 C4 62      LD HL,DATA_62C4
+4CA5  11 C0 3F      LD DE,VIDEO+03C0H
+4CA8  01 10 00      LD BC,0010H
+4CAB  ED B0         LDIR
+4CAD  21 C3 62      LD HL,DATA_62C3
+4CB0  11 F0 3F      LD DE,VIDEO+03F0H
+4CB3  01 10 00      LD BC,0010H
+4CB6  ED B0         LDIR
+L4CB8:
+4CB8  3A 80 38      LD A,(KEYBOARD+0080H)
+4CBB  57            LD D,A
+4CBC  3A 40 38      LD A,(KEYBOARD+0040H)
+4CBF  5F            LD E,A
+4CC0  21 04 01      LD HL,0104H
+4CC3  B7            OR A
+4CC4  ED 52         SBC HL,DE
+4CC6  CA 7F 49      JP Z,L497F
+4CC9  21 08 01      LD HL,0108H
+4CCC  3A 04 38      LD A,(KEYBOARD+0004H)
+4CCF  5F            LD E,A
+4CD0  B7            OR A
+4CD1  ED 52         SBC HL,DE
+4CD3  20 0C         JR NZ,L4CE1
+4CD5  21 40 38      LD HL,KEYBOARD+0040H
+L4CD8:
+4CD8  CB 46         BIT 0,(HL)
+4CDA  28 FC         JR Z,L4CD8
+4CDC  3E 01         LD A,01H
+4CDE  32 5F 62      LD (DATA_625F),A
+L4CE1:
+4CE1  CD D0 4E      CALL SUB_4ED0
+4CE4  CD C0 5A      CALL SUB_5AC0
+4CE7  2A 2A 62      LD HL,(DATA_622A)
+4CEA  01 D9 06      LD BC,06D9H
+4CED  B7            OR A
+4CEE  ED 42         SBC HL,BC
+4CF0  20 0B         JR NZ,L4CFD
+4CF2  21 66 67      LD HL,DATA_6766
+4CF5  22 C1 62      LD (DATA_62C1),HL
+4CF8  3E 01         LD A,01H
+4CFA  32 56 62      LD (DATA_6256),A
+L4CFD:
+4CFD  21 9D 50      LD HL,L509D
+4D00  22 9B 50      LD (DATA_509B),HL
+4D03  CD 55 50      CALL SUB_5055
+4D06  CD C0 5A      CALL SUB_5AC0
+4D09  3E C2         LD A,0C2H
+4D0B  32 5E 52      LD (DATA_525E),A
+4D0E  CD 14 52      CALL SUB_5214
+4D11  CD C0 5A      CALL SUB_5AC0
+4D14  CD C4 57      CALL SUB_57C4
+4D17  06 0F         LD B,0FH
+4D19  21 70 45      LD HL,4570H
+4D1C  11 49 00      LD DE,0049H
+L4D1F:
+4D1F  36 BF         LD (HL),0BFH
+4D21  23            INC HL
+4D22  36 BF         LD (HL),0BFH
+4D24  19            ADD HL,DE
+4D25  10 F8         DJNZ L4D1F
+4D27  CD 25 55      CALL SUB_5525
+4D2A  3A 59 62      LD A,(DATA_6259)
+4D2D  B7            OR A
+4D2E  CC 7C 55      CALL Z,SUB_557C
+4D31  CD 6D 58      CALL SUB_586D
+4D34  CD C0 5A      CALL SUB_5AC0
+4D37  21 C1 50      LD HL,DATA_50C1
+4D3A  22 9B 50      LD (DATA_509B),HL
+4D3D  CD 55 50      CALL SUB_5055
+4D40  3A 59 62      LD A,(DATA_6259)
+4D43  B7            OR A
+4D44  CC 42 5B      CALL Z,SUB_5B42
+4D47  CD C0 5A      CALL SUB_5AC0
+4D4A  3E CA         LD A,0CAH
+4D4C  32 5E 52      LD (DATA_525E),A
+4D4F  CD 14 52      CALL SUB_5214
+4D52  3E CD         LD A,0CDH
+4D54  32 EA 5A      LD (SUB_5AEA),A
+4D57  CD EA 4F      CALL SUB_4FEA
+4D5A  CD C0 5A      CALL SUB_5AC0
+4D5D  3A 59 62      LD A,(DATA_6259)
+4D60  B7            OR A
+4D61  CC 8D 51      CALL Z,SUB_518D
+4D64  3A 59 62      LD A,(DATA_6259)
+4D67  B7            OR A
+4D68  CA A3 4D      JP Z,L4DA3
+4D6B  3A 61 62      LD A,(DATA_6261)
+4D6E  CB 57         BIT 2,A
+4D70  CA 9C 4D      JP Z,L4D9C
+4D73  21 E3 62      LD HL,DATA_62E3
+4D76  11 FA 46      LD DE,46FAH
+4D79  06 13         LD B,13H
+4D7B  CD 40 61      CALL SUB_6140
+4D7E  3A 55 64      LD A,(DATA_6455)
+4D81  B7            OR A
+4D82  C2 90 4D      JP NZ,L4D90
+4D85  21 17 67      LD HL,DATA_6717
+4D88  11 55 64      LD DE,DATA_6455
+4D8B  01 07 00      LD BC,0007H
+4D8E  ED B0         LDIR
+L4D90:
+4D90  3A 2D 62      LD A,(DATA_622D)
+4D93  B7            OR A
+4D94  28 06         JR Z,L4D9C
+4D96  21 31 30      LD HL,3031H
+4D99  22 F9 46      LD (46F9H),HL
+L4D9C:
+4D9C  3A 61 62      LD A,(DATA_6261)
+4D9F  3C            INC A
+4DA0  32 61 62      LD (DATA_6261),A
+L4DA3:
+4DA3  3E 0F         LD A,0FH
+4DA5  21 2E 45      LD HL,452EH
+4DA8  11 00 3C      LD DE,VIDEO
+L4DAB:
+4DAB  01 40 00      LD BC,0040H
+4DAE  ED B0         LDIR
+4DB0  01 0A 00      LD BC,000AH
+4DB3  09            ADD HL,BC
+4DB4  3D            DEC A
+4DB5  20 F4         JR NZ,L4DAB
+4DB7  CD C0 5A      CALL SUB_5AC0
+4DBA  3A C0 62      LD A,(DATA_62C0)
+4DBD  EE 01         XOR 01H
+4DBF  32 C0 62      LD (DATA_62C0),A
+4DC2  28 1C         JR Z,L4DE0
+4DC4  3A BE 62      LD A,(DATA_62BE)
+4DC7  EE 30         XOR 30H
+4DC9  32 BE 62      LD (DATA_62BE),A
+4DCC  3A BF 62      LD A,(DATA_62BF)
+4DCF  3C            INC A
+4DD0  FE 05         CP 05H
+4DD2  20 09         JR NZ,L4DDD
+4DD4  3A BE 62      LD A,(DATA_62BE)
+4DD7  EE 30         XOR 30H
+4DD9  32 BE 62      LD (DATA_62BE),A
+4DDC  AF            XOR A
+L4DDD:
+4DDD  32 BF 62      LD (DATA_62BF),A
+L4DE0:
+4DE0  21 D0 3F      LD HL,VIDEO+03D0H
+4DE3  11 D1 3F      LD DE,VIDEO+03D1H
+4DE6  01 1F 00      LD BC,001FH
+4DE9  36 80         LD (HL),80H
+4DEB  ED B0         LDIR
+4DED  3A BD 62      LD A,(DATA_62BD)
+4DF0  B7            OR A
+4DF1  20 07         JR NZ,L4DFA
+4DF3  3C            INC A
+4DF4  32 55 62      LD (DATA_6255),A
+4DF7  C3 0D 4E      JP L4E0D
+L4DFA:
+4DFA  21 D0 3F      LD HL,VIDEO+03D0H
+4DFD  CB 3F         SRL A
+4DFF  28 0A         JR Z,L4E0B
+4E01  F5            PUSH AF
+4E02  47            LD B,A
+L4E03:
+4E03  36 8C         LD (HL),8CH
+4E05  23            INC HL
+4E06  10 FB         DJNZ L4E03
+4E08  F1            POP AF
+4E09  30 02         JR NC,L4E0D
+L4E0B:
+4E0B  36 84         LD (HL),84H
+L4E0D:
+4E0D  3A 55 62      LD A,(DATA_6255)
+4E10  B7            OR A
+4E11  CA 44 4E      JP Z,L4E44
+4E14  3A 53 62      LD A,(DATA_6253)
+4E17  B7            OR A
+4E18  FA 2E 4E      JP M,L4E2E
+4E1B  21 C6 66      LD HL,DATA_66C6
+4E1E  11 55 64      LD DE,DATA_6455
+4E21  01 51 00      LD BC,0051H
+4E24  ED B0         LDIR
+4E26  AF            XOR A
+4E27  32 64 62      LD (DATA_6264),A
+4E2A  3E 80         LD A,80H
+4E2C  18 13         JR L4E41
+L4E2E:
+4E2E  FE 85         CP 85H
+4E30  FA 40 4E      JP M,L4E40
+4E33  3A 59 62      LD A,(DATA_6259)
+4E36  B7            OR A
+4E37  CA 10 5F      JP Z,L5F10
+4E3A  CD F3 5A      CALL SUB_5AF3
+4E3D  C3 10 5F      JP L5F10
+L4E40:
+4E40  3C            INC A
+L4E41:
+4E41  32 53 62      LD (DATA_6253),A
+L4E44:
+4E44  3A 2D 62      LD A,(DATA_622D)
+4E47  B7            OR A
+4E48  28 07         JR Z,L4E51
+4E4A  3A 56 62      LD A,(DATA_6256)
+4E4D  B7            OR A
+4E4E  C2 6F 4E      JP NZ,L4E6F
+L4E51:
+4E51  ED 4B 2E 62   LD BC,(DATA_622E)
+4E55  CB 38         SRL B
+4E57  CB 19         RR C
+4E59  21 40 38      LD HL,KEYBOARD+0040H
+4E5C  11 5E 62      LD DE,DATA_625E
+L4E5F:
+4E5F  0B            DEC BC
+4E60  CB 7E         BIT 7,(HL)
+4E62  20 08         JR NZ,L4E6C
+4E64  AF            XOR A
+4E65  12            LD (DE),A
+L4E66:
+4E66  78            LD A,B
+4E67  B1            OR C
+4E68  20 F5         JR NZ,L4E5F
+4E6A  18 03         JR L4E6F
+L4E6C:
+4E6C  C3 66 4E      JP L4E66
+L4E6F:
+4E6F  3A 58 62      LD A,(DATA_6258)
+4E72  B7            OR A
+4E73  CA B8 4C      JP Z,L4CB8
+4E76  21 4F 60      LD HL,DATA_604F
+4E79  11 9B 3D      LD DE,VIDEO+019BH
+4E7C  06 0A         LD B,0AH
+4E7E  CD 40 61      CALL SUB_6140
+4E81  3A 42 62      LD A,(DATA_6242)
+4E84  32 A3 3D      LD (VIDEO+01A3H),A
+4E87  21 C0 3F      LD HL,VIDEO+03C0H
+4E8A  FE 31         CP 31H
+4E8C  28 03         JR Z,L4E91
+4E8E  21 F1 3F      LD HL,VIDEO+03F1H
+L4E91:
+4E91  E5            PUSH HL
+4E92  11 67 62      LD DE,DATA_6267
+4E95  01 0E 00      LD BC,000EH
+4E98  ED B0         LDIR
+4E9A  E1            POP HL
+4E9B  06 08         LD B,08H
+L4E9D:
+4E9D  C5            PUSH BC
+4E9E  E5            PUSH HL
+4E9F  54            LD D,H
+4EA0  5D            LD E,L
+4EA1  13            INC DE
+4EA2  36 80         LD (HL),80H
+4EA4  01 0D 00      LD BC,000DH
+4EA7  ED B0         LDIR
+4EA9  01 00 20      LD BC,2000H
+4EAC  CD 60 00      CALL $DELAY             ; pause for a time set by BC
+4EAF  D1            POP DE
+4EB0  D5            PUSH DE
+4EB1  21 67 62      LD HL,DATA_6267
+4EB4  01 0E 00      LD BC,000EH
+4EB7  ED B0         LDIR
+4EB9  01 00 20      LD BC,2000H
+4EBC  CD 60 00      CALL $DELAY             ; pause for a time set by BC
+4EBF  E1            POP HL
+4EC0  C1            POP BC
+4EC1  10 DA         DJNZ L4E9D
+4EC3  01 00 50      LD BC,DATA_5000
+4EC6  CD 60 00      CALL $DELAY             ; pause for a time set by BC
+4EC9  AF            XOR A
+4ECA  32 58 62      LD (DATA_6258),A
+4ECD  C3 B8 4C      JP L4CB8
+SUB_4ED0:
+4ED0  21 29 45      LD HL,4529H
+4ED3  11 2A 45      LD DE,452AH
+4ED6  01 55 04      LD BC,0455H
+4ED9  36 80         LD (HL),80H
+4EDB  ED B0         LDIR
+4EDD  3A 60 62      LD A,(DATA_6260)
+4EE0  3C            INC A
+4EE1  FE 05         CP 05H
+4EE3  20 01         JR NZ,L4EE6
+4EE5  AF            XOR A
+L4EE6:
+4EE6  32 60 62      LD (DATA_6260),A
+4EE9  2A 51 62      LD HL,(DATA_6251)
+4EEC  3A 45 62      LD A,(DATA_6245)
+4EEF  FE 01         CP 01H
+4EF1  20 03         JR NZ,L4EF6
+4EF3  21 6E 45      LD HL,456EH
+L4EF6:
+4EF6  22 4C 62      LD (DATA_624C),HL
+4EF9  21 6E 45      LD HL,456EH
+4EFC  22 4E 62      LD (DATA_624E),HL
+4EFF  3A 45 62      LD A,(DATA_6245)
+4F02  32 50 62      LD (DATA_6250),A
+4F05  FD 21 8F 62   LD IY,DATA_628F
+4F09  11 2E 45      LD DE,452EH
+4F0C  2A 4A 62      LD HL,(DATA_624A)
+4F0F  06 40         LD B,40H
+L4F11:
+4F11  C5            PUSH BC
+4F12  3A 44 62      LD A,(DATA_6244)
+4F15  47            LD B,A
+L4F16:
+4F16  C5            PUSH BC
+4F17  D5            PUSH DE
+L4F18:
+4F18  7E            LD A,(HL)
+4F19  CB 3F         SRL A
+4F1B  CB 3F         SRL A
+4F1D  CB 3F         SRL A
+4F1F  CB 87         RES 0,A
+4F21  B7            OR A
+4F22  CA BB 4F      JP Z,L4FBB
+4F25  D6 02         SUB 02H
+4F27  06 00         LD B,00H
+4F29  4F            LD C,A
+4F2A  DD 21 9F 62   LD IX,DATA_629F
+4F2E  DD 09         ADD IX,BC
+4F30  DD 46 01      LD B,(IX+01H)
+4F33  DD 4E 00      LD C,(IX+00H)
+4F36  EB            EX DE,HL
+4F37  09            ADD HL,BC
+4F38  EB            EX DE,HL
+4F39  7E            LD A,(HL)
+4F3A  E6 0F         AND 0FH
+4F3C  32 41 4F      LD (DATA_4F41),A
+4F3F  FD 7E 00      LD A,(IY+00H)
+4F42  12            LD (DE),A
+4F43  23            INC HL
+4F44  D1            POP DE
+4F45  C1            POP BC
+4F46  10 CE         DJNZ L4F16
+4F48  13            INC DE
+4F49  C1            POP BC
+4F4A  78            LD A,B
+4F4B  FE 40         CP 40H
+4F4D  20 0B         JR NZ,L4F5A
+4F4F  E5            PUSH HL
+4F50  2A 44 62      LD HL,(DATA_6244)
+4F53  22 46 62      LD (DATA_6246),HL
+4F56  E1            POP HL
+4F57  22 48 62      LD (DATA_6248),HL
+L4F5A:
+4F5A  10 B5         DJNZ L4F11
+4F5C  3A 57 62      LD A,(DATA_6257)
+4F5F  B7            OR A
+4F60  20 0A         JR NZ,L4F6C
+4F62  7E            LD A,(HL)
+4F63  FE FF         CP 0FFH
+4F65  20 05         JR NZ,L4F6C
+4F67  3E 01         LD A,01H
+4F69  32 57 62      LD (DATA_6257),A
+L4F6C:
+4F6C  3A 53 62      LD A,(DATA_6253)
+4F6F  B7            OR A
+4F70  F2 82 4F      JP P,L4F82
+4F73  FE 80         CP 80H
+4F75  C2 A8 4F      JP NZ,L4FA8
+4F78  3A 57 62      LD A,(DATA_6257)
+4F7B  B7            OR A
+4F7C  CA A1 4F      JP Z,L4FA1
+4F7F  C3 A8 4F      JP L4FA8
+L4F82:
+4F82  3A 57 62      LD A,(DATA_6257)
+4F85  B7            OR A
+4F86  28 0B         JR Z,L4F93
+4F88  FE 01         CP 01H
+4F8A  20 1C         JR NZ,L4FA8
+4F8C  3C            INC A
+4F8D  32 57 62      LD (DATA_6257),A
+4F90  C3 A1 4F      JP L4FA1
+L4F93:
+4F93  2A 48 62      LD HL,(DATA_6248)
+4F96  22 4A 62      LD (DATA_624A),HL
+4F99  3A 51 62      LD A,(DATA_6251)
+4F9C  EE 01         XOR 01H
+4F9E  32 51 62      LD (DATA_6251),A
+L4FA1:
+4FA1  2A 2A 62      LD HL,(DATA_622A)
+4FA4  23            INC HL
+4FA5  22 2A 62      LD (DATA_622A),HL
+L4FA8:
+4FA8  2A 46 62      LD HL,(DATA_6246)
+4FAB  22 44 62      LD (DATA_6244),HL
+4FAE  21 3A 49      LD HL,493AH
+4FB1  06 40         LD B,40H
+L4FB3:
+4FB3  3E B0         LD A,0B0H
+4FB5  B6            OR (HL)
+4FB6  77            LD (HL),A
+4FB7  23            INC HL
+4FB8  10 F9         DJNZ L4FB3
+4FBA  C9            RET
+L4FBB:
+4FBB  7E            LD A,(HL)
+4FBC  E6 0F         AND 0FH
+4FBE  FE 04         CP 04H
+4FC0  FA DD 4F      JP M,L4FDD
+4FC3  D6 03         SUB 03H
+4FC5  32 45 62      LD (DATA_6245),A
+4FC8  FE 01         CP 01H
+4FCA  28 09         JR Z,L4FD5
+4FCC  ED 53 4C 62   LD (DATA_624C),DE
+4FD0  32 50 62      LD (DATA_6250),A
+4FD3  18 04         JR L4FD9
+L4FD5:
+4FD5  ED 53 4E 62   LD (DATA_624E),DE
+L4FD9:
+4FD9  23            INC HL
+4FDA  C3 18 4F      JP L4F18
+L4FDD:
+4FDD  3C            INC A
+4FDE  32 44 62      LD (DATA_6244),A
+4FE1  D1            POP DE
+4FE2  C1            POP BC
+4FE3  47            LD B,A
+4FE4  C5            PUSH BC
+4FE5  D5            PUSH DE
+4FE6  23            INC HL
+4FE7  C3 18 4F      JP L4F18
+SUB_4FEA:
+4FEA  AF            XOR A
+4FEB  32 5D 62      LD (DATA_625D),A
+4FEE  2A 4E 62      LD HL,(DATA_624E)
+4FF1  ED 5B 4C 62   LD DE,(DATA_624C)
+4FF5  B7            OR A
+4FF6  ED 52         SBC HL,DE
+4FF8  CA 32 50      JP Z,L5032
+4FFB  FA 32 50      JP M,L5032
+4FFE  45            LD B,L
+4FFF  04            INC B
+DATA_5000:
+5000  CB 38         SRL B
+5002  EB            EX DE,HL
+5003  3A 50 62      LD A,(DATA_6250)
+5006  3D            DEC A
+5007  CB 27         SLA A
+5009  5F            LD E,A
+500A  16 00         LD D,00H
+500C  FD 21 9F 62   LD IY,DATA_629F
+5010  FD 19         ADD IY,DE
+5012  FD 56 01      LD D,(IY+01H)
+5015  FD 5E 00      LD E,(IY+00H)
+5018  19            ADD HL,DE
+L5019:
+5019  7E            LD A,(HL)
+501A  FE BF         CP 0BFH
+501C  20 05         JR NZ,L5023
+501E  3E 01         LD A,01H
+5020  32 5D 62      LD (DATA_625D),A
+L5023:
+5023  3E 8C         LD A,8CH
+5025  B6            OR (HL)
+5026  77            LD (HL),A
+5027  23            INC HL
+5028  23            INC HL
+5029  10 EE         DJNZ L5019
+502B  3A 5D 62      LD A,(DATA_625D)
+502E  B7            OR A
+502F  C2 45 50      JP NZ,L5045
+L5032:
+5032  3A 60 62      LD A,(DATA_6260)
+5035  B7            OR A
+5036  C0            RET NZ
+5037  3A 59 62      LD A,(DATA_6259)
+503A  B7            OR A
+503B  C0            RET NZ
+503C  3A BD 62      LD A,(DATA_62BD)
+503F  3D            DEC A
+5040  F8            RET M
+5041  32 BD 62      LD (DATA_62BD),A
+5044  C9            RET
+L5045:
+5045  3A 55 62      LD A,(DATA_6255)
+5048  B7            OR A
+5049  C0            RET NZ
+504A  3A BD 62      LD A,(DATA_62BD)
+504D  FE 40         CP 40H
+504F  C8            RET Z
+5050  3C            INC A
+5051  32 BD 62      LD (DATA_62BD),A
+5054  C9            RET
+SUB_5055:
+5055  FD 21 1E 67   LD IY,DATA_671E
+5059  3A 53 62      LD A,(DATA_6253)
+505C  B7            OR A
+505D  F2 66 50      JP P,L5066
+5060  CB BF         RES 7,A
+5062  FD 21 A9 68   LD IY,DATA_68A9
+L5066:
+5066  06 00         LD B,00H
+5068  CB 27         SLA A
+506A  4F            LD C,A
+506B  FD 09         ADD IY,BC
+506D  FD 56 01      LD D,(IY+01H)
+5070  FD 5E 00      LD E,(IY+00H)
+5073  FD 21 9F 62   LD IY,DATA_629F
+5077  3A 54 62      LD A,(DATA_6254)
+507A  3D            DEC A
+507B  CB 27         SLA A
+507D  4F            LD C,A
+507E  FD 09         ADD IY,BC
+5080  FD 46 01      LD B,(IY+01H)
+5083  FD 4E 00      LD C,(IY+00H)
+5086  2A 5B 62      LD HL,(DATA_625B)
+5089  09            ADD HL,BC
+508A  3A 53 62      LD A,(DATA_6253)
+508D  B7            OR A
+508E  F2 9A 50      JP P,L509A
+5091  1A            LD A,(DE)
+5092  4F            LD C,A
+5093  13            INC DE
+5094  1A            LD A,(DE)
+5095  47            LD B,A
+5096  13            INC DE
+5097  B7            OR A
+5098  ED 42         SBC HL,BC
+L509A:
+509A  C3 9D 50      JP L509D
+L509D:
+509D  1A            LD A,(DE)
+509E  B7            OR A
+509F  F2 B7 50      JP P,L50B7
+50A2  4F            LD C,A
+50A3  A6            AND (HL)
+50A4  FE 80         CP 80H
+50A6  28 05         JR Z,L50AD
+50A8  3E 01         LD A,01H
+50AA  32 55 62      LD (DATA_6255),A
+L50AD:
+50AD  79            LD A,C
+50AE  B6            OR (HL)
+50AF  CB F7         SET 6,A
+50B1  77            LD (HL),A
+50B2  23            INC HL
+50B3  13            INC DE
+50B4  C3 9D 50      JP L509D
+L50B7:
+50B7  B7            OR A
+50B8  C8            RET Z
+50B9  06 00         LD B,00H
+50BB  4F            LD C,A
+50BC  09            ADD HL,BC
+50BD  13            INC DE
+50BE  C3 9D 50      JP L509D
+DATA_50C1:
+50C1  1A 4F B7 F2   DB 1AH,4FH,0B7H,0F2H
+50C5  E1 50 CB 76   DB 0E1H,50H,0CBH,76H
+50C9  C2 D7 50 A6   DB 0C2H,0D7H,50H,0A6H
+50CD  CB FF B9 28   DB 0CBH,0FFH,0B9H,28H
+50D1  05 3E 01 32   DB 05H,3EH,01H,32H
+50D5  55 62 1A B6   DB 55H,62H,1AH,0B6H
+50D9  CB B7 77 13   DB 0CBH,0B7H,77H,13H
+50DD  23 C3 C1 50   DB 23H,0C3H,0C1H,50H
+50E1  B7 C8 06 00   DB 0B7H,0C8H,06H,00H
+50E5  09 13 C3 C1   DB 09H,13H,0C3H,0C1H
+50E9  50            DB 50H
+SUB_50EA:
+50EA  06 00         LD B,00H
+50EC  DD 7E 01      LD A,(IX+01H)
+50EF  CB 27         SLA A
+50F1  4F            LD C,A
+50F2  DD 7E 00      LD A,(IX+00H)
+50F5  E6 3F         AND 3FH
+50F7  81            ADD A,C
+50F8  4F            LD C,A
+50F9  FD 2A C1 62   LD IY,(DATA_62C1)
+50FD  DD CB 00 76   BIT 6,(IX+00H)
+5101  28 11         JR Z,L5114
+5103  FD 21 91 68   LD IY,DATA_6891
+5107  DD CB 03 66   BIT 4,(IX+03H)
+510B  28 07         JR Z,L5114
+510D  1B            DEC DE
+510E  1B            DEC DE
+510F  1B            DEC DE
+5110  FD 21 A9 68   LD IY,DATA_68A9
+L5114:
+5114  FD 09         ADD IY,BC
+5116  FD 66 01      LD H,(IY+01H)
+5119  FD 6E 00      LD L,(IY+00H)
+511C  FD 21 9F 62   LD IY,DATA_629F
+5120  DD 7E 02      LD A,(IX+02H)
+5123  3D            DEC A
+5124  CB 27         SLA A
+5126  4F            LD C,A
+5127  FD 09         ADD IY,BC
+5129  FD 46 01      LD B,(IY+01H)
+512C  FD 4E 00      LD C,(IY+00H)
+512F  EB            EX DE,HL
+5130  09            ADD HL,BC
+5131  DD CB 00 76   BIT 6,(IX+00H)
+5135  28 17         JR Z,SUB_514E
+5137  1A            LD A,(DE)
+5138  4F            LD C,A
+5139  13            INC DE
+513A  1A            LD A,(DE)
+513B  47            LD B,A
+513C  13            INC DE
+513D  B7            OR A
+513E  ED 42         SBC HL,BC
+5140  DD 7E 03      LD A,(IX+03H)
+5143  B7            OR A
+5144  F2 4E 51      JP P,SUB_514E
+5147  23            INC HL
+5148  CB 77         BIT 6,A
+514A  20 02         JR NZ,SUB_514E
+514C  23            INC HL
+514D  23            INC HL
+SUB_514E:
+514E  CB 76         BIT 6,(HL)
+5150  08            EX AF,AF'
+5151  CB B6         RES 6,(HL)
+5153  1A            LD A,(DE)
+5154  B7            OR A
+5155  F2 7A 51      JP P,L517A
+5158  A6            AND (HL)
+5159  FE 80         CP 80H
+515B  28 0F         JR Z,L516C
+515D  DD 7E 00      LD A,(IX+00H)
+5160  B7            OR A
+5161  20 05         JR NZ,L5168
+5163  7E            LD A,(HL)
+5164  FE 95         CP 95H
+5166  28 04         JR Z,L516C
+L5168:
+5168  DD CB 03 C6   SET 0,(IX+03H)
+L516C:
+516C  08            EX AF,AF'
+516D  1A            LD A,(DE)
+516E  28 03         JR Z,L5173
+5170  AE            XOR (HL)
+5171  18 01         JR L5174
+L5173:
+5173  B6            OR (HL)
+L5174:
+5174  77            LD (HL),A
+5175  23            INC HL
+5176  13            INC DE
+5177  C3 4E 51      JP SUB_514E
+L517A:
+517A  B7            OR A
+517B  C8            RET Z
+517C  06 00         LD B,00H
+517E  4F            LD C,A
+517F  09            ADD HL,BC
+5180  E5            PUSH HL
+5181  01 7E 49      LD BC,497EH
+5184  B7            OR A
+5185  ED 42         SBC HL,BC
+5187  E1            POP HL
+5188  F0            RET P
+5189  13            INC DE
+518A  C3 4E 51      JP SUB_514E
+SUB_518D:
+518D  3A 55 62      LD A,(DATA_6255)
+5190  B7            OR A
+5191  C0            RET NZ
+5192  DB 00         IN A,(00H)
+5194  47            LD B,A
+5195  3E FF         LD A,0FFH
+5197  90            SUB B
+5198  47            LD B,A
+5199  3A 40 38      LD A,(KEYBOARD+0040H)
+519C  CB 6F         BIT 5,A
+519E  20 04         JR NZ,L51A4
+51A0  CB 50         BIT 2,B
+51A2  28 15         JR Z,L51B9
+L51A4:
+51A4  2A 5B 62      LD HL,(DATA_625B)
+51A7  E5            PUSH HL
+51A8  11 2E 45      LD DE,452EH
+51AB  B7            OR A
+51AC  ED 52         SBC HL,DE
+51AE  E1            POP HL
+51AF  CA D2 51      JP Z,L51D2
+51B2  2B            DEC HL
+51B3  22 5B 62      LD (DATA_625B),HL
+51B6  C3 D2 51      JP L51D2
+L51B9:
+51B9  CB 77         BIT 6,A
+51BB  20 04         JR NZ,L51C1
+51BD  CB 58         BIT 3,B
+51BF  28 11         JR Z,L51D2
+L51C1:
+51C1  2A 5B 62      LD HL,(DATA_625B)
+51C4  E5            PUSH HL
+51C5  11 4D 45      LD DE,454DH
+51C8  B7            OR A
+51C9  ED 52         SBC HL,DE
+51CB  E1            POP HL
+51CC  28 04         JR Z,L51D2
+51CE  23            INC HL
+51CF  22 5B 62      LD (DATA_625B),HL
+L51D2:
+51D2  CB 5F         BIT 3,A
+51D4  C2 DC 51      JP NZ,L51DC
+51D7  CB 40         BIT 0,B
+51D9  CA F9 51      JP Z,L51F9
+L51DC:
+51DC  4F            LD C,A
+51DD  3A 5D 62      LD A,(DATA_625D)
+51E0  B7            OR A
+51E1  79            LD A,C
+51E2  C2 F9 51      JP NZ,L51F9
+51E5  3A 53 62      LD A,(DATA_6253)
+51E8  3D            DEC A
+51E9  F2 F5 51      JP P,L51F5
+51EC  3A 54 62      LD A,(DATA_6254)
+51EF  3D            DEC A
+51F0  32 54 62      LD (DATA_6254),A
+51F3  3E 02         LD A,02H
+L51F5:
+51F5  32 53 62      LD (DATA_6253),A
+51F8  C9            RET
+L51F9:
+51F9  CB 67         BIT 4,A
+51FB  20 03         JR NZ,L5200
+51FD  CB 48         BIT 1,B
+51FF  C8            RET Z
+L5200:
+5200  3A 53 62      LD A,(DATA_6253)
+5203  3C            INC A
+5204  FE 03         CP 03H
+5206  20 08         JR NZ,L5210
+5208  3A 54 62      LD A,(DATA_6254)
+520B  3C            INC A
+520C  32 54 62      LD (DATA_6254),A
+520F  AF            XOR A
+L5210:
+5210  32 53 62      LD (DATA_6253),A
+5213  C9            RET
+SUB_5214:
+5214  FD 2A 65 62   LD IY,(DATA_6265)
+5218  2A 2A 62      LD HL,(DATA_622A)
+521B  01 05 00      LD BC,0005H
+521E  B7            OR A
+521F  ED 42         SBC HL,BC
+5221  44            LD B,H
+5222  4D            LD C,L
+L5223:
+5223  FD 7E 01      LD A,(IY+01H)
+5226  FE FF         CP 0FFH
+5228  C8            RET Z
+5229  67            LD H,A
+522A  FD 6E 00      LD L,(IY+00H)
+522D  B7            OR A
+522E  ED 42         SBC HL,BC
+5230  F2 3B 52      JP P,L523B
+5233  11 04 00      LD DE,0004H
+5236  FD 19         ADD IY,DE
+5238  C3 23 52      JP L5223
+L523B:
+523B  FD 22 65 62   LD (DATA_6265),IY
+L523F:
+523F  11 45 00      LD DE,0045H
+5242  B7            OR A
+5243  E5            PUSH HL
+5244  ED 52         SBC HL,DE
+5246  E1            POP HL
+5247  F0            RET P
+5248  C5            PUSH BC
+5249  01 29 45      LD BC,4529H
+524C  09            ADD HL,BC
+524D  EB            EX DE,HL
+524E  FD 46 03      LD B,(IY+03H)
+5251  FD 4E 02      LD C,(IY+02H)
+5254  C5            PUSH BC
+5255  DD E1         POP IX
+5257  DD 7E 00      LD A,(IX+00H)
+525A  CB BF         RES 7,A
+525C  CB 77         BIT 6,A
+DATA_525E:
+525E  C2 F8 52      JP NZ,L52F8
+5261  FE 7F         CP 7FH
+5263  CA F8 52      JP Z,L52F8
+5266  FE 58         CP 58H
+5268  F2 0E 53      JP P,L530E
+526B  D5            PUSH DE
+526C  3A 56 62      LD A,(DATA_6256)
+526F  B7            OR A
+5270  C2 FF 58      JP NZ,L58FF
+5273  3A 58 62      LD A,(DATA_6258)
+5276  B7            OR A
+5277  C2 8C 52      JP NZ,L528C
+527A  DD 7E 00      LD A,(IX+00H)
+527D  FE 06         CP 06H
+527F  CA 24 53      JP Z,L5324
+5282  FE 24         CP 24H
+5284  CA B7 53      JP Z,L53B7
+5287  FE 2A         CP 2AH
+5289  CA 0E 54      JP Z,L540E
+L528C:
+528C  D1            POP DE
+528D  FD E5         PUSH IY
+528F  D5            PUSH DE
+5290  CD EA 50      CALL SUB_50EA
+5293  D1            POP DE
+5294  FD E1         POP IY
+5296  DD CB 00 76   BIT 6,(IX+00H)
+529A  C2 E7 54      JP NZ,L54E7
+529D  3A 56 62      LD A,(DATA_6256)
+52A0  B7            OR A
+52A1  C2 F8 52      JP NZ,L52F8
+52A4  DD CB 03 46   BIT 0,(IX+03H)
+52A8  28 2A         JR Z,L52D4
+52AA  DD 7E 00      LD A,(IX+00H)
+52AD  DD 36 00 40   LD (IX+00H),40H
+52B1  DD 36 03 00   LD (IX+03H),00H
+52B5  FE 18         CP 18H
+52B7  20 0B         JR NZ,L52C4
+52B9  DD 36 01 02   LD (IX+01H),02H
+52BD  DD 36 03 80   LD (IX+03H),80H
+52C1  C3 F8 52      JP L52F8
+L52C4:
+52C4  FE 36         CP 36H
+52C6  C2 F8 52      JP NZ,L52F8
+52C9  DD 36 03 C0   LD (IX+03H),0C0H
+52CD  DD 36 01 02   LD (IX+01H),02H
+52D1  C3 F8 52      JP L52F8
+L52D4:
+52D4  DD 7E 00      LD A,(IX+00H)
+52D7  FE 0C         CP 0CH
+52D9  CA 21 54      JP Z,L5421
+52DC  FE 12         CP 12H
+52DE  CA 42 54      JP Z,L5442
+52E1  47            LD B,A
+52E2  3A 58 62      LD A,(DATA_6258)
+52E5  B7            OR A
+52E6  78            LD A,B
+52E7  20 0F         JR NZ,L52F8
+52E9  FE 18         CP 18H
+52EB  CA 1A 56      JP Z,L561A
+52EE  FE 36         CP 36H
+52F0  CA 90 56      JP Z,L5690
+52F3  FE 3C         CP 3CH
+52F5  CA 3E 57      JP Z,L573E
+L52F8:
+52F8  01 04 00      LD BC,0004H
+52FB  FD 09         ADD IY,BC
+52FD  C1            POP BC
+52FE  FD 7E 01      LD A,(IY+01H)
+5301  FE FF         CP 0FFH
+5303  C8            RET Z
+5304  67            LD H,A
+5305  FD 6E 00      LD L,(IY+00H)
+5308  B7            OR A
+5309  ED 42         SBC HL,BC
+530B  C3 3F 52      JP L523F
+L530E:
+530E  DD 36 00 7F   LD (IX+00H),7FH
+5312  DD CB 03 6E   BIT 5,(IX+03H)
+5316  CA F8 52      JP Z,L52F8
+5319  DD 36 03 00   LD (IX+03H),00H
+531D  DD 36 00 18   LD (IX+00H),18H
+5321  C3 F8 52      JP L52F8
+L5324:
+5324  DD CB 00 7E   BIT 7,(IX+00H)
+5328  C2 8C 52      JP NZ,L528C
+532B  DD CB 03 6E   BIT 5,(IX+03H)
+532F  C2 82 53      JP NZ,L5382
+5332  3A 55 62      LD A,(DATA_6255)
+5335  B7            OR A
+5336  C2 8C 52      JP NZ,L528C
+5339  EB            EX DE,HL
+533A  ED 5B 5B 62   LD DE,(DATA_625B)
+533E  B7            OR A
+533F  ED 52         SBC HL,DE
+5341  FA 8C 52      JP M,L528C
+5344  4D            LD C,L
+5345  21 54 62      LD HL,DATA_6254
+5348  7E            LD A,(HL)
+5349  CB 27         SLA A
+534B  86            ADD A,(HL)
+534C  2B            DEC HL
+534D  86            ADD A,(HL)
+534E  47            LD B,A
+534F  DD 7E 02      LD A,(IX+02H)
+5352  CB 27         SLA A
+5354  DD 86 02      ADD A,(IX+02H)
+5357  DD 86 01      ADD A,(IX+01H)
+535A  90            SUB B
+535B  FA 8C 52      JP M,L528C
+535E  47            LD B,A
+535F  3A 2D 62      LD A,(DATA_622D)
+5362  B7            OR A
+5363  78            LD A,B
+5364  28 02         JR Z,L5368
+5366  CB 3F         SRL A
+L5368:
+5368  D6 05         SUB 05H
+536A  57            LD D,A
+536B  C6 0B         ADD A,0BH
+536D  5F            LD E,A
+536E  79            LD A,C
+536F  BA            CP D
+5370  FA 8C 52      JP M,L528C
+5373  BB            CP E
+5374  F2 8C 52      JP P,L528C
+5377  ED 5F         LD A,R
+5379  FE 19         CP 19H
+537B  F2 8C 52      JP P,L528C
+537E  DD CB 03 EE   SET 5,(IX+03H)
+L5382:
+5382  06 02         LD B,02H
+5384  3A 2D 62      LD A,(DATA_622D)
+5387  B7            OR A
+5388  20 01         JR NZ,L538B
+538A  05            DEC B
+L538B:
+538B  DD 7E 01      LD A,(IX+01H)
+538E  3D            DEC A
+538F  F2 97 53      JP P,L5397
+5392  DD 35 02      DEC (IX+02H)
+5395  3E 02         LD A,02H
+L5397:
+5397  DD 77 01      LD (IX+01H),A
+539A  DD 7E 02      LD A,(IX+02H)
+539D  FE 02         CP 02H
+539F  20 11         JR NZ,L53B2
+53A1  DD 7E 01      LD A,(IX+01H)
+53A4  B7            OR A
+53A5  20 0B         JR NZ,L53B2
+53A7  DD 36 00 40   LD (IX+00H),40H
+53AB  DD 36 03 00   LD (IX+03H),00H
+53AF  C3 8C 52      JP L528C
+L53B2:
+53B2  10 D7         DJNZ L538B
+53B4  C3 8C 52      JP L528C
+L53B7:
+53B7  DD CB 00 7E   BIT 7,(IX+00H)
+53BB  C2 8C 52      JP NZ,L528C
+53BE  3A 55 62      LD A,(DATA_6255)
+53C1  B7            OR A
+53C2  C2 8C 52      JP NZ,L528C
+53C5  EB            EX DE,HL
+53C6  ED 5B 5B 62   LD DE,(DATA_625B)
+53CA  B7            OR A
+53CB  ED 52         SBC HL,DE
+53CD  FA 8C 52      JP M,L528C
+53D0  4D            LD C,L
+53D1  DD 7E 02      LD A,(IX+02H)
+53D4  CB 27         SLA A
+53D6  DD 86 02      ADD A,(IX+02H)
+53D9  DD 86 01      ADD A,(IX+01H)
+53DC  47            LD B,A
+53DD  21 54 62      LD HL,DATA_6254
+53E0  7E            LD A,(HL)
+53E1  CB 27         SLA A
+53E3  86            ADD A,(HL)
+53E4  2B            DEC HL
+53E5  86            ADD A,(HL)
+53E6  90            SUB B
+53E7  FA 8C 52      JP M,L528C
+53EA  D6 05         SUB 05H
+53EC  57            LD D,A
+53ED  C6 0F         ADD A,0FH
+53EF  5F            LD E,A
+53F0  79            LD A,C
+53F1  BA            CP D
+53F2  FA 8C 52      JP M,L528C
+53F5  BB            CP E
+53F6  F2 8C 52      JP P,L528C
+53F9  ED 5F         LD A,R
+53FB  FE 19         CP 19H
+53FD  F2 8C 52      JP P,L528C
+5400  DD 36 00 2A   LD (IX+00H),2AH
+5404  3E 50         LD A,50H
+5406  06 08         LD B,08H
+5408  CD 12 62      CALL SUB_6212
+540B  C3 8C 52      JP L528C
+L540E:
+540E  DD 7E 01      LD A,(IX+01H)
+5411  3C            INC A
+5412  FE 03         CP 03H
+5414  FA 1B 54      JP M,L541B
+5417  DD 34 02      INC (IX+02H)
+541A  AF            XOR A
+L541B:
+541B  DD 77 01      LD (IX+01H),A
+541E  C3 8C 52      JP L528C
+L5421:
+5421  2B            DEC HL
+5422  2B            DEC HL
+5423  11 4A 00      LD DE,004AH
+5426  19            ADD HL,DE
+5427  DD 46 04      LD B,(IX+04H)
+L542A:
+542A  3E 95         LD A,95H
+542C  CB 76         BIT 6,(HL)
+542E  CB B6         RES 6,(HL)
+5430  28 03         JR Z,L5435
+5432  AE            XOR (HL)
+5433  18 01         JR L5436
+L5435:
+5435  B6            OR (HL)
+L5436:
+5436  77            LD (HL),A
+5437  19            ADD HL,DE
+5438  10 F0         DJNZ L542A
+543A  DD 7E 05      LD A,(IX+05H)
+543D  B6            OR (HL)
+543E  77            LD (HL),A
+543F  C3 F8 52      JP L52F8
+L5442:
+5442  3A BF 62      LD A,(DATA_62BF)
+5445  B7            OR A
+5446  28 14         JR Z,L545C
+5448  2B            DEC HL
+5449  2B            DEC HL
+544A  2B            DEC HL
+544B  01 4A 00      LD BC,004AH
+544E  B7            OR A
+544F  ED 42         SBC HL,BC
+5451  CB 3F         SRL A
+5453  06 00         LD B,00H
+5455  4F            LD C,A
+5456  09            ADD HL,BC
+5457  3A BE 62      LD A,(DATA_62BE)
+545A  B6            OR (HL)
+545B  77            LD (HL),A
+L545C:
+545C  DD 7E 04      LD A,(IX+04H)
+545F  B7            OR A
+5460  C2 84 54      JP NZ,L5484
+5463  3A 3E 5B      LD A,(DATA_5B3E)
+5466  4F            LD C,A
+5467  ED 5F         LD A,R
+5469  B9            CP C
+546A  F2 F8 52      JP P,L52F8
+546D  ED 5F         LD A,R
+546F  E6 0F         AND 0FH
+5471  06 16         LD B,16H
+5473  FE 0A         CP 0AH
+5475  F2 81 54      JP P,L5481
+5478  06 14         LD B,14H
+547A  FE 05         CP 05H
+547C  F2 81 54      JP P,L5481
+547F  06 12         LD B,12H
+L5481:
+5481  DD 70 04      LD (IX+04H),B
+L5484:
+5484  DD 7E 04      LD A,(IX+04H)
+5487  DD 35 04      DEC (IX+04H)
+548A  FE 16         CP 16H
+548C  28 09         JR Z,L5497
+548E  FE 14         CP 14H
+5490  28 05         JR Z,L5497
+5492  FE 12         CP 12H
+5494  C2 F8 52      JP NZ,L52F8
+L5497:
+5497  FD E5         PUSH IY
+5499  D5            PUSH DE
+549A  D6 12         SUB 12H
+549C  ED 44         NEG
+549E  C6 04         ADD A,04H
+54A0  CB 27         SLA A
+54A2  CB 27         SLA A
+54A4  C6 0F         ADD A,0FH
+54A6  06 0A         LD B,0AH
+54A8  CD 12 62      CALL SUB_6212
+54AB  FD 21 4F 63   LD IY,DATA_634F
+54AF  06 14         LD B,14H
+54B1  11 06 00      LD DE,0006H
+L54B4:
+54B4  FD 7E 05      LD A,(IY+05H)
+54B7  B7            OR A
+54B8  28 0A         JR Z,L54C4
+54BA  FD 19         ADD IY,DE
+54BC  10 F6         DJNZ L54B4
+54BE  D1            POP DE
+54BF  FD E1         POP IY
+54C1  C3 F8 52      JP L52F8
+L54C4:
+54C4  FD 36 00 30   LD (IY+00H),30H
+54C8  DD 7E 01      LD A,(IX+01H)
+54CB  FD 77 01      LD (IY+01H),A
+54CE  DD 7E 02      LD A,(IX+02H)
+54D1  3C            INC A
+54D2  FD 77 02      LD (IY+02H),A
+54D5  FD 36 03 00   LD (IY+03H),00H
+54D9  D1            POP DE
+54DA  13            INC DE
+54DB  13            INC DE
+54DC  FD 73 04      LD (IY+04H),E
+54DF  FD 72 05      LD (IY+05H),D
+54E2  FD E1         POP IY
+54E4  C3 F8 52      JP L52F8
+L54E7:
+54E7  DD CB 03 66   BIT 4,(IX+03H)
+54EB  20 15         JR NZ,L5502
+54ED  DD 46 00      LD B,(IX+00H)
+54F0  C5            PUSH BC
+54F1  3E 28         LD A,28H
+54F3  90            SUB B
+54F4  06 04         LD B,04H
+54F6  CD EA 5A      CALL SUB_5AEA
+54F9  F1            POP AF
+54FA  C6 06         ADD A,06H
+54FC  DD 77 00      LD (IX+00H),A
+54FF  C3 F8 52      JP L52F8
+L5502:
+5502  DD 7E 01      LD A,(IX+01H)
+5505  FE 06         CP 06H
+5507  FA 1E 55      JP M,L551E
+550A  F1            POP AF
+550B  F1            POP AF
+550C  06 03         LD B,03H
+L550E:
+550E  C5            PUSH BC
+550F  01 00 00      LD BC,0000H
+5512  CD 60 00      CALL $DELAY             ; pause for a time set by BC
+5515  C1            POP BC
+5516  10 F6         DJNZ L550E
+5518  CD F3 5A      CALL SUB_5AF3
+551B  C3 6E 5F      JP L5F6E
+L551E:
+551E  3C            INC A
+551F  DD 77 01      LD (IX+01H),A
+5522  C3 F8 52      JP L52F8
+SUB_5525:
+5525  DD 21 4F 63   LD IX,DATA_634F
+5529  06 14         LD B,14H
+L552B:
+552B  C5            PUSH BC
+552C  DD 7E 05      LD A,(IX+05H)
+552F  B7            OR A
+5530  CA 73 55      JP Z,L5573
+5533  57            LD D,A
+5534  DD 5E 04      LD E,(IX+04H)
+5537  13            INC DE
+5538  62            LD H,D
+5539  6B            LD L,E
+553A  01 2E 45      LD BC,452EH
+553D  B7            OR A
+553E  E5            PUSH HL
+553F  ED 42         SBC HL,BC
+5541  E1            POP HL
+5542  FA 6F 55      JP M,L556F
+5545  01 6E 45      LD BC,456EH
+5548  B7            OR A
+5549  ED 42         SBC HL,BC
+554B  F2 6F 55      JP P,L556F
+554E  DD 72 05      LD (IX+05H),D
+5551  DD 73 04      LD (IX+04H),E
+5554  DD 7E 01      LD A,(IX+01H)
+5557  C6 02         ADD A,02H
+5559  FE 03         CP 03H
+555B  FA 63 55      JP M,L5563
+555E  DD 34 02      INC (IX+02H)
+5561  D6 03         SUB 03H
+L5563:
+5563  DD 77 01      LD (IX+01H),A
+5566  CD EA 50      CALL SUB_50EA
+5569  DD CB 03 46   BIT 0,(IX+03H)
+556D  28 04         JR Z,L5573
+L556F:
+556F  DD 36 05 00   LD (IX+05H),00H
+L5573:
+5573  01 06 00      LD BC,0006H
+5576  DD 09         ADD IX,BC
+5578  C1            POP BC
+5579  10 B0         DJNZ L552B
+557B  C9            RET
+SUB_557C:
+557C  3A 56 62      LD A,(DATA_6256)
+557F  B7            OR A
+5580  C8            RET Z
+5581  DD 21 13 64   LD IX,DATA_6413
+5585  06 03         LD B,03H
+5587  3A 2D 62      LD A,(DATA_622D)
+558A  B7            OR A
+558B  28 02         JR Z,L558F
+558D  06 06         LD B,06H
+L558F:
+558F  C5            PUSH BC
+5590  DD 7E 00      LD A,(IX+00H)
+5593  B7            OR A
+5594  CA 0F 56      JP Z,L560F
+5597  DD 56 05      LD D,(IX+05H)
+559A  DD 5E 04      LD E,(IX+04H)
+559D  D5            PUSH DE
+559E  CD EA 50      CALL SUB_50EA
+55A1  D1            POP DE
+55A2  3A 57 62      LD A,(DATA_6257)
+55A5  B7            OR A
+55A6  20 07         JR NZ,L55AF
+55A8  1B            DEC DE
+55A9  DD 72 05      LD (IX+05H),D
+55AC  DD 73 04      LD (IX+04H),E
+L55AF:
+55AF  DD CB 03 46   BIT 0,(IX+03H)
+55B3  28 07         JR Z,L55BC
+55B5  DD 36 00 00   LD (IX+00H),00H
+55B9  C3 0F 56      JP L560F
+L55BC:
+55BC  26 00         LD H,00H
+55BE  DD 7E 06      LD A,(IX+06H)
+55C1  DD 46 07      LD B,(IX+07H)
+55C4  80            ADD A,B
+55C5  DD 77 06      LD (IX+06H),A
+55C8  D2 F4 55      JP NC,L55F4
+55CB  26 01         LD H,01H
+55CD  DD CB 0A 46   BIT 0,(IX+0AH)
+55D1  CA E5 55      JP Z,L55E5
+55D4  DD 7E 01      LD A,(IX+01H)
+55D7  3C            INC A
+55D8  FE 03         CP 03H
+55DA  20 04         JR NZ,L55E0
+55DC  AF            XOR A
+55DD  DD 34 02      INC (IX+02H)
+L55E0:
+55E0  DD 77 01      LD (IX+01H),A
+55E3  18 0F         JR L55F4
+L55E5:
+55E5  DD 7E 01      LD A,(IX+01H)
+55E8  3D            DEC A
+55E9  F2 F1 55      JP P,L55F1
+55EC  DD 35 02      DEC (IX+02H)
+55EF  3E 02         LD A,02H
+L55F1:
+55F1  DD 77 01      LD (IX+01H),A
+L55F4:
+55F4  DD 7E 08      LD A,(IX+08H)
+55F7  DD 46 09      LD B,(IX+09H)
+55FA  80            ADD A,B
+55FB  DD 77 08      LD (IX+08H),A
+55FE  D2 0A 56      JP NC,L560A
+5601  26 01         LD H,01H
+5603  1B            DEC DE
+5604  DD 72 05      LD (IX+05H),D
+5607  DD 73 04      LD (IX+04H),E
+L560A:
+560A  7C            LD A,H
+560B  B7            OR A
+560C  CA BC 55      JP Z,L55BC
+L560F:
+560F  11 0B 00      LD DE,000BH
+5612  DD 19         ADD IX,DE
+5614  C1            POP BC
+5615  05            DEC B
+5616  C2 8F 55      JP NZ,L558F
+5619  C9            RET
+L561A:
+561A  DD 7E 04      LD A,(IX+04H)
+561D  B7            OR A
+561E  C2 89 56      JP NZ,L5689
+5621  3A 3F 5B      LD A,(DATA_5B3F)
+5624  4F            LD C,A
+5625  ED 5F         LD A,R
+5627  B9            CP C
+5628  F2 F8 52      JP P,L52F8
+562B  06 07         LD B,07H
+562D  3A 2D 62      LD A,(DATA_622D)
+5630  B7            OR A
+5631  20 02         JR NZ,L5635
+5633  06 0C         LD B,0CH
+L5635:
+5635  DD 70 04      LD (IX+04H),B
+5638  DD 21 C7 63   LD IX,DATA_63C7
+563C  06 05         LD B,05H
+563E  D5            PUSH DE
+563F  11 08 00      LD DE,0008H
+L5642:
+5642  DD 7E 05      LD A,(IX+05H)
+5645  B7            OR A
+5646  28 08         JR Z,L5650
+5648  DD 19         ADD IX,DE
+564A  10 F6         DJNZ L5642
+564C  D1            POP DE
+564D  C3 F8 52      JP L52F8
+L5650:
+5650  DD 36 00 00   LD (IX+00H),00H
+5654  DD 36 01 01   LD (IX+01H),01H
+5658  DD 36 02 01   LD (IX+02H),01H
+565C  E1            POP HL
+565D  01 08 00      LD BC,0008H
+5660  09            ADD HL,BC
+5661  DD 75 04      LD (IX+04H),L
+5664  DD 74 05      LD (IX+05H),H
+5667  DD 36 06 00   LD (IX+06H),00H
+566B  ED 5F         LD A,R
+566D  E6 1F         AND 1FH
+566F  C6 0C         ADD A,0CH
+5671  DD 77 07      LD (IX+07H),A
+5674  3A 55 62      LD A,(DATA_6255)
+5677  B7            OR A
+5678  C2 F8 52      JP NZ,L52F8
+567B  21 BB 66      LD HL,DATA_66BB
+567E  11 55 64      LD DE,DATA_6455
+5681  01 0B 00      LD BC,000BH
+5684  ED B0         LDIR
+5686  C3 F8 52      JP L52F8
+L5689:
+5689  3D            DEC A
+568A  DD 77 04      LD (IX+04H),A
+568D  C3 F8 52      JP L52F8
+L5690:
+5690  DD 7E 01      LD A,(IX+01H)
+5693  EE 03         XOR 03H
+5695  DD 77 01      LD (IX+01H),A
+5698  DD 7E 06      LD A,(IX+06H)
+569B  B7            OR A
+569C  28 07         JR Z,L56A5
+569E  3D            DEC A
+569F  DD 77 06      LD (IX+06H),A
+56A2  C3 F8 52      JP L52F8
+L56A5:
+56A5  DD 7E 05      LD A,(IX+05H)
+56A8  B7            OR A
+56A9  C2 C4 56      JP NZ,L56C4
+56AC  06 0C         LD B,0CH
+56AE  3A 2D 62      LD A,(DATA_622D)
+56B1  B7            OR A
+56B2  20 02         JR NZ,L56B6
+56B4  06 06         LD B,06H
+L56B6:
+56B6  ED 5F         LD A,R
+56B8  B8            CP B
+56B9  F2 F8 52      JP P,L52F8
+56BC  DD 36 04 00   LD (IX+04H),00H
+56C0  DD 36 05 0F   LD (IX+05H),0FH
+L56C4:
+56C4  11 48 00      LD DE,0048H
+56C7  19            ADD HL,DE
+56C8  DD 7E 04      LD A,(IX+04H)
+56CB  B7            OR A
+56CC  CA F5 56      JP Z,L56F5
+56CF  47            LD B,A
+56D0  11 4A 00      LD DE,004AH
+L56D3:
+56D3  3E BF         LD A,0BFH
+56D5  4E            LD C,(HL)
+56D6  CB B6         RES 6,(HL)
+56D8  AE            XOR (HL)
+56D9  CB FF         SET 7,A
+56DB  77            LD (HL),A
+56DC  3E BF         LD A,0BFH
+56DE  A1            AND C
+56DF  FE 80         CP 80H
+56E1  C2 28 57      JP NZ,L5728
+56E4  19            ADD HL,DE
+56E5  E5            PUSH HL
+56E6  C5            PUSH BC
+56E7  78            LD A,B
+56E8  CB 27         SLA A
+56EA  C6 0A         ADD A,0AH
+56EC  06 04         LD B,04H
+56EE  CD 12 62      CALL SUB_6212
+56F1  C1            POP BC
+56F2  E1            POP HL
+56F3  10 DE         DJNZ L56D3
+L56F5:
+56F5  DD 7E 05      LD A,(IX+05H)
+56F8  4E            LD C,(HL)
+56F9  CB B6         RES 6,(HL)
+56FB  AE            XOR (HL)
+56FC  77            LD (HL),A
+56FD  DD 7E 05      LD A,(IX+05H)
+5700  A1            AND C
+5701  C2 28 57      JP NZ,L5728
+5704  DD 7E 04      LD A,(IX+04H)
+5707  FE 05         CP 05H
+5709  20 07         JR NZ,L5712
+570B  DD 7E 05      LD A,(IX+05H)
+570E  FE 0F         CP 0FH
+5710  28 16         JR Z,L5728
+L5712:
+5712  DD 7E 05      LD A,(IX+05H)
+5715  CB 27         SLA A
+5717  CB 27         SLA A
+5719  F2 20 57      JP P,L5720
+571C  DD 34 04      INC (IX+04H)
+571F  AF            XOR A
+L5720:
+5720  F6 03         OR 03H
+5722  DD 77 05      LD (IX+05H),A
+5725  C3 F8 52      JP L52F8
+L5728:
+5728  DD 36 05 00   LD (IX+05H),00H
+572C  3A 41 5B      LD A,(DATA_5B41)
+572F  47            LD B,A
+5730  3A 2D 62      LD A,(DATA_622D)
+5733  B7            OR A
+5734  20 02         JR NZ,L5738
+5736  06 1E         LD B,1EH
+L5738:
+5738  DD 70 06      LD (IX+06H),B
+573B  C3 F8 52      JP L52F8
+L573E:
+573E  3A 40 5B      LD A,(DATA_5B40)
+5741  47            LD B,A
+5742  3A 2D 62      LD A,(DATA_622D)
+5745  B7            OR A
+5746  20 02         JR NZ,L574A
+5748  06 1E         LD B,1EH
+L574A:
+574A  ED 5F         LD A,R
+574C  B8            CP B
+574D  F2 F8 52      JP P,L52F8
+5750  DD 7E 04      LD A,(IX+04H)
+5753  B7            OR A
+5754  28 07         JR Z,L575D
+5756  3D            DEC A
+5757  DD 77 04      LD (IX+04H),A
+575A  C3 F8 52      JP L52F8
+L575D:
+575D  06 07         LD B,07H
+575F  3A 2D 62      LD A,(DATA_622D)
+5762  B7            OR A
+5763  20 02         JR NZ,L5767
+5765  06 0F         LD B,0FH
+L5767:
+5767  DD 70 04      LD (IX+04H),B
+576A  FD E5         PUSH IY
+576C  D5            PUSH DE
+576D  06 06         LD B,06H
+576F  11 06 00      LD DE,0006H
+5772  FD 21 EF 63   LD IY,DATA_63EF
+L5776:
+5776  FD 7E 01      LD A,(IY+01H)
+5779  B7            OR A
+577A  28 0A         JR Z,L5786
+577C  FD 19         ADD IY,DE
+577E  10 F6         DJNZ L5776
+5780  D1            POP DE
+5781  FD E1         POP IY
+5783  C3 F8 52      JP L52F8
+L5786:
+5786  E1            POP HL
+5787  23            INC HL
+5788  DD 7E 02      LD A,(IX+02H)
+578B  3D            DEC A
+578C  CB 27         SLA A
+578E  4F            LD C,A
+578F  06 00         LD B,00H
+5791  FD E5         PUSH IY
+5793  FD 21 9F 62   LD IY,DATA_629F
+5797  FD 09         ADD IY,BC
+5799  FD 46 01      LD B,(IY+01H)
+579C  FD 4E 00      LD C,(IY+00H)
+579F  FD E1         POP IY
+57A1  FD 75 00      LD (IY+00H),L
+57A4  FD 74 01      LD (IY+01H),H
+57A7  FD 70 05      LD (IY+05H),B
+57AA  FD 71 04      LD (IY+04H),C
+57AD  ED 5F         LD A,R
+57AF  E6 03         AND 03H
+57B1  FD 77 02      LD (IY+02H),A
+57B4  FD 36 03 00   LD (IY+03H),00H
+57B8  FD E1         POP IY
+57BA  3E 14         LD A,14H
+57BC  06 0E         LD B,0EH
+57BE  CD 12 62      CALL SUB_6212
+57C1  C3 F8 52      JP L52F8
+SUB_57C4:
+57C4  DD 21 C7 63   LD IX,DATA_63C7
+57C8  06 05         LD B,05H
+L57CA:
+57CA  C5            PUSH BC
+57CB  DD 7E 05      LD A,(IX+05H)
+57CE  B7            OR A
+57CF  CA 3B 58      JP Z,L583B
+57D2  57            LD D,A
+57D3  DD 5E 04      LD E,(IX+04H)
+57D6  3A 55 62      LD A,(DATA_6255)
+57D9  B7            OR A
+57DA  20 12         JR NZ,L57EE
+57DC  1B            DEC DE
+57DD  62            LD H,D
+57DE  6B            LD L,E
+57DF  01 2A 45      LD BC,452AH
+57E2  B7            OR A
+57E3  ED 42         SBC HL,BC
+57E5  FA 44 58      JP M,L5844
+57E8  DD 72 05      LD (IX+05H),D
+57EB  DD 73 04      LD (IX+04H),E
+L57EE:
+57EE  CD EA 50      CALL SUB_50EA
+57F1  DD CB 00 76   BIT 6,(IX+00H)
+57F5  C2 54 58      JP NZ,L5854
+57F8  DD 7E 03      LD A,(IX+03H)
+57FB  B7            OR A
+57FC  C2 4E 58      JP NZ,L584E
+57FF  DD 7E 06      LD A,(IX+06H)
+5802  3C            INC A
+5803  DD BE 07      CP (IX+07H)
+5806  CA 4E 58      JP Z,L584E
+5809  DD 77 06      LD (IX+06H),A
+580C  FE 01         CP 01H
+580E  20 06         JR NZ,L5816
+5810  DD 36 01 00   LD (IX+01H),00H
+5814  18 18         JR L582E
+L5816:
+5816  DD 7E 01      LD A,(IX+01H)
+5819  3C            INC A
+581A  FE 03         CP 03H
+581C  FA 23 58      JP M,L5823
+581F  DD 34 02      INC (IX+02H)
+5822  AF            XOR A
+L5823:
+5823  DD 77 01      LD (IX+01H),A
+5826  DD 7E 06      LD A,(IX+06H)
+5829  FE 04         CP 04H
+582B  F2 3B 58      JP P,L583B
+L582E:
+582E  DD 56 05      LD D,(IX+05H)
+5831  DD 5E 04      LD E,(IX+04H)
+5834  13            INC DE
+5835  DD 72 05      LD (IX+05H),D
+5838  DD 73 04      LD (IX+04H),E
+L583B:
+583B  C1            POP BC
+583C  11 08 00      LD DE,0008H
+583F  DD 19         ADD IX,DE
+5841  10 87         DJNZ L57CA
+5843  C9            RET
+L5844:
+5844  DD 36 03 00   LD (IX+03H),00H
+5848  DD 36 05 00   LD (IX+05H),00H
+584C  18 ED         JR L583B
+L584E:
+584E  DD 36 00 40   LD (IX+00H),40H
+5852  18 E7         JR L583B
+L5854:
+5854  DD 46 00      LD B,(IX+00H)
+5857  C5            PUSH BC
+5858  3E 37         LD A,37H
+585A  90            SUB B
+585B  06 03         LD B,03H
+585D  CD EA 5A      CALL SUB_5AEA
+5860  F1            POP AF
+5861  C6 06         ADD A,06H
+5863  DD 77 00      LD (IX+00H),A
+5866  FE 58         CP 58H
+5868  F2 44 58      JP P,L5844
+586B  18 CE         JR L583B
+SUB_586D:
+586D  06 06         LD B,06H
+586F  FD 21 EF 63   LD IY,DATA_63EF
+L5873:
+5873  C5            PUSH BC
+5874  FD 7E 01      LD A,(IY+01H)
+5877  B7            OR A
+5878  CA F4 58      JP Z,L58F4
+587B  67            LD H,A
+587C  FD 6E 00      LD L,(IY+00H)
+587F  2B            DEC HL
+5880  FD 75 00      LD (IY+00H),L
+5883  FD 74 01      LD (IY+01H),H
+5886  FD 46 05      LD B,(IY+05H)
+5889  FD 4E 04      LD C,(IY+04H)
+588C  09            ADD HL,BC
+588D  06 00         LD B,00H
+588F  FD 7E 03      LD A,(IY+03H)
+5892  CB 27         SLA A
+5894  FD 86 03      ADD A,(IY+03H)
+5897  4F            LD C,A
+5898  FD 7E 02      LD A,(IY+02H)
+589B  DD 21 A6 64   LD IX,DATA_64A6
+589F  B7            OR A
+58A0  28 14         JR Z,L58B6
+58A2  DD 21 F7 64   LD IX,DATA_64F7
+58A6  FE 01         CP 01H
+58A8  28 0C         JR Z,L58B6
+58AA  DD 21 48 65   LD IX,DATA_6548
+58AE  FE 02         CP 02H
+58B0  28 04         JR Z,L58B6
+58B2  DD 21 99 65   LD IX,DATA_6599
+L58B6:
+58B6  DD 09         ADD IX,BC
+58B8  DD 46 01      LD B,(IX+01H)
+58BB  DD 4E 00      LD C,(IX+00H)
+58BE  B7            OR A
+58BF  ED 42         SBC HL,BC
+58C1  0E 00         LD C,00H
+58C3  DD 46 02      LD B,(IX+02H)
+58C6  CB 76         BIT 6,(HL)
+58C8  08            EX AF,AF'
+58C9  CB B6         RES 6,(HL)
+58CB  FD 7E 03      LD A,(IY+03H)
+58CE  B7            OR A
+58CF  28 08         JR Z,L58D9
+58D1  78            LD A,B
+58D2  A6            AND (HL)
+58D3  FE 80         CP 80H
+58D5  28 02         JR Z,L58D9
+58D7  0E 01         LD C,01H
+L58D9:
+58D9  08            EX AF,AF'
+58DA  78            LD A,B
+58DB  28 03         JR Z,L58E0
+58DD  AE            XOR (HL)
+58DE  18 01         JR L58E1
+L58E0:
+58E0  B6            OR (HL)
+L58E1:
+58E1  77            LD (HL),A
+58E2  79            LD A,C
+58E3  B7            OR A
+58E4  20 0A         JR NZ,L58F0
+58E6  FD 34 03      INC (IY+03H)
+58E9  FD 7E 03      LD A,(IY+03H)
+58EC  FE 1B         CP 1BH
+58EE  20 04         JR NZ,L58F4
+L58F0:
+58F0  FD 36 01 00   LD (IY+01H),00H
+L58F4:
+58F4  C1            POP BC
+58F5  11 06 00      LD DE,0006H
+58F8  FD 19         ADD IY,DE
+58FA  05            DEC B
+58FB  C2 73 58      JP NZ,L5873
+58FE  C9            RET
+L58FF:
+58FF  DD CB 00 76   BIT 6,(IX+00H)
+5903  C2 AD 5A      JP NZ,L5AAD
+5906  DD 7E 00      LD A,(IX+00H)
+5909  FE 24         CP 24H
+590B  CA 86 59      JP Z,L5986
+590E  FE 2A         CP 2AH
+5910  CA 86 59      JP Z,L5986
+5913  FE 18         CP 18H
+5915  CA 56 5A      JP Z,L5A56
+5918  FE 12         CP 12H
+591A  CA 77 5A      JP Z,L5A77
+591D  FE 0C         CP 0CH
+591F  C2 8C 52      JP NZ,L528C
+5922  21 34 70      LD HL,DATA_7034
+5925  7E            LD A,(HL)
+5926  E6 03         AND 03H
+5928  CB 27         SLA A
+592A  CB 27         SLA A
+592C  CB 27         SLA A
+592E  CB 27         SLA A
+5930  5F            LD E,A
+5931  2B            DEC HL
+5932  7E            LD A,(HL)
+5933  E6 03         AND 03H
+5935  CB 27         SLA A
+5937  CB 27         SLA A
+5939  CB 27         SLA A
+593B  CB 27         SLA A
+593D  57            LD D,A
+593E  06 0A         LD B,0AH
+L5940:
+5940  2B            DEC HL
+5941  2B            DEC HL
+5942  7E            LD A,(HL)
+5943  E6 03         AND 03H
+5945  CB 27         SLA A
+5947  CB 27         SLA A
+5949  CB 27         SLA A
+594B  CB 27         SLA A
+594D  4F            LD C,A
+594E  7E            LD A,(HL)
+594F  CB BF         RES 7,A
+5951  CB 3F         SRL A
+5953  CB 3F         SRL A
+5955  CB FF         SET 7,A
+5957  B3            OR E
+5958  77            LD (HL),A
+5959  59            LD E,C
+595A  2B            DEC HL
+595B  7E            LD A,(HL)
+595C  E6 03         AND 03H
+595E  CB 27         SLA A
+5960  CB 27         SLA A
+5962  CB 27         SLA A
+5964  CB 27         SLA A
+5966  4F            LD C,A
+5967  7E            LD A,(HL)
+5968  CB BF         RES 7,A
+596A  CB 3F         SRL A
+596C  CB 3F         SRL A
+596E  CB FF         SET 7,A
+5970  B2            OR D
+5971  77            LD (HL),A
+5972  51            LD D,C
+5973  10 CB         DJNZ L5940
+5975  7E            LD A,(HL)
+5976  E6 83         AND 83H
+5978  57            LD D,A
+5979  23            INC HL
+597A  7E            LD A,(HL)
+597B  E6 83         AND 83H
+597D  21 34 70      LD HL,DATA_7034
+5980  77            LD (HL),A
+5981  2B            DEC HL
+5982  72            LD (HL),D
+5983  C3 8C 52      JP L528C
+L5986:
+5986  DD 7E 01      LD A,(IX+01H)
+5989  EE 01         XOR 01H
+598B  DD 77 01      LD (IX+01H),A
+598E  DD 7E 04      LD A,(IX+04H)
+5991  3D            DEC A
+5992  FA 9B 59      JP M,L599B
+5995  DD 77 04      LD (IX+04H),A
+5998  C3 8C 52      JP L528C
+L599B:
+599B  06 0F         LD B,0FH
+599D  3A 2D 62      LD A,(DATA_622D)
+59A0  B7            OR A
+59A1  CA A6 59      JP Z,L59A6
+59A4  06 1E         LD B,1EH
+L59A6:
+59A6  ED 5F         LD A,R
+59A8  B8            CP B
+59A9  F2 8C 52      JP P,L528C
+59AC  06 03         LD B,03H
+59AE  3A 2D 62      LD A,(DATA_622D)
+59B1  B7            OR A
+59B2  28 02         JR Z,L59B6
+59B4  06 06         LD B,06H
+L59B6:
+59B6  FD E5         PUSH IY
+59B8  FD 21 13 64   LD IY,DATA_6413
+59BC  11 0B 00      LD DE,000BH
+L59BF:
+59BF  FD 7E 00      LD A,(IY+00H)
+59C2  B7            OR A
+59C3  28 09         JR Z,L59CE
+59C5  FD 19         ADD IY,DE
+59C7  10 F6         DJNZ L59BF
+59C9  FD E1         POP IY
+59CB  C3 8C 52      JP L528C
+L59CE:
+59CE  06 14         LD B,14H
+59D0  3A 2D 62      LD A,(DATA_622D)
+59D3  B7            OR A
+59D4  28 02         JR Z,L59D8
+59D6  06 0C         LD B,0CH
+L59D8:
+59D8  DD 70 04      LD (IX+04H),B
+59DB  FD 36 00 30   LD (IY+00H),30H
+59DF  D1            POP DE
+59E0  C1            POP BC
+59E1  C5            PUSH BC
+59E2  D5            PUSH DE
+59E3  0B            DEC BC
+59E4  FD 71 04      LD (IY+04H),C
+59E7  FD 70 05      LD (IY+05H),B
+59EA  DD 7E 00      LD A,(IX+00H)
+59ED  0E 03         LD C,03H
+59EF  16 01         LD D,01H
+59F1  FE 24         CP 24H
+59F3  28 04         JR Z,L59F9
+59F5  0E 0D         LD C,0DH
+59F7  16 00         LD D,00H
+L59F9:
+59F9  FD 36 01 00   LD (IY+01H),00H
+59FD  FD 71 02      LD (IY+02H),C
+5A00  FD 72 0A      LD (IY+0AH),D
+5A03  FD 36 03 00   LD (IY+03H),00H
+5A07  FD 66 05      LD H,(IY+05H)
+5A0A  FD 6E 04      LD L,(IY+04H)
+5A0D  01 29 45      LD BC,4529H
+5A10  B7            OR A
+5A11  ED 42         SBC HL,BC
+5A13  ED 5B 5B 62   LD DE,(DATA_625B)
+5A17  13            INC DE
+5A18  13            INC DE
+5A19  13            INC DE
+5A1A  EB            EX DE,HL
+5A1B  B7            OR A
+5A1C  ED 42         SBC HL,BC
+5A1E  EB            EX DE,HL
+5A1F  B7            OR A
+5A20  ED 52         SBC HL,DE
+5A22  FD 75 09      LD (IY+09H),L
+5A25  FD 36 08 00   LD (IY+08H),00H
+5A29  06 28         LD B,28H
+5A2B  FE 2A         CP 2AH
+5A2D  28 02         JR Z,L5A31
+5A2F  06 08         LD B,08H
+L5A31:
+5A31  3A 54 62      LD A,(DATA_6254)
+5A34  4F            LD C,A
+5A35  CB 27         SLA A
+5A37  81            ADD A,C
+5A38  4F            LD C,A
+5A39  3A 53 62      LD A,(DATA_6253)
+5A3C  81            ADD A,C
+5A3D  90            SUB B
+5A3E  F2 43 5A      JP P,L5A43
+5A41  ED 44         NEG
+L5A43:
+5A43  FD 77 07      LD (IY+07H),A
+5A46  FD 36 06 00   LD (IY+06H),00H
+5A4A  FD E1         POP IY
+5A4C  3E 28         LD A,28H
+5A4E  06 0C         LD B,0CH
+5A50  CD 12 62      CALL SUB_6212
+5A53  C3 8C 52      JP L528C
+L5A56:
+5A56  3A 59 62      LD A,(DATA_6259)
+5A59  B7            OR A
+5A5A  CA 8C 52      JP Z,L528C
+5A5D  3A 61 62      LD A,(DATA_6261)
+5A60  FE 50         CP 50H
+5A62  F2 8C 52      JP P,L528C
+5A65  ED 5F         LD A,R
+5A67  FE 28         CP 28H
+5A69  F2 8C 52      JP P,L528C
+5A6C  DD 36 00 40   LD (IX+00H),40H
+5A70  DD 36 03 20   LD (IX+03H),20H
+5A74  C3 8C 52      JP L528C
+L5A77:
+5A77  3A 59 62      LD A,(DATA_6259)
+5A7A  B7            OR A
+5A7B  CA 8C 52      JP Z,L528C
+5A7E  DD 7E 01      LD A,(IX+01H)
+5A81  EE 01         XOR 01H
+5A83  DD 77 01      LD (IX+01H),A
+5A86  3A 61 62      LD A,(DATA_6261)
+5A89  FE 50         CP 50H
+5A8B  FA 8C 52      JP M,L528C
+5A8E  DD 36 00 40   LD (IX+00H),40H
+5A92  DD 36 01 00   LD (IX+01H),00H
+5A96  DD 36 03 10   LD (IX+03H),10H
+5A9A  21 C6 66      LD HL,DATA_66C6
+5A9D  11 55 64      LD DE,DATA_6455
+5AA0  01 50 00      LD BC,0050H
+5AA3  ED B0         LDIR
+5AA5  AF            XOR A
+5AA6  32 64 62      LD (DATA_6264),A
+5AA9  D1            POP DE
+5AAA  C3 F8 52      JP L52F8
+L5AAD:
+5AAD  3A 61 62      LD A,(DATA_6261)
+5AB0  FE 50         CP 50H
+5AB2  FA 8C 52      JP M,L528C
+5AB5  DD CB 03 66   BIT 4,(IX+03H)
+5AB9  C2 8C 52      JP NZ,L528C
+5ABC  D1            POP DE
+5ABD  C3 F8 52      JP L52F8
+SUB_5AC0:
+5AC0  DD 21 55 64   LD IX,DATA_6455
+5AC4  3A 64 62      LD A,(DATA_6264)
+5AC7  32 D0 5A      LD (DATA_5AD0),A
+5ACA  3C            INC A
+5ACB  32 DD 5A      LD (DATA_5ADD),A
+5ACE  DD 7E 00      LD A,(IX+00H)
+5AD1  B7            OR A
+5AD2  20 07         JR NZ,L5ADB
+5AD4  32 64 62      LD (DATA_6264),A
+5AD7  32 55 64      LD (DATA_6455),A
+5ADA  C9            RET
+L5ADB:
+5ADB  DD 46 00      LD B,(IX+00H)
+5ADE  CD 12 62      CALL SUB_6212
+5AE1  3A 64 62      LD A,(DATA_6264)
+5AE4  C6 02         ADD A,02H
+5AE6  32 64 62      LD (DATA_6264),A
+5AE9  C9            RET
+SUB_5AEA:
+5AEA  CD 12 62      CALL SUB_6212
+5AED  3E C9         LD A,0C9H
+5AEF  32 EA 5A      LD (SUB_5AEA),A
+5AF2  C9            RET
+SUB_5AF3:
+5AF3  01 00 00      LD BC,0000H
+5AF6  ED 43 2A 62   LD (DATA_622A),BC
+5AFA  2A 2E 62      LD HL,(DATA_622E)
+5AFD  01 00 03      LD BC,0300H
+5B00  B7            OR A
+5B01  ED 42         SBC HL,BC
+5B03  FA 09 5B      JP M,L5B09
+5B06  22 2E 62      LD (DATA_622E),HL
+L5B09:
+5B09  3A 2D 62      LD A,(DATA_622D)
+5B0C  B7            OR A
+5B0D  C8            RET Z
+5B0E  3A 3E 5B      LD A,(DATA_5B3E)
+5B11  B7            OR A
+5B12  FA 1A 5B      JP M,L5B1A
+5B15  C6 1E         ADD A,1EH
+5B17  32 3E 5B      LD (DATA_5B3E),A
+L5B1A:
+5B1A  3A 3F 5B      LD A,(DATA_5B3F)
+5B1D  C6 10         ADD A,10H
+5B1F  FA 25 5B      JP M,L5B25
+5B22  32 3F 5B      LD (DATA_5B3F),A
+L5B25:
+5B25  3A 40 5B      LD A,(DATA_5B40)
+5B28  C6 0F         ADD A,0FH
+5B2A  FE 60         CP 60H
+5B2C  F2 32 5B      JP P,L5B32
+5B2F  32 40 5B      LD (DATA_5B40),A
+L5B32:
+5B32  3A 41 5B      LD A,(DATA_5B41)
+5B35  D6 05         SUB 05H
+5B37  F8            RET M
+5B38  32 41 5B      LD (DATA_5B41),A
+5B3B  C9            RET
+DATA_5B3C:
+5B3C  00            DB 00H
+DATA_5B3D:
+5B3D  00            DB 00H
+DATA_5B3E:
+5B3E  00            DB 00H
+DATA_5B3F:
+5B3F  00            DB 00H
+DATA_5B40:
+5B40  00            DB 00H
+DATA_5B41:
+5B41  00            DB 00H
+SUB_5B42:
+5B42  3A 55 62      LD A,(DATA_6255)
+5B45  B7            OR A
+5B46  C2 26 5C      JP NZ,L5C26
+5B49  DB 00         IN A,(00H)
+5B4B  47            LD B,A
+5B4C  3E FF         LD A,0FFH
+5B4E  90            SUB B
+5B4F  47            LD B,A
+5B50  CB 3F         SRL A
+5B52  CB 3F         SRL A
+5B54  CB 3F         SRL A
+5B56  CB 3F         SRL A
+5B58  21 5F 62      LD HL,DATA_625F
+5B5B  A6            AND (HL)
+5B5C  C2 26 5C      JP NZ,L5C26
+5B5F  CB 60         BIT 4,B
+5B61  CA 72 5B      JP Z,L5B72
+5B64  11 08 00      LD DE,0008H
+5B67  06 01         LD B,01H
+5B69  CD CD 5B      CALL SUB_5BCD
+5B6C  21 5F 62      LD HL,DATA_625F
+5B6F  C3 9D 5B      JP L5B9D
+L5B72:
+5B72  3A 40 38      LD A,(KEYBOARD+0040H)
+5B75  21 5E 62      LD HL,DATA_625E
+5B78  A6            AND (HL)
+5B79  C2 86 5B      JP NZ,L5B86
+5B7C  3A 40 38      LD A,(KEYBOARD+0040H)
+5B7F  CB 7F         BIT 7,A
+5B81  C2 C0 5B      JP NZ,L5BC0
+5B84  36 00         LD (HL),00H
+L5B86:
+5B86  3A 40 38      LD A,(KEYBOARD+0040H)
+5B89  21 5F 62      LD HL,DATA_625F
+5B8C  A6            AND (HL)
+5B8D  C2 26 5C      JP NZ,L5C26
+5B90  3A 40 38      LD A,(KEYBOARD+0040H)
+5B93  CB 47         BIT 0,A
+5B95  C2 9D 5B      JP NZ,L5B9D
+5B98  36 00         LD (HL),00H
+5B9A  C3 26 5C      JP L5C26
+L5B9D:
+5B9D  36 01         LD (HL),01H
+5B9F  3A 63 62      LD A,(DATA_6263)
+5BA2  FE 02         CP 02H
+5BA4  CA 26 5C      JP Z,L5C26
+5BA7  11 04 00      LD DE,0004H
+5BAA  06 1F         LD B,1FH
+5BAC  CD CD 5B      CALL SUB_5BCD
+5BAF  B7            OR A
+5BB0  CA 26 5C      JP Z,L5C26
+5BB3  DD 35 02      DEC (IX+02H)
+5BB6  3A 63 62      LD A,(DATA_6263)
+5BB9  3C            INC A
+5BBA  32 63 62      LD (DATA_6263),A
+5BBD  C3 26 5C      JP L5C26
+L5BC0:
+5BC0  36 80         LD (HL),80H
+5BC2  11 08 00      LD DE,0008H
+5BC5  06 01         LD B,01H
+5BC7  CD CD 5B      CALL SUB_5BCD
+5BCA  C3 26 5C      JP L5C26
+SUB_5BCD:
+5BCD  D9            EXX
+5BCE  DD 21 1F 63   LD IX,DATA_631F
+5BD2  11 06 00      LD DE,0006H
+5BD5  06 08         LD B,08H
+L5BD7:
+5BD7  DD 7E 05      LD A,(IX+05H)
+5BDA  B7            OR A
+5BDB  CA E5 5B      JP Z,L5BE5
+5BDE  DD 19         ADD IX,DE
+5BE0  10 F5         DJNZ L5BD7
+5BE2  D9            EXX
+5BE3  AF            XOR A
+5BE4  C9            RET
+L5BE5:
+5BE5  D9            EXX
+5BE6  2A 5B 62      LD HL,(DATA_625B)
+5BE9  DD 70 00      LD (IX+00H),B
+5BEC  19            ADD HL,DE
+5BED  DD 74 05      LD (IX+05H),H
+5BF0  DD 75 04      LD (IX+04H),L
+5BF3  3A 53 62      LD A,(DATA_6253)
+5BF6  B7            OR A
+5BF7  3A 54 62      LD A,(DATA_6254)
+5BFA  CA FE 5B      JP Z,L5BFE
+5BFD  3C            INC A
+L5BFE:
+5BFE  DD 77 02      LD (IX+02H),A
+5C01  3A 53 62      LD A,(DATA_6253)
+5C04  3D            DEC A
+5C05  F2 0A 5C      JP P,L5C0A
+5C08  3E 02         LD A,02H
+L5C0A:
+5C0A  DD 77 01      LD (IX+01H),A
+5C0D  3A 55 64      LD A,(DATA_6455)
+5C10  B7            OR A
+5C11  C2 23 5C      JP NZ,L5C23
+5C14  21 B0 66      LD HL,DATA_66B0
+5C17  11 55 64      LD DE,DATA_6455
+5C1A  01 0B 00      LD BC,000BH
+5C1D  ED B0         LDIR
+5C1F  AF            XOR A
+5C20  32 64 62      LD (DATA_6264),A
+L5C23:
+5C23  3E 01         LD A,01H
+5C25  C9            RET
+L5C26:
+5C26  DD 21 1F 63   LD IX,DATA_631F
+5C2A  06 08         LD B,08H
+L5C2C:
+5C2C  C5            PUSH BC
+5C2D  DD 7E 05      LD A,(IX+05H)
+5C30  B7            OR A
+5C31  CA C1 5D      JP Z,L5DC1
+5C34  57            LD D,A
+5C35  DD 5E 04      LD E,(IX+04H)
+5C38  DD 7E 00      LD A,(IX+00H)
+5C3B  CB 47         BIT 0,A
+5C3D  C2 88 5D      JP NZ,L5D88
+5C40  B7            OR A
+5C41  CA 5C 5D      JP Z,L5D5C
+5C44  06 02         LD B,02H
+5C46  AF            XOR A
+L5C47:
+5C47  C5            PUSH BC
+5C48  F5            PUSH AF
+5C49  DD 7E 01      LD A,(IX+01H)
+5C4C  3D            DEC A
+5C4D  F2 5C 5C      JP P,L5C5C
+5C50  DD 7E 02      LD A,(IX+02H)
+5C53  3D            DEC A
+5C54  CA 77 5C      JP Z,L5C77
+5C57  DD 77 02      LD (IX+02H),A
+5C5A  3E 02         LD A,02H
+L5C5C:
+5C5C  DD 77 01      LD (IX+01H),A
+5C5F  F1            POP AF
+5C60  32 74 51      LD (L5174),A
+5C63  D5            PUSH DE
+5C64  CD EA 50      CALL SUB_50EA
+5C67  D1            POP DE
+5C68  DD 7E 03      LD A,(IX+03H)
+5C6B  B7            OR A
+5C6C  C2 8A 5C      JP NZ,L5C8A
+5C6F  C1            POP BC
+5C70  3E 77         LD A,77H
+5C72  10 D3         DJNZ L5C47
+5C74  C3 C1 5D      JP L5DC1
+L5C77:
+5C77  F1            POP AF
+5C78  F1            POP AF
+5C79  AF            XOR A
+5C7A  DD 77 03      LD (IX+03H),A
+5C7D  DD 77 05      LD (IX+05H),A
+5C80  3A 63 62      LD A,(DATA_6263)
+5C83  3D            DEC A
+5C84  32 63 62      LD (DATA_6263),A
+5C87  C3 C1 5D      JP L5DC1
+L5C8A:
+5C8A  C1            POP BC
+5C8B  05            DEC B
+5C8C  CA 99 5C      JP Z,L5C99
+5C8F  3E 77         LD A,77H
+5C91  32 74 51      LD (L5174),A
+5C94  D5            PUSH DE
+5C95  CD EA 50      CALL SUB_50EA
+5C98  D1            POP DE
+L5C99:
+5C99  AF            XOR A
+5C9A  DD 77 03      LD (IX+03H),A
+5C9D  DD 77 05      LD (IX+05H),A
+L5CA0:
+5CA0  3A 63 62      LD A,(DATA_6263)
+5CA3  3D            DEC A
+5CA4  32 63 62      LD (DATA_6263),A
+5CA7  FD 2A 65 62   LD IY,(DATA_6265)
+5CAB  EB            EX DE,HL
+5CAC  11 2E 45      LD DE,452EH
+5CAF  B7            OR A
+5CB0  ED 52         SBC HL,DE
+5CB2  EB            EX DE,HL
+L5CB3:
+5CB3  D5            PUSH DE
+5CB4  FD E5         PUSH IY
+5CB6  FD 7E 01      LD A,(IY+01H)
+5CB9  FE FF         CP 0FFH
+5CBB  CA 56 5D      JP Z,L5D56
+5CBE  67            LD H,A
+5CBF  FD 6E 00      LD L,(IY+00H)
+5CC2  ED 4B 2A 62   LD BC,(DATA_622A)
+5CC6  B7            OR A
+5CC7  ED 42         SBC HL,BC
+5CC9  EB            EX DE,HL
+5CCA  B7            OR A
+5CCB  ED 52         SBC HL,DE
+5CCD  FA 56 5D      JP M,L5D56
+5CD0  FD 46 03      LD B,(IY+03H)
+5CD3  FD 4E 02      LD C,(IY+02H)
+5CD6  C5            PUSH BC
+5CD7  FD E1         POP IY
+5CD9  FD 7E 00      LD A,(IY+00H)
+5CDC  CB 77         BIT 6,A
+5CDE  C2 4B 5D      JP NZ,L5D4B
+5CE1  06 08         LD B,08H
+5CE3  FE 18         CP 18H
+5CE5  CA F8 5C      JP Z,L5CF8
+5CE8  06 03         LD B,03H
+5CEA  FE 2A         CP 2AH
+5CEC  CA F8 5C      JP Z,L5CF8
+5CEF  06 04         LD B,04H
+5CF1  FE 36         CP 36H
+5CF3  CA F8 5C      JP Z,L5CF8
+5CF6  06 02         LD B,02H
+L5CF8:
+5CF8  78            LD A,B
+5CF9  BD            CP L
+5CFA  FA 4B 5D      JP M,L5D4B
+5CFD  FD 7E 02      LD A,(IY+02H)
+5D00  CB 27         SLA A
+5D02  FD 86 02      ADD A,(IY+02H)
+5D05  FD 86 01      ADD A,(IY+01H)
+5D08  47            LD B,A
+5D09  DD 7E 02      LD A,(IX+02H)
+5D0C  CB 27         SLA A
+5D0E  DD 86 02      ADD A,(IX+02H)
+5D11  DD 86 01      ADD A,(IX+01H)
+5D14  90            SUB B
+5D15  FA 4B 5D      JP M,L5D4B
+5D18  FE 05         CP 05H
+5D1A  F2 4B 5D      JP P,L5D4B
+5D1D  CD 4F 61      CALL SUB_614F
+5D20  FD 7E 00      LD A,(IY+00H)
+5D23  FD 36 00 40   LD (IY+00H),40H
+5D27  FD 36 03 00   LD (IY+03H),00H
+5D2B  FE 18         CP 18H
+5D2D  C2 3B 5D      JP NZ,L5D3B
+5D30  FD 36 01 02   LD (IY+01H),02H
+5D34  FD 36 03 80   LD (IY+03H),80H
+5D38  C3 56 5D      JP L5D56
+L5D3B:
+5D3B  FE 36         CP 36H
+5D3D  C2 56 5D      JP NZ,L5D56
+5D40  FD 36 03 C0   LD (IY+03H),0C0H
+5D44  FD 36 01 02   LD (IY+01H),02H
+5D48  C3 56 5D      JP L5D56
+L5D4B:
+5D4B  FD E1         POP IY
+5D4D  D1            POP DE
+5D4E  01 04 00      LD BC,0004H
+5D51  FD 09         ADD IY,BC
+5D53  C3 B3 5C      JP L5CB3
+L5D56:
+5D56  FD E1         POP IY
+5D58  D1            POP DE
+5D59  C3 C1 5D      JP L5DC1
+L5D5C:
+5D5C  13            INC DE
+5D5D  AF            XOR A
+5D5E  32 74 51      LD (L5174),A
+5D61  06 04         LD B,04H
+L5D63:
+5D63  C5            PUSH BC
+5D64  D5            PUSH DE
+5D65  CD EA 50      CALL SUB_50EA
+5D68  DD 7E 03      LD A,(IX+03H)
+5D6B  B7            OR A
+5D6C  28 3E         JR Z,L5DAC
+5D6E  D1            POP DE
+5D6F  C1            POP BC
+5D70  78            LD A,B
+5D71  FE 01         CP 01H
+5D73  28 0A         JR Z,L5D7F
+5D75  3E 77         LD A,77H
+5D77  32 74 51      LD (L5174),A
+5D7A  D5            PUSH DE
+5D7B  CD EA 50      CALL SUB_50EA
+5D7E  D1            POP DE
+L5D7F:
+5D7F  AF            XOR A
+5D80  DD 77 03      LD (IX+03H),A
+5D83  DD 77 05      LD (IX+05H),A
+5D86  18 49         JR L5DD1
+L5D88:
+5D88  DD 35 00      DEC (IX+00H)
+5D8B  D5            PUSH DE
+5D8C  CD EA 50      CALL SUB_50EA
+5D8F  D1            POP DE
+5D90  DD 7E 03      LD A,(IX+03H)
+5D93  B7            OR A
+5D94  28 2B         JR Z,L5DC1
+5D96  AF            XOR A
+5D97  DD 77 03      LD (IX+03H),A
+5D9A  DD 77 05      LD (IX+05H),A
+5D9D  DD 7E 00      LD A,(IX+00H)
+5DA0  B7            OR A
+5DA1  CA D1 5D      JP Z,L5DD1
+5DA4  FE 1E         CP 1EH
+5DA6  CA A0 5C      JP Z,L5CA0
+5DA9  C3 C1 5D      JP L5DC1
+L5DAC:
+5DAC  D1            POP DE
+5DAD  13            INC DE
+5DAE  C1            POP BC
+5DAF  78            LD A,B
+5DB0  FE 02         CP 02H
+5DB2  20 0B         JR NZ,L5DBF
+5DB4  3E 77         LD A,77H
+5DB6  32 74 51      LD (L5174),A
+5DB9  DD 72 05      LD (IX+05H),D
+5DBC  DD 73 04      LD (IX+04H),E
+L5DBF:
+5DBF  10 A2         DJNZ L5D63
+L5DC1:
+5DC1  01 06 00      LD BC,0006H
+5DC4  DD 09         ADD IX,BC
+5DC6  C1            POP BC
+5DC7  05            DEC B
+5DC8  C2 2C 5C      JP NZ,L5C2C
+5DCB  3E 77         LD A,77H
+5DCD  32 74 51      LD (L5174),A
+5DD0  C9            RET
+L5DD1:
+5DD1  FD 2A 65 62   LD IY,(DATA_6265)
+5DD5  EB            EX DE,HL
+5DD6  11 2C 45      LD DE,452CH
+5DD9  B7            OR A
+5DDA  ED 52         SBC HL,DE
+5DDC  EB            EX DE,HL
+L5DDD:
+5DDD  D5            PUSH DE
+5DDE  FD E5         PUSH IY
+5DE0  FD 7E 01      LD A,(IY+01H)
+5DE3  FE FF         CP 0FFH
+5DE5  CA 0A 5F      JP Z,L5F0A
+5DE8  67            LD H,A
+5DE9  FD 6E 00      LD L,(IY+00H)
+5DEC  ED 4B 2A 62   LD BC,(DATA_622A)
+5DF0  0B            DEC BC
+5DF1  B7            OR A
+5DF2  ED 42         SBC HL,BC
+5DF4  EB            EX DE,HL
+5DF5  B7            OR A
+5DF6  ED 52         SBC HL,DE
+5DF8  FA 0A 5F      JP M,L5F0A
+5DFB  01 04 00      LD BC,0004H
+5DFE  3A 56 62      LD A,(DATA_6256)
+5E01  B7            OR A
+5E02  28 03         JR Z,L5E07
+5E04  01 08 00      LD BC,0008H
+L5E07:
+5E07  B7            OR A
+5E08  E5            PUSH HL
+5E09  ED 42         SBC HL,BC
+5E0B  E1            POP HL
+5E0C  F2 64 5E      JP P,L5E64
+5E0F  FD 46 03      LD B,(IY+03H)
+5E12  FD 4E 02      LD C,(IY+02H)
+5E15  C5            PUSH BC
+5E16  FD E1         POP IY
+5E18  3A 56 62      LD A,(DATA_6256)
+5E1B  B7            OR A
+5E1C  C2 6F 5E      JP NZ,L5E6F
+5E1F  FD CB 00 76   BIT 6,(IY+00H)
+5E23  C2 64 5E      JP NZ,L5E64
+5E26  FD 7E 02      LD A,(IY+02H)
+5E29  CB 27         SLA A
+5E2B  FD 86 02      ADD A,(IY+02H)
+5E2E  FD 86 01      ADD A,(IY+01H)
+5E31  47            LD B,A
+5E32  DD 7E 02      LD A,(IX+02H)
+5E35  CB 27         SLA A
+5E37  DD 86 02      ADD A,(IX+02H)
+5E3A  DD 86 01      ADD A,(IX+01H)
+5E3D  90            SUB B
+5E3E  FA 64 5E      JP M,L5E64
+5E41  D6 05         SUB 05H
+5E43  F2 64 5E      JP P,L5E64
+5E46  CD 4F 61      CALL SUB_614F
+5E49  FD 7E 00      LD A,(IY+00H)
+5E4C  FD 36 00 40   LD (IY+00H),40H
+5E50  FD 36 03 00   LD (IY+03H),00H
+5E54  FE 18         CP 18H
+5E56  C2 0A 5F      JP NZ,L5F0A
+5E59  FD 36 01 02   LD (IY+01H),02H
+5E5D  FD 36 03 80   LD (IY+03H),80H
+5E61  C3 0A 5F      JP L5F0A
+L5E64:
+5E64  FD E1         POP IY
+5E66  D1            POP DE
+5E67  01 04 00      LD BC,0004H
+5E6A  FD 09         ADD IY,BC
+5E6C  C3 DD 5D      JP L5DDD
+L5E6F:
+5E6F  FD 7E 00      LD A,(IY+00H)
+5E72  FE 12         CP 12H
+5E74  28 16         JR Z,L5E8C
+5E76  FE 06         CP 06H
+5E78  CA 9A 5E      JP Z,L5E9A
+5E7B  7D            LD A,L
+5E7C  FE 03         CP 03H
+5E7E  F2 64 5E      JP P,L5E64
+5E81  FD 7E 00      LD A,(IY+00H)
+5E84  FE 0C         CP 0CH
+5E86  CA EF 5E      JP Z,L5EEF
+5E89  C3 64 5E      JP L5E64
+L5E8C:
+5E8C  3E 01         LD A,01H
+5E8E  32 59 62      LD (DATA_6259),A
+5E91  21 00 05      LD HL,0500H
+5E94  CD 8C 61      CALL SUB_618C
+5E97  C3 0A 5F      JP L5F0A
+L5E9A:
+5E9A  DD 7E 02      LD A,(IX+02H)
+5E9D  D6 03         SUB 03H
+5E9F  47            LD B,A
+5EA0  CB 27         SLA A
+5EA2  CB 27         SLA A
+5EA4  CB 27         SLA A
+5EA6  80            ADD A,B
+5EA7  4F            LD C,A
+5EA8  06 00         LD B,00H
+5EAA  7D            LD A,L
+5EAB  B7            OR A
+5EAC  28 01         JR Z,L5EAF
+5EAE  2D            DEC L
+L5EAF:
+5EAF  55            LD D,L
+5EB0  21 BB 6F      LD HL,DATA_6FBB
+5EB3  09            ADD HL,BC
+5EB4  4A            LD C,D
+5EB5  09            ADD HL,BC
+L5EB6:
+5EB6  DD 7E 01      LD A,(IX+01H)
+5EB9  06 83         LD B,83H
+5EBB  B7            OR A
+5EBC  28 08         JR Z,L5EC6
+5EBE  06 8C         LD B,8CH
+5EC0  FE 01         CP 01H
+5EC2  28 02         JR Z,L5EC6
+5EC4  06 B0         LD B,0B0H
+L5EC6:
+5EC6  78            LD A,B
+5EC7  A6            AND (HL)
+5EC8  FE 80         CP 80H
+5ECA  20 01         JR NZ,L5ECD
+5ECC  23            INC HL
+L5ECD:
+5ECD  7E            LD A,(HL)
+5ECE  B7            OR A
+5ECF  F2 02 5F      JP P,L5F02
+5ED2  FE 80         CP 80H
+5ED4  CA 0A 5F      JP Z,L5F0A
+5ED7  78            LD A,B
+5ED8  E6 95         AND 95H
+5EDA  A6            AND (HL)
+5EDB  FE 80         CP 80H
+5EDD  20 03         JR NZ,L5EE2
+5EDF  78            LD A,B
+5EE0  E6 AA         AND 0AAH
+L5EE2:
+5EE2  AE            XOR (HL)
+5EE3  CB FF         SET 7,A
+5EE5  77            LD (HL),A
+5EE6  21 01 00      LD HL,0001H
+5EE9  CD 8C 61      CALL SUB_618C
+5EEC  C3 0A 5F      JP L5F0A
+L5EEF:
+5EEF  DD 7E 02      LD A,(IX+02H)
+5EF2  D6 03         SUB 03H
+5EF4  47            LD B,A
+5EF5  CB 27         SLA A
+5EF7  80            ADD A,B
+5EF8  4F            LD C,A
+5EF9  06 00         LD B,00H
+5EFB  21 15 70      LD HL,DATA_7015
+5EFE  09            ADD HL,BC
+5EFF  C3 B6 5E      JP L5EB6
+L5F02:
+5F02  DD 7E 00      LD A,(IX+00H)
+5F05  FE 06         CP 06H
+5F07  CA 64 5E      JP Z,L5E64
+L5F0A:
+5F0A  FD E1         POP IY
+5F0C  D1            POP DE
+5F0D  C3 C1 5D      JP L5DC1
+L5F10:
+5F10  AF            XOR A
+5F11  32 55 62      LD (DATA_6255),A
+5F14  3A 43 62      LD A,(DATA_6243)
+5F17  FE 01         CP 01H
+5F19  28 03         JR Z,L5F1E
+5F1B  32 58 62      LD (DATA_6258),A
+L5F1E:
+5F1E  3A 2C 62      LD A,(DATA_622C)
+5F21  3D            DEC A
+5F22  32 2C 62      LD (DATA_622C),A
+5F25  C6 30         ADD A,30H
+5F27  F5            PUSH AF
+5F28  3A 42 62      LD A,(DATA_6242)
+5F2B  21 C6 3F      LD HL,VIDEO+03C6H
+5F2E  FE 31         CP 31H
+5F30  28 03         JR Z,L5F35
+5F32  21 F7 3F      LD HL,VIDEO+03F7H
+L5F35:
+5F35  F1            POP AF
+5F36  77            LD (HL),A
+5F37  FE 30         CP 30H
+5F39  CA 0B 60      JP Z,L600B
+5F3C  3A 43 62      LD A,(DATA_6243)
+5F3F  FE 01         CP 01H
+5F41  CA 6E 5F      JP Z,L5F6E
+L5F44:
+5F44  21 27 62      LD HL,DATA_6227
+5F47  11 30 62      LD DE,DATA_6230
+5F4A  01 39 62      LD BC,DATA_6239
+5F4D  3A 42 62      LD A,(DATA_6242)
+5F50  FE 31         CP 31H
+5F52  28 06         JR Z,L5F5A
+5F54  11 39 62      LD DE,DATA_6239
+5F57  01 30 62      LD BC,DATA_6230
+L5F5A:
+5F5A  C5            PUSH BC
+5F5B  01 09 00      LD BC,0009H
+5F5E  ED B0         LDIR
+5F60  E1            POP HL
+5F61  11 27 62      LD DE,DATA_6227
+5F64  01 09 00      LD BC,0009H
+5F67  ED B0         LDIR
+5F69  EE 03         XOR 03H
+5F6B  32 42 62      LD (DATA_6242),A
+L5F6E:
+5F6E  01 00 00      LD BC,0000H
+5F71  CD 60 00      CALL $DELAY             ; pause for a time set by BC
+5F74  FD 21 79 62   LD IY,DATA_6279
+5F78  11 04 00      LD DE,0004H
+5F7B  2A 5B 62      LD HL,(DATA_625B)
+5F7E  01 2E 45      LD BC,452EH
+5F81  B7            OR A
+5F82  ED 42         SBC HL,BC
+5F84  ED 4B 2A 62   LD BC,(DATA_622A)
+5F88  09            ADD HL,BC
+5F89  44            LD B,H
+5F8A  4D            LD C,L
+L5F8B:
+5F8B  FD CB 01 7E   BIT 7,(IY+01H)
+5F8F  20 11         JR NZ,L5FA2
+5F91  FD 66 01      LD H,(IY+01H)
+5F94  FD 6E 00      LD L,(IY+00H)
+5F97  B7            OR A
+5F98  ED 42         SBC HL,BC
+5F9A  F2 A2 5F      JP P,L5FA2
+5F9D  FD 19         ADD IY,DE
+5F9F  C3 8B 5F      JP L5F8B
+L5FA2:
+5FA2  FD 56 FD      LD D,(IY-03H)
+5FA5  FD 5E FC      LD E,(IY-04H)
+5FA8  ED 53 2A 62   LD (DATA_622A),DE
+5FAC  3E 01         LD A,01H
+5FAE  32 45 62      LD (DATA_6245),A
+5FB1  32 44 62      LD (DATA_6244),A
+5FB4  06 00         LD B,00H
+5FB6  21 99 73      LD HL,DATA_7399
+L5FB9:
+5FB9  7A            LD A,D
+5FBA  B3            OR E
+5FBB  CA E1 5F      JP Z,L5FE1
+5FBE  1B            DEC DE
+5FBF  3A 44 62      LD A,(DATA_6244)
+5FC2  4F            LD C,A
+5FC3  09            ADD HL,BC
+L5FC4:
+5FC4  7E            LD A,(HL)
+5FC5  E6 F0         AND 0F0H
+5FC7  20 F0         JR NZ,L5FB9
+5FC9  7E            LD A,(HL)
+5FCA  23            INC HL
+5FCB  E6 0F         AND 0FH
+5FCD  FE 04         CP 04H
+5FCF  F2 D9 5F      JP P,L5FD9
+5FD2  3C            INC A
+5FD3  32 44 62      LD (DATA_6244),A
+5FD6  C3 C4 5F      JP L5FC4
+L5FD9:
+5FD9  D6 03         SUB 03H
+5FDB  32 45 62      LD (DATA_6245),A
+5FDE  C3 C4 5F      JP L5FC4
+L5FE1:
+5FE1  22 4A 62      LD (DATA_624A),HL
+5FE4  21 35 45      LD HL,4535H
+5FE7  22 5B 62      LD (DATA_625B),HL
+5FEA  FD 7E FE      LD A,(IY-02H)
+5FED  32 53 62      LD (DATA_6253),A
+5FF0  FD 7E FF      LD A,(IY-01H)
+5FF3  32 54 62      LD (DATA_6254),A
+5FF6  21 2D 45      LD HL,452DH
+5FF9  ED 5B 2A 62   LD DE,(DATA_622A)
+5FFD  CB 43         BIT 0,E
+5FFF  28 01         JR Z,L6002
+6001  23            INC HL
+L6002:
+6002  22 51 62      LD (DATA_6251),HL
+6005  CD 59 60      CALL SUB_6059
+6008  C3 B8 4C      JP L4CB8
+L600B:
+600B  21 45 60      LD HL,DATA_6045
+600E  11 16 3D      LD DE,VIDEO+0116H
+6011  06 14         LD B,14H
+6013  CD 40 61      CALL SUB_6140
+6016  3A 42 62      LD A,(DATA_6242)
+6019  32 28 3D      LD (VIDEO+0128H),A
+601C  06 03         LD B,03H
+L601E:
+601E  C5            PUSH BC
+601F  01 00 00      LD BC,0000H
+6022  CD 60 00      CALL $DELAY             ; pause for a time set by BC
+6025  C1            POP BC
+6026  10 F6         DJNZ L601E
+6028  3A 43 62      LD A,(DATA_6243)
+602B  FE 01         CP 01H
+602D  CA 7F 49      JP Z,L497F
+6030  21 3E 62      LD HL,DATA_623E
+6033  3A 42 62      LD A,(DATA_6242)
+6036  FE 31         CP 31H
+6038  28 03         JR Z,L603D
+603A  21 35 62      LD HL,DATA_6235
+L603D:
+603D  7E            LD A,(HL)
+603E  B7            OR A
+603F  C2 44 5F      JP NZ,L5F44
+6042  C3 7F 49      JP L497F
+DATA_6045:
+6045  20 47 61 6D   DB 20H,47H,61H,6DH
+6049  65 20 4F 76   DB 65H,20H,4FH,76H
+604D  65 72         DB 65H,72H
+DATA_604F:
+604F  20 50 6C 61   DB 20H,50H,6CH,61H
+6053  79 65 72 20   DB 79H,65H,72H,20H
+6057  20 20         DB 20H,20H
+SUB_6059:
+6059  21 36 70      LD HL,DATA_7036
+605C  11 C0 6C      LD DE,DATA_6CC0
+605F  06 4B         LD B,4BH
+6061  0E 06         LD C,06H
+L6063:
+6063  C5            PUSH BC
+6064  7E            LD A,(HL)
+6065  E6 80         AND 80H
+6067  B1            OR C
+6068  12            LD (DE),A
+6069  13            INC DE
+606A  7E            LD A,(HL)
+606B  E6 7F         AND 7FH
+606D  CB 3F         SRL A
+606F  CB 3F         SRL A
+6071  CB 3F         SRL A
+6073  CB 3F         SRL A
+6075  12            LD (DE),A
+6076  13            INC DE
+6077  7E            LD A,(HL)
+6078  E6 0F         AND 0FH
+607A  12            LD (DE),A
+607B  AF            XOR A
+607C  13            INC DE
+607D  12            LD (DE),A
+607E  13            INC DE
+607F  23            INC HL
+6080  C1            POP BC
+6081  10 E0         DJNZ L6063
+6083  06 1D         LD B,1DH
+L6085:
+6085  C5            PUSH BC
+6086  3E 0C         LD A,0CH
+6088  12            LD (DE),A
+6089  13            INC DE
+608A  AF            XOR A
+608B  12            LD (DE),A
+608C  13            INC DE
+608D  7E            LD A,(HL)
+608E  CB 3F         SRL A
+6090  CB 3F         SRL A
+6092  CB 3F         SRL A
+6094  CB 3F         SRL A
+6096  12            LD (DE),A
+6097  13            INC DE
+6098  AF            XOR A
+6099  12            LD (DE),A
+609A  13            INC DE
+609B  7E            LD A,(HL)
+609C  E6 0F         AND 0FH
+609E  12            LD (DE),A
+609F  13            INC DE
+60A0  23            INC HL
+60A1  ED A0         LDI
+60A3  C1            POP BC
+60A4  10 DF         DJNZ L6085
+60A6  06 0F         LD B,0FH
+L60A8:
+60A8  C5            PUSH BC
+60A9  3E 12         LD A,12H
+60AB  12            LD (DE),A
+60AC  13            INC DE
+60AD  3E 01         LD A,01H
+60AF  12            LD (DE),A
+60B0  13            INC DE
+60B1  ED A0         LDI
+60B3  AF            XOR A
+60B4  12            LD (DE),A
+60B5  13            INC DE
+60B6  12            LD (DE),A
+60B7  13            INC DE
+60B8  C1            POP BC
+60B9  10 ED         DJNZ L60A8
+60BB  3E 05         LD A,05H
+60BD  E5            PUSH HL
+L60BE:
+60BE  21 EA 65      LD HL,DATA_65EA
+60C1  01 05 00      LD BC,0005H
+60C4  ED B0         LDIR
+60C6  3D            DEC A
+60C7  20 F5         JR NZ,L60BE
+60C9  E1            POP HL
+60CA  06 14         LD B,14H
+L60CC:
+60CC  C5            PUSH BC
+60CD  3E 24         LD A,24H
+60CF  12            LD (DE),A
+60D0  13            INC DE
+60D1  7E            LD A,(HL)
+60D2  CB 3F         SRL A
+60D4  CB 3F         SRL A
+60D6  CB 3F         SRL A
+60D8  CB 3F         SRL A
+60DA  12            LD (DE),A
+60DB  13            INC DE
+60DC  7E            LD A,(HL)
+60DD  E6 0F         AND 0FH
+60DF  12            LD (DE),A
+60E0  13            INC DE
+60E1  23            INC HL
+60E2  AF            XOR A
+60E3  12            LD (DE),A
+60E4  13            INC DE
+60E5  C1            POP BC
+60E6  10 E4         DJNZ L60CC
+60E8  01 0F 00      LD BC,000FH
+60EB  ED B0         LDIR
+60ED  06 08         LD B,08H
+L60EF:
+60EF  3E 36         LD A,36H
+60F1  12            LD (DE),A
+60F2  13            INC DE
+60F3  3E 01         LD A,01H
+60F5  12            LD (DE),A
+60F6  13            INC DE
+60F7  3E 02         LD A,02H
+60F9  12            LD (DE),A
+60FA  13            INC DE
+60FB  AF            XOR A
+60FC  12            LD (DE),A
+60FD  13            INC DE
+60FE  12            LD (DE),A
+60FF  13            INC DE
+6100  12            LD (DE),A
+6101  13            INC DE
+6102  12            LD (DE),A
+6103  13            INC DE
+6104  10 E9         DJNZ L60EF
+6106  01 A1 00      LD BC,00A1H
+6109  ED B0         LDIR
+610B  21 2E 6A      LD HL,DATA_6A2E
+610E  22 65 62      LD (DATA_6265),HL
+6111  3E 40         LD A,40H
+6113  32 BD 62      LD (DATA_62BD),A
+6116  21 1F 63      LD HL,DATA_631F
+6119  11 20 63      LD DE,DATA_6320
+611C  01 35 01      LD BC,0135H
+611F  36 00         LD (HL),00H
+6121  ED B0         LDIR
+6123  21 24 67      LD HL,DATA_6724
+6126  22 C1 62      LD (DATA_62C1),HL
+6129  AF            XOR A
+612A  32 56 62      LD (DATA_6256),A
+612D  32 57 62      LD (DATA_6257),A
+6130  32 63 62      LD (DATA_6263),A
+6133  32 59 62      LD (DATA_6259),A
+6136  32 61 62      LD (DATA_6261),A
+6139  32 55 64      LD (DATA_6455),A
+613C  32 64 62      LD (DATA_6264),A
+613F  C9            RET
+SUB_6140:
+6140  7E            LD A,(HL)
+6141  12            LD (DE),A
+6142  1A            LD A,(DE)
+6143  BE            CP (HL)
+6144  CA 4A 61      JP Z,L614A
+6147  CB AF         RES 5,A
+6149  12            LD (DE),A
+L614A:
+614A  23            INC HL
+614B  13            INC DE
+614C  10 F2         DJNZ SUB_6140
+614E  C9            RET
+SUB_614F:
+614F  FD 7E 00      LD A,(IY+00H)
+6152  E6 7F         AND 7FH
+6154  FE 06         CP 06H
+6156  C2 68 61      JP NZ,L6168
+6159  21 08 00      LD HL,0008H
+615C  FD CB 03 6E   BIT 5,(IY+03H)
+6160  CA 8C 61      JP Z,SUB_618C
+6163  2E 15         LD L,15H
+6165  C3 8C 61      JP SUB_618C
+L6168:
+6168  21 05 00      LD HL,0005H
+616B  FE 0C         CP 0CH
+616D  CA 8C 61      JP Z,SUB_618C
+6170  FE 24         CP 24H
+6172  CA 8C 61      JP Z,SUB_618C
+6175  2E 10         LD L,10H
+6177  FE 2A         CP 2AH
+6179  CA 8C 61      JP Z,SUB_618C
+617C  2E 15         LD L,15H
+617E  FE 12         CP 12H
+6180  CA 8C 61      JP Z,SUB_618C
+6183  2E 25         LD L,25H
+6185  FE 18         CP 18H
+6187  CA 8C 61      JP Z,SUB_618C
+618A  2E 50         LD L,50H
+SUB_618C:
+618C  3A 2D 62      LD A,(DATA_622D)
+618F  3C            INC A
+6190  47            LD B,A
+L6191:
+6191  C5            PUSH BC
+6192  ED 5B 27 62   LD DE,(DATA_6227)
+6196  3A 29 62      LD A,(DATA_6229)
+6199  47            LD B,A
+619A  7B            LD A,E
+619B  85            ADD A,L
+619C  27            DAA
+619D  5F            LD E,A
+619E  7A            LD A,D
+619F  8C            ADC A,H
+61A0  27            DAA
+61A1  57            LD D,A
+61A2  D2 AA 61      JP NC,L61AA
+61A5  78            LD A,B
+61A6  B7            OR A
+61A7  3C            INC A
+61A8  27            DAA
+61A9  47            LD B,A
+L61AA:
+61AA  ED 53 27 62   LD (DATA_6227),DE
+61AE  78            LD A,B
+61AF  32 29 62      LD (DATA_6229),A
+61B2  C1            POP BC
+61B3  10 DC         DJNZ L6191
+61B5  0E 00         LD C,00H
+61B7  B7            OR A
+61B8  21 C8 3F      LD HL,VIDEO+03C8H
+61BB  F5            PUSH AF
+61BC  3A 42 62      LD A,(DATA_6242)
+61BF  FE 31         CP 31H
+61C1  CA C7 61      JP Z,L61C7
+61C4  21 F9 3F      LD HL,VIDEO+03F9H
+L61C7:
+61C7  F1            POP AF
+61C8  CA D0 61      JP Z,L61D0
+61CB  C6 30         ADD A,30H
+61CD  77            LD (HL),A
+61CE  0E 01         LD C,01H
+L61D0:
+61D0  06 02         LD B,02H
+61D2  DD E5         PUSH IX
+61D4  DD 21 28 62   LD IX,DATA_6228
+61D8  23            INC HL
+L61D9:
+61D9  DD 7E 00      LD A,(IX+00H)
+61DC  E6 F0         AND 0F0H
+61DE  CB 3F         SRL A
+61E0  CB 3F         SRL A
+61E2  CB 3F         SRL A
+61E4  CB 3F         SRL A
+61E6  C2 F0 61      JP NZ,L61F0
+61E9  79            LD A,C
+61EA  B7            OR A
+61EB  3E 00         LD A,00H
+61ED  CA F5 61      JP Z,L61F5
+L61F0:
+61F0  C6 30         ADD A,30H
+61F2  0E 01         LD C,01H
+61F4  77            LD (HL),A
+L61F5:
+61F5  23            INC HL
+61F6  DD 7E 00      LD A,(IX+00H)
+61F9  E6 0F         AND 0FH
+61FB  C2 05 62      JP NZ,L6205
+61FE  79            LD A,C
+61FF  B7            OR A
+6200  3E 00         LD A,00H
+6202  CA 0A 62      JP Z,L620A
+L6205:
+6205  C6 30         ADD A,30H
+6207  0E 01         LD C,01H
+6209  77            LD (HL),A
+L620A:
+620A  23            INC HL
+620B  DD 2B         DEC IX
+620D  10 CA         DJNZ L61D9
+620F  DD E1         POP IX
+6211  C9            RET
+SUB_6212:
+6212  48            LD C,B
+6213  6F            LD L,A
+L6214:
+6214  45            LD B,L
+6215  3E 01         LD A,01H
+6217  D3 FF         OUT (CASSETTE),A
+L6219:
+6219  10 FE         DJNZ L6219
+621B  45            LD B,L
+621C  3E 02         LD A,02H
+621E  D3 FF         OUT (CASSETTE),A
+L6220:
+6220  10 FE         DJNZ L6220
+6222  0D            DEC C
+6223  C2 14 62      JP NZ,L6214
+6226  C9            RET
+DATA_6227:
+6227  4B            DB 4BH
+DATA_6228:
+6228  50            DB 50H
+DATA_6229:
+6229  47            DB 47H
+DATA_622A:
+622A  00 00         DB 00H,00H
+DATA_622C:
+622C  00            DB 00H
+DATA_622D:
+622D  00            DB 00H
+DATA_622E:
+622E  00 00         DB 00H,00H
+DATA_6230:
+6230  48 4C 2C 33   DB 48H,4CH,2CH,33H
+6234  46            DB 46H
+DATA_6235:
+6235  44 30 48 9C   DB 44H,30H,48H,9CH
+DATA_6239:
+6239  13 0C 09 4C   DB 13H,0CH,09H,4CH
+623D  44            DB 44H
+DATA_623E:
+623E  09            DB 09H
+DATA_623F:
+623F  44 45 2C      DB 44H,45H,2CH
+DATA_6242:
+6242  00            DB 00H
+DATA_6243:
+6243  00            DB 00H
+DATA_6244:
+6244  00            DB 00H
+DATA_6245:
+6245  00            DB 00H
+DATA_6246:
+6246  00 00         DB 00H,00H
+DATA_6248:
+6248  00 00         DB 00H,00H
+DATA_624A:
+624A  00 00         DB 00H,00H
+DATA_624C:
+624C  00 00         DB 00H,00H
+DATA_624E:
+624E  00 00         DB 00H,00H
+DATA_6250:
+6250  00            DB 00H
+DATA_6251:
+6251  00 00         DB 00H,00H
+DATA_6253:
+6253  00            DB 00H
+DATA_6254:
+6254  00            DB 00H
+DATA_6255:
+6255  00            DB 00H
+DATA_6256:
+6256  00            DB 00H
+DATA_6257:
+6257  00            DB 00H
+DATA_6258:
+6258  00            DB 00H
+DATA_6259:
+6259  00 00         DB 00H,00H
+DATA_625B:
+625B  00 00         DB 00H,00H
+DATA_625D:
+625D  00            DB 00H
+DATA_625E:
+625E  00            DB 00H
+DATA_625F:
+625F  00            DB 00H
+DATA_6260:
+6260  00            DB 00H
+DATA_6261:
+6261  00 00         DB 00H,00H
+DATA_6263:
+6263  00            DB 00H
+DATA_6264:
+6264  00            DB 00H
+DATA_6265:
+6265  00 00         DB 00H,00H
+DATA_6267:
+6267  44 49 52 C4   DB 44H,49H,52H,0C4H
+626B  13 0E 09 4C   DB 13H,0EH,09H,4CH
+626F  44 09         DB 44H,09H
+6271  41 2C 28 41   DB 'A,(A'
+6275  00            DB 00H
+6276  00 02 01      DB 00H,02H,01H
+DATA_6279:
+6279  40 01 02 01   DB 40H,01H,02H,01H
+627D  86 02 00 04   DB 86H,02H,00H,04H
+6281  B4 03 02 01   DB 0B4H,03H,02H,01H
+6285  03 05 00 06   DB 03H,05H,00H,06H
+6289  31 06 02 05   DB 31H,06H,02H,05H
+628D  FF FF         DB 0FFH,0FFH
+DATA_628F:
+628F  83 87 8B 8C   DB 83H,87H,8BH,8CH
+6293  8D 8E 8F 9C   DB 8DH,8EH,8FH,9CH
+6297  9E AC AD B0   DB 9EH,0ACH,0ADH,0B0H
+629B  B4 B8 BC BF   DB 0B4H,0B8H,0BCH,0BFH
+DATA_629F:
+629F  00 00 4A 00   DB 00H,00H,4AH,00H
+62A3  94 00 DE 00   DB 94H,00H,0DEH,00H
+62A7  28 01 72 01   DB 28H,01H,72H,01H
+62AB  BC 01 06 02   DB 0BCH,01H,06H,02H
+62AF  50 02 9A 02   DB 50H,02H,9AH,02H
+62B3  E4 02 2E 03   DB 0E4H,02H,2EH,03H
+62B7  78 03 C2 03   DB 78H,03H,0C2H,03H
+62BB  0C 04         DB 0CH,04H
+DATA_62BD:
+62BD  00            DB 00H
+DATA_62BE:
+62BE  A0            DB 0A0H
+DATA_62BF:
+62BF  00            DB 00H
+DATA_62C0:
+62C0  00            DB 00H
+DATA_62C1:
+62C1  00 00         DB 00H,00H
+DATA_62C3:
+62C3  BF            DB 0BFH
+DATA_62C4:
+62C4  53 48 49 50   DB 53H,48H,49H,50H
+62C8  53 20 34 20   DB 53H,20H,34H,20H
+62CC  20 20 20 30   DB 20H,20H,20H,30H
+62D0  30 30 20 BF   DB 30H,30H,20H,0BFH
+DATA_62D4:
+62D4  31 20 6F 72   DB 31H,20H,6FH,72H
+62D8  20 32 20 50   DB 20H,32H,20H,50H
+62DC  6C 61 79 65   DB 6CH,61H,79H,65H
+62E0  72 73 3F      DB 72H,73H,3FH
+DATA_62E3:
+62E3  35 2C 30 30   DB 35H,2CH,30H,30H
+62E7  30 20 42 6F   DB 30H,20H,42H,6FH
+62EB  6E 75 73 20   DB 6EH,75H,73H,20H
+62EF  50 6F 69 6E   DB 50H,6FH,69H,6EH
+62F3  74 73 21      DB 74H,73H,21H
+DATA_62F6:
+62F6  50 6C 61 79   DB 50H,6CH,61H,79H
+62FA  65 72 20 20   DB 65H,72H,20H,20H
+62FE  3A 20 53 6B   DB 3AH,20H,53H,6BH
+6302  69 6C 6C 20   DB 69H,6CH,6CH,20H
+6306  6C 65 76 65   DB 6CH,65H,76H,65H
+630A  6C 20 28 30   DB 6CH,20H,28H,30H
+630E  3D 4E 6F 76   DB 3DH,4EH,6FH,76H
+6312  69 63 65 20   DB 69H,63H,65H,20H
+6316  31 3D 45 78   DB 31H,3DH,45H,78H
+631A  70 65 72 74   DB 70H,65H,72H,74H
+631E  29            DB 29H
+DATA_631F:
+631F  46            DB 46H
+DATA_6320:
+6320  14 0C 09 44   DB 14H,0CH,09H,44H
+6324  4A 4E 5A 09   DB 4AH,4EH,5AH,09H
+6328  50 52 54 41   DB 50H,52H,54H,41H
+632C  49 52 50 14   DB 49H,52H,50H,14H
+6330  07 09 50 4F   DB 07H,09H,50H,4FH
+6334  50 09 41 46   DB 50H,09H,41H,46H
+6338  5A 14 0E 09   DB 5AH,14H,0EH,09H
+633C  4A 52 09 4E   DB 4AH,52H,09H,4EH
+6340  43 2C 41 49   DB 43H,2CH,41H,49H
+6344  52 45 56 45   DB 52H,45H,56H,45H
+6348  4E 64 14 13   DB 4EH,64H,14H,13H
+634C  4F 4E 45      DB 4FH,4EH,45H
+DATA_634F:
+634F  42 59 54 45   DB 42H,59H,54H,45H
+6353  09 4C 44 09   DB 09H,4CH,44H,09H
+6357  28 48 4C 29   DB 28H,48H,4CH,29H
+635B  2C 31 33 32   DB 2CH,31H,33H,32H
+635F  6E 14 15 41   DB 6EH,14H,15H,41H
+6363  49 52 45 56   DB 49H,52H,45H,56H
+6367  45 4E 09 4C   DB 45H,4EH,09H,4CH
+636B  44 09 41 2C   DB 44H,09H,41H,2CH
+636F  28 48 49 54   DB 28H,48H,49H,54H
+6373  46 4C 47 29   DB 46H,4CH,47H,29H
+6377  78 14 05 09   DB 78H,14H,05H,09H
+637B  4F 52 09 41   DB 4FH,52H,09H,41H
+637F  82 14 0C 09   DB 82H,14H,0CH,09H
+6383  4A 50 09 5A   DB 4AH,50H,09H,5AH
+6387  2C 4E 4F 54   DB 2CH,4EH,4FH,54H
+638B  48 49 54 8C   DB 48H,49H,54H,8CH
+638F  14 0E 09 4C   DB 14H,0EH,09H,4CH
+6393  44 09 41 2C   DB 44H,09H,41H,2CH
+6397  28 53 55 42   DB 28H,53H,55H,42H
+639B  4C 52 4F 29   DB 4CH,52H,4FH,29H
+639F  96 14 05 09   DB 96H,14H,05H,09H
+63A3  4F 52 09 41   DB 4FH,52H,09H,41H
+63A7  A0 14 0D 09   DB 0A0H,14H,0DH,09H
+63AB  4A 50 09 4D   DB 4AH,50H,09H,4DH
+63AF  2C 4E 4F 46   DB 2CH,4EH,4FH,46H
+63B3  49 52 53 54   DB 49H,52H,53H,54H
+63B7  AA 14 0E 09   DB 0AAH,14H,0EH,09H
+63BB  4C 44 09 48   DB 4CH,44H,09H,48H
+63BF  4C 2C 53 55   DB 4CH,2CH,53H,55H
+63C3  42 4E 4F 54   DB 42H,4EH,4FH,54H
+DATA_63C7:
+63C7  45 B4 14 0E   DB 45H,0B4H,14H,0EH
+63CB  09 4C 44 09   DB 09H,4CH,44H,09H
+63CF  44 45 2C 4E   DB 44H,45H,2CH,4EH
+63D3  4F 54 45 42   DB 4FH,54H,45H,42H
+63D7  55 46 BE 14   DB 55H,46H,0BEH,14H
+63DB  09 09 4C 44   DB 09H,09H,4CH,44H
+63DF  09 42 43 2C   DB 09H,42H,43H,2CH
+63E3  38 31 C8 14   DB 38H,31H,0C8H,14H
+63E7  05 09 4C 44   DB 05H,09H,4CH,44H
+63EB  49 52 D2 14   DB 49H,52H,0D2H,14H
+DATA_63EF:
+63EF  06 09 58 4F   DB 06H,09H,58H,4FH
+63F3  52 09 41 DC   DB 52H,09H,41H,0DCH
+63F7  14 0F 09 4C   DB 14H,0FH,09H,4CH
+63FB  44 09 28 4E   DB 44H,09H,28H,4EH
+63FF  4F 54 45 50   DB 4FH,54H,45H,50H
+6403  4E 54 29 2C   DB 4EH,54H,29H,2CH
+6407  41 E6 14 09   DB 41H,0E6H,14H,09H
+640B  09 4C 44 09   DB 09H,4CH,44H,09H
+640F  41 2C 38 30   DB 41H,2CH,38H,30H
+DATA_6413:
+6413  48 F0 14 08   DB 48H,0F0H,14H,08H
+6417  09 4A 52 09   DB 09H,4AH,52H,09H
+641B  47 4F 54 41   DB 47H,4FH,54H,41H
+641F  FA 14 0E 4E   DB 0FAH,14H,0EH,4EH
+6423  4F 46 49 52   DB 4FH,46H,49H,52H
+6427  53 54 09 43   DB 53H,54H,09H,43H
+642B  50 09 38 35   DB 50H,09H,38H,35H
+642F  48 04 15 0C   DB 48H,04H,15H,0CH
+6433  09 4A 50 09   DB 09H,4AH,50H,09H
+6437  4D 2C 4E 4F   DB 4DH,2CH,4EH,4FH
+643B  42 4C 4F 57   DB 42H,4CH,4FH,57H
+643F  0E 15 0F 09   DB 0EH,15H,0FH,09H
+6443  4C 44 09 41   DB 4CH,44H,09H,41H
+6447  2C 28 42 4F   DB 2CH,28H,42H,4FH
+644B  4F 4D 46 4C   DB 4FH,4DH,46H,4CH
+644F  47 29 18 15   DB 47H,29H,18H,15H
+6453  05 09         DB 05H,09H
+DATA_6455:
+6455  4F 52 09 41   DB 4FH,52H,09H,41H
+6459  22 15 0D 09   DB 22H,15H,0DH,09H
+645D  4A 50 09 5A   DB 4AH,50H,09H,5AH
+6461  2C 4E 45 58   DB 2CH,4EH,45H,58H
+6465  54 53 48 50   DB 54H,53H,48H,50H
+6469  2C 15 0C 09   DB 2CH,15H,0CH,09H
+646D  43 41 4C 4C   DB 43H,41H,4CH,4CH
+6471  09 4E 45 57   DB 09H,4EH,45H,57H
+6475  52 55 4E 36   DB 52H,55H,4EH,36H
+6479  15 0B 09 4A   DB 15H,0BH,09H,4AH
+647D  50 09 4E 45   DB 50H,09H,4EH,45H
+6481  58 54 53 48   DB 58H,54H,53H,48H
+6485  50 40 15 0C   DB 50H,40H,15H,0CH
+6489  4E 4F 42 4C   DB 4EH,4FH,42H,4CH
+648D  4F 57 09 49   DB 4FH,57H,09H,49H
+6491  4E 43 09 41   DB 4EH,43H,09H,41H
+6495  4A 15 12 47   DB 4AH,15H,12H,47H
+6499  4F 54 41 09   DB 4FH,54H,41H,09H
+649D  4C 44 09      DB 4CH,44H,09H
+64A0  28 53 55 42   DB '(SUB'
+64A4  4C 00         DB 'L',00H
+DATA_64A6:
+64A6  03 00 8C 03   DB 03H,00H,8CH,03H
+64AA  00 83 4D 00   DB 00H,83H,4DH,00H
+64AE  B0 4E 00 8C   DB 0B0H,4EH,00H,8CH
+64B2  4E 00 83 99   DB 4EH,00H,83H,99H
+64B6  00 B0 99 00   DB 00H,0B0H,99H,00H
+64BA  8C 9A 00 83   DB 8CH,9AH,00H,83H
+64BE  E5 00 B0 E5   DB 0E5H,00H,0B0H,0E5H
+64C2  00 8C E6 00   DB 00H,8CH,0E6H,00H
+64C6  83 30 01 B0   DB 83H,30H,01H,0B0H
+64CA  31 01 8C 32   DB 31H,01H,8CH,32H
+64CE  01 83 33 01   DB 01H,83H,33H,01H
+64D2  83 7E 01 B0   DB 83H,7EH,01H,0B0H
+64D6  7F 01 B0 80   DB 7FH,01H,0B0H,80H
+64DA  01 B0 37 01   DB 01H,0B0H,37H,01H
+64DE  83 38 01 83   DB 83H,38H,01H,83H
+64E2  39 01 8C 3A   DB 39H,01H,8CH,3AH
+64E6  01 B0 F0 00   DB 01H,0B0H,0F0H,00H
+64EA  83 F1 00 8C   DB 83H,0F1H,00H,8CH
+64EE  F2 00 B0 A9   DB 0F2H,00H,0B0H,0A9H
+64F2  00 83 A9 00   DB 00H,83H,0A9H,00H
+64F6  8C            DB 8CH
+DATA_64F7:
+64F7  02 00 8C 02   DB 02H,00H,8CH,02H
+64FB  00 83 4C 00   DB 00H,83H,4CH,00H
+64FF  B0 4C 00 8C   DB 0B0H,4CH,00H,8CH
+6503  4C 00 83 96   DB 4CH,00H,83H,96H
+6507  00 B0 96 00   DB 00H,0B0H,96H,00H
+650B  8C 96 00 83   DB 8CH,96H,00H,83H
+650F  E0 00 B0 E0   DB 0E0H,00H,0B0H,0E0H
+6513  00 8C E0 00   DB 00H,8CH,0E0H,00H
+6517  83 2A 01 B0   DB 83H,2AH,01H,0B0H
+651B  2B 01 8C 2B   DB 2BH,01H,8CH,2BH
+651F  01 83 75 01   DB 01H,83H,75H,01H
+6523  B0 75 01 8C   DB 0B0H,75H,01H,8CH
+6527  75 01 83 C0   DB 75H,01H,83H,0C0H
+652B  01 B0 C0 01   DB 01H,0B0H,0C0H,01H
+652F  8C C0 01 83   DB 8CH,0C0H,01H,83H
+6533  0B 02 B0 0B   DB 0BH,02H,0B0H,0BH
+6537  02 8C 0C 02   DB 02H,8CH,0CH,02H
+653B  83 0D 02 83   DB 83H,0DH,02H,83H
+653F  0E 02 83 0F   DB 0EH,02H,83H,0FH
+6543  02 8C 10 02   DB 02H,8CH,10H,02H
+6547  B0            DB 0B0H
+DATA_6548:
+6548  01 00 8C 01   DB 01H,00H,8CH,01H
+654C  00 83 4B 00   DB 00H,83H,4BH,00H
+6550  B0 4B 00 8C   DB 0B0H,4BH,00H,8CH
+6554  4B 00 83 95   DB 4BH,00H,83H,95H
+6558  00 B0 95 00   DB 00H,0B0H,95H,00H
+655C  8C 95 00 83   DB 8CH,95H,00H,83H
+6560  DF 00 B0 DF   DB 0DFH,00H,0B0H,0DFH
+6564  00 8C DF 00   DB 00H,8CH,0DFH,00H
+6568  83 29 01 B0   DB 83H,29H,01H,0B0H
+656C  28 01 8C 28   DB 28H,01H,8CH,28H
+6570  01 83 72 01   DB 01H,83H,72H,01H
+6574  B0 72 01 8C   DB 0B0H,72H,01H,8CH
+6578  72 01 83 BB   DB 72H,01H,83H,0BBH
+657C  01 B0 BB 01   DB 01H,0B0H,0BBH,01H
+6580  8C BB 01 83   DB 8CH,0BBH,01H,83H
+6584  04 02 B0 04   DB 04H,02H,0B0H,04H
+6588  02 8C 03 02   DB 02H,8CH,03H,02H
+658C  83 02 02 83   DB 83H,02H,02H,83H
+6590  01 02 83 00   DB 01H,02H,83H,00H
+6594  02 8C FF 01   DB 02H,8CH,0FFH,01H
+6598  B0            DB 0B0H
+DATA_6599:
+6599  00 00 8C 00   DB 00H,00H,8CH,00H
+659D  00 83 4A 00   DB 00H,83H,4AH,00H
+65A1  B0 49 00 8C   DB 0B0H,49H,00H,8CH
+65A5  49 00 83 92   DB 49H,00H,83H,92H
+65A9  00 B0 92 00   DB 00H,0B0H,92H,00H
+65AD  8C 91 00 83   DB 8CH,91H,00H,83H
+65B1  DA 00 B0 DA   DB 0DAH,00H,0B0H,0DAH
+65B5  00 8C D9 00   DB 00H,8CH,0D9H,00H
+65B9  83 23 01 B0   DB 83H,23H,01H,0B0H
+65BD  22 01 8C 21   DB 22H,01H,8CH,21H
+65C1  01 83 20 01   DB 01H,83H,20H,01H
+65C5  83 69 01 B0   DB 83H,69H,01H,0B0H
+65C9  68 01 B0 67   DB 68H,01H,0B0H,67H
+65CD  01 B0 1C 01   DB 01H,0B0H,1CH,01H
+65D1  83 1B 01 83   DB 83H,1BH,01H,83H
+65D5  1A 01 8C 19   DB 1AH,01H,8CH,19H
+65D9  01 B0 CF 00   DB 01H,0B0H,0CFH,00H
+65DD  83 CE 00 8C   DB 83H,0CEH,00H,8CH
+65E1  CE 00 B0 83   DB 0CEH,00H,0B0H,83H
+65E5  00 83 83 00   DB 00H,83H,83H,00H
+65E9  8C            DB 8CH
+DATA_65EA:
+65EA  18 00 01 00   DB 18H,00H,01H,00H
+65EE  00            DB 00H
+DATA_65EF:
+65EF  8C B0 B0 B0   DB 8CH,0B0H,0B0H,0B0H
+DATA_65F3:
+65F3  8C 83 83 83   DB 8CH,83H,83H,83H
+65F7  8C B0 B0 B0   DB 8CH,0B0H,0B0H,0B0H
+DATA_65FB:
+65FB  00            DB 00H
+DATA_65FC:
+65FC  00            DB 00H
+DATA_65FD:
+65FD  00            DB 00H
+DATA_65FE:
+65FE  00 00         DB 00H,00H
+DATA_6600:
+6600  00 00         DB 00H,00H
+DATA_6602:
+6602  03 0B 80 80   DB 03H,0BH,80H,80H
+6606  80 80 0B 0B   DB 80H,80H,0BH,0BH
+660A  0B 0B 0B 0B   DB 0BH,0BH,0BH,0BH
+660E  0B 0B 0B 80   DB 0BH,0BH,0BH,80H
+6612  80 82 83 83   DB 80H,82H,83H,83H
+6616  83 83 83 83   DB 83H,83H,83H,83H
+661A  83 83 83 83   DB 83H,83H,83H,83H
+661E  81 80 0B 0B   DB 81H,80H,0BH,0BH
+6622  0B 07 03 03   DB 0BH,07H,03H,03H
+6626  03 03 03 09   DB 03H,03H,03H,09H
+662A  0B 80 80 80   DB 0BH,80H,80H,80H
+662E  80 80 80 84   DB 80H,80H,80H,84H
+6632  83 8C 8B 8B   DB 83H,8CH,8BH,8BH
+6636  8B 8B 8B 8B   DB 8BH,8BH,8BH,8BH
+663A  8B 87 83 81   DB 8BH,87H,83H,81H
+663E  80 80 0B 0B   DB 80H,80H,0BH,0BH
+DATA_6642:
+6642  B5 90 49 82   DB 0B5H,90H,49H,82H
+6646  89 A4 B0 B0   DB 89H,0A4H,0B0H,0B0H
+664A  B0 43 B5 98   DB 0B0H,43H,0B5H,98H
+664E  86 81 00      DB 86H,81H,00H
+DATA_6651:
+6651  42 59 3A 20   DB 42H,59H,3AH,20H
+6655  57 61 79 6E   DB 57H,61H,79H,6EH
+6659  65 20 57 65   DB 65H,20H,57H,65H
+665D  73 74 6D 6F   DB 73H,74H,6DH,6FH
+6661  72 65 6C 61   DB 72H,65H,6CH,61H
+6665  6E 64 20 26   DB 6EH,64H,20H,26H
+6669  20 54 65 72   DB 20H,54H,65H,72H
+666D  72 79 20 47   DB 72H,79H,20H,47H
+6671  69 6C 6D 61   DB 69H,6CH,6DH,61H
+6675  6E            DB 6EH
+DATA_6676:
+6676  28 43 29 20   DB 28H,43H,29H,20H
+667A  43 6F 70 79   DB 43H,6FH,70H,79H
+667E  72 69 67 68   DB 72H,69H,67H,68H
+6682  74 20 31 39   DB 74H,20H,31H,39H
+6686  38 32         DB 38H,32H
+DATA_6688:
+6688  48 69 74 20   DB 48H,69H,74H,20H
+668C  3C 45 4E 54   DB 3CH,45H,4EH,54H
+6690  45 52 3E 20   DB 45H,52H,3EH,20H
+6694  74 6F 20 42   DB 74H,6FH,20H,42H
+6698  65 67 69 6E   DB 65H,67H,69H,6EH
+DATA_669C:
+669C  48 69 74 20   DB 48H,69H,74H,20H
+66A0  20 20 20 20   DB 20H,20H,20H,20H
+66A4  20 20 20 20   DB 20H,20H,20H,20H
+66A8  74 6F 20 42   DB 74H,6FH,20H,42H
+66AC  65 67 69 6E   DB 65H,67H,69H,6EH
+DATA_66B0:
+66B0  2D 0A 37 08   DB 2DH,0AH,37H,08H
+66B4  4B 06 5F 04   DB 4BH,06H,5FH,04H
+66B8  78 02 00      DB 78H,02H,00H
+DATA_66BB:
+66BB  3C 02 32 04   DB 3CH,02H,32H,04H
+66BF  28 06 1E 08   DB 28H,06H,1EH,08H
+66C3  14 0A 00      DB 14H,0AH,00H
+DATA_66C6:
+66C6  82 03 80 03   DB 82H,03H,80H,03H
+66CA  7E 03 7C 03   DB 7EH,03H,7CH,03H
+66CE  7A 03 78 03   DB 7AH,03H,78H,03H
+66D2  76 03 74 03   DB 76H,03H,74H,03H
+66D6  72 03 70 03   DB 72H,03H,70H,03H
+66DA  6E 03 6C 03   DB 6EH,03H,6CH,03H
+66DE  6A 03 68 03   DB 6AH,03H,68H,03H
+66E2  66 03 64 03   DB 66H,03H,64H,03H
+66E6  62 03 60 03   DB 62H,03H,60H,03H
+66EA  5E 03 5C 03   DB 5EH,03H,5CH,03H
+66EE  5A 03 58 03   DB 5AH,03H,58H,03H
+66F2  56 03 54 03   DB 56H,03H,54H,03H
+66F6  52 03 50 03   DB 52H,03H,50H,03H
+66FA  4E 03 4C 03   DB 4EH,03H,4CH,03H
+66FE  4A 03 48 03   DB 4AH,03H,48H,03H
+6702  46 03 44 03   DB 46H,03H,44H,03H
+6706  42 03 40 03   DB 42H,03H,40H,03H
+670A  3E 03 3C 03   DB 3EH,03H,3CH,03H
+670E  3A 03 38 03   DB 3AH,03H,38H,03H
+6712  36 03 34 03   DB 36H,03H,34H,03H
+6716  00            DB 00H
+DATA_6717:
+6717  50 0A 50 0A   DB 50H,0AH,50H,0AH
+671B  50 0A 00      DB 50H,0AH,00H
+DATA_671E:
+671E  9C 67 AA 67   DB 9CH,67H,0AAH,67H
+6722  BB 67         DB 0BBH,67H
+DATA_6724:
+6724  CB 67 CE 67   DB 0CBH,67H,0CEH,67H
+6728  D1 67 D4 67   DB 0D1H,67H,0D4H,67H
+672C  DB 67 E3 67   DB 0DBH,67H,0E3H,67H
+6730  ED 67 ED 67   DB 0EDH,67H,0EDH,67H
+6734  ED 67 F2 67   DB 0EDH,67H,0F2H,67H
+6738  F2 67 F2 67   DB 0F2H,67H,0F2H,67H
+673C  F9 67 F9 67   DB 0F9H,67H,0F9H,67H
+6740  F9 67 0C 68   DB 0F9H,67H,0CH,68H
+6744  0E 68 10 68   DB 0EH,68H,10H,68H
+6748  14 68 1A 68   DB 14H,68H,1AH,68H
+674C  21 68 28 68   DB 21H,68H,28H,68H
+6750  2F 68 37 68   DB 2FH,68H,37H,68H
+6754  40 68 42 68   DB 40H,68H,42H,68H
+6758  44 68 46 68   DB 44H,68H,46H,68H
+675C  46 68 50 68   DB 46H,68H,50H,68H
+6760  5A 68 5A 68   DB 5AH,68H,5AH,68H
+6764  5A 68         DB 5AH,68H
+DATA_6766:
+6766  CB 67 CE 67   DB 0CBH,67H,0CEH,67H
+676A  D1 67 BB 6F   DB 0D1H,67H,0BBH,6FH
+676E  BB 6F BB 6F   DB 0BBH,6FH,0BBH,6FH
+6772  15 70 15 70   DB 15H,70H,15H,70H
+6776  15 70 5C 68   DB 15H,70H,5CH,68H
+677A  5A 68 5C 68   DB 5AH,68H,5CH,68H
+677E  5A 68 5A 68   DB 5AH,68H,5AH,68H
+6782  5A 68 0C 68   DB 5AH,68H,0CH,68H
+6786  0E 68 10 68   DB 0EH,68H,10H,68H
+678A  6B 68 75 68   DB 6BH,68H,75H,68H
+678E  6B 68 7F 68   DB 6BH,68H,7FH,68H
+6792  88 68 7F 68   DB 88H,68H,7FH,68H
+6796  40 68 42 68   DB 40H,68H,42H,68H
+679A  44 68 A0 B0   DB 44H,68H,0A0H,0B0H
+679E  B0 B0 BC BE   DB 0B0H,0B0H,0BCH,0BEH
+67A2  B4 B0 45 83   DB 0B4H,0B0H,45H,83H
+67A6  83 83 83 00   DB 83H,83H,83H,00H
+67AA  80 80 80 80   DB 80H,80H,80H,80H
+67AE  B0 B8 90 43   DB 0B0H,0B8H,90H,43H
+67B2  82 83 83 8F   DB 82H,83H,83H,8FH
+67B6  8F 8F 8F 83   DB 8FH,8FH,8FH,83H
+67BA  00 80 80 80   DB 00H,80H,80H,80H
+67BE  80 80 A0 44   DB 80H,80H,0A0H,44H
+67C2  88 8C 8C BC   DB 88H,8CH,8CH,0BCH
+67C6  BF BF BD 8C   DB 0BFH,0BFH,0BDH,8CH
+67CA  00 83 83 00   DB 00H,83H,83H,00H
+67CE  8C 8C 00 B0   DB 8CH,8CH,00H,0B0H
+67D2  B0 00 99 BF   DB 0B0H,00H,99H,0BFH
+67D6  A6 48 82 84   DB 0A6H,48H,82H,84H
+67DA  00 A4 BC 98   DB 00H,0A4H,0BCH,98H
+67DE  47 81 8B 92   DB 47H,81H,8BH,92H
+67E2  00 90 B0 A0   DB 00H,90H,0B0H,0A0H
+67E6  47 86 AF 89   DB 47H,86H,0AFH,89H
+67EA  49 81 00 A2   DB 49H,81H,00H,0A2H
+67EE  AE 9D 91 00   DB 0AEH,9DH,91H,00H
+67F2  98 8C A4 48   DB 98H,8CH,0A4H,48H
+67F6  83 8C 00 80   DB 83H,8CH,00H,80H
+67FA  80 80 B8 B4   DB 80H,80H,0B8H,0B4H
+67FE  80 B0 B0 42   DB 80H,0B0H,0B0H,42H
+6802  82 8F 8F 8F   DB 82H,8FH,8FH,8FH
+6806  8F 8F 8F 8F   DB 8FH,8FH,8FH,8FH
+680A  81 00 8F 00   DB 81H,00H,8FH,00H
+680E  BC 00 B0 49   DB 0BCH,00H,0B0H,49H
+6812  83 00 82 BF   DB 83H,00H,82H,0BFH
+6816  97 48 82 00   DB 97H,48H,82H,00H
+681A  88 BC 9C 48   DB 88H,0BCH,9CH,48H
+681E  8B 81 00 A0   DB 8BH,81H,00H,0A0H
+6822  B0 B0 48 AF   DB 0B0H,0B0H,48H,0AFH
+6826  85 00 89 BB   DB 85H,00H,89H,0BBH
+682A  99 81 47 82   DB 99H,81H,47H,82H
+682E  00 A4 AC A4   DB 00H,0A4H,0ACH,0A4H
+6832  84 47 8B 81   DB 84H,47H,8BH,81H
+6836  00 90 B0 90   DB 00H,90H,0B0H,90H
+683A  90 46 82 AE   DB 90H,46H,82H,0AEH
+683E  86 00 83 00   DB 86H,00H,83H,00H
+6842  8C 00 B0 00   DB 8CH,00H,0B0H,00H
+6846  A0 A0 B0 90   DB 0A0H,0A0H,0B0H,90H
+684A  90 46 8B BC   DB 90H,46H,8BH,0BCH
+684E  87 00 A0 A0   DB 87H,00H,0A0H,0A0H
+6852  B0 90 90 46   DB 0B0H,90H,90H,46H
+6856  8B BF 87 00   DB 8BH,0BFH,87H,00H
+685A  80 00 80 B0   DB 80H,00H,80H,0B0H
+685E  BC B0 46 83   DB 0BCH,0B0H,46H,83H
+6862  9F BF AF 83   DB 9FH,0BFH,0AFH,83H
+6866  46 81 80 82   DB 46H,81H,80H,82H
+686A  00 90 B0 B0   DB 00H,90H,0B0H,0B0H
+686E  A0 46 B2 8D   DB 0A0H,46H,0B2H,8DH
+6872  8E 81 00 90   DB 8EH,81H,00H,90H
+6876  B0 B0 A0 46   DB 0B0H,0B0H,0A0H,46H
+687A  B2 8E 8D 81   DB 0B2H,8EH,8DH,81H
+687E  00 8C B0 B0   DB 00H,8CH,0B0H,0B0H
+6882  47 86 8D 8E   DB 47H,86H,8DH,8EH
+6886  89 00 8C B0   DB 89H,00H,8CH,0B0H
+688A  B0 47 86 8E   DB 0B0H,47H,86H,8EH
+688E  8D 89 00      DB 8DH,89H,00H
+DATA_6891:
+6891  B5 68 ED 68   DB 0B5H,68H,0EDH,68H
+6895  23 69 B9 68   DB 23H,69H,0B9H,68H
+6899  F1 68 27 69   DB 0F1H,68H,27H,69H
+689D  BF 68 FB 68   DB 0BFH,68H,0FBH,68H
+68A1  31 69 D3 68   DB 31H,69H,0D3H,68H
+68A5  09 69 3F 69   DB 09H,69H,3FH,69H
+DATA_68A9:
+68A9  59 69 63 69   DB 59H,69H,63H,69H
+68AD  71 69 87 69   DB 71H,69H,87H,69H
+68B1  A9 69 DC 69   DB 0A9H,69H,0DCH,69H
+68B5  00 00 80 00   DB 00H,00H,80H,00H
+68B9  00 00 BF B3   DB 00H,00H,0BFH,0B3H
+68BD  BF 00 4B 00   DB 0BFH,00H,4BH,00H
+68C1  B0 B0 B0 B0   DB 0B0H,0B0H,0B0H,0B0H
+68C5  B0 45 BF 80   DB 0B0H,45H,0BFH,80H
+68C9  8C 80 BF 45   DB 8CH,80H,0BFH,45H
+68CD  83 83 83 83   DB 83H,83H,83H,83H
+68D1  83 00 4C 00   DB 83H,00H,4CH,00H
+68D5  8C B0 80 BC   DB 8CH,0B0H,80H,0BCH
+68D9  80 B0 8C 43   DB 80H,0B0H,8CH,43H
+68DD  8C 8C 80 80   DB 8CH,8CH,80H,80H
+68E1  80 8C 8C 43   DB 80H,8CH,8CH,43H
+68E5  8C 83 80 8F   DB 8CH,83H,80H,8FH
+68E9  80 83 8C 00   DB 80H,83H,8CH,00H
+68ED  00 00 80 00   DB 00H,00H,80H,00H
+68F1  00 00 BC 8C   DB 00H,00H,0BCH,8CH
+68F5  BC 47 83 83   DB 0BCH,47H,83H,83H
+68F9  83 00 01 00   DB 83H,00H,01H,00H
+68FD  BF 83 B3 83   DB 0BFH,83H,0B3H,83H
+6901  BF 45 8F 8C   DB 0BFH,45H,8FH,8CH
+6905  8C 8C 8F 00   DB 8CH,8CH,8FH,00H
+6909  4C 00 B0 80   DB 4CH,00H,0B0H,80H
+690D  80 B0 80 80   DB 80H,0B0H,80H,80H
+6911  B0 43 B0 B3   DB 0B0H,43H,0B0H,0B3H
+6915  80 83 80 B3   DB 80H,83H,80H,0B3H
+6919  B0 43 B0 8C   DB 0B0H,43H,0B0H,8CH
+691D  80 BC 80 8C   DB 80H,0BCH,80H,8CH
+6921  B0 00 00 00   DB 0B0H,00H,00H,00H
+6925  80 00 00 00   DB 80H,00H,00H,00H
+6929  B0 B0 B0 47   DB 0B0H,0B0H,0B0H,47H
+692D  8F 8C 8F 00   DB 8FH,8CH,8FH,00H
+6931  01 00 BC 8C   DB 01H,00H,0BCH,8CH
+6935  8C 8C BC 45   DB 8CH,8CH,0BCH,45H
+6939  BF B0 B3 B0   DB 0BFH,0B0H,0B3H,0B0H
+693D  BF 00 02 00   DB 0BFH,00H,02H,00H
+6941  83 8C 80 8F   DB 83H,8CH,80H,8FH
+6945  80 8C 83 43   DB 80H,8CH,83H,43H
+6949  83 B3 80 B0   DB 83H,0B3H,80H,0B0H
+694D  80 B3 83 43   DB 80H,0B3H,83H,43H
+6951  83 80 80 83   DB 83H,80H,80H,83H
+6955  80 80 83 00   DB 80H,80H,83H,00H
+6959  FC FF B0 B0   DB 0FCH,0FFH,0B0H,0B0H
+695D  B0 47 8F 8C   DB 0B0H,47H,8FH,8CH
+6961  8F 00 FD FF   DB 8FH,00H,0FDH,0FFH
+6965  B0 8C 8C 8C   DB 0B0H,8CH,8CH,8CH
+6969  B0 45 8F B0   DB 0B0H,45H,8FH,0B0H
+696D  B3 B0 8F 00   DB 0B3H,0B0H,8FH,00H
+6971  FE FF B0 8C   DB 0FEH,0FFH,0B0H,8CH
+6975  93 B3 A3 8C   DB 93H,0B3H,0A3H,8CH
+6979  B0 43 8F B0   DB 0B0H,43H,8FH,0B0H
+697D  8A 83 85 B0   DB 8AH,83H,85H,0B0H
+6981  8F 45 83 83   DB 8FH,45H,83H,83H
+6985  83 00 46 00   DB 83H,00H,46H,00H
+6989  B0 B0 B0 44   DB 0B0H,0B0H,0B0H,44H
+698D  B0 83 B0 A8   DB 0B0H,83H,0B0H,0A8H
+6991  90 9C 90 83   DB 90H,9CH,90H,83H
+6995  B0 41 8F 80   DB 0B0H,41H,8FH,80H
+6999  9E 9B AF A7   DB 9EH,9BH,0AFH,0A7H
+699D  84 80 8F 42   DB 84H,80H,8FH,42H
+69A1  83 80 8C 8C   DB 83H,80H,8CH,8CH
+69A5  8C 80 83 00   DB 8CH,80H,83H,00H
+69A9  49 00 B0 84   DB 49H,00H,0B0H,84H
+69AD  80 8C 9C 84   DB 80H,8CH,9CH,84H
+69B1  94 88 B0 40   DB 94H,88H,0B0H,40H
+69B5  B1 89 80 B6   DB 0B1H,89H,80H,0B6H
+69B9  BD BA B9 B3   DB 0BDH,0BAH,0B9H,0B3H
+69BD  80 86 B0 81   DB 80H,86H,0B0H,81H
+69C1  3D 82 8F 80   DB 3DH,82H,8FH,80H
+69C5  89 B4 BF AF   DB 89H,0B4H,0BFH,0AFH
+69C9  BF 9E 8E 80   DB 0BFH,9EH,8EH,80H
+69CD  8F 81 3E 82   DB 8FH,81H,3EH,82H
+69D1  8D 92 A0 A8   DB 8DH,92H,0A0H,0A8H
+69D5  B8 B0 84 A1   DB 0B8H,0B0H,84H,0A1H
+69D9  8E 82 00 91   DB 8EH,82H,00H,91H
+69DD  00 B0 90 B0   DB 00H,0B0H,90H,0B0H
+69E1  A0 B0 40 A0   DB 0A0H,0B0H,40H,0A0H
+69E5  8A A4 97 A0   DB 8AH,0A4H,97H,0A0H
+69E9  80 A1 99 83   DB 80H,0A1H,99H,83H
+69ED  A1 92 8B BA   DB 0A1H,92H,8BH,0BAH
+69F1  99 3C 93 87   DB 99H,3CH,93H,87H
+69F5  90 B4 8E B7   DB 90H,0B4H,8EH,0B7H
+69F9  BE BC BF 93   DB 0BEH,0BCH,0BFH,93H
+69FD  B8 9D 8A A4   DB 0B8H,9DH,8AH,0A4H
+6A01  B5 84 39 82   DB 0B5H,84H,39H,82H
+6A05  9D 95 8B AE   DB 9DH,95H,8BH,0AEH
+6A09  BD BF BF BF   DB 0BDH,0BFH,0BFH,0BFH
+6A0D  BF BF B9 97   DB 0BFH,0BFH,0B9H,97H
+6A11  B0 93 86 3C   DB 0B0H,93H,86H,3CH
+6A15  83 88 96 B2   DB 83H,88H,96H,0B2H
+6A19  83 83 81 A3   DB 83H,83H,81H,0A3H
+6A1D  A3 82 8C A5   DB 0A3H,82H,8CH,0A5H
+6A21  93 3E 82 80   DB 93H,3EH,82H,80H
+6A25  82 81 87 8F   DB 82H,81H,87H,8FH
+6A29  81 87 82 81   DB 81H,87H,82H,81H
+6A2D  00            DB 00H
+DATA_6A2E:
+6A2E  37 00 C0 6C   DB 37H,00H,0C0H,6CH
+6A32  48 00 C4 6C   DB 48H,00H,0C4H,6CH
+6A36  4F 00 C8 6C   DB 4FH,00H,0C8H,6CH
+6A3A  5A 00 EC 6D   DB 5AH,00H,0ECH,6DH
+6A3E  67 00 CC 6C   DB 67H,00H,0CCH,6CH
+6A42  78 00 F2 6D   DB 78H,00H,0F2H,6DH
+6A46  81 00 D0 6C   DB 81H,00H,0D0H,6CH
+6A4A  87 00 D4 6C   DB 87H,00H,0D4H,6CH
+6A4E  8D 00 D8 6C   DB 8DH,00H,0D8H,6CH
+6A52  91 00 DC 6C   DB 91H,00H,0DCH,6CH
+6A56  96 00 E0 6C   DB 96H,00H,0E0H,6CH
+6A5A  9B 00 E4 6C   DB 9BH,00H,0E4H,6CH
+6A5E  A1 00 E8 6C   DB 0A1H,00H,0E8H,6CH
+6A62  A6 00 EC 6C   DB 0A6H,00H,0ECH,6CH
+6A66  AD 00 F0 6C   DB 0ADH,00H,0F0H,6CH
+6A6A  B3 00 F4 6C   DB 0B3H,00H,0F4H,6CH
+6A6E  C6 00 F8 6C   DB 0C6H,00H,0F8H,6CH
+6A72  D7 00 FC 6C   DB 0D7H,00H,0FCH,6CH
+6A76  E3 00 F8 6D   DB 0E3H,00H,0F8H,6DH
+6A7A  F0 00 00 6D   DB 0F0H,00H,00H,6DH
+6A7E  F5 00 FE 6D   DB 0F5H,00H,0FEH,6DH
+6A82  FC 00 04 6D   DB 0FCH,00H,04H,6DH
+6A86  05 01 08 6D   DB 05H,01H,08H,6DH
+6A8A  09 01 0C 6D   DB 09H,01H,0CH,6DH
+6A8E  0D 01 10 6D   DB 0DH,01H,10H,6DH
+6A92  19 01 14 6D   DB 19H,01H,14H,6DH
+6A96  1D 01 18 6D   DB 1DH,01H,18H,6DH
+6A9A  2C 01 1C 6D   DB 2CH,01H,1CH,6DH
+6A9E  3E 01 20 6D   DB 3EH,01H,20H,6DH
+6AA2  43 01 04 6E   DB 43H,01H,04H,6EH
+6AA6  4B 01 0A 6E   DB 4BH,01H,0AH,6EH
+6AAA  59 01 24 6D   DB 59H,01H,24H,6DH
+6AAE  5E 01 10 6E   DB 5EH,01H,10H,6EH
+6AB2  6C 01 16 6E   DB 6CH,01H,16H,6EH
+6AB6  7A 01 28 6D   DB 7AH,01H,28H,6DH
+6ABA  81 01 2C 6D   DB 81H,01H,2CH,6DH
+6ABE  8D 01 30 6D   DB 8DH,01H,30H,6DH
+6AC2  99 01 1C 6E   DB 99H,01H,1CH,6EH
+6AC6  9F 01 34 6D   DB 9FH,01H,34H,6DH
+6ACA  BA 01 38 6D   DB 0BAH,01H,38H,6DH
+6ACE  D1 01 9A 6E   DB 0D1H,01H,9AH,6EH
+6AD2  F3 01 22 6E   DB 0F3H,01H,22H,6EH
+6AD6  09 02 28 6E   DB 09H,02H,28H,6EH
+6ADA  10 02 3C 6D   DB 10H,02H,3CH,6DH
+6ADE  18 02 9F 6E   DB 18H,02H,9FH,6EH
+6AE2  52 02 2E 6E   DB 52H,02H,2EH,6EH
+6AE6  57 02 34 6E   DB 57H,02H,34H,6EH
+6AEA  60 02 40 6D   DB 60H,02H,40H,6DH
+6AEE  65 02 44 6D   DB 65H,02H,44H,6DH
+6AF2  7A 02 48 6D   DB 7AH,02H,48H,6DH
+6AF6  82 02 A4 6E   DB 82H,02H,0A4H,6EH
+6AFA  97 02 4C 6D   DB 97H,02H,4CH,6DH
+6AFE  A3 02 3A 6E   DB 0A3H,02H,3AH,6EH
+6B02  AC 02 50 6D   DB 0ACH,02H,50H,6DH
+6B06  B1 02 54 6D   DB 0B1H,02H,54H,6DH
+6B0A  B7 02 E5 6E   DB 0B7H,02H,0E5H,6EH
+6B0E  C6 02 58 6D   DB 0C6H,02H,58H,6DH
+6B12  CA 02 5C 6D   DB 0CAH,02H,5CH,6DH
+6B16  CF 02 60 6D   DB 0CFH,02H,60H,6DH
+6B1A  D6 02 64 6D   DB 0D6H,02H,64H,6DH
+6B1E  DA 02 68 6D   DB 0DAH,02H,68H,6DH
+6B22  DD 02 EA 6E   DB 0DDH,02H,0EAH,6EH
+6B26  ED 02 6C 6D   DB 0EDH,02H,6CH,6DH
+6B2A  F2 02 70 6D   DB 0F2H,02H,70H,6DH
+6B2E  F7 02 74 6D   DB 0F7H,02H,74H,6DH
+6B32  FC 02 78 6D   DB 0FCH,02H,78H,6DH
+6B36  05 03 7C 6D   DB 05H,03H,7CH,6DH
+6B3A  0D 03 EF 6E   DB 0DH,03H,0EFH,6EH
+6B3E  21 03 80 6D   DB 21H,03H,80H,6DH
+6B42  28 03 84 6D   DB 28H,03H,84H,6DH
+6B46  30 03 88 6D   DB 30H,03H,88H,6DH
+6B4A  35 03 8C 6D   DB 35H,03H,8CH,6DH
+6B4E  47 03 90 6D   DB 47H,03H,90H,6DH
+6B52  54 03 94 6D   DB 54H,03H,94H,6DH
+6B56  57 03 F4 6E   DB 57H,03H,0F4H,6EH
+6B5A  66 03 40 6E   DB 66H,03H,40H,6EH
+6B5E  6A 03 98 6D   DB 6AH,03H,98H,6DH
+6B62  6E 03 9C 6D   DB 6EH,03H,9CH,6DH
+6B66  75 03 A0 6D   DB 75H,03H,0A0H,6DH
+6B6A  7A 03 A4 6D   DB 7AH,03H,0A4H,6DH
+6B6E  87 03 46 6E   DB 87H,03H,46H,6EH
+6B72  8D 03 4C 6E   DB 8DH,03H,4CH,6EH
+6B76  92 03 52 6E   DB 92H,03H,52H,6EH
+6B7A  99 03 A8 6D   DB 99H,03H,0A8H,6DH
+6B7E  9C 03 AC 6D   DB 9CH,03H,0ACH,6DH
+6B82  A0 03 B0 6D   DB 0A0H,03H,0B0H,6DH
+6B86  A4 03 58 6E   DB 0A4H,03H,58H,6EH
+6B8A  A7 03 F9 6E   DB 0A7H,03H,0F9H,6EH
+6B8E  B6 03 B4 6D   DB 0B6H,03H,0B4H,6DH
+6B92  BC 03 B8 6D   DB 0BCH,03H,0B8H,6DH
+6B96  13 04 BC 6D   DB 13H,04H,0BCH,6DH
+6B9A  1E 04 FE 6E   DB 1EH,04H,0FEH,6EH
+6B9E  23 04 C0 6D   DB 23H,04H,0C0H,6DH
+6BA2  2B 04 02 6F   DB 2BH,04H,02H,6FH
+6BA6  34 04 C4 6D   DB 34H,04H,0C4H,6DH
+6BAA  3E 04 06 6F   DB 3EH,04H,06H,6FH
+6BAE  46 04 0A 6F   DB 46H,04H,0AH,6FH
+6BB2  4A 04 0E 6F   DB 4AH,04H,0EH,6FH
+6BB6  4E 04 12 6F   DB 4EH,04H,12H,6FH
+6BBA  54 04 16 6F   DB 54H,04H,16H,6FH
+6BBE  5D 04 C8 6D   DB 5DH,04H,0C8H,6DH
+6BC2  61 04 1A 6F   DB 61H,04H,1AH,6FH
+6BC6  68 04 1E 6F   DB 68H,04H,1EH,6FH
+6BCA  70 04 22 6F   DB 70H,04H,22H,6FH
+6BCE  75 04 26 6F   DB 75H,04H,26H,6FH
+6BD2  7C 04 2A 6F   DB 7CH,04H,2AH,6FH
+6BD6  84 04 2E 6F   DB 84H,04H,2EH,6FH
+6BDA  8B 04 32 6F   DB 8BH,04H,32H,6FH
+6BDE  91 04 5E 6E   DB 91H,04H,5EH,6EH
+6BE2  97 04 36 6F   DB 97H,04H,36H,6FH
+6BE6  9D 04 3A 6F   DB 9DH,04H,3AH,6FH
+6BEA  A2 04 64 6E   DB 0A2H,04H,64H,6EH
+6BEE  A7 04 3E 6F   DB 0A7H,04H,3EH,6FH
+6BF2  B2 04 6A 6E   DB 0B2H,04H,6AH,6EH
+6BF6  B6 04 70 6E   DB 0B6H,04H,70H,6EH
+6BFA  BA 04 76 6E   DB 0BAH,04H,76H,6EH
+6BFE  BF 04 7C 6E   DB 0BFH,04H,7CH,6EH
+6C02  C4 04 A9 6E   DB 0C4H,04H,0A9H,6EH
+6C06  CA 04 42 6F   DB 0CAH,04H,42H,6FH
+6C0A  D2 04 AE 6E   DB 0D2H,04H,0AEH,6EH
+6C0E  DA 04 B3 6E   DB 0DAH,04H,0B3H,6EH
+6C12  EF 04 B8 6E   DB 0EFH,04H,0B8H,6EH
+6C16  F7 04 BD 6E   DB 0F7H,04H,0BDH,6EH
+6C1A  02 05 CC 6D   DB 02H,05H,0CCH,6DH
+6C1E  1F 05 C2 6E   DB 1FH,05H,0C2H,6EH
+6C22  2F 05 82 6E   DB 2FH,05H,82H,6EH
+6C26  3E 05 C7 6E   DB 3EH,05H,0C7H,6EH
+6C2A  4A 05 88 6E   DB 4AH,05H,88H,6EH
+6C2E  52 05 8E 6E   DB 52H,05H,8EH,6EH
+6C32  62 05 94 6E   DB 62H,05H,94H,6EH
+6C36  63 05 CC 6E   DB 63H,05H,0CCH,6EH
+6C3A  6A 05 46 6F   DB 6AH,05H,46H,6FH
+6C3E  6E 05 D0 6D   DB 6EH,05H,0D0H,6DH
+6C42  70 05 D1 6E   DB 70H,05H,0D1H,6EH
+6C46  77 05 4A 6F   DB 77H,05H,4AH,6FH
+6C4A  AA 05 4E 6F   DB 0AAH,05H,4EH,6FH
+6C4E  C6 05 53 6F   DB 0C6H,05H,53H,6FH
+6C52  F0 05 58 6F   DB 0F0H,05H,58H,6FH
+6C56  08 06 D4 6D   DB 08H,06H,0D4H,6DH
+6C5A  0E 06 D8 6D   DB 0EH,06H,0D8H,6DH
+6C5E  14 06 DC 6D   DB 14H,06H,0DCH,6DH
+6C62  19 06 D6 6E   DB 19H,06H,0D6H,6EH
+6C66  1A 06 E0 6D   DB 1AH,06H,0E0H,6DH
+6C6A  20 06 E4 6D   DB 20H,06H,0E4H,6DH
+6C6E  23 06 DB 6E   DB 23H,06H,0DBH,6EH
+6C72  26 06 E8 6D   DB 26H,06H,0E8H,6DH
+6C76  2F 06 E0 6E   DB 2FH,06H,0E0H,6EH
+6C7A  57 06 5D 6F   DB 57H,06H,5DH,6FH
+6C7E  69 06 64 6F   DB 69H,06H,64H,6FH
+6C82  6F 06 6B 6F   DB 6FH,06H,6BH,6FH
+6C86  81 06 72 6F   DB 81H,06H,72H,6FH
+6C8A  99 06 79 6F   DB 99H,06H,79H,6FH
+6C8E  A7 06 80 6F   DB 0A7H,06H,80H,6FH
+6C92  AC 06 87 6F   DB 0ACH,06H,87H,6FH
+6C96  C0 06 8E 6F   DB 0C0H,06H,8EH,6FH
+6C9A  2C 07 95 6F   DB 2CH,07H,95H,6FH
+6C9E  2D 07 99 6F   DB 2DH,07H,99H,6FH
+6CA2  2D 07 9E 6F   DB 2DH,07H,9EH,6FH
+6CA6  34 07 A3 6F   DB 34H,07H,0A3H,6FH
+6CAA  3B 07 AB 6F   DB 3BH,07H,0ABH,6FH
+6CAE  3C 07 A7 6F   DB 3CH,07H,0A7H,6FH
+6CB2  3D 07 AF 6F   DB 3DH,07H,0AFH,6FH
+6CB6  3D 07 B3 6F   DB 3DH,07H,0B3H,6FH
+6CBA  3F 07 B7 6F   DB 3FH,07H,0B7H,6FH
+6CBE  FF FF         DB 0FFH,0FFH
+DATA_6CC0:
+6CC0  30 1B 05 09   DB 30H,1BH,05H,09H
+6CC4  4F 52 09 41   DB 4FH,52H,09H,41H
+6CC8  3A 1B 0B 09   DB 3AH,1BH,0BH,09H
+6CCC  4A 52 09 5A   DB 4AH,52H,09H,5AH
+6CD0  2C 44 4F 41   DB 2CH,44H,4FH,41H
+6CD4  4C 4C 44 1B   DB 4CH,4CH,44H,1BH
+6CD8  05 09 43 50   DB 05H,09H,43H,50H
+6CDC  09 31 4E 1B   DB 09H,31H,4EH,1BH
+6CE0  0D 09 4A 52   DB 0DH,09H,4AH,52H
+6CE4  09 4E 5A 2C   DB 09H,4EH,5AH,2CH
+6CE8  53 4B 50 4F   DB 53H,4BH,50H,4FH
+6CEC  56 52 58 1B   DB 56H,52H,58H,1BH
+6CF0  06 09 49 4E   DB 06H,09H,49H,4EH
+6CF4  43 09 41 62   DB 43H,09H,41H,62H
+6CF8  1B 0E 09 4C   DB 1BH,0EH,09H,4CH
+6CFC  44 09 28 45   DB 44H,09H,28H,45H
+6D00  4E 44 46 4C   DB 4EH,44H,46H,4CH
+6D04  47 29 2C 41   DB 47H,29H,2CH,41H
+6D08  6C 1B 09 09   DB 6CH,1BH,09H,09H
+6D0C  4A 50 09 49   DB 4AH,50H,09H,49H
+6D10  4E 43 43 43   DB 4EH,43H,43H,43H
+6D14  76 1B 15 44   DB 76H,1BH,15H,44H
+6D18  4F 41 4C 4C   DB 4FH,41H,4CH,4CH
+6D1C  09 4C 44 09   DB 09H,4CH,44H,09H
+6D20  48 4C 2C 28   DB 48H,4CH,2CH,28H
+6D24  54 50 53 54   DB 54H,50H,53H,54H
+6D28  4F 52 45 29   DB 4FH,52H,45H,29H
+6D2C  80 1B 0F 09   DB 80H,1BH,0FH,09H
+6D30  4C 44 09 28   DB 4CH,44H,09H,28H
+6D34  54 45 52 50   DB 54H,45H,52H,50H
+6D38  54 52 29 2C   DB 54H,52H,29H,2CH
+6D3C  48 4C 8A 1B   DB 48H,4CH,8AH,1BH
+6D40  0F 09 4C 44   DB 0FH,09H,4CH,44H
+6D44  09 41 2C 28   DB 09H,41H,2CH,28H
+6D48  44 45 46 41   DB 44H,45H,46H,41H
+6D4C  55 4C 54 29   DB 55H,4CH,54H,29H
+6D50  94 1B 06 09   DB 94H,1BH,06H,09H
+6D54  58 4F 52 09   DB 58H,4FH,52H,09H
+6D58  31 9E 1B 0F   DB 31H,9EH,1BH,0FH
+6D5C  09 4C 44 09   DB 09H,4CH,44H,09H
+6D60  28 44 45 46   DB 28H,44H,45H,46H
+6D64  41 55 4C 54   DB 41H,55H,4CH,54H
+6D68  29 2C 41 A8   DB 29H,2CH,41H,0A8H
+6D6C  1B 14 49 4E   DB 1BH,14H,49H,4EH
+6D70  43 43 43 09   DB 43H,43H,43H,09H
+6D74  4C 44 09 48   DB 4CH,44H,09H,48H
+6D78  4C 2C 28 43   DB 4CH,2CH,28H,43H
+6D7C  4F 4C 43 4E   DB 4FH,4CH,43H,4EH
+6D80  54 29 B2 1B   DB 54H,29H,0B2H,1BH
+6D84  07 09 49 4E   DB 07H,09H,49H,4EH
+6D88  43 09 48 4C   DB 43H,09H,48H,4CH
+6D8C  BC 1B 0F 09   DB 0BCH,1BH,0FH,09H
+6D90  4C 44 09 28   DB 4CH,44H,09H,28H
+6D94  43 4F 4C 43   DB 43H,4FH,4CH,43H
+6D98  4E 54 29 2C   DB 4EH,54H,29H,2CH
+6D9C  48 4C C6 1B   DB 48H,4CH,0C6H,1BH
+6DA0  16 53 4B 50   DB 16H,53H,4BH,50H
+6DA4  4F 56 52 09   DB 4FH,56H,52H,09H
+6DA8  4C 44 09 48   DB 4CH,44H,09H,48H
+6DAC  4C 2C 28 42   DB 4CH,2CH,28H,42H
+6DB0  43 53 54 4F   DB 43H,53H,54H,4FH
+6DB4  52 45 29 D0   DB 52H,45H,29H,0D0H
+6DB8  1B 0F 09 4C   DB 1BH,0FH,09H,4CH
+6DBC  44 09 28 42   DB 44H,09H,28H,42H
+6DC0  4C 4F 43 4F   DB 4CH,4FH,43H,4FH
+6DC4  4C 29 2C 48   DB 4CH,29H,2CH,48H
+6DC8  4C DA 1B 12   DB 4CH,0DAH,1BH,12H
+6DCC  09 4C 44 09   DB 09H,4CH,44H,09H
+6DD0  48 4C 2C 42   DB 48H,4CH,2CH,42H
+6DD4  55 46 46 45   DB 55H,46H,46H,45H
+6DD8  52 2B 34 31   DB 52H,2BH,34H,31H
+6DDC  31 48 E4 1B   DB 31H,48H,0E4H,1BH
+6DE0  08 09 4C 44   DB 08H,09H,4CH,44H
+6DE4  09 42 2C 36   DB 09H,42H,2CH,36H
+6DE8  34 EE 1B 10   DB 34H,0EEH,1BH,10H
+6DEC  4C 49 4E 45   DB 4CH,49H,4EH,45H
+6DF0  4C 4F 50 09   DB 4CH,4FH,50H,09H
+6DF4  4C 44 09 41   DB 4CH,44H,09H,41H
+6DF8  2C 31 37 36   DB 2CH,31H,37H,36H
+6DFC  F8 1B 08 09   DB 0F8H,1BH,08H,09H
+6E00  4F 52 09 28   DB 4FH,52H,09H,28H
+6E04  48 4C 29 02   DB 48H,4CH,29H,02H
+6E08  1C 0A 09 4C   DB 1CH,0AH,09H,4CH
+6E0C  44 09 28 48   DB 44H,09H,28H,48H
+6E10  4C 29 2C 41   DB 4CH,29H,2CH,41H
+6E14  0C 1C 07 09   DB 0CH,1CH,07H,09H
+6E18  49 4E 43 09   DB 49H,4EH,43H,09H
+6E1C  48 4C 16 1C   DB 48H,4CH,16H,1CH
+6E20  0D 09 44 4A   DB 0DH,09H,44H,4AH
+6E24  4E 5A 09 4C   DB 4EH,5AH,09H,4CH
+6E28  49 4E 45 4C   DB 49H,4EH,45H,4CH
+6E2C  4F 50 20 1C   DB 4FH,50H,20H,1CH
+6E30  04 09 52 45   DB 04H,09H,52H,45H
+6E34  54 2A 1C 10   DB 54H,2AH,1CH,10H
+6E38  46 4F 52 4D   DB 46H,4FH,52H,4DH
+6E3C  41 54 09 4C   DB 41H,54H,09H,4CH
+6E40  44 09 41 2C   DB 44H,09H,41H,2CH
+6E44  28 48 4C 29   DB 28H,48H,4CH,29H
+6E48  34 1C 08 09   DB 34H,1CH,08H,09H
+6E4C  41 4E 44 09   DB 41H,4EH,44H,09H
+6E50  30 46 48 3E   DB 30H,46H,48H,3EH
+6E54  1C 05 09 43   DB 1CH,05H,09H,43H
+6E58  50 09 34 48   DB 50H,09H,34H,48H
+6E5C  1C 0C 09 4A   DB 1CH,0CH,09H,4AH
+6E60  50 09 4D 2C   DB 50H,09H,4DH,2CH
+6E64  43 48 41 4E   DB 43H,48H,41H,4EH
+6E68  47 45 52 1C   DB 47H,45H,52H,1CH
+6E6C  06 09 53 55   DB 06H,09H,53H,55H
+6E70  42 09 33 5C   DB 42H,09H,33H,5CH
+6E74  1C 0D 09 4C   DB 1CH,0DH,09H,4CH
+6E78  44 09 28 4C   DB 44H,09H,28H,4CH
+6E7C  45 56 45 4C   DB 45H,56H,45H,4CH
+6E80  29 2C 41 66   DB 29H,2CH,41H,66H
+6E84  1C 05 09 43   DB 1CH,05H,09H,43H
+6E88  50 09 31 70   DB 50H,09H,31H,70H
+6E8C  1C 0C 09 4A   DB 1CH,0CH,09H,4AH
+6E90  52 09 5A 2C   DB 52H,09H,5AH,2CH
+6E94  45 4E 44 57   DB 45H,4EH,44H,57H
+6E98  41 54 7A 1C   DB 41H,54H,7AH,1CH
+6E9C  0F 09 4C 44   DB 0FH,09H,4CH,44H
+6EA0  09 28 57 41   DB 09H,28H,57H,41H
+6EA4  54 42 45 47   DB 54H,42H,45H,47H
+6EA8  29 2C 44 45   DB 29H,2CH,44H,45H
+6EAC  84 1C 0E 09   DB 84H,1CH,0EH,09H
+6EB0  4C 44 09 28   DB 4CH,44H,09H,28H
+6EB4  57 41 54 4C   DB 57H,41H,54H,4CH
+6EB8  45 56 29 2C   DB 45H,56H,29H,2CH
+6EBC  41 8E 1C 0B   DB 41H,8EH,1CH,0BH
+6EC0  09 4A 52 09   DB 09H,4AH,52H,09H
+6EC4  45 58 49 54   DB 45H,58H,49H,54H
+6EC8  57 41 54 98   DB 57H,41H,54H,98H
+6ECC  1C 15 45 4E   DB 1CH,15H,45H,4EH
+6ED0  44 57 41 54   DB 44H,57H,41H,54H
+6ED4  09 4C 44 09   DB 09H,4CH,44H,09H
+6ED8  28 57 41 54   DB 28H,57H,41H,54H
+6EDC  45 4E 44 29   DB 45H,4EH,44H,29H
+6EE0  2C 44 45 A2   DB 2CH,44H,45H,0A2H
+6EE4  1C 0E 45 58   DB 1CH,0EH,45H,58H
+6EE8  49 54 57 41   DB 49H,54H,57H,41H
+6EEC  54 09 49 4E   DB 54H,09H,49H,4EH
+6EF0  43 09 48 4C   DB 43H,09H,48H,4CH
+6EF4  AC 1C 0B 09   DB 0ACH,1CH,0BH,09H
+6EF8  4A 50 09 43   DB 4AH,50H,09H,43H
+6EFC  4F 4E 54 49   DB 4FH,4EH,54H,49H
+6F00  4E 55 B6 1C   DB 4EH,55H,0B6H,1CH
+6F04  0C 43 48 41   DB 0CH,43H,48H,41H
+6F08  4E 47 45 09   DB 4EH,47H,45H,09H
+6F0C  49 4E 43 09   DB 49H,4EH,43H,09H
+6F10  41 C0 1C 0E   DB 41H,0C0H,1CH,0EH
+6F14  09 4C 44 09   DB 09H,4CH,44H,09H
+6F18  28 42 4C 4F   DB 28H,42H,4CH,4FH
+6F1C  43 4F 4C 29   DB 43H,4FH,4CH,29H
+6F20  2C 41 CA 1C   DB 2CH,41H,0CAH,1CH
+6F24  07 09 50 4F   DB 07H,09H,50H,4FH
+6F28  50 09 44 45   DB 50H,09H,44H,45H
+6F2C  D4 1C 07 09   DB 0D4H,1CH,07H,09H
+6F30  50 4F 50 09   DB 50H,4FH,50H,09H
+6F34  42 43 DE 1C   DB 42H,43H,0DEH,1CH
+6F38  07 09 4C 44   DB 07H,09H,4CH,44H
+6F3C  09 42 2C 41   DB 09H,42H,2CH,41H
+6F40  E8 1C 08 09   DB 0E8H,1CH,08H,09H
+6F44  50 55 53 48   DB 50H,55H,53H,48H
+6F48  09 42 43 F2   DB 09H,42H,43H,0F2H
+6F4C  1C 08 09 50   DB 1CH,08H,09H,50H
+6F50  55 53 48 09   DB 55H,53H,48H,09H
+6F54  44 45 FC 1C   DB 44H,45H,0FCH,1CH
+6F58  07 09 49 4E   DB 07H,09H,49H,4EH
+6F5C  43 09 48 4C   DB 43H,09H,48H,4CH
+6F60  06 1D 0B 09   DB 06H,1DH,0BH,09H
+6F64  4A 50 09 43   DB 4AH,50H,09H,43H
+6F68  4F 4E 54 49   DB 4FH,4EH,54H,49H
+6F6C  4E 55 10 1D   DB 4EH,55H,10H,1DH
+6F70  0C 50 52 54   DB 0CH,50H,52H,54H
+6F74  57 41 54 09   DB 57H,41H,54H,09H
+6F78  58 4F 52 09   DB 58H,4FH,52H,09H
+6F7C  41 1A 1D 0D   DB 41H,1AH,1DH,0DH
+6F80  09 4C 44 09   DB 09H,4CH,44H,09H
+6F84  28 55 50 46   DB 28H,55H,50H,46H
+6F88  4C 47 29 2C   DB 4CH,47H,29H,2CH
+6F8C  41 24 1D 0F   DB 41H,24H,1DH,0FH
+6F90  09 4C 44 09   DB 09H,4CH,44H,09H
+6F94  48 4C 2C 28   DB 48H,4CH,2CH,28H
+6F98  57 41 54 45   DB 57H,41H,54H,45H
+6F9C  4E 44 29 2E   DB 4EH,44H,29H,2EH
+6FA0  1D 0F 09 4C   DB 1DH,0FH,09H,4CH
+6FA4  44 09 44 45   DB 44H,09H,44H,45H
+6FA8  2C 28 57 41   DB 2CH,28H,57H,41H
+6FAC  54 42 45 47   DB 54H,42H,45H,47H
+6FB0  29 38 1D 05   DB 29H,38H,1DH,05H
+6FB4  09 4F 52 09   DB 09H,4FH,52H,09H
+6FB8  41 42 1D      DB 41H,42H,1DH
+DATA_6FBB:
+6FBB  0A 09 53 42   DB 0AH,09H,53H,42H
+6FBF  43 09 48 4C   DB 43H,09H,48H,4CH
+6FC3  2C 44 45 4C   DB 2CH,44H,45H,4CH
+6FC7  1D 0C 09 4A   DB 1DH,0CH,09H,4AH
+6FCB  50 09 5A 2C   DB 50H,09H,5AH,2CH
+6FCF  44 45 43 41   DB 44H,45H,43H,41H
+6FD3  49 52 56 1D   DB 49H,52H,56H,1DH
+6FD7  0C 09 4A 50   DB 0CH,09H,4AH,50H
+6FDB  09 4D 2C 44   DB 09H,4DH,2CH,44H
+6FDF  45 43 41 49   DB 45H,43H,41H,49H
+6FE3  52 60 1D 07   DB 52H,60H,1DH,07H
+6FE7  09 4C 44 09   DB 09H,4CH,44H,09H
+6FEB  42 2C 4C 6A   DB 42H,2CH,4CH,6AH
+6FEF  1D 06 09 49   DB 1DH,06H,09H,49H
+6FF3  4E 43 09 42   DB 4EH,43H,09H,42H
+6FF7  74 1D 06 09   DB 74H,1DH,06H,09H
+6FFB  53 52 4C 09   DB 53H,52H,4CH,09H
+6FFF  42 7E 1D 09   DB 42H,7EH,1DH,09H
+7003  09 45 58 09   DB 09H,45H,58H,09H
+7007  44 45 2C 48   DB 44H,45H,2CH,48H
+700B  4C 88 1D 0E   DB 4CH,88H,1DH,0EH
+700F  09 4C 44 09   DB 09H,4CH,44H,09H
+7013  41 2C         DB 41H,2CH
+DATA_7015:
+7015  28 57 41 54   DB 28H,57H,41H,54H
+7019  4C 45 56 29   DB 4CH,45H,56H,29H
+701D  92 1D 06 09   DB 92H,1DH,06H,09H
+7021  44 45 43 09   DB 44H,45H,43H,09H
+7025  41 9C 1D 06   DB 41H,9CH,1DH,06H
+7029  09 53 4C 41   DB 09H,53H,4CH,41H
+702D  09 41 A6 1D   DB 09H,41H,0A6H,1DH
+7031  07 09 4C      DB 07H,09H,4CH
+DATA_7034:
+7034  44 09         DB 44H,09H
+DATA_7036:
+7036  0A 2C 0D 2C   DB 0AH,2CH,0DH,2CH
+703A  29 29 2A 2A   DB 29H,29H,2AH,2AH
+703E  1A 1A 1A 08   DB 1AH,1AH,1AH,08H
+7042  08 19 17 15   DB 08H,19H,17H,15H
+7046  0D 1B 2A 2A   DB 0DH,1BH,2AH,2AH
+704A  1A 18 07 05   DB 1AH,18H,07H,05H
+704E  13 1D 1C 0C   DB 13H,1DH,1CH,0CH
+7052  AC 8A AD 8A   DB 0ACH,8AH,0ADH,8AH
+7056  1D 1D 1A 2B   DB 1DH,1DH,1AH,2BH
+705A  2D 1D 0C 0C   DB 2DH,1DH,0CH,0CH
+705E  0C 2C 2C 1A   DB 0CH,2CH,2CH,1AH
+7062  1A 2A 0B 1A   DB 1AH,2AH,0BH,1AH
+7066  07 04 A2 03   DB 07H,04H,0A2H,03H
+706A  17 1B 18 18   DB 17H,1BH,18H,18H
+706E  08 17 29 18   DB 08H,17H,29H,18H
+7072  27 09 09 0D   DB 27H,09H,09H,0DH
+7076  2C 1C 2B 27   DB 2CH,1CH,2BH,27H
+707A  08 17 17 17   DB 08H,17H,17H,17H
+707E  97 17 17 85   DB 97H,17H,17H,85H
+7082  8D 56 95 47   DB 8DH,56H,95H,47H
+7086  95 58 B5 32   DB 95H,58H,0B5H,32H
+708A  B5 45 B5 B2   DB 0B5H,45H,0B5H,0B2H
+708E  95 94 95 74   DB 95H,94H,95H,74H
+7092  B5 B1 80 B1   DB 0B5H,0B1H,80H,0B1H
+7096  80 C2 8D C2   DB 80H,0C2H,8DH,0C2H
+709A  8D 47 95 62   DB 8DH,47H,95H,62H
+709E  AD 55 B5 73   DB 0ADH,55H,0B5H,73H
+70A2  B5 64 95 56   DB 0B5H,64H,95H,56H
+70A6  95 83 95 94   DB 95H,83H,95H,94H
+70AA  81 65 B5 A1   DB 81H,65H,0B5H,0A1H
+70AE  B5 92 B5 82   DB 0B5H,92H,0B5H,82H
+70B2  B5 52 95 71   DB 0B5H,52H,95H,71H
+70B6  B5 81 80 71   DB 0B5H,81H,80H,71H
+70BA  B5 01 06 01   DB 0B5H,01H,06H,01H
+70BE  05 04 02 06   DB 05H,04H,02H,06H
+70C2  06 01 05 03   DB 06H,01H,05H,03H
+70C6  03 01 01 01   DB 03H,01H,01H,01H
+70CA  27 08 05 18   DB 27H,08H,05H,18H
+70CE  18 18 18 13   DB 18H,18H,18H,13H
+70D2  04 15 15 15   DB 04H,15H,15H,15H
+70D6  25 22 13 12   DB 25H,22H,13H,12H
+70DA  13 05 13 13   DB 13H,05H,13H,13H
+70DE  3C 00 0D 00   DB 3CH,00H,0DH,00H
+70E2  00 3C 00 09   DB 00H,3CH,00H,09H
+70E6  00 00 3C 00   DB 00H,00H,3CH,00H
+70EA  0B 00 00 06   DB 0BH,00H,00H,06H
+70EE  00 03 00 24   DB 00H,03H,00H,24H
+70F2  00 01 00 00   DB 00H,01H,00H,00H
+70F6  2A 00 0D 00   DB 2AH,00H,0DH,00H
+70FA  00 0C 00 03   DB 00H,0CH,00H,03H
+70FE  00 12 00 07   DB 00H,12H,00H,07H
+7102  00 18 02 07   DB 00H,18H,02H,07H
+7106  00 18 00 07   DB 00H,18H,00H,07H
+710A  00 18 01 08   DB 00H,18H,01H,08H
+710E  00 18 02 07   DB 00H,18H,02H,07H
+7112  00 80 80 80   DB 00H,80H,80H,80H
+7116  80 80 80 80   DB 80H,80H,80H,80H
+711A  B8 42 80 80   DB 0B8H,42H,80H,80H
+711E  80 80 80 A0   DB 80H,80H,80H,0A0H
+7122  BE BF 42 80   DB 0BEH,0BFH,42H,80H
+7126  80 80 80 B8   DB 80H,80H,80H,0B8H
+712A  BF BF BF 42   DB 0BFH,0BFH,0BFH,42H
+712E  80 80 A0 BE   DB 80H,80H,0A0H,0BEH
+7132  BF BF BF BF   DB 0BFH,0BFH,0BFH,0BFH
+7136  42 80 B8 BF   DB 42H,80H,0B8H,0BFH
+713A  BF BF BF BF   DB 0BFH,0BFH,0BFH,0BFH
+713E  BF 42 82 AF   DB 0BFH,42H,82H,0AFH
+7142  BF BF BF BF   DB 0BFH,0BFH,0BFH,0BFH
+7146  BF BF 42 80   DB 0BFH,0BFH,42H,80H
+714A  80 8B BF BF   DB 80H,8BH,0BFH,0BFH
+714E  BF BF BF 42   DB 0BFH,0BFH,0BFH,42H
+7152  80 80 80 82   DB 80H,80H,80H,82H
+7156  AF BF BF BF   DB 0AFH,0BFH,0BFH,0BFH
+715A  42 80 80 80   DB 42H,80H,80H,80H
+715E  80 80 8B BF   DB 80H,80H,8BH,0BFH
+7162  BF 42 80 80   DB 0BFH,42H,80H,80H
+7166  80 80 80 80   DB 80H,80H,80H,80H
+716A  82 AF 00 AA   DB 82H,0AFH,00H,0AAH
+716E  AF 48 AA AF   DB 0AFH,48H,0AAH,0AFH
+7172  48 AA AF 48   DB 48H,0AAH,0AFH,48H
+7176  AA AF 48 AA   DB 0AAH,0AFH,48H,0AAH
+717A  AF 48 AA AF   DB 0AFH,48H,0AAH,0AFH
+717E  48 AA AF 48   DB 48H,0AAH,0AFH,48H
+7182  AA AF 48 AA   DB 0AAH,0AFH,48H,0AAH
+7186  AF 48 AA AF   DB 0AFH,48H,0AAH,0AFH
+718A  48 82 83 00   DB 48H,82H,83H,00H
+DATA_718E:
+718E  9A 71 EE 71   DB 9AH,71H,0EEH,71H
+7192  41 72         DB 41H,72H
+DATA_7194:
+7194  93 72         DB 93H,72H
+DATA_7196:
+7196  53 73         DB 53H,73H
+DATA_7198:
+7198  76 73 9C 87   DB 76H,73H,9CH,87H
+719C  83 83 8B AE   DB 83H,83H,8BH,0AEH
+71A0  80 BF 83 83   DB 80H,0BFH,83H,83H
+71A4  83 83 83 80   DB 83H,83H,83H,80H
+71A8  A0 9E 83 83   DB 0A0H,9EH,83H,83H
+71AC  AD 90 36 83   DB 0ADH,90H,36H,83H
+71B0  8D AC B4 B0   DB 8DH,0ACH,0B4H,0B0H
+71B4  80 80 BF 8C   DB 80H,80H,0BFH,8CH
+71B8  8C 8C 8C 80   DB 8CH,8CH,8CH,80H
+71BC  80 BF 8C 8C   DB 80H,0BFH,8CH,8CH
+71C0  8C 8C BF 36   DB 8CH,8CH,0BFH,36H
+71C4  B4 90 80 80   DB 0B4H,90H,80H,80H
+71C8  A2 BB 80 BF   DB 0A2H,0BBH,80H,0BFH
+71CC  80 80 80 80   DB 80H,80H,80H,80H
+71D0  80 80 BF 80   DB 80H,80H,0BFH,80H
+71D4  80 80 80 BF   DB 80H,80H,80H,0BFH
+71D8  36 81 83 83   DB 36H,81H,83H,83H
+71DC  83 83 80 80   DB 83H,83H,80H,80H
+71E0  83 83 83 83   DB 83H,83H,83H,83H
+71E4  83 83 80 83   DB 83H,83H,80H,83H
+71E8  80 80 80 80   DB 80H,80H,80H,80H
+71EC  83 00 B0 9C   DB 83H,00H,0B0H,9CH
+71F0  8C 8C AC B8   DB 8CH,8CH,0ACH,0B8H
+71F4  80 BC 8C 8C   DB 80H,0BCH,8CH,8CH
+71F8  8C 8C 8C 80   DB 8CH,8CH,8CH,80H
+71FC  80 B8 8C 8C   DB 80H,0B8H,8CH,8CH
+7200  B4 37 8D B4   DB 0B4H,37H,8DH,0B4H
+7204  B0 90 80 82   DB 0B0H,90H,80H,82H
+7208  80 BF B0 B0   DB 80H,0BFH,0B0H,0B0H
+720C  B0 B0 80 80   DB 0B0H,0B0H,80H,80H
+7210  BE B1 B0 B0   DB 0BEH,0B1H,0B0H,0B0H
+7214  B2 BD 36 90   DB 0B2H,0BDH,36H,90H
+7218  80 82 83 8B   DB 80H,82H,83H,8BH
+721C  AC 80 BF 80   DB 0ACH,80H,0BFH,80H
+7220  80 80 80 80   DB 80H,80H,80H,80H
+7224  80 BF 80 80   DB 80H,0BFH,80H,80H
+7228  80 80 BF 36   DB 80H,80H,0BFH,36H
+722C  87 8D 8C 8C   DB 87H,8DH,8CH,8CH
+7230  8E 83 80 8F   DB 8EH,83H,80H,8FH
+7234  8C 8C 8C 8C   DB 8CH,8CH,8CH,8CH
+7238  8C 80 8F 80   DB 8CH,80H,8FH,80H
+723C  80 80 80 8F   DB 80H,80H,80H,8FH
+7240  00 80 B0 B0   DB 00H,80H,0B0H,0B0H
+7244  B0 B0 A0 80   DB 0B0H,0B0H,0A0H,80H
+7248  B0 B0 B0 B0   DB 0B0H,0B0H,0B0H,0B0H
+724C  B0 B0 80 80   DB 0B0H,0B0H,80H,80H
+7250  A0 B0 B0 90   DB 0A0H,0B0H,0B0H,90H
+7254  37 B7 91 80   DB 37H,0B7H,91H,80H
+7258  80 82 8B 80   DB 80H,82H,8BH,80H
+725C  BF 80 80 80   DB 0BFH,80H,80H,80H
+7260  80 80 80 B8   DB 80H,80H,80H,0B8H
+7264  87 80 80 8B   DB 87H,80H,80H,8BH
+7268  B4 37 83 8B   DB 0B4H,37H,83H,8BH
+726C  8D AC B0 80   DB 8DH,0ACH,0B0H,80H
+7270  BF 83 83 83   DB 0BFH,83H,83H,83H
+7274  83 80 80 BF   DB 83H,80H,80H,0BFH
+7278  83 83 83 83   DB 83H,83H,83H,83H
+727C  BF 36 AA AC   DB 0BFH,36H,0AAH,0ACH
+7280  B0 B0 B8 8E   DB 0B0H,0B0H,0B8H,8EH
+7284  80 BF B0 B0   DB 80H,0BFH,0B0H,0B0H
+7288  B0 B0 B0 80   DB 0B0H,0B0H,0B0H,80H
+728C  BF 80 80 80   DB 0BFH,80H,80H,80H
+7290  80 BF 00 BF   DB 80H,0BFH,00H,0BFH
+7294  83 83 8B AC   DB 83H,83H,8BH,0ACH
+7298  90 80 80 BF   DB 90H,80H,80H,0BFH
+729C  83 83 83 8D   DB 83H,83H,83H,8DH
+72A0  B4 80 80 B8   DB 0B4H,80H,80H,0B8H
+72A4  86 83 83 89   DB 86H,83H,83H,89H
+72A8  B4 80 80 B8   DB 0B4H,80H,80H,0B8H
+72AC  8E 83 83 83   DB 8EH,83H,83H,83H
+72B0  AE 80 80 B8   DB 0AEH,80H,80H,0B8H
+72B4  86 83 83 89   DB 86H,83H,83H,89H
+72B8  B4 80 80 BF   DB 0B4H,80H,80H,0BFH
+72BC  B4 80 80 80   DB 0B4H,80H,80H,80H
+72C0  AA 95 1B BF   DB 0AAH,95H,1BH,0BFH
+72C4  80 80 80 80   DB 80H,80H,80H,80H
+72C8  BF 80 80 BF   DB 0BFH,80H,80H,0BFH
+72CC  B0 B0 B0 9C   DB 0B0H,0B0H,0B0H,9CH
+72D0  87 80 80 BF   DB 87H,80H,80H,0BFH
+72D4  B0 B0 B0 B0   DB 0B0H,0B0H,0B0H,0B0H
+72D8  BF 80 80 BF   DB 0BFH,80H,80H,0BFH
+72DC  80 80 80 80   DB 80H,80H,80H,80H
+72E0  80 80 80 BF   DB 80H,80H,80H,0BFH
+72E4  80 80 80 80   DB 80H,80H,80H,80H
+72E8  BF 80 80 BF   DB 0BFH,80H,80H,0BFH
+72EC  82 AD 90 80   DB 82H,0ADH,90H,80H
+72F0  AA 95 1B BF   DB 0AAH,95H,1BH,0BFH
+72F4  80 80 80 80   DB 80H,80H,80H,80H
+72F8  BF 80 80 BF   DB 0BFH,80H,80H,0BFH
+72FC  80 80 80 AF   DB 80H,80H,80H,0AFH
+7300  90 80 80 BF   DB 90H,80H,80H,0BFH
+7304  80 80 80 80   DB 80H,80H,80H,80H
+7308  BF 80 80 BF   DB 0BFH,80H,80H,0BFH
+730C  80 80 82 83   DB 80H,80H,82H,83H
+7310  AB 94 80 BF   DB 0ABH,94H,80H,0BFH
+7314  80 80 80 80   DB 80H,80H,80H,80H
+7318  BF 80 80 BF   DB 0BFH,80H,80H,0BFH
+731C  80 80 8B B4   DB 80H,80H,8BH,0B4H
+7320  AA 95 1B BF   DB 0AAH,95H,1BH,0BFH
+7324  B0 B0 B8 8E   DB 0B0H,0B0H,0B8H,8EH
+7328  81 80 80 BF   DB 81H,80H,80H,0BFH
+732C  80 80 80 82   DB 80H,80H,80H,82H
+7330  BD 80 80 BF   DB 0BDH,80H,80H,0BFH
+7334  80 80 80 80   DB 80H,80H,80H,80H
+7338  BF 80 80 8B   DB 0BFH,80H,80H,8BH
+733C  AC B0 B0 B8   DB 0ACH,0B0H,0B0H,0B8H
+7340  8E 81 80 8B   DB 8EH,81H,80H,8BH
+7344  A4 B0 B0 98   DB 0A4H,0B0H,0B0H,98H
+7348  87 80 80 BF   DB 87H,80H,80H,0BFH
+734C  80 80 80 82   DB 80H,80H,80H,82H
+7350  AF 95 00 90   DB 0AFH,95H,00H,90H
+7354  A4 80 98 A1   DB 0A4H,80H,98H,0A1H
+7358  80 A0 84 38   DB 80H,0A0H,84H,38H
+735C  89 90 99 91   DB 89H,90H,99H,91H
+7360  82 A4 86 A0   DB 82H,0A4H,86H,0A0H
+7364  84 38 96 89   DB 84H,38H,96H,89H
+7368  92 AC B1 A9   DB 92H,0ACH,0B1H,0A9H
+736C  91 39 8A 80   DB 91H,39H,8AH,80H
+7370  8A 89 8D 89   DB 8AH,89H,8DH,89H
+7374  8A 00 88 90   DB 8AH,00H,88H,90H
+7378  80 92 A4 80   DB 80H,92H,0A4H,80H
+737C  98 A0 37 88   DB 98H,0A0H,37H,88H
+7380  90 89 98 81   DB 90H,89H,98H,81H
+7384  A2 A6 A0 86   DB 0A2H,0A6H,0A0H,86H
+7388  38 A2 96 B2   DB 38H,0A2H,96H,0B2H
+738C  9C A1 86 A9   DB 9CH,0A1H,86H,0A9H
+7390  39 85 86 8E   DB 39H,85H,86H,8EH
+7394  86 85 80 85   DB 86H,85H,80H,85H
+7398  00            DB 00H
+DATA_7399:
+7399  23 2C 32 05   DB 23H,2CH,32H,05H
+739D  33 33 33 33   DB 33H,33H,33H,33H
+73A1  33 33 33 33   DB 33H,33H,33H,33H
+73A5  33 33 33 33   DB 33H,33H,33H,33H
+73A9  33 33 33 33   DB 33H,33H,33H,33H
+73AD  33 33 39 3B   DB 33H,33H,39H,3BH
+73B1  42 49 4B 50   DB 42H,49H,4BH,50H
+73B5  54 5C 60 62   DB 54H,5CH,60H,62H
+73B9  63 6C 6B 6B   DB 63H,6CH,6BH,6BH
+73BD  6B 6B 6B 6B   DB 6BH,6BH,6BH,6BH
+73C1  6B 72 7C 82   DB 6BH,72H,7CH,82H
+73C5  89 8B 92 99   DB 89H,8BH,92H,99H
+73C9  9B A2 A9 AB   DB 9BH,0A2H,0A9H,0ABH
+73CD  B0 B2 B3 BC   DB 0B0H,0B2H,0B3H,0BCH
+73D1  BB BB B7 B3   DB 0BBH,0BBH,0B7H,0B3H
+73D5  B0 AB B2 BC   DB 0B0H,0ABH,0B2H,0BCH
+73D9  C0 CA CB D2   DB 0C0H,0CAH,0CBH,0D2H
+73DD  DC DB E0 E2   DB 0DCH,0DBH,0E0H,0E2H
+73E1  E3 E3 E3 E9   DB 0E3H,0E3H,0E3H,0E9H
+73E5  EB EB EB EB   DB 0EBH,0EBH,0EBH,0EBH
+73E9  EB EB EB EB   DB 0EBH,0EBH,0EBH,0EBH
+73ED  EB EB EB EB   DB 0EBH,0EBH,0EBH,0EBH
+73F1  EB E7 E3 E3   DB 0EBH,0E7H,0E3H,0E3H
+73F5  E5 E0 E0 DB   DB 0E5H,0E0H,0E0H,0DBH
+73F9  DB D7 D3 D9   DB 0DBH,0D7H,0D3H,0D9H
+73FD  DB E0 E2 E3   DB 0DBH,0E0H,0E2H,0E3H
+7401  E3 E3 E5 E0   DB 0E3H,0E3H,0E5H,0E0H
+7405  E0 E0 E0 E0   DB 0E0H,0E0H,0E0H,0E0H
+7409  E4 E3 E3 E5   DB 0E4H,0E3H,0E3H,0E5H
+740D  E0 E0 DD D5   DB 0E0H,0E0H,0DDH,0D5H
+7411  D0 D0 D0 CB   DB 0D0H,0D0H,0D0H,0CBH
+7415  CD C5 C0 BD   DB 0CDH,0C5H,0C0H,0BDH
+7419  B3 B3 B3 B3   DB 0B3H,0B3H,0B3H,0B3H
+741D  B3 B3 B3 B3   DB 0B3H,0B3H,0B3H,0B3H
+7421  B3 B3 BB C0   DB 0B3H,0B3H,0BBH,0C0H
+7425  C3 C3 C3 C3   DB 0C3H,0C3H,0C3H,0C3H
+7429  C3 C3 C3 C3   DB 0C3H,0C3H,0C3H,0C3H
+742D  C3 C3 C0 C0   DB 0C3H,0C3H,0C0H,0C0H
+7431  C0 C0 C0 C0   DB 0C0H,0C0H,0C0H,0C0H
+7435  C0 C0 C0 C0   DB 0C0H,0C0H,0C0H,0C0H
+7439  C0 C0 C0 C0   DB 0C0H,0C0H,0C0H,0C0H
+743D  BD B1 AB A1   DB 0BDH,0B1H,0ABH,0A1H
+7441  9B 9B 9B 9B   DB 9BH,9BH,9BH,9BH
+7445  9B 9B 9B 9B   DB 9BH,9BH,9BH,9BH
+7449  9B AA B0 B0   DB 9BH,0AAH,0B0H,0B0H
+744D  B0 B0 B0 B0   DB 0B0H,0B0H,0B0H,0B0H
+7451  B0 B0 AD A1   DB 0B0H,0B0H,0ADH,0A1H
+7455  98 90 90 90   DB 98H,90H,90H,90H
+7459  90 90 90 90   DB 90H,90H,90H,90H
+745D  90 90 90 90   DB 90H,90H,90H,90H
+7461  90 93 93 93   DB 90H,93H,93H,93H
+7465  9B 9B 9B 97   DB 9BH,9BH,9BH,97H
+7469  91 8B 87 80   DB 91H,8BH,87H,80H
+746D  7D 75 70 70   DB 7DH,75H,70H,70H
+7471  70 70 6D 60   DB 70H,70H,6DH,60H
+7475  60 62 6C 7F   DB 60H,62H,6CH,7FH
+7479  8F 9F AF BF   DB 8FH,9FH,0AFH,0BFH
+747D  CF D6 DB E0   DB 0CFH,0D6H,0DBH,0E0H
+7481  E0 E3 E3 E3   DB 0E0H,0E3H,0E3H,0E3H
+7485  E3 EB EB EB   DB 0E3H,0EBH,0EBH,0EBH
+7489  EB EB EB EB   DB 0EBH,0EBH,0EBH,0EBH
+748D  EB EB EB EB   DB 0EBH,0EBH,0EBH,0EBH
+7491  EB EB EB E3   DB 0EBH,0EBH,0EBH,0E3H
+7495  E0 DE D0 CF   DB 0E0H,0DEH,0D0H,0CFH
+7499  BE B3 BC BB   DB 0BEH,0B3H,0BCH,0BBH
+749D  C0 C4 C3 C3   DB 0C0H,0C4H,0C3H,0C3H
+74A1  C3 C3 C3 C3   DB 0C3H,0C3H,0C3H,0C3H
+74A5  C3 C3 C1 C0   DB 0C3H,0C3H,0C1H,0C0H
+74A9  BB BD B3 B1   DB 0BBH,0BDH,0B3H,0B1H
+74AD  AB A7 A1 9B   DB 0ABH,0A7H,0A1H,9BH
+74B1  9B A4 A3 A1   DB 9BH,0A4H,0A3H,0A1H
+74B5  9D 91 8B 8B   DB 9DH,91H,8BH,8BH
+74B9  87 81 7D 76   DB 87H,81H,7DH,76H
+74BD  6D 61 60 60   DB 6DH,61H,60H,60H
+74C1  60 60 60 64   DB 60H,60H,60H,64H
+74C5  6C 6B 6D 65   DB 6CH,6BH,6DH,65H
+74C9  60 5D 55 50   DB 60H,5DH,55H,50H
+74CD  4B 48 40 40   DB 4BH,48H,40H,40H
+74D1  40 40 40 40   DB 40H,40H,40H,40H
+74D5  42 49 4B 50   DB 42H,49H,4BH,50H
+74D9  52 53 53 5C   DB 52H,53H,53H,5CH
+74DD  62 6C 72 7B   DB 62H,6CH,72H,7BH
+74E1  82 8C 9F A0   DB 82H,8CH,9FH,0A0H
+74E5  A2 AB BF C0   DB 0A2H,0ABH,0BFH,0C0H
+74E9  C2 CC CB D2   DB 0C2H,0CCH,0CBH,0D2H
+74ED  DC E2 E3 E3   DB 0DCH,0E2H,0E3H,0E3H
+74F1  EC F0 F0 F0   DB 0ECH,0F0H,0F0H,0F0H
+74F5  F0 F0 F0 F0   DB 0F0H,0F0H,0F0H,0F0H
+74F9  F0 F2 F3 F3   DB 0F0H,0F2H,0F3H,0F3H
+74FD  F3 F3 F3 F3   DB 0F3H,0F3H,0F3H,0F3H
+7501  F3 F1 F0 F0   DB 0F3H,0F1H,0F0H,0F0H
+7505  F0 F0 F0 F3   DB 0F0H,0F0H,0F0H,0F3H
+7509  F5 F0 E7 E0   DB 0F5H,0F0H,0E7H,0E0H
+750D  DB DB DB DB   DB 0DBH,0DBH,0DBH,0DBH
+7511  E0 E0 E4 E3   DB 0E0H,0E0H,0E4H,0E3H
+7515  E6 E0 E0 E0   DB 0E6H,0E0H,0E0H,0E0H
+7519  DB DB DB DB   DB 0DBH,0DBH,0DBH,0DBH
+751D  DB DB DB DB   DB 0DBH,0DBH,0DBH,0DBH
+7521  DB DB DB E2   DB 0DBH,0DBH,0DBH,0E2H
+7525  E9 EB EB ED   DB 0E9H,0EBH,0EBH,0EDH
+7529  E5 E0 E0 DD   DB 0E5H,0E0H,0E0H,0DDH
+752D  D3 D3 D3 D5   DB 0D3H,0D3H,0D3H,0D5H
+7531  CB CB CB CB   DB 0CBH,0CBH,0CBH,0CBH
+7535  D0 CF BB 01   DB 0D0H,0CFH,0BBH,01H
+7539  7F BB 02 6F   DB 7FH,0BBH,02H,6FH
+753D  82 BB 5D 83   DB 82H,0BBH,5DH,83H
+7541  BB 50 89 C0   DB 0BBH,50H,89H,0C0H
+7545  4B 8B C0 4D   DB 4BH,8BH,0C0H,4DH
+7549  90 CC 40 92   DB 90H,0CCH,40H,92H
+754D  D4 3D 93 DB   DB 0D4H,3DH,93H,0DBH
+7551  31 93 E2 30   DB 31H,93H,0E2H,30H
+7555  99 EB 04 2B   DB 99H,0EBH,04H,2BH
+7559  9B F0 2E 9B   DB 9BH,0F0H,2EH,9BH
+755D  F0 2D A2 F4   DB 0F0H,2DH,0A2H,0F4H
+7561  25 A9 F3 1B   DB 25H,0A9H,0F3H,1BH
+7565  B2 F3 15 BC   DB 0B2H,0F3H,15H,0BCH
+7569  F3 10 C0 F3   DB 0F3H,10H,0C0H,0F3H
+756D  01 C0 F3 C4   DB 01H,0C0H,0F3H,0C4H
+7571  F3 CC F3 CB   DB 0F3H,0CCH,0F3H,0CBH
+7575  F3 CB F3 C7   DB 0F3H,0CBH,0F3H,0C7H
+7579  F3 C1 F3 BF   DB 0F3H,0C1H,0F3H,0BFH
+757D  F3 AB F3 A5   DB 0F3H,0ABH,0F3H,0A5H
+7581  F3 9B F3 93   DB 0F3H,9BH,0F3H,93H
+7585  F3 90 F3 8F   DB 0F3H,90H,0F3H,8FH
+7589  F1 7F F0 6B   DB 0F1H,7FH,0F0H,6BH
+758D  F0 65 ED 5B   DB 0F0H,65H,0EDH,5BH
+7591  E0 5D DD 50   DB 0E0H,5DH,0DDH,50H
+7595  D1 50 CB 4D   DB 0D1H,50H,0CBH,4DH
+7599  C3 41 C0 40   DB 0C3H,41H,0C0H,40H
+759D  BD 37 B0 31   DB 0BDH,37H,0B0H,31H
+75A1  AD 27 A1 23   DB 0ADH,27H,0A1H,23H
+75A5  9D 23 95 23   DB 9DH,23H,95H,23H
+75A9  90 25 8D 1E   DB 90H,25H,8DH,1EH
+75AD  80 10 7B 10   DB 80H,10H,7BH,10H
+75B1  77 10 71 10   DB 77H,10H,71H,10H
+75B5  6B 10 67 1E   DB 6BH,10H,67H,1EH
+75B9  61 24 5B 23   DB 'a$[#'
+75BD  5B 23 60 23   DB '[#`#'
+75C1  64 23 69 03   DB 'd#i',03H
+75C5  23 7F 8F 9F   DB 23H,7FH,8FH,9FH
+75C9  01 23 AF 23   DB 01H,23H,0AFH,23H
+75CD  BA 23 C0 23   DB 0BAH,23H,0C0H,23H
+75D1  C0 29 C2 2B   DB 0C0H,29H,0C2H,2BH
+75D5  C3 30 C9 34   DB 0C3H,30H,0C9H,34H
+75D9  CB 3C CB 4A   DB 0CBH,3CH,0CBH,4AH
+75DD  CB 5A D2 6F   DB 0CBH,5AH,0D2H,6FH
+75E1  D3 03 7F 8F   DB 0D3H,03H,7FH,8FH
+75E5  90 D5 01 90   DB 90H,0D5H,01H,90H
+75E9  D0 92 D0 93   DB 0D0H,92H,0D0H,93H
+75ED  D0 93 D0 9C   DB 0D0H,93H,0D0H,9CH
+75F1  D0 9B D0 9D   DB 0D0H,9BH,0D0H,9DH
+75F5  D0 95 D0 90   DB 0D0H,95H,0D0H,90H
+75F9  D0 8B D0 8B   DB 0D0H,8BH,0D0H,8BH
+75FD  D0 8B CB 8B   DB 0D0H,8BH,0CBH,8BH
+7601  CB 90 CB 90   DB 0CBH,90H,0CBH,90H
+7605  CB 90 CB 92   DB 0CBH,90H,0CBH,92H
+7609  CB 93 CB 93   DB 0CBH,93H,0CBH,93H
+760D  CB 91 CB 90   DB 0CBH,91H,0CBH,90H
+7611  CB 90 CB 90   DB 0CBH,90H,0CBH,90H
+7615  CB 90 CB 90   DB 0CBH,90H,0CBH,90H
+7619  CB 90 CB 90   DB 0CBH,90H,0CBH,90H
+761D  CB 90 CB 90   DB 0CBH,90H,0CBH,90H
+7621  CB 90 CB 90   DB 0CBH,90H,0CBH,90H
+7625  CB 90 CB 90   DB 0CBH,90H,0CBH,90H
+7629  CB 90 CB 90   DB 0CBH,90H,0CBH,90H
+762D  CB 90 CB 8B   DB 0CBH,90H,0CBH,8BH
+7631  CB 83 C3 80   DB 0CBH,83H,0C3H,80H
+7635  C0 7B C0 7B   DB 0C0H,7BH,0C0H,7BH
+7639  BB 7B BB 7B   DB 0BBH,7BH,0BBH,7BH
+763D  BD 7B B3 73   DB 0BDH,7BH,0B3H,73H
+7641  B3 75 B5 68   DB 0B3H,75H,0B5H,68H
+7645  B0 60 B0 60   DB 0B0H,60H,0B0H,60H
+7649  B0 60 B0 6A   DB 0B0H,60H,0B0H,6AH
+764D  B0 74 B0 79   DB 0B0H,74H,0B0H,79H
+7651  B0 7B B0 7B   DB 0B0H,7BH,0B0H,7BH
+7655  B2 7B B3 7B   DB 0B2H,7BH,0B3H,7BH
+7659  B9 80 BB 80   DB 0B9H,80H,0BBH,80H
+765D  C0 82 C2 89   DB 0C0H,82H,0C2H,89H
+7661  C9 8B CB 8B   DB 0C9H,8BH,0CBH,8BH
+7665  CB 8B CB 90   DB 0CBH,8BH,0CBH,90H
+7669  D0 90 D0 90   DB 0D0H,90H,0D0H,90H
+766D  D2 92 DC 93   DB 0D2H,92H,0DCH,93H
+7671  DB 99 DB 9B   DB 0DBH,99H,0DBH,9BH
+7675  DB 9B DB A0   DB 0DBH,9BH,0DBH,0A0H
+7679  DB A0 DB A0   DB 0DBH,0A0H,0DBH,0A0H
+767D  DB A0 E0 A0   DB 0DBH,0A0H,0E0H,0A0H
+7681  E0 9B E0 9B   DB 0E0H,9BH,0E0H,9BH
+7685  E0 9B E0 9B   DB 0E0H,9BH,0E0H,9BH
+7689  E0 9B DB 9B   DB 0E0H,9BH,0DBH,9BH
+768D  DD 9B D3 9D   DB 0DDH,9BH,0D3H,9DH
+7691  D9 95 DB 90   DB 0D9H,95H,0DBH,90H
+7695  E0 90 E2 90   DB 0E0H,90H,0E2H,90H
+7699  E3 8D EB 85   DB 0E3H,8DH,0EBH,85H
+769D  EB 80 F0 78   DB 0EBH,80H,0F0H,78H
+76A1  F0 70 F0 68   DB 0F0H,70H,0F0H,68H
+76A5  F0 60 F0 58   DB 0F0H,60H,0F0H,58H
+76A9  F0 50 F0 48   DB 0F0H,50H,0F0H,48H
+76AD  F0 40 F0 40   DB 0F0H,40H,0F0H,40H
+76B1  F0 40 F0 40   DB 0F0H,40H,0F0H,40H
+76B5  F0 3B F0 3B   DB 0F0H,3BH,0F0H,3BH
+76B9  F0 3B F4 3D   DB 0F0H,3BH,0F4H,3DH
+76BD  F3 33 F3 33   DB 0F3H,33H,0F3H,33H
+76C1  F3 33 F3 33   DB 0F3H,33H,0F3H,33H
+76C5  F3 33 F3 33   DB 0F3H,33H,0F3H,33H
+76C9  F1 3C EB 42   DB 0F1H,3CH,0EBH,42H
+76CD  E7 43 E3 4C   DB 0E7H,43H,0E3H,4CH
+76D1  E9 4B EB 48   DB 0E9H,4BH,0EBH,48H
+76D5  F0 3D F0 33   DB 0F0H,3DH,0F0H,33H
+76D9  F0 33 F0 33   DB 0F0H,33H,0F0H,33H
+76DD  F0 33 F0 33   DB 0F0H,33H,0F0H,33H
+76E1  F0 35 F0 30   DB 0F0H,35H,0F0H,30H
+76E5  F0 30 F0 2B   DB 0F0H,30H,0F0H,2BH
+76E9  EF 2B DF 2B   DB 0EFH,2BH,0DFH,2BH
+76ED  C8 2B BB 2B   DB 0C8H,2BH,0BBH,2BH
+76F1  B8 2B AF 2B   DB 0B8H,2BH,0AFH,2BH
+76F5  98 2B 8F      DB 98H,2BH,8FH
+76F8  2B 78 2B 67   DB '+x+g'
+76FC  2D 60 21 6A   DB '-`!j'
+7700  20 6B 20 63   DB ' k c'
+7704  03            DB 03H
+7705  20 6C 7F 8F   DB 20H,6CH,7FH,8FH
+7709  20 9F AF BF   DB 20H,9FH,0AFH,0BFH
+770D  01 20 C0 20   DB 01H,20H,0C0H,20H
+7711  C0 23 C0 23   DB 0C0H,23H,0C0H,23H
+7715  C0 29 C0 03   DB 0C0H,29H,0C0H,03H
+7719  2B 9F AF BF   DB 2BH,9FH,0AFH,0BFH
+771D  2B 6B 7F 8F   DB 2BH,6BH,7FH,8FH
+7721  01 26 63 18   DB 01H,26H,63H,18H
+7725  60 10 5B 10   DB 60H,10H,5BH,10H
+7729  5B 10 5B 1A   DB 5BH,10H,5BH,1AH
+772D  5B 26 62 2D   DB 5BH,26H,62H,2DH
+7731  6C 21 7A 20   DB 6CH,21H,7AH,20H
+7735  8A 05 1F 8B   DB 8AH,05H,1FH,8BH
+7739  00 9A A2 A9   DB 00H,9AH,0A2H,0A9H
+773D  AB B2 BC BB   DB 0ABH,0B2H,0BCH,0BBH
+7741  BB BB CA CB   DB 0BBH,0BBH,0CAH,0CBH
+7745  D2 D3 D3 D3   DB 0D2H,0D3H,0D3H,0D3H
+7749  D3 D3 D3 D5   DB 0D3H,0D3H,0D3H,0D5H
+774D  CB CB CB CB   DB 0CBH,0CBH,0CBH,0CBH
+7751  CB D0 D0 D0   DB 0CBH,0D0H,0D0H,0D0H
+7755  D4 DC E0 E9   DB 0D4H,0DCH,0E0H,0E9H
+7759  F4 F3 F3 F3   DB 0F4H,0F3H,0F3H,0F3H
+775D  F3 F3 F3 F3   DB 0F3H,0F3H,0F3H,0F3H
+7761  F1 F0 F0 F0   DB 0F1H,0F0H,0F0H,0F0H
+7765  F0 F0 F0 EB   DB 0F0H,0F0H,0F0H,0EBH
+7769  EB EB EB EB   DB 0EBH,0EBH,0EBH,0EBH
+776D  EB F0 F0 F0   DB 0EBH,0F0H,0F0H,0F0H
+7771  ED E5 E0 DB   DB 0EDH,0E5H,0E0H,0DBH
+7775  DB DB DB DB   DB 0DBH,0DBH,0DBH,0DBH
+7779  DB DB DB DB   DB 0DBH,0DBH,0DBH,0DBH
+777D  DB DB DB DB   DB 0DBH,0DBH,0DBH,0DBH
+7781  E0 E3 E3 E3   DB 0E0H,0E3H,0E3H,0E3H
+7785  E3 E3 E3 E3   DB 0E3H,0E3H,0E3H,0E3H
+7789  E3 E3 E3 E3   DB 0E3H,0E3H,0E3H,0E3H
+778D  E1 E0 E0 E0   DB 0E1H,0E0H,0E0H,0E0H
+7791  DD D3 D3 D3   DB 0DDH,0D3H,0D3H,0D3H
+7795  D1 CB C7 C0   DB 0D1H,0CBH,0C7H,0C0H
+7799  C0 C0 C0 C0   DB 0C0H,0C0H,0C0H,0C0H
+779D  C0 C0 C0 C0   DB 0C0H,0C0H,0C0H,0C0H
+77A1  C0 C0 C0 C0   DB 0C0H,0C0H,0C0H,0C0H
+77A5  C0 C3 C3 C3   DB 0C0H,0C3H,0C3H,0C3H
+77A9  C3 C3 CB CB   DB 0C3H,0C3H,0CBH,0CBH
+77AD  CB CB CB CB   DB 0CBH,0CBH,0CBH,0CBH
+77B1  C7 C1 C0 C0   DB 0C7H,0C1H,0C0H,0C0H
+77B5  C0 C0 C0 C0   DB 0C0H,0C0H,0C0H,0C0H
+77B9  C0 C0 C0 C0   DB 0C0H,0C0H,0C0H,0C0H
+77BD  C0 C0 B8 B0   DB 0C0H,0C0H,0B8H,0B0H
+77C1  B0 B0 B0 B0   DB 0B0H,0B0H,0B0H,0B0H
+77C5  B0 B0 B0 B4   DB 0B0H,0B0H,0B0H,0B4H
+77C9  B3 B3 B3 B1   DB 0B3H,0B3H,0B3H,0B1H
+77CD  A8 9D 95 8B   DB 0A8H,9DH,95H,8BH
+77D1  8B 8B 8B 8B   DB 8BH,8BH,8BH,8BH
+77D5  8D 81 78 68   DB 8DH,81H,78H,68H
+77D9  5B 5B 5B 5B   DB 5BH,5BH,5BH,5BH
+77DD  58 4D 43 43   DB 58H,4DH,43H,43H
+77E1  43 43 43 43   DB 43H,43H,43H,43H
+77E5  49 4B 4B 5A   DB 49H,4BH,4BH,5AH
+77E9  6F 7F 82 83   DB 6FH,7FH,82H,83H
+77ED  83 89 9A 9B   DB 83H,89H,9AH,9BH
+77F1  9B 9B 9B 9B   DB 9BH,9BH,9BH,9BH
+77F5  9B 9D 95 90   DB 9BH,9DH,95H,90H
+77F9  8B 8B 92 99   DB 8BH,8BH,92H,99H
+77FD  9B A2 AC BA   DB 9BH,0A2H,0ACH,0BAH
+7801  C2 CC D0 D0   DB 0C2H,0CCH,0D0H,0D0H
+7805  D0 D0 CB C7   DB 0D0H,0D0H,0CBH,0C7H
+7809  C1 B7 B0 AD   DB 0C1H,0B7H,0B0H,0ADH
+780D  A1 A0 9B 93   DB 0A1H,0A0H,9BH,93H
+7811  93 95 90 90   DB 93H,95H,90H,90H
+7815  92 99 9B A0   DB 92H,99H,9BH,0A0H
+7819  A0 A0 A0 A0   DB 0A0H,0A0H,0A0H,0A0H
+781D  A0 A0 A0 A0   DB 0A0H,0A0H,0A0H,0A0H
+7821  A0 9B 9B 9B   DB 0A0H,9BH,9BH,9BH
+7825  9B 9B 9B 93   DB 9BH,9BH,9BH,93H
+7829  93 91 90 90   DB 93H,91H,90H,90H
+782D  8B 8B 8B 8B   DB 8BH,8BH,8BH,8BH
+7831  90 90 99 AA   DB 90H,90H,99H,0AAH
+7835  BA BB BB C0   DB 0BAH,0BBH,0BBH,0C0H
+7839  C0 C0 C0 C0   DB 0C0H,0C0H,0C0H,0C0H
+783D  BB BB BB BB   DB 0BBH,0BBH,0BBH,0BBH
+7841  BB BB CA CB   DB 0BBH,0BBH,0CAH,0CBH
+7845  D0 D0 D0 D0   DB 0D0H,0D0H,0D0H,0D0H
+7849  C8 B8 AD A0   DB 0C8H,0B8H,0ADH,0A0H
+784D  A0 9D 93 93   DB 0A0H,9DH,93H,93H
+7851  9C AA BF CA   DB 9CH,0AAH,0BFH,0CAH
+7855  DA E4 EC EB   DB 0DAH,0E4H,0ECH,0EBH
+7859  EB EB E8 E0   DB 0EBH,0EBH,0E8H,0E0H
+785D  DB D5 D0 CD   DB 0DBH,0D5H,0D0H,0CDH
+7861  C1 C0 BD B1   DB 0C1H,0C0H,0BDH,0B1H
+7865  AB AB AB B6   DB 0ABH,0ABH,0ABH,0B6H
+7869  B3 B3 B1 AB   DB 0B3H,0B3H,0B1H,0ABH
+786D  AB AB AB A3   DB 0ABH,0ABH,0ABH,0A3H
+7871  A3 A1 A0 9D   DB 0A3H,0A1H,0A0H,9DH
+7875  91 88 7B 7D   DB 91H,88H,7BH,7DH
+7879  75 68 60 5B   DB 75H,68H,60H,5BH
+787D  57 53 50 4B   DB 57H,53H,50H,4BH
+7881  43 43 40 40   DB 43H,43H,40H,40H
+7885  40 40 40 40   DB 40H,40H,40H,40H
+7889  3B 01 10 3B   DB 3BH,01H,10H,3BH
+788D  12 3B 13 3B   DB 12H,3BH,13H,3BH
+7891  13 3B 13 3B   DB 13H,3BH,13H,3BH
+7895  13 3B 13 3B   DB 13H,3BH,13H,3BH
+7899  13 3B 13 3B   DB 13H,3BH,13H,3BH
+789D  13 3B 13 3D   DB 13H,3BH,13H,3DH
+78A1  13 33 13 33   DB 13H,33H,13H,33H
+78A5  13 33 13 33   DB 13H,33H,13H,33H
+78A9  13 33 13 33   DB 13H,33H,13H,33H
+78AD  13 33 13 33   DB 13H,33H,13H,33H
+78B1  13 33 13 31   DB 13H,33H,13H,31H
+78B5  13 30 13 32   DB 13H,30H,13H,32H
+78B9  13 33 13 39   DB 13H,33H,13H,39H
+78BD  13 3B 13 42   DB 13H,3BH,13H,42H
+78C1  03 13 49 78   DB 03H,13H,49H,78H
+78C5  8A 13 5F 68   DB 8AH,13H,5FH,68H
+78C9  9A 13 AF BF   DB 9AH,13H,0AFH,0BFH
+78CD  CF 01 13 DA   DB 0CFH,01H,13H,0DAH
+78D1  13 E0 13 E2   DB 13H,0E0H,13H,0E2H
+78D5  13 E3 13 E3   DB 13H,0E3H,13H,0E3H
+78D9  13 E3 13 E3   DB 13H,0E3H,13H,0E3H
+78DD  1C E3 04 22   DB 1CH,0E3H,04H,22H
+78E1  E3 2C EC 30   DB 0E3H,2CH,0ECH,30H
+78E5  EB 33 EB 3B   DB 0EBH,33H,0EBH,3BH
+78E9  EB 03 4A 58   DB 0EBH,03H,4AH,58H
+78ED  6A EB 7A 88   DB 6AH,0EBH,7AH,88H
+78F1  9A EB 01 AA   DB 9AH,0EBH,01H,0AAH
+78F5  EB B2 EB B3   DB 0EBH,0B2H,0EBH,0B3H
+78F9  EB 01 B1 EB   DB 0EBH,01H,0B1H,0EBH
+78FD  01 A8 EB 98   DB 01H,0A8H,0EBH,98H
+7901  EB 88 EB 78   DB 0EBH,88H,0EBH,78H
+7905  EB 6D EB 61   DB 0EBH,6DH,0EBH,61H
+7909  EB 58 EB 4B   DB 0EBH,58H,0EBH,4BH
+790D  EB 47 EB 43   DB 0EBH,47H,0EBH,43H
+7911  EB 43 F0 4C   DB 0EBH,43H,0F0H,4CH
+7915  F0 54 F0 59   DB 0F0H,54H,0F0H,59H
+7919  F0 5B F0 62   DB 0F0H,5BH,0F0H,62H
+791D  F0 6C F0 72   DB 0F0H,6CH,0F0H,72H
+7921  EB 73 EB 73   DB 0EBH,73H,0EBH,73H
+7925  EB 73 EB 73   DB 0EBH,73H,0EBH,73H
+7929  ED 73 E3 73   DB 0EDH,73H,0E3H,73H
+792D  E3 73 E3 73   DB 0E3H,73H,0E3H,73H
+7931  E9 73 EB 73   DB 0E9H,73H,0EBH,73H
+7935  F2 73 F3 7B   DB 0F2H,73H,0F3H,7BH
+7939  F3 7B F3 7B   DB 0F3H,7BH,0F3H,7BH
+793D  F3 7B F3 7B   DB 0F3H,7BH,0F3H,7BH
+7941  F3 7B F5 7B   DB 0F3H,7BH,0F5H,7BH
+7945  ED 7D E1 73   DB 0EDH,7DH,0E1H,73H
+7949  E0 73 E0 73   DB 0E0H,73H,0E0H,73H
+794D  E4 73 E3 73   DB 0E4H,73H,0E3H,73H
+7951  E3 7B E1 7B   DB 0E3H,7BH,0E1H,7BH
+7955  DB 82 DB 83   DB 0DBH,82H,0DBH,83H
+7959  DB 81 DB 78   DB 0DBH,81H,0DBH,78H
+795D  DB 68 DB 58   DB 0DBH,68H,0DBH,58H
+7961  E0 4B E0 4B   DB 0E0H,4BH,0E0H,4BH
+7965  E0 4B E0 4B   DB 0E0H,4BH,0E0H,4BH
+7969  E0 52 E0 5B   DB 0E0H,52H,0E0H,5BH
+796D  E0 6A E0 7A   DB 0E0H,6AH,0E0H,7AH
+7971  E0 80 E0 80   DB 0E0H,80H,0E0H,80H
+7975  E3 80 E3 80   DB 0E3H,80H,0E3H,80H
+7979  E3 80 E3 80   DB 0E3H,80H,0E3H,80H
+797D  E3 80 E3 80   DB 0E3H,80H,0E3H,80H
+7981  E3 80 E3 80   DB 0E3H,80H,0E3H,80H
+7985  E3 80 E3 80   DB 0E3H,80H,0E3H,80H
+7989  E3 80 E3 80   DB 0E3H,80H,0E3H,80H
+798D  E3 80 E3 80   DB 0E3H,80H,0E3H,80H
+7991  E3 80 E3 80   DB 0E3H,80H,0E3H,80H
+7995  E0 7D E0 71   DB 0E0H,7DH,0E0H,71H
+7999  E0 68 DB 58   DB 0E0H,68H,0DBH,58H
+799D  DB 50 DB 4D   DB 0DBH,50H,0DBH,4DH
+79A1  D3 40 D3 3E   DB 0D3H,40H,0D3H,3EH
+79A5  D3 30 D0 30   DB 0D3H,30H,0D0H,30H
+79A9  D0 30 D0 30   DB 0D0H,30H,0D0H,30H
+79AD  D0 30 D0 3A   DB 0D0H,30H,0D0H,3AH
+79B1  D0 3B D0 3B   DB 0D0H,3BH,0D0H,3BH
+79B5  D0 3B D0 3B   DB 0D0H,3BH,0D0H,3BH
+79B9  D0 3B D0 3B   DB 0D0H,3BH,0D0H,3BH
+79BD  D0 3B D0 3B   DB 0D0H,3BH,0D0H,3BH
+79C1  D0 46 D3 4B   DB 0D0H,46H,0D3H,4BH
+79C5  DB 50 E0 50   DB 0DBH,50H,0E0H,50H
+79C9  E3 50 EB 50   DB 0E3H,50H,0EBH,50H
+79CD  EB 50 EB 50   DB 0EBH,50H,0EBH,50H
+79D1  EB 50 EB 50   DB 0EBH,50H,0EBH,50H
+79D5  EB 50 EB 50   DB 0EBH,50H,0EBH,50H
+79D9  EB 50 E6 50   DB 0EBH,50H,0E6H,50H
+79DD  DB 50 D3 50   DB 0DBH,50H,0D3H,50H
+79E1  D0 50 CB 50   DB 0D0H,50H,0CBH,50H
+79E5  CB 50 CB 50   DB 0CBH,50H,0CBH,50H
+79E9  D0 50 DA 50   DB 0D0H,50H,0DAH,50H
+79ED  EA 53 EB 53   DB 0EAH,53H,0EBH,53H
+79F1  EB 53 F0 50   DB 0EBH,53H,0F0H,50H
+79F5  F0 03 2B 3F   DB 0F0H,03H,2BH,3FH
+79F9  4F F0 01 23   DB 4FH,0F0H,01H,23H
+79FD  F0 20 F0 22   DB 0F0H,20H,0F0H,22H
+7A01  EB 23 E5 23   DB 0EBH,23H,0E5H,23H
+7A05  DB 23 D3 23   DB 0DBH,23H,0D3H,23H
+7A09  D0 23 D0 23   DB 0D0H,23H,0D0H,23H
+7A0D  D0 23 D0 23   DB 0D0H,23H,0D0H,23H
+7A11  D3 23 DB 23   DB 0D3H,23H,0DBH,23H
+7A15  E0 2B E3 30   DB 0E0H,2BH,0E3H,30H
+7A19  EB 30 F0 30   DB 0EBH,30H,0F0H,30H
+7A1D  F3 2B F3 23   DB 0F3H,2BH,0F3H,23H
+7A21  F3 20 F3 20   DB 0F3H,20H,0F3H,20H
+7A25  F0 20 EE 20   DB 0F0H,20H,0EEH,20H
+7A29  E0 20 DB 23   DB 0E0H,20H,0DBH,23H
+7A2D  DB 23 DB 23   DB 0DBH,23H,0DBH,23H
+7A31  E0 2B E3 2B   DB 0E0H,2BH,0E3H,2BH
+7A35  EB 2B F0 30   DB 0EBH,2BH,0F0H,30H
+7A39  F0 30 F0 30   DB 0F0H,30H,0F0H,30H
+7A3D  F0 30 EE 2B   DB 0F0H,30H,0EEH,2BH
+7A41  E0 2D DE 20   DB 0E0H,2DH,0DEH,20H
+7A45  D0 20 D0 20   DB 0D0H,20H,0D0H,20H
+7A49  D0 23 CB 2B   DB 0D0H,23H,0CBH,2BH
+7A4D  CB 30 CB 33   DB 0CBH,30H,0CBH,33H
+7A51  CB 3C CB 4A   DB 0CBH,3CH,0CBH,4AH
+7A55  CB 4B CB 5F   DB 0CBH,4BH,0CBH,5FH
+7A59  CB 6A CB 6B   DB 0CBH,6AH,0CBH,6BH
+7A5D  CB 6B CB 6B   DB 0CBH,6BH,0CBH,6BH
+7A61  CB 6B CB 6B   DB 0CBH,6BH,0CBH,6BH
+7A65  CB 6B C3 6B   DB 0CBH,6BH,0C3H,6BH
+7A69  C0 6B BB 63   DB 0C0H,6BH,0BBH,63H
+7A6D  BB 65 BB 58   DB 0BBH,65H,0BBH,58H
+7A71  BB 50 BB 50   DB 0BBH,50H,0BBH,50H
+7A75  BB 50 BB 5A   DB 0BBH,50H,0BBH,5AH
+7A79  BB 5B BB 51   DB 0BBH,5BH,0BBH,51H
+7A7D  BB 4B BB 4B   DB 0BBH,4BH,0BBH,4BH
+7A81  BB 4B BB 4B   DB 0BBH,4BH,0BBH,4BH
+7A85  BB 50 BB 53   DB 0BBH,50H,0BBH,53H
+7A89  BB 02 4F 5B   DB 0BBH,02H,4FH,5BH
+7A8D  BB 03 40 50   DB 0BBH,03H,40H,50H
+7A91  60 BB 40 53   DB 60H,0BBH,40H,53H
+7A95  63 BB 40 5B   DB 63H,0BBH,40H,5BH
+7A99  63 BB 02 40   DB 63H,0BBH,02H,40H
+7A9D  60 BB 01 3B   DB 60H,0BBH,01H,3BH
+7AA1  BB 33 BB 30   DB 0BBH,33H,0BBH,30H
+7AA5  BB 2F BB 20   DB 0BBH,2FH,0BBH,20H
+7AA9  BB 20 BB 20   DB 0BBH,20H,0BBH,20H
+7AAD  BB 20 BB 20   DB 0BBH,20H,0BBH,20H
+7AB1  BB 23 BB 2B   DB 0BBH,23H,0BBH,2BH
+7AB5  BB 2B BB 3F   DB 0BBH,2BH,0BBH,3FH
+7AB9  BB 40 B3 40   DB 0BBH,40H,0B3H,40H
+7ABD  B3 40 B3 40   DB 0B3H,40H,0B3H,40H
+7AC1  B3 40 B3 40   DB 0B3H,40H,0B3H,40H
+7AC5  B0 40 AB 43   DB 0B0H,40H,0ABH,43H
+7AC9  AB 4B AB 50   DB 0ABH,4BH,0ABH,50H
+7ACD  A3 53 A0 5B   DB 0A3H,53H,0A0H,5BH
+7AD1  A0 60 A0 60   DB 0A0H,60H,0A0H,60H
+7AD5  A0 60 A0 60   DB 0A0H,60H,0A0H,60H
+7AD9  9B 60 93 60   DB 9BH,60H,93H,60H
+7ADD  93 60 93 60   DB 93H,60H,93H,60H
+7AE1  93 60 93 60   DB 93H,60H,93H,60H
+7AE5  93 60 93 60   DB 93H,60H,93H,60H
+7AE9  93 60 93 60   DB 93H,60H,93H,60H
+7AED  93 60 93 60   DB 93H,60H,93H,60H
+7AF1  93 60 93 60   DB 93H,60H,93H,60H
+7AF5  93 60 93 60   DB 93H,60H,93H,60H
+7AF9  93 5B 93 53   DB 93H,5BH,93H,53H
+7AFD  93 50 93 4B   DB 93H,50H,93H,4BH
+7B01  93 4B 93 4B   DB 93H,4BH,93H,4BH
+7B05  93 4B 93 4B   DB 93H,4BH,93H,4BH
+7B09  93 43 93 40   DB 93H,43H,93H,40H
+7B0D  93 3B 93 33   DB 93H,3BH,93H,33H
+7B11  93 36 93 2B   DB 93H,36H,93H,2BH
+7B15  93 06 23 93   DB 93H,06H,23H,93H
+7B19  23 93 23 93   DB 23H,93H,23H,93H
+7B1D  23 93 23 95   DB 23H,93H,23H,95H
+7B21  23 90 23 8B   DB 23H,90H,23H,8BH
+7B25  23 8D 23 83   DB 23H,8DH,23H,83H
+7B29  23 81 23 80   DB 23H,81H,23H,80H
+7B2D  23 80 23 7B   DB 23H,80H,23H,7BH
+7B31  25 7B 18 7B   DB 25H,7BH,18H,7BH
+7B35  10 7B 10 7B   DB 10H,7BH,10H,7BH
+7B39  10 7B 1A 7B   DB 10H,7BH,1AH,7BH
+7B3D  24 7B 23 7B   DB 24H,7BH,23H,7BH
+7B41  23 80 23 80   DB 23H,80H,23H,80H
+7B45  23 80 23 84   DB 23H,80H,23H,84H
+7B49  23 83 23 89   DB 23H,83H,23H,89H
+7B4D  23 8B 23 8B   DB 23H,8BH,23H,8BH
+7B51  23 90 23 90   DB 23H,90H,23H,90H
+7B55  23 90 23 90   DB 23H,90H,23H,90H
+7B59  23 90 23 90   DB 23H,90H,23H,90H
+7B5D  23 90 23 90   DB 23H,90H,23H,90H
+7B61  23 90 2B 93   DB 23H,90H,2BH,93H
+7B65  04 30 9B 33   DB 04H,30H,9BH,33H
+7B69  9B 3C 9B 3B   DB 9BH,3CH,9BH,3BH
+7B6D  9B 44 9B 4B   DB 9BH,44H,9BH,4BH
+7B71  9B 50 9B 50   DB 9BH,50H,9BH,50H
+7B75  9B 50 9B 50   DB 9BH,50H,9BH,50H
+7B79  9B 50 9B 4B   DB 9BH,50H,9BH,4BH
+7B7D  9B 4B 9B 4B   DB 9BH,4BH,9BH,4BH
+7B81  9B 43 9B 40   DB 9BH,43H,9BH,40H
+7B85  9B 40 9B 40   DB 9BH,40H,9BH,40H
+7B89  9B 40 9B 40   DB 9BH,40H,9BH,40H
+7B8D  9B 3B 9B 3B   DB 9BH,3BH,9BH,3BH
+7B91  9B 33 9B 33   DB 9BH,33H,9BH,33H
+7B95  9B 33 9B 33   DB 9BH,33H,9BH,33H
+7B99  9B 33 9B 33   DB 9BH,33H,9BH,33H
+7B9D  9B 35 9B 30   DB 9BH,35H,9BH,30H
+7BA1  9B 30 9B 30   DB 9BH,30H,9BH,30H
+7BA5  9B 30 9B 30   DB 9BH,30H,9BH,30H
+7BA9  9B 30 9B 30   DB 9BH,30H,9BH,30H
+7BAD  9B 33 9B 3B   DB 9BH,33H,9BH,3BH
+7BB1  9B 3B 9B 3B   DB 9BH,3BH,9BH,3BH
+7BB5  9B 3B 9B 3B   DB 9BH,3BH,9BH,3BH
+7BB9  9B 33 9B 30   DB 9BH,33H,9BH,30H
+7BBD  9B 30 9B 30   DB 9BH,30H,9BH,30H
+7BC1  9B 30 9B 30   DB 9BH,30H,9BH,30H
+7BC5  9B 30 9B 30   DB 9BH,30H,9BH,30H
+7BC9  9B 30 9B 30   DB 9BH,30H,9BH,30H
+7BCD  9B 30 9B 30   DB 9BH,30H,9BH,30H
+7BD1  9B 30 9B 30   DB 9BH,30H,9BH,30H
+7BD5  9B 30 9B 30   DB 9BH,30H,9BH,30H
+7BD9  9B 30 9B 30   DB 9BH,30H,9BH,30H
+7BDD  9B 30 9B 30   DB 9BH,30H,9BH,30H
+7BE1  9B 30 9B 30   DB 9BH,30H,9BH,30H
+7BE5  9B 30 9B 30   DB 9BH,30H,9BH,30H
+7BE9  9B 30 9B 30   DB 9BH,30H,9BH,30H
+7BED  9B 33 9B 33   DB 9BH,33H,9BH,33H
+7BF1  9B 3B 9B 3B   DB 9BH,3BH,9BH,3BH
+7BF5  9B 44 9B 43   DB 9BH,44H,9BH,43H
+7BF9  9B 4C 9B 52   DB 9BH,4CH,9BH,52H
+7BFD  A2 53 AB 03   DB 0A2H,53H,0ABH,03H
+7C01  5C BF CF DF   DB 5CH,0BFH,0CFH,0DFH
+7C05  01 6A EF 70   DB 01H,6AH,0EFH,70H
+7C09  F0 74 F3 7C   DB 0F0H,74H,0F3H,7CH
+7C0D  F3 80 F3 84   DB 0F3H,80H,0F3H,84H
+7C11  F3 8C F3 90   DB 0F3H,8CH,0F3H,90H
+7C15  F3 94 F3 9C   DB 0F3H,94H,0F3H,9CH
+7C19  F3 9B F3 9B   DB 0F3H,9BH,0F3H,9BH
+7C1D  F3 9B F3 9B   DB 0F3H,9BH,0F3H,9BH
+7C21  F3 9B F3 98   DB 0F3H,9BH,0F3H,98H
+7C25  F3 03 68 7A   DB 0F3H,03H,68H,7AH
+7C29  88 F3 01 5B   DB 88H,0F3H,01H,5BH
+7C2D  F3 55 F3 48   DB 0F3H,55H,0F3H,48H
+7C31  F5 40 F0 40   DB 0F5H,40H,0F0H,40H
+7C35  EB 37 ED 30   DB 0EBH,37H,0EDH,30H
+7C39  E5 28 E0 1B   DB 0E5H,28H,0E0H,1BH
+7C3D  DB 1B D7 1B   DB 0DBH,1BH,0D7H,1BH
+7C41  D1 1B D0 1B   DB 0D1H,1BH,0D0H,1BH
+7C45  CB 1B CD 1D   DB 0CBH,1BH,0CDH,1DH
+7C49  CB 10 D0 10   DB 0CBH,10H,0D0H,10H
+7C4D  D9 10 DD 10   DB 0D9H,10H,0DDH,10H
+7C51  DD 10 DD 10   DB 0DDH,10H,0DDH,10H
+7C55  DD 10 DD 1A   DB 0DDH,10H,0DDH,1AH
+7C59  D1 1B C8 20   DB 0D1H,1BH,0C8H,20H
+7C5D  C0 20 C0 20   DB 0C0H,20H,0C0H,20H
+7C61  BB 20 B7 20   DB 0BBH,20H,0B7H,20H
+7C65  B3 20 B0 20   DB 0B3H,20H,0B0H,20H
+7C69  AB 23 A3 23   DB 0ABH,23H,0A3H,23H
+7C6D  A1 23 A0 23   DB 0A1H,23H,0A0H,23H
+7C71  9B 23 9D 20   DB 9BH,23H,9DH,20H
+7C75  93 20 93 20   DB 93H,20H,93H,20H
+7C79  90 1B 90 1D   DB 90H,1BH,90H,1DH
+7C7D  92 13 93 13   DB 92H,13H,93H,13H
+7C81  93 11 99 10   DB 93H,11H,99H,10H
+7C85  9D 10 9D 10   DB 9DH,10H,9DH,10H
+7C89  9D 10 9D 10   DB 9DH,10H,9DH,10H
+7C8D  9D 10 9D 10   DB 9DH,10H,9DH,10H
+7C91  9D 10 93 12   DB 9DH,10H,93H,12H
+7C95  91 13 90 19   DB 91H,13H,90H,19H
+7C99  8B 1B 8B 1B   DB 8BH,1BH,8BH,1BH
+7C9D  8B 1B 8B 1B   DB 8BH,1BH,8BH,1BH
+7CA1  90 1B 93 22   DB 90H,1BH,93H,22H
+7CA5  9C 29 9B 2B   DB 9CH,29H,9BH,2BH
+7CA9  A2 2B A9 2B   DB 0A2H,2BH,0A9H,2BH
+7CAD  AB 2D AB 21   DB 0ABH,2DH,0ABH,21H
+7CB1  B0 20 B2 20   DB 0B0H,20H,0B2H,20H
+7CB5  B3 20 B9 20   DB 0B3H,20H,0B9H,20H
+7CB9  BB 20 C2 20   DB 0BBH,20H,0C2H,20H
+7CBD  C3 20 C9 22   DB 0C3H,20H,0C9H,22H
+7CC1  CB 23 CB 23   DB 0CBH,23H,0CBH,23H
+7CC5  C7 23 C3 23   DB 0C7H,23H,0C3H,23H
+7CC9  C0 23 C0 23   DB 0C0H,23H,0C0H,23H
+7CCD  BB 23 BD 23   DB 0BBH,23H,0BDH,23H
+7CD1  B3 20 B0 17   DB 0B3H,20H,0B0H,17H
+7CD5  B0 11 B0 10   DB 0B0H,11H,0B0H,10H
+7CD9  BA 10 BD 10   DB 0BAH,10H,0BDH,10H
+7CDD  BD 10 BD 10   DB 0BDH,10H,0BDH,10H
+7CE1  BD 10 BD 10   DB 0BDH,10H,0BDH,10H
+7CE5  B1 10 BA 1A   DB 0B1H,10H,0BAH,1AH
+7CE9  BB 1B C0 22   DB 0BBH,1BH,0C0H,22H
+7CED  C2 29 C3 2B   DB 0C2H,29H,0C3H,2BH
+7CF1  C3 32 C3 33   DB 0C3H,32H,0C3H,33H
+7CF5  C3 3B C3 3B   DB 0C3H,3BH,0C3H,3BH
+7CF9  C3 3B C5 03   DB 0C3H,3BH,0C5H,03H
+7CFD  40 98 AA B8   DB 40H,98H,0AAH,0B8H
+7D01  01 40 90 40   DB 01H,40H,90H,40H
+7D05  90 40 90 40   DB 90H,40H,90H,40H
+7D09  90 40 90 40   DB 90H,40H,90H,40H
+7D0D  90 40 90 40   DB 90H,40H,90H,40H
+7D11  90 40 90 40   DB 90H,40H,90H,40H
+7D15  90 40 90 40   DB 90H,40H,90H,40H
+7D19  90 40 90 40   DB 90H,40H,90H,40H
+7D1D  90 40 90 40   DB 90H,40H,90H,40H
+7D21  90 40 90 40   DB 90H,40H,90H,40H
+7D25  90 40 90 40   DB 90H,40H,90H,40H
+7D29  90 03 2E 3F   DB 90H,03H,2EH,3FH
+7D2D  40 90 06 01   DB 40H,90H,06H,01H
+7D31  23 90 23 90   DB 23H,90H,23H,90H
+7D35  23 90 02 1F   DB 23H,90H,02H,1FH
+7D39  26 90 01 10   DB 26H,90H,01H,10H
+7D3D  90 10 90 10   DB 90H,10H,90H,10H
+7D41  90 10 90 10   DB 90H,10H,90H,10H
+7D45  90 1F 90 1B   DB 90H,1FH,90H,1BH
+7D49  90 1B 90 1B   DB 90H,1BH,90H,1BH
+7D4D  90 1F 90 10   DB 90H,1FH,90H,10H
+7D51  90 10 90 10   DB 90H,10H,90H,10H
+7D55  90 10 90 10   DB 90H,10H,90H,10H
+7D59  90 02 1F 20   DB 90H,02H,1FH,20H
+7D5D  90 01 20 90   DB 90H,01H,20H,90H
+7D61  20 90 20 90   DB 20H,90H,20H,90H
+7D65  20 90 20 90   DB 20H,90H,20H,90H
+7D69  02 1F 20 90   DB 02H,1FH,20H,90H
+7D6D  01 10 90 10   DB 01H,10H,90H,10H
+7D71  90 10 90 10   DB 90H,10H,90H,10H
+7D75  90 10 90 02   DB 90H,10H,90H,02H
+7D79  1F 2F 90 01   DB 1FH,2FH,90H,01H
+7D7D  2B 90 2B 90   DB 2BH,90H,2BH,90H
+7D81  2B 90 2B 90   DB 2BH,90H,2BH,90H
+7D85  2B 90 2B 90   DB 2BH,90H,2BH,90H
+7D89  2B 90 04 03   DB 2BH,90H,04H,03H
+7D8D  2B 3F 40 90   DB 2BH,3FH,40H,90H
+7D91  01 40 90 40   DB 01H,40H,90H,40H
+7D95  90 40 90 40   DB 90H,40H,90H,40H
+7D99  90 40 90 40   DB 90H,40H,90H,40H
+7D9D  90 40 90 40   DB 90H,40H,90H,40H
+7DA1  90 40 90 40   DB 90H,40H,90H,40H
+7DA5  90 40 90 40   DB 90H,40H,90H,40H
+7DA9  90 40 90 40   DB 90H,40H,90H,40H
+7DAD  90 40 90 40   DB 90H,40H,90H,40H
+7DB1  90 40 90 40   DB 90H,40H,90H,40H
+7DB5  90 40 90 40   DB 90H,40H,90H,40H
+7DB9  90 40 90 40   DB 90H,40H,90H,40H
+7DBD  90 40 90 40   DB 90H,40H,90H,40H
+7DC1  90 40 90 40   DB 90H,40H,90H,40H
+7DC5  90 03 2E 3F   DB 90H,03H,2EH,3FH
+7DC9  40 90 01 23   DB 40H,90H,01H,23H
+7DCD  96 23 9E 23   DB 96H,23H,9EH,23H
+7DD1  9B 23 9E 23   DB 9BH,23H,9EH,23H
+7DD5  96 03 2E 3F   DB 96H,03H,2EH,3FH
+7DD9  40 90 01 40   DB 40H,90H,01H,40H
+7DDD  90 40 90 40   DB 90H,40H,90H,40H
+7DE1  90 40 90 40   DB 90H,40H,90H,40H
+7DE5  90 40 90 40   DB 90H,40H,90H,40H
+7DE9  90 40 90 40   DB 90H,40H,90H,40H
+7DED  90 40 90 40   DB 90H,40H,90H,40H
+7DF1  90 03 2E 3F   DB 90H,03H,2EH,3FH
+7DF5  40 90 01 23   DB 40H,90H,01H,23H
+7DF9  96 23 9E 23   DB 96H,23H,9EH,23H
+7DFD  9B 23 9E 23   DB 9BH,23H,9EH,23H
+7E01  96 03 2E 3F   DB 96H,03H,2EH,3FH
+7E05  40 90 01 23   DB 40H,90H,01H,23H
+7E09  96 23 9E 23   DB 96H,23H,9EH,23H
+7E0D  9B 23 9E 23   DB 9BH,23H,9EH,23H
+7E11  96 03 2E 3F   DB 96H,03H,2EH,3FH
+7E15  40 90 01 40   DB 40H,90H,01H,40H
+7E19  90 40 90 40   DB 90H,40H,90H,40H
+7E1D  90 40 90 40   DB 90H,40H,90H,40H
+7E21  90 40 90 40   DB 90H,40H,90H,40H
+7E25  90 40 90 40   DB 90H,40H,90H,40H
+7E29  90 40 90 40   DB 90H,40H,90H,40H
+7E2D  90 03 2E 3F   DB 90H,03H,2EH,3FH
+7E31  40 90 01 23   DB 40H,90H,01H,23H
+7E35  96 23 9E 23   DB 96H,23H,9EH,23H
+7E39  9B 23 9E 23   DB 9BH,23H,9EH,23H
+7E3D  96 03 2E 3F   DB 96H,03H,2EH,3FH
+7E41  40 90 01 40   DB 40H,90H,01H,40H
+7E45  90 40 90 40   DB 90H,40H,90H,40H
+7E49  90 40 90 40   DB 90H,40H,90H,40H
+7E4D  90 40 90 40   DB 90H,40H,90H,40H
+7E51  90 40 90 40   DB 90H,40H,90H,40H
+7E55  90 40 90 40   DB 90H,40H,90H,40H
+7E59  90 40 90 40   DB 90H,40H,90H,40H
+7E5D  90 40 90 40   DB 90H,40H,90H,40H
+7E61  90 40 90 40   DB 90H,40H,90H,40H
+7E65  90 03 2E 3F   DB 90H,03H,2EH,3FH
+7E69  40 90 01 23   DB 40H,90H,01H,23H
+7E6D  96 23 9E 23   DB 96H,23H,9EH,23H
+7E71  9B 23 9E 23   DB 9BH,23H,9EH,23H
+7E75  96 03 2E 3F   DB 96H,03H,2EH,3FH
+7E79  40 90 01 40   DB 40H,90H,01H,40H
+7E7D  90 40 90 40   DB 90H,40H,90H,40H
+7E81  90 40 90 40   DB 90H,40H,90H,40H
+7E85  90 40 90 40   DB 90H,40H,90H,40H
+7E89  90 03 2E 3F   DB 90H,03H,2EH,3FH
+7E8D  40 90 01 23   DB 40H,90H,01H,23H
+7E91  96 23 9E 23   DB 96H,23H,9EH,23H
+7E95  9B 23 9E 23   DB 9BH,23H,9EH,23H
+7E99  96 23 96 23   DB 96H,23H,96H,23H
+7E9D  9E 23 9B 23   DB 9EH,23H,9BH,23H
+7EA1  9E 23 96 03   DB 9EH,23H,96H,03H
+7EA5  2E 3F 40 90   DB 2EH,3FH,40H,90H
+7EA9  01 40 90 40   DB 01H,40H,90H,40H
+7EAD  90 40 90 40   DB 90H,40H,90H,40H
+7EB1  90 40 90 40   DB 90H,40H,90H,40H
+7EB5  90 40 90 40   DB 90H,40H,90H,40H
+7EB9  90 40 90 40   DB 90H,40H,90H,40H
+7EBD  90 40 90 40   DB 90H,40H,90H,40H
+7EC1  90 40 90 03   DB 90H,40H,90H,03H
+7EC5  2E 3F 40 90   DB 2EH,3FH,40H,90H
+7EC9  01 23 96 23   DB 01H,23H,96H,23H
+7ECD  9E 23 9B 23   DB 9EH,23H,9BH,23H
+7ED1  9E 23 96 03   DB 9EH,23H,96H,03H
+7ED5  2E 3F 40 90   DB 2EH,3FH,40H,90H
+7ED9  01 40 90 40   DB 01H,40H,90H,40H
+7EDD  90 40 90 40   DB 90H,40H,90H,40H
+7EE1  90 40 90 40   DB 90H,40H,90H,40H
+7EE5  90 40 90 40   DB 90H,40H,90H,40H
+7EE9  90 40 90 40   DB 90H,40H,90H,40H
+7EED  90 40 90 40   DB 90H,40H,90H,40H
+7EF1  90 40 90 40   DB 90H,40H,90H,40H
+7EF5  90 40 90 40   DB 90H,40H,90H,40H
+7EF9  90 40 90 40   DB 90H,40H,90H,40H
+7EFD  90 40 90 40   DB 90H,40H,90H,40H
+7F01  90 40 90 40   DB 90H,40H,90H,40H
+7F05  90 40 93 40   DB 90H,40H,93H,40H
+7F09  93 3B 93 3B   DB 93H,3BH,93H,3BH
+7F0D  9B 33 9B 30   DB 9BH,33H,9BH,30H
+7F11  A0 2E AE 20   DB 0A0H,2EH,0AEH,20H
+7F15  BF 1B CF 1B   DB 0BFH,1BH,0CFH,1BH
+7F19  DF 13 E6 13   DB 0DFH,13H,0E6H,13H
+7F1D  EB 13 F0 10   DB 0EBH,13H,0F0H,10H
+7F21  F0 10 F3 10   DB 0F0H,10H,0F3H,10H
+7F25  F3 10 F3 10   DB 0F3H,10H,0F3H,10H
+7F29  F3 14 F3 19   DB 0F3H,14H,0F3H,19H
+7F2D  F3 2A F3 03   DB 0F3H,2AH,0F3H,03H
+7F31  3A 68 7A F3   DB 3AH,68H,7AH,0F3H
+7F35  4A 58 8A F3   DB 4AH,58H,8AH,0F3H
+7F39  01 9A F3 A4   DB 01H,9AH,0F3H,0A4H
+7F3D  F3 AB F3 A5   DB 0F3H,0ABH,0F3H,0A5H
+7F41  F3 98 F3 03   DB 0F3H,98H,0F3H,03H
+7F45  48 5A 88 F0   DB 48H,5AH,88H,0F0H
+7F49  38 6A 78 F0   DB 38H,6AH,78H,0F0H
+7F4D  07 01 28 F0   DB 07H,01H,28H,0F0H
+7F51  17 EB 13 EB   DB 17H,0EBH,13H,0EBH
+7F55  13 E3 10 E0   DB 13H,0E3H,10H,0E0H
+7F59  10 D8 10 C8   DB 10H,0D8H,10H,0C8H
+7F5D  10 C0 10 C0   DB 10H,0C0H,10H,0C0H
+7F61  10 C0 10 C0   DB 10H,0C0H,10H,0C0H
+7F65  13 C0 13 C0   DB 13H,0C0H,13H,0C0H
+7F69  13 C0 1B C0   DB 13H,0C0H,1BH,0C0H
+7F6D  1B C0 1B CA   DB 1BH,0C0H,1BH,0CAH
+7F71  02 1B CB D2   DB 02H,1BH,0CBH,0D2H
+7F75  1B DC E0 01   DB 1BH,0DCH,0E0H,01H
+7F79  1B E2 1B E3   DB 1BH,0E2H,1BH,0E3H
+7F7D  20 EC 20 EB   DB 20H,0ECH,20H,0EBH
+7F81  02 20 EB F0   DB 02H,20H,0EBH,0F0H
+7F85  01 20 F0 20   DB 01H,20H,0F0H,20H
+7F89  F0 22 F0 23   DB 0F0H,22H,0F0H,23H
+7F8D  F0 2C EB 2B   DB 0F0H,2CH,0EBH,2BH
+7F91  EB 30 EB 30   DB 0EBH,30H,0EBH,30H
+7F95  E3 02 2B 30   DB 0E3H,02H,2BH,30H
+7F99  E0 01 27 D8   DB 0E0H,01H,27H,0D8H
+7F9D  23 CB 21 C3   DB 23H,0CBH,21H,0C3H
+7FA1  02 1B CC D2   DB 02H,1BH,0CCH,0D2H
+7FA5  1B DC E0 01   DB 1BH,0DCH,0E0H,01H
+7FA9  1B E4 1B EC   DB 1BH,0E4H,1BH,0ECH
+7FAD  1B EB 20 EB   DB 1BH,0EBH,20H,0EBH
+7FB1  20 EB 23 E3   DB 20H,0EBH,23H,0E3H
+7FB5  23 E0 20 DD   DB 23H,0E0H,20H,0DDH
+7FB9  1B D3 13 DC   DB 1BH,0D3H,13H,0DCH
+7FBD  13 E2 13 E9   DB 13H,0E2H,13H,0E9H
+7FC1  13 EB 13 EB   DB 13H,0EBH,13H,0EBH
+7FC5  13 EB 13 EB   DB 13H,0EBH,13H,0EBH
+7FC9  13 EB 13 EB   DB 13H,0EBH,13H,0EBH
+7FCD  13 ED 1C E3   DB 13H,0EDH,1CH,0E3H
+7FD1  22 E1 23 DB   DB 22H,0E1H,23H,0DBH
+7FD5  03 29 73 8B   DB 03H,29H,73H,8BH
+7FD9  D8 04 3A 73   DB 0D8H,04H,3AH,73H
+7FDD  8B C8 4A 73   DB 8BH,0C8H,4AH,73H
+7FE1  8B B8 5A 73   DB 8BH,0B8H,5AH,73H
+7FE5  8B A8 6F 76   DB 8BH,0A8H,6FH,76H
+7FE9  8B 9F 01 6B   DB 8BH,9FH,01H,6BH
+7FED  93 6B 93 6B   DB 93H,6BH,93H,6BH
+7FF1  93 6B 93 6B   DB 93H,6BH,93H,6BH
+7FF5  93 6B 93 6B   DB 93H,6BH,93H,6BH
+7FF9  93 03 6B 7F   DB 93H,03H,6BH,7FH
+7FFD  8F 96 FF      DB 8FH,96H,0FFH
+8881  00            NOP                     ; entry
+8882  21 00 52      LD HL,L5200
+8885  11 7F 49      LD DE,L497F
+8888  01 81 36      LD BC,3681H
+888B  ED B0         LDIR
+888D  C3 7F 49      JP L497F

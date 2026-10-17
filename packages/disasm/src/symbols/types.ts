@@ -50,9 +50,40 @@ export interface Source {
   author: string;
   title: string;
   publisher: string;
+  /** Digits or a range of digits (`1982`, `1983–84`); `circa` says the year is approximate. */
   year: string;
+  circa?: boolean;
   edition?: string;
-  locator: string;
+  /** A catalog number as printed, `26-2103`, for a work with no copy online. */
+  catalog?: string;
+  /** Where to find the work: an archive.org details page, or the page of its text. */
+  url?: string;
+  /** A plain-text edition of the work, where one exists. */
+  textUrl?: string;
+  /** The archive.org identifier, parsed from `url` when it is an archive.org details page. */
+  archiveId?: string;
+  /** Where the holder grants permission to redistribute; required when `redistributable` is true. */
+  permissionUrl?: string;
+  /** True where the work's text is free to redistribute. */
+  redistributable?: boolean;
+}
+
+/**
+ * Where each cited page of a source sits in its archive.org scan, from
+ * data/manuals/<source>.json. Scans open with covers and blanks, so printed
+ * page N is rarely PDF page N; each mapping was read off the page itself.
+ */
+export interface ManualScan {
+  /** The source's id in sources.json. */
+  source: string;
+  /** The archive.org item the PDF comes from (the source's archiveId). */
+  archiveId: string;
+  /** SHA-256 of each PDF in the item that this mapping is for, lowercase hex; every one listed has the same pages. */
+  pdfSha256: string[];
+  /** The PDF's page count. */
+  pdfPages: number;
+  /** The printed page as cited (`12/10`, `6-29`, `D-2`, `15`) to its 1-based PDF page. */
+  pages: Record<string, number>;
 }
 
 /** How an address in either ROM table compares across the Model I and Model III ROMs. */

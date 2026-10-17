@@ -1,0 +1,4 @@
+; hidden-code.bas: tokenized BASIC, 3 lines, saved from $7000 to $701A, FF header, 1 unparsed
+10 GOTO 30
+20 [unparsed: 7 bytes at $700D: embedded 00 at +1]
+30 END
