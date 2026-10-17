@@ -556,7 +556,7 @@
   - `@type: SoftwareApplication`, `name: Fugløy`, `applicationCategory: DeveloperApplication`;
   - `operatingSystem: Any (web browser)`, `url`;
   - `offers` price `0`, `license` MIT.
-- `sitemap.xml` lists `/`, `/technical-details`, `/manuals`, `/about`. `robots.txt` allows all and names the sitemap.
+- `sitemap.xml` lists `/`, `/technical-details/`, `/manuals/`, `/about/` (trailing slashes, as built, matching the generated `index.html` folders). `robots.txt` allows all and names the sitemap.
 - Technical details hosts the explainer fragment unchanged in structure, wrapped by the layout, with its own `<title>` moved into `usePageSeo`.
 - About: what Fugløy is; files never leave your machine and nothing is hosted; storage is per browser, with Back up / Restore; credits (each source by title, zmac, the Westmoreland and Gilman 1995 release with the trs-80.org quote and link); repository link.
 
