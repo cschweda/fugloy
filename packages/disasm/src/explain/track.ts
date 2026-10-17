@@ -1,12 +1,16 @@
 /**
  * The Explain tab's value tracker. It proves what registers hold just before a
  * line runs, and never claims more: it walks backward along straight-line code
- * (the fall-through predecessor) and stops at a merge point (any xref target),
- * an entry point, after a CALL or RST, after 32 instructions, or at the start
- * of a run, then replays the shared register rule forward. Anything it cannot
+ * (the fall-through predecessor) and stops at a merge point (any label, which
+ * covers every xref target, data reference, table and user name, since a
+ * labelled address may be reached by an indirect jump or a RET), an entry
+ * point, after a CALL or RST, after 32 instructions, or at the start of a run,
+ * then replays the shared register rule forward. Anything it cannot
  * prove on every path to the line stays unknown.
  */
 import type { Instruction } from '@fugloy/z80';
+import { endsPath } from '../analysis/descent.js';
+import { dataReference } from '../analysis/symbols.js';
 import { stepRegs, unknownRegs } from '../analysis/regs.js';
 import type { RegState } from '../analysis/regs.js';
 import type { Analysis } from '../pipeline.js';
@@ -27,6 +31,8 @@ interface Index {
   into: Map<number, { callers: number[]; jumpers: number[] }>;
   /** Entry points: the analysis roots and entry. */
   roots: Set<number>;
+  /** Addresses an instruction references as data, or a hint declares a table at: reachable by an indirect transfer. */
+  dataRefs: Set<number>;
 }
 
 const cache = new WeakMap<Analysis, Index>();
@@ -54,14 +60,15 @@ function index(a: Analysis): Index {
   }
   const roots = new Set<number>([...a.roots, ...a.pass1.roots]);
   if (a.entry !== null) roots.add(a.entry);
-  const built = { endingAt, into, roots };
+  const dataRefs = new Set<number>(a.annotations.tables.map((t) => t.addr & 0xffff));
+  for (const ins of a.pass1.instructions.values()) {
+    const ref = dataReference(ins);
+    if (ref !== null) dataRefs.add(ref & 0xffff);
+  }
+  const built = { endingAt, into, roots, dataRefs };
   cache.set(a, built);
   return built;
 }
-
-/** True when control never falls through past this instruction. */
-const endsPath = (ins: Instruction): boolean =>
-  !ins.flow.conditional && (ins.flow.kind === 'jump' || ins.flow.kind === 'return' || ins.flow.kind === 'halt');
 
 /** The single instruction that falls through into `addr`, or null (none, several, or one whose flow ends the path). */
 function fallThrough(a: Analysis, ix: Index, addr: number): { at: number; ins: Instruction } | null {
@@ -84,7 +91,8 @@ export function knownBefore(a: Analysis, addr: number): Known {
       from = { addr: cur, callers: [...merge.callers], jumpers: [...merge.jumpers] };
       break;
     }
-    if (ix.roots.has(cur) || chain.length >= CAP) break;
+    // Any other label (a data reference, a table, a user name) may be entered by JP (HL) or a pushed RET.
+    if (a.symbols.has(cur) || ix.roots.has(cur) || chain.length >= CAP) break;
     const pred = fallThrough(a, ix, cur);
     // A CALL or RST, conditional or not, leaves everything unknown after it.
     if (pred === null || pred.ins.flow.kind === 'call') break;
@@ -111,8 +119,10 @@ function writesB(ins: Instruction): boolean {
  * For a DJNZ at `addr`: its loop (head = target, end = addr) and B's value on
  * entry when proven, else count null. A count of 0 means 256 passes. The count
  * holds only when every xref into the head comes from this DJNZ, nothing from
- * outside head..end jumps into the body, and no body instruction writes B or is
- * a CALL, RST or EXX.
+ * outside head..end jumps into the body, no label at an instruction start in
+ * head..end exists other than ones made only by jumps from inside head..end (a
+ * data reference, table, user name or root there may mean an indirect
+ * re-entry), and no body instruction writes B or is a CALL, RST or EXX.
  */
 export function djnzLoop(a: Analysis, addr: number): { head: number; end: number; count: number | null } | null {
   const ins = a.pass1.instructions.get(addr);
@@ -132,6 +142,13 @@ export function djnzLoop(a: Analysis, addr: number): { head: number; end: number
     if (x.to !== head && inside(x.to) && !inside(x.from)) return { ...loop, count: null };
   }
   for (const r of ix.roots) if (inside(r)) return { ...loop, count: null };
+  for (const sym of a.symbols.list()) {
+    // A label inside an instruction's bytes is an operand the program rewrites (Sea Dragon's DATA_49C1, the
+    // displacement of LD A,(IY+d)), not a place control enters; only labels at instruction starts can re-enter.
+    if (!inside(sym.addr) || !a.pass1.instructions.has(sym.addr)) continue;
+    // Xrefs from outside were already ruled out above; what is left is a label not made by jumps alone.
+    if (sym.source === 'user' || ix.dataRefs.has(sym.addr) || !ix.into.has(sym.addr)) return { ...loop, count: null };
+  }
   for (const [at, body] of a.pass1.instructions) {
     if (at < head || at >= end) continue;
     const m = body.mnemonic;

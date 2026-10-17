@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { pair } from '../../src/analysis/regs.js';
 import { djnzLoop, knownBefore } from '../../src/explain/track.js';
+import { emptyAnnotations } from '../../src/hints/apply.js';
 import { analyze } from '../../src/pipeline.js';
 import { loadRaw } from '../../src/raw.js';
 import { openProgram, withHintText } from '../../src/session.js';
@@ -51,6 +52,28 @@ describe('knownBefore on synthetic code', () => {
     const k = knownBefore(a, 0x7006);
     expect(k.regs.A).toBeNull(); // 7006 is a jump target
     expect(knownBefore(a, 0x7002).regs.A).toBe(1);
+  });
+
+  it('a target of JP (HL) knows nothing, though only fall-through reaches it statically', () => {
+    // 7000 LD A,5; 7002 LD HL,700BH; 7005 JR Z,7008; 7007 JP (HL); 7008 LD A,7; 700A NOP; 700B LD (HL),A; 700C RET
+    const a = prog([0x3e, 0x05, 0x21, 0x0b, 0x70, 0x28, 0x01, 0xe9, 0x3e, 0x07, 0x00, 0x77, 0xc9]);
+    expect(knownBefore(a, 0x700b).regs.A).toBeNull();
+  });
+
+  it('a target of PUSH HL; RET knows nothing', () => {
+    // 7000 LD A,5; 7002 LD HL,700CH; 7005 PUSH HL; 7006 JR Z,7009; 7008 RET; 7009 LD A,7; 700B NOP; 700C LD (HL),A; 700D RET
+    const a = prog([0x3e, 0x05, 0x21, 0x0c, 0x70, 0xe5, 0x28, 0x01, 0xc9, 0x3e, 0x07, 0x00, 0x77, 0xc9]);
+    expect(knownBefore(a, 0x700c).regs.A).toBeNull();
+  });
+
+  it('a user-named label in straight code stops the walk', () => {
+    // 7000 LD A,5; 7002 NOP (named HERE); 7003 LD (HL),A; 7004 RET
+    const mod = loadRaw(new Uint8Array([0x3e, 0x05, 0x00, 0x77, 0xc9]), BASE);
+    const annotations = emptyAnnotations();
+    annotations.names.set(0x7002, 'HERE');
+    const a = analyze(mod, { annotations });
+    expect(knownBefore(a, 0x7003).regs.A).toBeNull();
+    expect(knownBefore(prog([0x3e, 0x05, 0x00, 0x77, 0xc9]), 0x7003).regs.A).toBe(5);
   });
 
   it('cap: a value set more than 32 instructions back is not reached', () => {
@@ -118,6 +141,24 @@ describe('djnzLoop on synthetic code', () => {
     // 7000 l: INC A; 7001 DJNZ 7000; 7003 RET (the head is the entry point)
     const a = prog([0x3c, 0x10, 0xfd, 0xc9]);
     expect(djnzLoop(a, 0x7001)?.count).toBeNull();
+  });
+
+  it('an indirect re-entry into the loop gives no count', () => {
+    // 7000 LD B,4; 7002 LD HL,7005H; 7005 head: NOP; 7006 DJNZ 7005; 7008 JP (HL)
+    const a = prog([0x06, 0x04, 0x21, 0x05, 0x70, 0x00, 0x10, 0xfd, 0xe9]);
+    expect(djnzLoop(a, 0x7006)).toEqual({ head: 0x7005, end: 0x7006, count: null });
+  });
+
+  it('a data reference into the body gives no count', () => {
+    // 7000 LD B,4; 7002 LD HL,7006H; 7005 head: NOP; 7006 INC A; 7007 DJNZ 7005; 7009 JP (HL)
+    const a = prog([0x06, 0x04, 0x21, 0x06, 0x70, 0x00, 0x3c, 0x10, 0xfc, 0xe9]);
+    expect(djnzLoop(a, 0x7007)?.count).toBeNull();
+  });
+
+  it('a data reference to an operand byte inside the body (self-modifying code) keeps the count', () => {
+    // 7000 LD B,4; 7002 head: LD (7006H),A; 7005 LD C,0 (7006 is its operand); 7007 DJNZ 7002; 7009 RET
+    const a = prog([0x06, 0x04, 0x32, 0x06, 0x70, 0x0e, 0x00, 0x10, 0xf9, 0xc9]);
+    expect(djnzLoop(a, 0x7007)).toEqual({ head: 0x7002, end: 0x7007, count: 4 });
   });
 
   it('is null for a forward DJNZ, which is not a loop', () => {
