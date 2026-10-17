@@ -15,7 +15,7 @@ import { rowsOf, rowText } from './listing.js';
 import type { ListRow } from './listing.js';
 import { addrPiece, andList, byte$, decimal, say, word$ } from './machine.js';
 import type { Ctx } from './machine.js';
-import { patchedBytes, written } from './track.js';
+import { loopEntry, patchedBytes, written } from './track.js';
 import type { DataRegion, Piece, Sentence } from './types.js';
 
 /** The most items a list in a sentence names before "and N more". */
@@ -130,7 +130,7 @@ function split(c: Ctx, at: number, ins: Instruction): { at: number; text: string
   if (n === null) return null;
   const jAt = (at + ins.length) & 0xffff;
   const j = a.pass1.instructions.get(jAt);
-  if (j === undefined || a.symbols.has(jAt) || j.flow.kind !== 'jump' || !j.flow.conditional || j.flow.indirect) return null;
+  if (j === undefined || a.symbols.has(jAt) || j.flow.kind !== 'jump' || !j.flow.conditional || j.flow.indirect || patchedBytes(a, jAt, j).length > 0) return null;
   const cc = j.operands.find((o) => o.kind === 'cc');
   if (cc?.kind !== 'cc') return null;
   const cond: Cond = cc.cond;
@@ -141,7 +141,7 @@ function split(c: Ctx, at: number, ins: Instruction): { at: number; text: string
   for (let k = 0; k < BACK; k++) {
     if (a.symbols.has(cur)) return null;
     const p = before(a, cur);
-    if (p === null || p.ins.flow.kind !== 'next') return null;
+    if (p === null || p.ins.flow.kind !== 'next' || patchedBytes(a, p.at, p.ins).length > 0) return null;
     if (isLdAHL(p.ins)) {
       found = true;
       break;
@@ -176,13 +176,36 @@ function split(c: Ctx, at: number, ins: Instruction): { at: number; text: string
   return null;
 }
 
+/**
+ * True when every one of `moves` is ADD HL,BC or ADD HL,DE whose high byte (B
+ * or D) is proven 0 throughout the loop: 0 on entry (the loop is entered only
+ * by falling into its head, `loopEntry`), and nothing in the loop writes it or
+ * calls out (CALL, RST, EXX). Then each add moves HL forward by 0-255.
+ */
+function addsOnlyForward(a: Analysis, loop: { head: number; end: number; body: { at: number; ins: Instruction }[] }, moves: number[]): boolean {
+  const his = new Set<'B' | 'D'>();
+  for (const at of moves) {
+    const ins = a.pass1.instructions.get(at)!;
+    const [d, s] = ins.operands;
+    if (ins.mnemonic !== 'ADD' || d?.kind !== 'reg16' || d.reg !== 'HL' || s?.kind !== 'reg16' || (s.reg !== 'BC' && s.reg !== 'DE')) return false;
+    his.add(s.reg === 'BC' ? 'B' : 'D');
+  }
+  for (const { ins } of loop.body) {
+    const m = ins.mnemonic;
+    if (m === 'CALL' || m === 'RST' || m === 'EXX') return false;
+    if (written(ins).some((r) => his.has(r as 'B' | 'D'))) return false;
+  }
+  const entry = loopEntry(a, loop.head, loop.end, true);
+  return entry !== null && [...his].every((r) => entry[r] === 0);
+}
+
 /** The loop a load of HL at `at` falls into, as straight-line code, and how it reads (HL). */
 function loopFrom(c: Ctx, ix: Index, at: number, ins: Instruction): { head: number; end: number; body: { at: number; ins: Instruction }[] } | null {
   const a = c.a;
   let p = (at + ins.length) & 0xffff;
   for (let k = 0; k < LEAD; k++) {
     const cur = a.pass1.instructions.get(p);
-    if (cur === undefined) return null;
+    if (cur === undefined || patchedBytes(a, p, cur).length > 0) return null;
     const head = p;
     if (ix.back.some((b) => b.to === head && b.from - head < SPAN)) {
       let end = head;
@@ -264,7 +287,7 @@ function build(c: Ctx, ix: Index, start: number, end: number): DataRegion {
     const nAt = (at + ins.length) & 0xffff;
     const n = a.pass1.instructions.get(nAt);
     const [d, s] = n?.operands ?? [];
-    if (n === undefined || n.mnemonic !== 'LD' || d?.kind !== 'mem' || s?.kind !== 'reg16' || s.reg !== reg || patchedBytes(a, nAt, n).length > 0) continue;
+    if (n === undefined || a.symbols.has(nAt) || n.mnemonic !== 'LD' || d?.kind !== 'mem' || s?.kind !== 'reg16' || s.reg !== reg || patchedBytes(a, nAt, n).length > 0) continue;
     const variable = d.addr & 0xffff;
     const readers: number[] = [];
     const others: number[] = [];
@@ -295,13 +318,16 @@ function build(c: Ctx, ix: Index, start: number, end: number): DataRegion {
     const moves = loop.body.filter((b) => !incs.includes(b.at) && !decs.includes(b.at) && written(b.ins).some((r) => r === 'H' || r === 'L')).map((b) => b.at);
     const head: Piece = { text: nameOrAddr(a, loop.head), addr: loop.head };
     const intro: Piece[] = [{ text: 'The load at ' }, addrPiece(c, at), { text: ' falls into the loop at ' }, head, { text: ` (to ${word$(loop.end)}), which reads the bytes through HL` }];
-    const step: 1 | -1 | null = incs.length > 0 && decs.length === 0 ? 1 : decs.length > 0 && incs.length === 0 ? -1 : null;
+    const forwardAdds = moves.length > 0 && addsOnlyForward(a, loop, moves);
+    const step: 1 | -1 | null =
+      (moves.length === 0 || forwardAdds) && decs.length === 0 && (incs.length > 0 || forwardAdds) ? 1 : moves.length === 0 && decs.length > 0 && incs.length === 0 ? -1 : null;
     if (step === null) out.push(say(intro, '.'));
-    else {
-      const steps = step === 1 ? incs : decs;
-      out.push(say(intro, `, stepping ${step === 1 ? 'forward' : 'back'} (${step === 1 ? 'INC' : 'DEC'} HL at `, capped(steps.map((x) => [addrPiece(c, x)])), ').'));
-    }
-    if (moves.length > 0) out.push(say('HL also changes in it at ', capped(moves.map((x) => at$(c, x))), '.'));
+    else if (step === -1) out.push(say(intro, ', stepping back (DEC HL at ', capped(decs.map((x) => [addrPiece(c, x)])), ').'));
+    else out.push(say(intro, ', stepping forward (', capped([...incs, ...moves].sort((p, q) => p - q).map((x) => [{ text: `${rowText(a, x) ?? 'INC HL'} at ` }, addrPiece(c, x)])), ').'));
+    if (forwardAdds) {
+      const regs = [...new Set(moves.map((x) => (a.pass1.instructions.get(x)!.operands[1] as { reg: string }).reg[0]!))].sort();
+      out.push(say(`The ${moves.length === 1 ? 'add moves' : 'adds move'} HL forward too: ${regs.join(' and ')} ${regs.length === 1 ? 'is' : 'are'} 0 on the way in, and nothing in the loop changes ${regs.length === 1 ? 'it' : 'them'}.`));
+    } else if (moves.length > 0) out.push(say('HL also changes in it at ', capped(moves.map((x) => at$(c, x))), ', so which way and how far it moves is not proven.'));
     const splits = loop.body.flatMap((b) => split(c, b.at, b.ins) ?? []);
     if (splits.length > 0) {
       const items = splits.map((sp): Piece[] => {

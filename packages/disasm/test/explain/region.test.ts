@@ -50,7 +50,9 @@ describe('dataRegion on Sea Dragon (seadrg01.hints)', () => {
     expect(and?.text).toBe('bytes $00–$0F are treated differently (AND 0F0H at $5FC5)');
     // A = (HL) AND $0F, both below $80, so JP P after CP 04H is a proven "at least $04".
     expect(loop.splits.find((s) => s.at === 0x5fcd)?.text).toBe('bytes whose low four bits are below $04 are treated differently from the rest (CP 04H at $5FCD)');
-    expect(text(r).join(' ')).toContain('stepping forward');
+    expect(text(r).join(' ')).toContain('stepping forward (ADD HL,BC at $5FC3 and INC HL at $5FCA)');
+    // ADD HL,BC moves forward only because B is proven 0 (LD B,00H at $5FB4, nothing in the loop writes B).
+    expect(text(r)).toContain('The add moves HL forward too: B is 0 on the way in, and nothing in the loop changes it.');
   });
 
   it('explainLine sets region on a data row and leaves code rows without one', () => {
@@ -92,6 +94,66 @@ describe('dataRegion on synthetic programs', () => {
     const t = text(r).join(' ');
     expect(t).not.toMatch(/No instruction refers to it by address/);
     expect(t).toMatch(/rewrites/);
+  });
+});
+
+describe('dataRegion: what it refuses to claim', () => {
+  const named = (bytes: number[], hints: { offset: number; name: string }[]) => {
+    const s0 = raw(bytes);
+    const list = hints.map((h, i) => ({ directive: 'name' as const, name: h.name, block: 0, offset: h.offset, line: i + 1 }));
+    return withHintFile(s0, { ...skeletonHints(s0.module, new Uint8Array(bytes)), hints: list });
+  };
+
+  it('a loop that only steps HL back with DEC HL steps -1', () => {
+    // 7000 LD HL,7009H; 7003 LD A,(HL); DEC HL; OR A; JR NZ,7003H; RET; 7009 data.
+    const r = must(dataRegion(raw([0x21, 0x09, 0x70, 0x7e, 0x2b, 0xb7, 0x20, 0xfb, 0xc9, 0x01, 0x02, 0x00]), 0x700a));
+    expect(r.readers).toEqual([{ loop: 0x7003, step: -1, splits: [] }]);
+    expect(text(r).join(' ')).toContain('stepping back (DEC HL at $7004)');
+  });
+
+  it('ADD HL,DE with DE unproven leaves the direction unproven: no readers entry, no "stepping"', () => {
+    // 7000 LD HL,700AH; 7003 LD A,(HL); INC HL; ADD HL,DE; OR A; JR NZ,7003H; RET; 700A data.
+    const r = must(dataRegion(raw([0x21, 0x0a, 0x70, 0x7e, 0x23, 0x19, 0xb7, 0x20, 0xfa, 0xc9, 0x01, 0x02, 0x00]), 0x700b));
+    expect(r.readers).toEqual([]);
+    const t = text(r).join(' ');
+    expect(t).not.toMatch(/stepping/);
+    expect(t).toContain('falls into the loop at L7003');
+    expect(t).toContain('HL also changes in it at $7005 (ADD HL,DE)');
+  });
+
+  it('ADD HL,BC with B proven 0 through the loop still steps forward', () => {
+    // 7000 LD B,0; 7002 LD HL,700CH; 7005 LD A,(HL); INC HL; ADD HL,BC; OR A; JR NZ,7005H; RET; 700C data.
+    const r = must(dataRegion(raw([0x06, 0x00, 0x21, 0x0c, 0x70, 0x7e, 0x23, 0x09, 0xb7, 0x20, 0xfa, 0xc9, 0x01, 0x02, 0x00]), 0x700d));
+    expect(r.readers).toEqual([{ loop: 0x7005, step: 1, splits: [] }]);
+  });
+
+  it('a pointer needs the very next instruction to store the same register, with no label on it', () => {
+    // 7000 LD HL,7007H; 7003 LD (7020H),HL; 7006 RET; 7007 data.
+    const bytes = [0x21, 0x07, 0x70, 0x22, 0x20, 0x70, 0xc9, 0x01, 0x02];
+    expect(must(dataRegion(raw(bytes), 0x7007)).pointers).toEqual([{ variable: 0x7020, name: '$7020', storedAt: 0x7003, readers: [] }]);
+    expect(must(dataRegion(named(bytes, [{ offset: 3, name: 'KEEP' }]), 0x7007)).pointers).toEqual([]);
+    // 7000 LD HL,7008H; 7003 LD (7020H),DE; 7007 RET: a different register.
+    expect(must(dataRegion(raw([0x21, 0x08, 0x70, 0xed, 0x53, 0x20, 0x70, 0xc9, 0x01, 0x02]), 0x7008)).pointers).toEqual([]);
+    // 7000 LD HL,7008H; 7003 NOP; 7004 LD (7020H),HL; 7007 RET: not adjacent.
+    expect(must(dataRegion(raw([0x21, 0x08, 0x70, 0x00, 0x22, 0x20, 0x70, 0xc9, 0x01, 0x02]), 0x7008)).pointers).toEqual([]);
+  });
+
+  // 7000 LD HL,700AH; 7003 LD A,(HL); INC HL; AND 0F0H; JR NZ,7003H; RET; 700A data.
+  const andLoop = [0x21, 0x0a, 0x70, 0x7e, 0x23, 0xe6, 0xf0, 0x20, 0xfa, 0xc9, 0x01, 0x02];
+
+  it('a split needs A straight from LD A,(HL): not with a label or an A write between', () => {
+    expect(must(dataRegion(raw(andLoop), 0x700a)).readers[0]!.splits).toEqual([{ at: 0x7005, text: 'bytes $00–$0F are treated differently (AND 0F0H at $7005)' }]);
+    expect(must(dataRegion(named(andLoop, [{ offset: 5, name: 'MASK' }]), 0x700a)).readers[0]!.splits).toEqual([]);
+    // 7003 LD A,(HL); INC HL; INC A; AND 0F0H; JR NZ,7003H; RET; 700B data.
+    const r = must(dataRegion(raw([0x21, 0x0b, 0x70, 0x7e, 0x23, 0x3c, 0xe6, 0xf0, 0x20, 0xf9, 0xc9, 0x01, 0x02]), 0x700b));
+    expect(r.readers[0]!.splits).toEqual([]);
+  });
+
+  it('a split is dropped when the program rewrites the conditional jump after it', () => {
+    // 7000 LD HL,700CH; 7003 LD A,(HL); INC HL; AND 0F0H; 7007 JR Z,700BH; 7009 JR 7003H; 700B RET; 700C data.
+    const bytes = [0x21, 0x0c, 0x70, 0x7e, 0x23, 0xe6, 0xf0, 0x28, 0x02, 0x18, 0xf8, 0xc9, 0x01, 0x02];
+    expect(must(dataRegion(raw(bytes), 0x700c)).readers[0]!.splits.map((x) => x.at)).toEqual([0x7005]);
+    expect(must(dataRegion(named(bytes, [{ offset: 8, name: 'HOP' }]), 0x700c)).readers[0]!.splits).toEqual([]);
   });
 });
 

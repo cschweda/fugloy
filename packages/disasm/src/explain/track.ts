@@ -191,12 +191,14 @@ function writesB(ins: Instruction): boolean {
  * head..end exists other than ones made only by jumps from inside head..end (a
  * data reference, table, user name or root there may mean an indirect
  * re-entry). Null otherwise, or when no single instruction falls into the head.
+ * With `anyBackJump`, jumps into the head may come from anywhere in head..end,
+ * not only from `end` (a loop with several jumps back to its head).
  */
-export function loopEntry(a: Analysis, head: number, end: number): RegState | null {
+export function loopEntry(a: Analysis, head: number, end: number, anyBackJump = false): RegState | null {
   const inside = (p: number): boolean => p >= head && p <= end;
   const ix = index(a);
   for (const x of a.pass1.xrefs) {
-    if (x.to === head && x.from !== end) return null;
+    if (x.to === head && (anyBackJump ? !inside(x.from) : x.from !== end)) return null;
     if (x.to !== head && inside(x.to) && !inside(x.from)) return null;
   }
   for (const r of ix.roots) if (inside(r)) return null;
