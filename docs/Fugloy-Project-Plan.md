@@ -179,8 +179,14 @@ Each table is a data file with a source citation per entry. Published maps disag
 The hint file is the one piece of persistent state in v1. Decisions, made now:
 
 - **Format: line-oriented text**, one directive per line, so it diffs in git and can be hand-edited. Example directives: `code`, `bytes`, `words`, `string`, `entry`, `table <count> <width>`, `name <label>`, `comment <text>`, `nocode`, and (phase 2) `relocate <addr> <length>`, which declares that the bytes at this offset execute at another address: they are analyzed there and emitted under zmac's `.phase`.
+- **Names and comments outside the program**: `at <addr> name <label>` and `at <addr> comment <text>`, one per line, keyed by a runtime address instead of a block offset (`$7F00`, `7F00H`, `0x7F00`, or decimal). They name RAM variables and other addresses the file does not load, and the listing, the zmac source, and the IR use them like any user name: zmac gets `SCORE EQU 7F00H` (with the comment, if any), and the listing header says `; name SCORE = $7F00`. An `at` hint on an address the image loads is not applied and draws a warning (`at $5200 names a loaded address; use block 0:$0000 instead`), because inside the program the block-relative form is the one that survives relocation and variant builds. `at` names follow the same rules as `name` (identifier, not reserved, not a generated-label shape, unique ignoring case). Example:
+
+  ```
+  at $7F00 name SCORE
+  at $7F00 comment player score, two bytes
+  ```
 - **Keys are block-relative and block identity is content-based**: `block <index>:<offset>` where a block is a loaded run identified by its original start address, its length, and a hash of its first 64 bytes. When a hint file is applied to a different file, blocks are paired by length and hash, not by position, so the same hints apply to Asylum 1b, 1c, and 1d, and a variant with an extra 2-byte vector block (1e) still matches on its main run. Unmatched blocks' hints are reported, not silently dropped.
-- **Identity**: the file header carries the SHA-256 of the input program, so the workbench can match a dropped file to its hints and refuse a mismatch.
+- **Identity**: the file header carries the SHA-256 of the input program. A hint file is applied block by block, by content (above), so a file written for one build applies to a variant; a program hash that differs is a warning, and the workbench refuses a hint file only when no block matches at all.
 - **Storage**: a file on disk (CLI) or IndexedDB (browser), downloadable; nothing else in v1.
 
 Part 2 adds annotations for stores that patch code and for interrupt hooks; the format is designed to take new directives without a version bump.
