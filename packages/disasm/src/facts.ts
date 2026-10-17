@@ -51,12 +51,19 @@ const $ = (n: number): string => `$${hex4(n & 0xffff)}`;
 const port$ = (n: number): string => `$${n.toString(16).toUpperCase().padStart(2, '0')}`;
 
 
+const VERB_ORDER = ['Reads', 'Writes', 'Refers to', 'Calls', 'Jumps to'];
+/** `Reads and writes`: the verbs seen, in a fixed order, the first capitalized. */
+function joinVerbs(verbs: ReadonlySet<string>): string {
+  const list = VERB_ORDER.filter((v) => verbs.has(v)).map((v, i) => (i === 0 ? v : v.toLowerCase()));
+  return list.length < 3 ? list.join(' and ') : `${list.slice(0, -1).join(', ')}, and ${list.at(-1)}`;
+}
+
 /** Every reference to something outside the program, looked up in both machines' tables. */
 function evidenceOf(a: Analysis): MachineEvidence[] {
   const m1: SymbolSet = selectSymbols({ machine: 1, dos: 'none' });
   const m3: SymbolSet = selectSymbols({ machine: 3, dos: 'none' });
   const loaded = (addr: number): boolean => a.space.image.isLoaded(addr);
-  const found = new Map<string, MachineEvidence & { verbs: Set<string> }>();
+  const found = new Map<string, Omit<MachineEvidence, 'text'> & { verbs: Set<string>; say: (v: string) => string }>();
   const note = (kind: MachineEvidence['kind'], machine: 1 | 3 | 'both', key: number, name: string, verb: string, text: (v: string) => string): void => {
     const id = `${kind}:${key}`;
     const have = found.get(id);
@@ -64,7 +71,7 @@ function evidenceOf(a: Analysis): MachineEvidence[] {
       have.verbs.add(verb);
       return;
     }
-    found.set(id, { machine, key, kind, name, text: text(verb), verbs: new Set([verb]) });
+    found.set(id, { machine, key, kind, name, say: text, verbs: new Set([verb]) });
   };
   const rom = (addr: number, verb: string): void => {
     if (loaded(addr)) return;
@@ -112,7 +119,7 @@ function evidenceOf(a: Analysis): MachineEvidence[] {
   }
   return [...found.values()]
     .sort((x, y) => x.kind.localeCompare(y.kind) || x.key - y.key)
-    .map(({ verbs: _verbs, ...e }) => e);
+    .map(({ verbs, say, ...e }) => ({ ...e, text: say(joinVerbs(verbs)) }));
 }
 
 function fitOf(evidence: readonly MachineEvidence[]): MachineFit {

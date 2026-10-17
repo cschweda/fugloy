@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { renderPass1Listing } from '../src/listing.js';
 import { programFacts } from '../src/facts.js';
 import { analyze } from '../src/pipeline.js';
 import { loadRaw } from '../src/raw.js';
@@ -80,4 +81,47 @@ describe('machine fit from synthetic programs', () => {
     const at = (base: number) => programFacts(analyze(loadRaw(new Uint8Array([0xc9]), base))).memoryNeeded;
     expect([at(0x7fff), at(0x8000), at(0xbfff), at(0xc000)]).toEqual([16, 32, 32, 48]);
   });
+});
+
+describe('evidence details', () => {
+  it('joins the verbs of a program that reads and writes a port', () => {
+    // IN A,($E8) ; OUT ($E8),A ; RET
+    const f = raw([0xdb, 0xe8, 0xd3, 0xe8, 0xc9]);
+    expect(f.machine.fit).toBe('model3');
+    expect(f.machine.evidence[0]!.text).toMatch(/^Reads and writes port \$E8 \(.+\), which only the Model III has\.$/);
+  });
+
+  it('LD A,($37E0) is a Model I program', () => {
+    const f = raw([0x3a, 0xe0, 0x37, 0xc9]);
+    expect(f.machine.fit).toBe('model1');
+    expect(f.machine.evidence[0]!.text).toMatch(/^Reads \$37E0 .*which only the Model I has\.$/);
+  });
+
+  it('a ROM address whose code differs is both-machine evidence that says so', () => {
+    const f = raw([0xcd, 0x50, 0x00, 0xc9]); // CALL 0050H, class 'different'
+    expect(f.machine.fit).toBe('both');
+    expect(f.machine.evidence[0]!.text).toContain('different code');
+  });
+
+  it('without a symbol selection nothing is named but the fit still resolves', () => {
+    const f = raw([0xd3, 0xec, 0xcd, 0x60, 0x00, 0xc9]);
+    expect(f.hardware).toEqual([]);
+    expect(f.romCalls).toEqual([]);
+    expect(f.dosCalls).toEqual([]);
+    expect(f.machine.fit).toBe('model3');
+  });
+});
+
+describe('code stats match the pass 1 header', () => {
+  const header = (a: Parameters<typeof renderPass1Listing>[0]): [number, number, number] => {
+    const m = /(\d+) of (\d+) bytes decoded as code \((\d+)%\)/.exec(renderPass1Listing(a, {}))!;
+    return [Number(m[1]), Number(m[2]), Number(m[3])];
+  };
+  const armour = openProgram(new Uint8Array(readFileSync(`${dir}../armored-patrol/ARMOUR.III`)), { name: 'ARMOUR.III', selection: { machine: 3, dos: 'trsdos' } });
+  for (const [name, s] of [['seadrg01 with hints', sea], ['ARMOUR.III', armour]] as const) {
+    it(name, () => {
+      const f = programFacts(s.analysis);
+      expect([f.code.bytes, f.code.of, f.code.percent]).toEqual(header(s.analysis));
+    });
+  }
 });
