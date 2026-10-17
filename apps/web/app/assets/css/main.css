@@ -509,3 +509,31 @@ details.fg-menu > summary::-webkit-details-marker { display: none; }
 .fg-quote { margin-left: 0; padding: 8px 16px; border-left: 3px solid var(--fg-accent); background: var(--fg-surface); color: var(--fg-text-strong); }
 .fg-credits { list-style: disc; padding-left: 20px; display: grid; gap: 6px; }
 .fg-credits cite { color: var(--fg-text-strong); }
+
+/* Explain tab: the lead sentence first and largest; details, patterns, the routine and previews quieter. */
+.fg-explain { display: flex; flex-direction: column; gap: 6px; }
+.fg-explain section { display: flex; flex-direction: column; gap: 4px; }
+.fg-explain-line { color: var(--fg-addr); font-size: 12px; font-weight: 400; white-space: pre-wrap; padding-bottom: 6px; border-bottom: 1px solid #21262d; }
+.fg-explain-lead { display: flex; flex-direction: column; gap: 4px; }
+.fg-explain-first { color: var(--fg-text-strong); font-size: 15px; line-height: 1.5; }
+.fg-explain-entry { color: var(--fg-table); }
+.fg-explain-details { color: var(--fg-muted); font-size: 12px; font-family: var(--fg-mono); }
+.fg-explain-range { margin-left: 6px; text-transform: none; letter-spacing: 0; font-size: 11px; color: var(--fg-text); }
+.fg-explain-addr { color: var(--fg-addr); }
+.fg-previews { gap: 6px; }
+.fg-preview {
+  display: flex; flex-direction: column; width: 100%; text-align: left; padding: 6px 8px;
+  border: 1px solid var(--fg-border); border-radius: 6px; background: var(--fg-surface); font-size: 12px; cursor: pointer;
+}
+.fg-preview:hover { border-color: #8b949e; background: var(--fg-hover); }
+.fg-preview:focus-visible { outline: 2px solid var(--fg-accent); outline-offset: 2px; }
+.fg-preview-line { white-space: pre; overflow: hidden; text-overflow: ellipsis; color: var(--fg-text); }
+.fg-picture { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.fg-picture-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; }
+.fg-picture-width { padding: 2px 9px; font-size: 12px; }
+.fg-picture-width[aria-pressed="true"] { border-color: var(--fg-accent); color: var(--fg-text-strong); background: #3a2420; }
+.fg-picture-field { width: 5em; }
+.fg-picture-frame { max-height: 420px; overflow: auto; border: 1px solid var(--fg-border); border-radius: 4px; background: var(--fg-bg); align-self: flex-start; max-width: 100%; }
+.fg-picture-frame canvas { display: block; }
+.fg-picture-frame:focus-visible { outline: 2px solid var(--fg-accent); outline-offset: 2px; }
+.fg-picture-note { font-size: 11px; }

@@ -258,6 +258,60 @@ for (const c of CASES) {
   });
 }
 
+// Stepping with Explain open: each ArrowDown re-explains the new line, so a
+// step's work (the key handler and the render it causes) must stay within a
+// frame, and no step may be a long task.
+for (const c of CASES) {
+  test.describe(`${c.name}, Explain open`, () => {
+    test.skip(!c.available, 'sample not present (fixtures/real is gitignored)');
+
+    test('200 ArrowDowns re-explain each line within a frame', async ({ page }) => {
+      await openCase(page, c);
+      // The first code line past the header: a click there opens Explain on it.
+      const start = await page.evaluate(() => {
+        const rows = [...document.querySelectorAll<HTMLElement>('.fg-row-code[data-addr]')];
+        return Number(rows[0]!.dataset.addr);
+      });
+      await page.locator(`.fg-row-code[data-addr="${start}"]`).click();
+      await expect(page.getByRole('tab', { name: 'Explain' })).toHaveAttribute('aria-selected', 'true');
+      // Let the idle-time routine index build land, as it would while the reader looks at the program.
+      await page.waitForTimeout(500);
+      const run = await measure(page, async () => {
+        const steps = await page.evaluate(async () => {
+          const el = document.querySelector<HTMLElement>('.fg-listing')!;
+          const raf = (): Promise<void> => new Promise((r) => requestAnimationFrame(() => r()));
+          const out: { work: number; frame: number }[] = [];
+          for (let i = 0; i < 200; i++) {
+            const t0 = performance.now();
+            el.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+            // Vue's update runs in a microtask queued by the handler; this one runs after it.
+            await Promise.resolve();
+            const work = performance.now() - t0;
+            await raf();
+            out.push({ work, frame: performance.now() - t0 });
+          }
+          return out;
+        });
+        (page as unknown as { __steps: typeof steps }).__steps = steps;
+      });
+      const steps = (page as unknown as { __steps: { work: number; frame: number }[] }).__steps;
+      const work = steps.map((x) => x.work);
+      const frame = steps.map((x) => x.frame);
+      const end = await page.evaluate(() => Number(document.querySelector<HTMLElement>('.fg-row-cursor')!.dataset.addr));
+      const report = `${c.name}, Explain open: 200 ArrowDowns from $${start.toString(16).toUpperCase()} to $${end.toString(16).toUpperCase()}: work p50 ${ms(p(work, 0.5))}, p95 ${ms(p(work, 0.95))}, max ${ms(Math.max(...work))}; key to frame p50 ${ms(p(frame, 0.5))}, p95 ${ms(p(frame, 0.95))}, max ${ms(Math.max(...frame))}; long tasks: ${run.longTasks.length}${run.longTasks.length ? ` (max ${ms(Math.max(...run.longTasks))})` : ''}`;
+      console.log(report);
+      test.info().annotations.push({ type: 'perf', description: report });
+      expect(end).not.toBe(start);
+      await expect(page.getByTestId('explain-line')).toContainText(end.toString(16).toUpperCase().padStart(4, '0'));
+      if (PERF) {
+        expect(run.longTasks.filter((d) => d > 50)).toEqual([]);
+        expect(p(work, 0.95)).toBeLessThan(16.7);
+        expect(Math.max(...work)).toBeLessThan(50);
+      }
+    });
+  });
+}
+
 // The ListingView contracts the perf numbers rest on, on a real example (no samples needed).
 test.describe('ListingView anchoring (seadrg01)', () => {
   test('a cursor on a labelled address stays put across re-renders', async ({ page }) => {
