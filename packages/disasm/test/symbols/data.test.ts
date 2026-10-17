@@ -94,7 +94,19 @@ describe('the hardware tables', () => {
   });
 
   it('enters the Model III memory map devices of manual p. 14: the printer status pair, keyboard, and video', () => {
-    expect(memory(model3)).toEqual([[0x37e8, 'PRTSTATUS', 2], [0x3800, 'KEYBOARD', 1024], [0x3c00, 'VIDEO', 1024]]);
+    expect(memory(model3)).toEqual([[0x37e8, '$PRSTAT', 2], [0x3800, 'KEYBOARD', 1024], [0x3c00, 'VIDEO', 1024]]);
+  });
+
+  // Tandy's ROM summary (m3-basic 12/24) prints the printer status as "$PRSTAT 14312/X'37E8'", and a name a source prints beats a coined one (spec 4.3).
+  it('names the printer status pair $PRSTAT, as Tandy prints it on 12/24, and still cites the Model III manual p. 14', () => {
+    expect(named(model3, '$PRSTAT')).toMatchObject({
+      key: 0x37e8,
+      kind: 'region',
+      length: 2,
+      coined: false,
+      cite: [{ source: 'm3-trm', page: '14' }, { source: 'm3-basic', page: '12/24' }],
+    });
+    expect(named(model3, 'PRTSTATUS')).toBeUndefined();
   });
 
   it('enters the Model I memory-mapped devices (Level II manual D-2, Decker 63) and the one port, FF', () => {
@@ -121,10 +133,11 @@ describe('the hardware tables', () => {
     expect(pages('PRINTER')).toEqual(['63', '64']);
   });
 
-  it('coins every hardware name, since the manuals name signals, not symbols', () => {
+  it('coins every hardware name but $PRSTAT, since the manuals name signals, not symbols; Tandy prints that one', () => {
     expect(model1.length).toBeGreaterThan(0);
     expect(model3.length).toBeGreaterThan(0);
-    for (const e of [...model1, ...model3]) expect(e.coined, e.name).toBe(true);
+    for (const e of [...model1, ...model3]) expect(e.coined, e.name).toBe(!e.name.startsWith('$'));
+    expect([...model1, ...model3].filter((e) => !e.coined).map((e) => e.name)).toEqual(['$PRSTAT']);
   });
 
   it('names the screen and a port through selectSymbols, for both machines', () => {
@@ -160,17 +173,25 @@ describe('the Model III ROM table', () => {
     expect(rom.length).toBeGreaterThanOrEqual(60);
   });
 
-  it('names the 28 rows of Tandy summary 12/24: 27 routines here, and the printer status at 0x37E8 through the hardware table that owns it', () => {
+  it('names all 28 rows of Tandy summary 12/24 in the Model III selection: 27 routines here, and the printer status $PRSTAT in the hardware table', () => {
     expect(SUMMARY).toHaveLength(28);
-    const here = SUMMARY.filter(([name]) => name !== '$PRSTAT');
-    expect(here).toHaveLength(27);
-    for (const [name, key, page] of here) {
+    // The Model III selection is rom-model3 plus hardware-model3 (here with no DOS table).
+    const selection = selectSymbols({ machine: 3, dos: 'none' }).entries();
+    expect(selection.map((e) => e.table)).toEqual([...rom, ...TABLES['hardware-model3']].map((e) => e.table));
+    const found = SUMMARY.filter(([name, key]) => selection.some((e) => e.name === name && e.key === key));
+    expect(found.map(([name]) => name)).toEqual(SUMMARY.map(([name]) => name));
+    expect(found).toHaveLength(28);
+    // The 27 routines are here, each uncoined and citing its own page.
+    const routines = SUMMARY.filter(([name]) => name !== '$PRSTAT');
+    expect(routines).toHaveLength(27);
+    for (const [name, key, page] of routines) {
       expect(named(name), name).toMatchObject({ key, kind: 'routine', coined: false, cite: [{ source: 'm3-basic', page }] });
     }
-    // 37E8 is memory, and the hardware table already names it PRTSTATUS; memory entries in one selection may not overlap.
+    // 37E8 is memory the hardware table owns, and memory entries in one selection may not overlap, so $PRSTAT cannot also be here.
     expect(named('$PRSTAT')).toBeUndefined();
     expect(at(0x37e8)).toBeUndefined();
-    expect(TABLES['hardware-model3'].find((e) => e.key === 0x37e8)).toMatchObject({ name: 'PRTSTATUS', kind: 'region' });
+    expect(TABLES['hardware-model3'].find((e) => e.name === '$PRSTAT')).toMatchObject({ key: 0x37e8, kind: 'region', length: 2, coined: false });
+    expect(selectSymbols({ machine: 3, dos: 'none' }).data(0x37e9)).toMatchObject({ entry: { name: '$PRSTAT' }, offset: 1 });
   });
 
   it('puts $PRCHAR at 0x003B, the print routine Tandy lists there', () => {
@@ -228,6 +249,9 @@ describe('the Model III ROM table', () => {
   it('uses Tandy names, which start with $, only where Tandy prints them, and coins every other name', () => {
     for (const e of rom) expect(e.coined, e.name).toBe(!e.name.startsWith('$'));
     expect(rom.filter((e) => !e.coined).map((e) => e.name).sort()).toEqual(SUMMARY.filter(([name]) => name !== '$PRSTAT').map(([name]) => name).sort());
+    // Across the Model III selection the uncoined names are exactly Tandy's 28 summary names.
+    const selection = selectSymbols({ machine: 3, dos: 'none' }).entries();
+    expect(selection.filter((e) => !e.coined).map((e) => e.name).sort()).toEqual(SUMMARY.map(([name]) => name).sort());
   });
 
   it('cites only Tandy chapter 12 (12/2 to 12/26) and Decker pages the book prints (1 to 126), and never kiwisincebirth', () => {

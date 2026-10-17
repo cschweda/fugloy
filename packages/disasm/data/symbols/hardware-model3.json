@@ -3,12 +3,11 @@
   "entries": [
     {
       "addr": "37E8",
-      "name": "PRTSTATUS",
+      "name": "$PRSTAT",
       "kind": "region",
       "length": 2,
       "purpose": "printer status read as memory, the same status as port F8",
-      "cite": [{ "source": "m3-trm", "page": "14" }],
-      "coined": true
+      "cite": [{ "source": "m3-trm", "page": "14" }, { "source": "m3-basic", "page": "12/24" }]
     },
     {
       "addr": "3800",

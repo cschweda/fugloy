@@ -159,7 +159,7 @@ export const TABLES: Readonly<Record<TableId, readonly TableEntry[]>> = {
     { table: 'hardware-model3', kind: 'port', key: 0xF4, name: 'FDC_DRVSEL', length: 1, purpose: 'drive and side select, density, wait states, precompensation (out only)', cite: [{ source: 'm3-trm', page: '22' }], coined: true },
     { table: 'hardware-model3', kind: 'port', key: 0xF8, name: 'PRINTER', length: 1, purpose: 'printer status (in), printer data (out)', cite: [{ source: 'm3-trm', page: '15' }], coined: true },
     { table: 'hardware-model3', kind: 'port', key: 0xFF, name: 'CASSETTE', length: 1, purpose: 'cassette input (in), cassette output level (out)', cite: [{ source: 'm3-trm', page: '21' }, { source: 'm3-trm', page: '22' }], coined: true },
-    { table: 'hardware-model3', kind: 'region', key: 0x37E8, name: 'PRTSTATUS', length: 2, purpose: 'printer status read as memory, the same status as port F8', cite: [{ source: 'm3-trm', page: '14' }], coined: true },
+    { table: 'hardware-model3', kind: 'region', key: 0x37E8, name: '$PRSTAT', length: 2, purpose: 'printer status read as memory, the same status as port F8', cite: [{ source: 'm3-trm', page: '14' }, { source: 'm3-basic', page: '12/24' }], coined: false },
     { table: 'hardware-model3', kind: 'region', key: 0x3800, name: 'KEYBOARD', length: 1024, purpose: 'memory-mapped keyboard', cite: [{ source: 'm3-trm', page: '14' }], coined: true, note: 'this manual decodes 3800-3BFF; the Model I handbook decodes 3800-38FF' },
     { table: 'hardware-model3', kind: 'region', key: 0x3C00, name: 'VIDEO', length: 1024, purpose: 'video display memory', cite: [{ source: 'm3-trm', page: '14' }], coined: true },
   ],
