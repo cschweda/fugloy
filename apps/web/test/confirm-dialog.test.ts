@@ -31,7 +31,7 @@ describe('ConfirmDialog', () => {
     const host = document.createElement('div');
     document.body.append(host);
     const w = mount(ConfirmDialog, { props: { open: false, title: 'T', message: 'M', confirmLabel: 'Yes', noEscape: true }, attachTo: host });
-    await w.setProps({ open: true });
+    await w.setProps({ open: true } as never);
     const d = w.get('dialog').element as HTMLDialogElement;
     expect(d.open).toBe(true);
     d.close();
