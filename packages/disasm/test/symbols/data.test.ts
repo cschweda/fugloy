@@ -138,6 +138,130 @@ describe('the hardware tables', () => {
   });
 });
 
+describe('the Model III ROM table', () => {
+  const rom = TABLES['rom-model3'];
+  const at = (key: number): TableEntry | undefined => rom.find((e) => e.key === key);
+  const named = (name: string): TableEntry | undefined => rom.find((e) => e.name === name);
+  const pages = (e: TableEntry | undefined, source: string): string[] => (e?.cite ?? []).filter((c) => c.source === source).map((c) => c.page);
+
+  // The 28 rows of Tandy's "Summary of Important ROM Addresses" (m3-basic 12/24), each with the manual page of its own entry. Every row's decimal
+  // and hex agree on the page image, and each routine's own heading prints the same pair. The page numbers are chapter and page (12/15), as the
+  // archive.org copy named in sources.json prints them.
+  const SUMMARY: readonly (readonly [string, number, string])[] = [
+    ['$RESET', 0x0000, '12/15'], ['$KBCHAR', 0x002b, '12/11'], ['$VDCHAR', 0x0033, '12/20'], ['$PRCHAR', 0x003b, '12/14'], ['$KBLINE', 0x0040, '12/12'],
+    ['$KBWAIT', 0x0049, '12/12'], ['$RSRCV', 0x0050, '12/18'], ['$RSTX', 0x0055, '12/19'], ['$RSINIT', 0x005a, '12/17'], ['$DELAY', 0x0060, '12/10'],
+    ['$INITIO', 0x0069, '12/10'], ['$ROUTE', 0x006c, '12/16'], ['$VDCLS', 0x01c9, '12/21'], ['$PRSCN', 0x01d9, '12/14'], ['$CSOFF', 0x01f8, '12/8'],
+    ['$VDLINE', 0x021b, '12/21'], ['$CSIN', 0x0235, '12/7'], ['$CSOUT', 0x0264, '12/9'], ['$CSHWR', 0x0287, '12/7'], ['$KBBRK', 0x028d, '12/13'],
+    ['$CSHIN', 0x0296, '12/6'], ['$CLKON', 0x0298, '12/5'], ['$CLKOFF', 0x02a1, '12/5'], ['$READY', 0x1a19, '12/15'], ['$DATE', 0x3033, '12/9'],
+    ['$TIME', 0x3036, '12/20'], ['$SETCAS', 0x3042, '12/19'], ['$PRSTAT', 0x37e8, '12/24'],
+  ];
+
+  it('has at least 60 entries', () => {
+    expect(rom.length).toBeGreaterThanOrEqual(60);
+  });
+
+  it('names the 28 rows of Tandy summary 12/24: 27 routines here, and the printer status at 0x37E8 through the hardware table that owns it', () => {
+    expect(SUMMARY).toHaveLength(28);
+    const here = SUMMARY.filter(([name]) => name !== '$PRSTAT');
+    expect(here).toHaveLength(27);
+    for (const [name, key, page] of here) {
+      expect(named(name), name).toMatchObject({ key, kind: 'routine', coined: false, cite: [{ source: 'm3-basic', page }] });
+    }
+    // 37E8 is memory, and the hardware table already names it PRTSTATUS; memory entries in one selection may not overlap.
+    expect(named('$PRSTAT')).toBeUndefined();
+    expect(at(0x37e8)).toBeUndefined();
+    expect(TABLES['hardware-model3'].find((e) => e.key === 0x37e8)).toMatchObject({ name: 'PRTSTATUS', kind: 'region' });
+  });
+
+  it('puts $PRCHAR at 0x003B, the print routine Tandy lists there', () => {
+    expect(named('$PRCHAR')).toMatchObject({ key: 0x003b });
+    expect(at(0x003b)?.name).toBe('$PRCHAR');
+  });
+
+  it('has the eight RST vectors, 0x00 through 0x38, as routines', () => {
+    for (const key of [0x00, 0x08, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38]) expect(at(key), `RST ${key.toString(16)}`).toMatchObject({ kind: 'routine' });
+    expect(at(0x00)?.name).toBe('$RESET');
+  });
+
+  // Decker's "Page N" line closes page N (its contents puts chapter 4 at p. 50, and its own address index lists 0008 and 0010 under 51, and
+  // 0018, 0020, 0028, 0030, and 0038 under 52), so the RST text above "Page 51" is on p. 51 and the text above "Page 52" on p. 52.
+  it('cites Decker on printed pages 51 and 52 for the RST vectors it describes', () => {
+    for (const key of [0x08, 0x10]) expect(pages(at(key), 'decker'), `RST ${key.toString(16)}`).toEqual(['51']);
+    for (const key of [0x18, 0x20, 0x28, 0x30, 0x38]) expect(pages(at(key), 'decker'), `RST ${key.toString(16)}`).toEqual(['52']);
+    for (const key of [0x08, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38]) expect(at(key)?.coined, `RST ${key.toString(16)}`).toBe(true);
+  });
+
+  // The 18 rows of Tandy's "Summary of Important RAM Addresses" (12/25 and 12/26), each a variable, or a vector for the BREAK jump. Lengths come
+  // from the page: three bytes for the vector, two for an address or device code, six for the clock, one otherwise.
+  it('enters each RAM address of Tandy summaries 12/25 and 12/26 as a variable or vector with its length', () => {
+    const RAM: readonly (readonly [number, string, 'variable' | 'vector', number, string])[] = [
+      [0x400c, 'BREAKVEC', 'vector', 3, '12/25'], [0x4019, 'CAPSLOCK', 'variable', 1, '12/25'], [0x401c, 'CURBLINK', 'variable', 1, '12/25'],
+      [0x4020, 'CURADDR', 'variable', 2, '12/25'], [0x4023, 'CURCHAR', 'variable', 1, '12/25'], [0x4028, 'PRTPAGELEN', 'variable', 1, '12/25'],
+      [0x4029, 'PRTLINECNT', 'variable', 1, '12/25'], [0x402b, 'PRTWIDTH', 'variable', 1, '12/25'], [0x41e8, 'RSRXBUF', 'variable', 1, '12/25'],
+      [0x41f0, 'RSTXBUF', 'variable', 1, '12/25'], [0x41f8, 'RSBAUD', 'variable', 1, '12/25'], [0x41f9, 'RSFORMAT', 'variable', 1, '12/25'],
+      [0x41fa, 'RSWAIT', 'variable', 1, '12/25'], [0x4211, 'CASBAUD', 'variable', 1, '12/25'], [0x4214, 'SCROLLPROT', 'variable', 1, '12/26'],
+      [0x4217, 'TIMEDATE', 'variable', 6, '12/26'], [0x4220, 'ROUTEDST', 'variable', 2, '12/26'], [0x4222, 'ROUTESRC', 'variable', 2, '12/26'],
+    ];
+    expect(RAM).toHaveLength(18);
+    for (const [key, name, kind, length, page] of RAM) {
+      expect(at(key), name).toMatchObject({ name, kind, length, coined: true });
+      expect(pages(at(key), 'm3-basic')[0], name).toBe(page);
+    }
+  });
+
+  it('names each address of the asylum16 list that a Model III source documents, and not $0112, which is only text in the start-up banner', () => {
+    const documented = [0x0000, 0x0008, 0x0010, 0x0020, 0x0030, 0x0038, 0x002b, 0x0033, 0x01f8, 0x0212, 0x0235, 0x0264, 0x0287, 0x0296, 0x093e, 0x1a19];
+    for (const key of documented) expect(at(key), key.toString(16)).toMatchObject({ kind: 'routine' });
+    expect(at(0x0212)?.cite).toEqual([{ source: 'decker', page: '17' }]);
+    expect(at(0x093e)?.cite).toEqual([{ source: 'decker', page: '28' }]);
+    // Decker's differences list gives 0112-0115 only as part of the banner "Radio Shack Model III Basic": no routine, so no entry.
+    expect(at(0x0112)).toBeUndefined();
+  });
+
+  it('keeps ROM entries below $4000 as routines and RAM entries from $4000 as variables or vectors', () => {
+    for (const e of rom) {
+      if (e.key < 0x4000) expect(e.kind, e.name).toBe('routine');
+      else expect(['variable', 'vector'], e.name).toContain(e.kind);
+    }
+  });
+
+  it('uses Tandy names, which start with $, only where Tandy prints them, and coins every other name', () => {
+    for (const e of rom) expect(e.coined, e.name).toBe(!e.name.startsWith('$'));
+    expect(rom.filter((e) => !e.coined).map((e) => e.name).sort()).toEqual(SUMMARY.filter(([name]) => name !== '$PRSTAT').map(([name]) => name).sort());
+  });
+
+  it('cites only Tandy chapter 12 (12/2 to 12/26) and Decker pages the book prints (1 to 126), and never kiwisincebirth', () => {
+    for (const e of rom) {
+      expect(e.cite.length, e.name).toBeGreaterThan(0);
+      for (const c of e.cite) {
+        expect(['m3-basic', 'decker'], `${e.name} cites ${c.source}`).toContain(c.source);
+        if (c.source === 'm3-basic') {
+          const m = /^12\/(\d+)$/.exec(c.page);
+          expect(m, `${e.name} cites ${c.page}`).not.toBeNull();
+          expect(Number(m?.[1]), `${e.name} cites ${c.page}`).toBeGreaterThanOrEqual(2);
+          expect(Number(m?.[1]), `${e.name} cites ${c.page}`).toBeLessThanOrEqual(26);
+        } else {
+          expect(c.page, `${e.name} cites decker ${c.page}`).toMatch(/^[1-9]\d{0,2}$/);
+          expect(Number(c.page), `${e.name} cites decker ${c.page}`).toBeLessThanOrEqual(126);
+        }
+      }
+    }
+    expect(rom.some((e) => e.cite.some((c) => c.source === 'kiwisincebirth'))).toBe(false);
+  });
+
+  it('names the ROM, the RST vectors, and the RAM it documents through selectSymbols, under every DOS', () => {
+    for (const dos of ['trsdos', 'ldos', 'none'] as const) {
+      const set = selectSymbols({ machine: 3, dos });
+      expect(set.code(0x0049)?.name, dos).toBe('$KBWAIT');
+      expect(set.code(0x0000)?.name, dos).toBe('$RESET');
+      expect(set.code(0x0038)?.name, dos).toBe(at(0x38)?.name);
+      expect(set.code(0x400c)?.name, dos).toBe('BREAKVEC');
+      expect(set.data(0x4021)).toMatchObject({ entry: { name: 'CURADDR' }, offset: 1 });
+      expect(set.data(0x4219)).toMatchObject({ entry: { name: 'TIMEDATE' }, offset: 2 });
+    }
+  });
+});
+
 describe('buildSymbolOutputs on an edited copy of the data', () => {
   const copies: string[] = [];
   afterAll(() => {

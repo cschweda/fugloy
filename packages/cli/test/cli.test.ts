@@ -183,7 +183,7 @@ describe('pass 1 flags', () => {
     expect(await run([`${fixtures}bas/hidden-code.bas`], io)).toBe(0);
     const text = out.join('');
     expect(text).toContain('; code lines: 1; entries mined: 0\n');
-    expect(text).toContain('\n10 GOTO 30\n; line 20: machine code, 6 bytes at $700D\n700D  C3 00 00      JP 0000H                ; entry\n');
+    expect(text).toContain('\n10 GOTO 30\n; line 20: machine code, 6 bytes at $700D\n700D  C3 00 00      JP $RESET               ; entry');
   });
 
   it('rebases a .BAS file with --rebase, names the original base, and keeps its hints matching', async () => {
@@ -223,7 +223,7 @@ describe('pass 1 flags', () => {
     expect(await run([bas, '--entry', '700D'], io)).toBe(0); // line 20's body: C3 00 00 C9 00 3E
     const text = out.join('');
     expect(text).toContain('; pass 1: roots $700D;');
-    expect(text).toContain('700D  C3 00 00      JP 0000H                ; entry');
+    expect(text).toContain('700D  C3 00 00      JP $RESET               ; entry');
   });
 
   skipIfNoZmac()('a .BAS file\'s zmac output assembles back to the same image', async () => {
