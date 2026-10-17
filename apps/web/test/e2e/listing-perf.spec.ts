@@ -1,8 +1,8 @@
 // The plan's named risk for phase 4: a listing of 8,000+ rows must scroll
 // smoothly, jump to an address fast, and keep the cursor row on screen when the
-// rows change. Runs against the generated site through the temporary demo on the
-// index page. asylum16 (gitignored) is used when it is present; the raw 48K load
-// needs nothing outside the repo.
+// rows change. Runs against the generated site's workbench, driven through its
+// test hook (window.__fugloyTest, app/pages/index.vue). asylum16 (gitignored) is
+// used when it is present; the raw 48K load needs nothing outside the repo.
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
@@ -15,21 +15,21 @@ const ASYLUM_HINTS = repo('fixtures/hints/asylum16.hints');
 declare global {
   interface Window {
     __longTasks: number[];
-    /** Set by the demo on the index page (app/pages/index.vue). */
-    __fugloyDemo?: {
+    /** Set by the workbench (app/pages/index.vue). */
+    __fugloyTest?: {
       rowCount: () => number;
       scrollToAddr: (addr: number) => void;
       setCursor: (addr: number | null) => void;
       rerender: (kind: 'tables' | 'names') => void;
       load: (bytes: number[], name: string, hints?: string, base?: number) => void;
+      loadedBytes: () => number[];
     };
   }
 }
 
 interface Case {
   name: string;
-  url: string;
-  /** A program the test reads itself and hands to the open demo (the page fetches nothing but its bundled examples). */
+  /** A program the test reads itself and hands to the workbench (the page fetches nothing but its bundled examples); without it, seadrg01's loaded image repeated over 48K, loaded raw at $4000. */
   input?: () => { bytes: number[]; name: string; hints: string };
   /** Addresses to jump to: row starts and addresses inside rows. */
   jumps: number[];
@@ -39,30 +39,54 @@ interface Case {
 const spread = (from: number, to: number, n: number): number[] => Array.from({ length: n }, (_, i) => from + Math.floor(((to - from) * (i + 0.5)) / n));
 
 const CASES: Case[] = [
-  { name: 'raw 48K load of seadrg01', url: '/?demo=raw48', jumps: spread(0x4000, 0xffff, 12), available: true },
+  { name: 'raw 48K load of seadrg01', jumps: spread(0x4000, 0xffff, 12), available: true },
   {
     name: 'asylum16 with its hints',
-    url: '/?demo=seadrg01',
     input: () => ({ bytes: Array.from(readFileSync(ASYLUM)), name: 'asylum16.cmd', hints: readFileSync(ASYLUM_HINTS, 'utf8') }),
     jumps: spread(0x42f3, 0x7ff6, 12),
     available: existsSync(ASYLUM) && existsSync(ASYLUM_HINTS),
   },
 ];
 
-async function openDemo(page: Page, c: Case): Promise<number> {
+const nextFrames = (page: Page): Promise<unknown> => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+
+/** Opens Sea Dragon with one click on the first screen, as a visitor would. */
+async function openSeaDragon(page: Page): Promise<void> {
+  await page.goto('/');
+  await page.waitForFunction(() => window.__fugloyTest !== undefined, undefined, { timeout: 30_000 });
+  await page.getByTestId('open-sea-dragon').click();
+  await expect(page.locator('.fg-listing')).toBeVisible();
+}
+
+async function openCase(page: Page, c: Case): Promise<number> {
   await page.addInitScript(() => {
     window.__longTasks = [];
     new PerformanceObserver((list) => {
       for (const e of list.getEntries()) window.__longTasks.push(e.duration);
     }).observe({ type: 'longtask', buffered: true });
   });
-  await page.goto(c.url);
-  await page.waitForFunction(() => window.__fugloyDemo !== undefined, undefined, { timeout: 30_000 });
+  await openSeaDragon(page);
   if (c.input !== undefined) {
-    await page.evaluate(({ bytes, name, hints }) => window.__fugloyDemo!.load(bytes, name, hints), c.input());
-    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    await page.evaluate(({ bytes, name, hints }) => window.__fugloyTest!.load(bytes, name, hints), c.input());
+  } else {
+    await page.evaluate(() => {
+      const t = window.__fugloyTest!;
+      const loaded = t.loadedBytes();
+      t.load(Array.from({ length: 0xc000 }, (_, i) => loaded[i % loaded.length]!), 'seadrg01 x 48K (raw)', undefined, 0x4000);
+    });
   }
-  return page.evaluate(() => window.__fugloyDemo!.rowCount());
+  await nextFrames(page);
+  return page.evaluate(() => window.__fugloyTest!.rowCount());
+}
+
+/** Sea Dragon open, the cursor on $49B1 (L49B1) and scrolled to it. */
+async function openAt49B1(page: Page): Promise<void> {
+  await openSeaDragon(page);
+  await page.evaluate(() => {
+    window.__fugloyTest!.setCursor(0x49b1);
+    window.__fugloyTest!.scrollToAddr(0x49b1);
+  });
+  await nextFrames(page);
 }
 
 /** Long tasks and frame intervals while `action` runs. */
@@ -104,7 +128,7 @@ for (const c of CASES) {
       // FUGLOY_CPU_THROTTLE=4 runs the same check on a CPU slowed fourfold (Chromium's DevTools throttling).
       const throttle = Number(process.env.FUGLOY_CPU_THROTTLE ?? 1);
       if (throttle > 1) await (await page.context().newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: throttle });
-      const count = await openDemo(page, c);
+      const count = await openCase(page, c);
       expect(count).toBeGreaterThan(c.name.startsWith('raw') ? 8000 : 1000);
       const listing = page.locator('.fg-listing');
       await listing.hover();
@@ -150,7 +174,7 @@ for (const c of CASES) {
           el.scrollTop = addr % 2 === 0 ? 0 : el.scrollHeight;
           await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
           const t0 = performance.now();
-          window.__fugloyDemo!.scrollToAddr(addr);
+          window.__fugloyTest!.scrollToAddr(addr);
           await new Promise((r) => requestAnimationFrame(() => r(undefined)));
           const box = el.getBoundingClientRect();
           // The row holding addr starts at most 3 bytes below it (rows are at most 4 bytes).
@@ -170,18 +194,18 @@ for (const c of CASES) {
       for (const kind of ['names', 'tables', 'tables'] as const) {
         const result = await page.evaluate(
           async ({ addr, kind }) => {
-            const demo = window.__fugloyDemo!;
+            const hook = window.__fugloyTest!;
             const el = document.querySelector<HTMLElement>('.fg-listing')!;
             const raf = (): Promise<void> => new Promise((r) => requestAnimationFrame(() => r()));
-            demo.setCursor(addr);
-            demo.scrollToAddr(addr);
+            hook.setCursor(addr);
+            hook.scrollToAddr(addr);
             await raf();
             await raf();
-            const before = demo.rowCount();
+            const before = hook.rowCount();
             const cursorTop = (): number | null => el.querySelector('.fg-row-cursor')?.getBoundingClientRect().top ?? null;
             const topBefore = cursorTop();
             const t0 = performance.now();
-            demo.rerender(kind);
+            hook.rerender(kind);
             await raf();
             const took = performance.now() - t0;
             const box = el.getBoundingClientRect();
@@ -190,7 +214,7 @@ for (const c of CASES) {
             return {
               kind,
               before,
-              after: demo.rowCount(),
+              after: hook.rowCount(),
               delta: r === undefined || topBefore === null ? NaN : r.top - topBefore,
               inView: r !== undefined && r.top >= box.top && r.bottom <= box.bottom,
               ms: took,
@@ -230,24 +254,23 @@ for (const c of CASES) {
 // The ListingView contracts the perf numbers rest on, on a real example (no samples needed).
 test.describe('ListingView anchoring (seadrg01)', () => {
   test('a cursor on a labelled address stays put across re-renders', async ({ page }) => {
-    await page.goto('/?demo=seadrg01&at=49B1');
-    await page.waitForFunction(() => window.__fugloyDemo !== undefined);
+    await openAt49B1(page);
     // $49B1 is L49B1, a jump target: a label row sits above its instruction row.
     await expect(page.locator('.fg-row-label[data-addr="18865"]')).toBeVisible();
     for (const kind of ['names', 'tables', 'tables'] as const) {
       const r = await page.evaluate(async (kind) => {
-        const demo = window.__fugloyDemo!;
+        const hook = window.__fugloyTest!;
         const raf = (): Promise<void> => new Promise((res) => requestAnimationFrame(() => res()));
         const el = document.querySelector<HTMLElement>('.fg-listing')!;
-        demo.setCursor(0x49b1);
+        hook.setCursor(0x49b1);
         await raf();
         const cursor = (): HTMLElement | null => el.querySelector<HTMLElement>('.fg-row-cursor');
         const before = cursor()!.getBoundingClientRect().top;
-        const rows = demo.rowCount();
-        demo.rerender(kind);
+        const rows = hook.rowCount();
+        hook.rerender(kind);
         await raf();
         const row = cursor()!;
-        return { kind, rowsChanged: demo.rowCount() !== rows, addr: row.dataset.addr, kindOfRow: row.className, delta: row.getBoundingClientRect().top - before };
+        return { kind, rowsChanged: hook.rowCount() !== rows, addr: row.dataset.addr, kindOfRow: row.className, delta: row.getBoundingClientRect().top - before };
       }, kind);
       expect(r.rowsChanged, `${kind} changed the rows`).toBe(true);
       expect(r.addr).toBe(String(0x49b1));
@@ -257,14 +280,13 @@ test.describe('ListingView anchoring (seadrg01)', () => {
   });
 
   test('the top row stays put across re-renders when the cursor is off screen, label row or not', async ({ page }) => {
-    await page.goto('/?demo=seadrg01&at=49B1');
-    await page.waitForFunction(() => window.__fugloyDemo !== undefined);
+    await openAt49B1(page);
     for (const labelOnTop of [true, false]) {
       const r = await page.evaluate(async (labelOnTop) => {
-        const demo = window.__fugloyDemo!;
+        const hook = window.__fugloyTest!;
         const raf = (): Promise<void> => new Promise((res) => requestAnimationFrame(() => res()));
         const el = document.querySelector<HTMLElement>('.fg-listing')!;
-        demo.setCursor(null);
+        hook.setCursor(null);
         // Put the L49B1 label row, or the instruction row under it, exactly at the top.
         const label = el.querySelector<HTMLElement>('.fg-row-label[data-addr="18865"]')!;
         const index = Math.round((label.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop) / 20);
@@ -272,7 +294,7 @@ test.describe('ListingView anchoring (seadrg01)', () => {
         await raf();
         const topRow = (): HTMLElement => [...el.querySelectorAll<HTMLElement>('.fg-row')].find((row) => Math.abs(row.getBoundingClientRect().top - el.getBoundingClientRect().top) < 1)!;
         const before = topRow().className;
-        demo.rerender('tables');
+        hook.rerender('tables');
         await raf();
         const after = topRow();
         return { before, after: after.className, addr: after.dataset.addr };
@@ -283,13 +305,13 @@ test.describe('ListingView anchoring (seadrg01)', () => {
   });
 
   test('scrollToAddr in the same tick as new rows lands on the new rows', async ({ page }) => {
-    await page.goto('/?demo=seadrg01&at=49B1');
-    await page.waitForFunction(() => window.__fugloyDemo !== undefined);
+    await openAt49B1(page);
     const results = await page.evaluate(async () => {
-      const demo = window.__fugloyDemo!;
-      const el = document.querySelector<HTMLElement>('.fg-listing')!;
+      const hook = window.__fugloyTest!;
       const raf = (): Promise<void> => new Promise<void>((res) => requestAnimationFrame(() => res()));
+      // Queried each time: a newly opened program gets a new (keyed) ListingView.
       const inView = (target: number): boolean => {
+        const el = document.querySelector<HTMLElement>('.fg-listing')!;
         const box = el.getBoundingClientRect();
         return [...el.querySelectorAll<HTMLElement>('.fg-row[data-addr]')].some((row) => {
           const a = Number(row.dataset.addr);
@@ -299,15 +321,15 @@ test.describe('ListingView anchoring (seadrg01)', () => {
       };
       const out: Record<string, boolean> = {};
       // No await between the rows change and the call. Same program, new rows:
-      demo.rerender('tables');
-      demo.scrollToAddr(0x7a00);
+      hook.rerender('tables');
+      hook.scrollToAddr(0x7a00);
       await raf();
       out.tables = inView(0x7a00);
-      // Far more rows than before (5,380 -> about 15,000): the old rows hold no
-      // row this far down, and the old spacer is too short to scroll to it.
+      // A new program with far more rows (5,380 -> about 12,650), opened in the
+      // same tick as the call: the scroll reaches the new listing, not the old.
       const bytes = Array.from({ length: 0xc000 }, (_, i) => (i * 7) & 0xff);
-      demo.load(bytes, 'raw', undefined, 0x4000);
-      demo.scrollToAddr(0xf000);
+      hook.load(bytes, 'raw', undefined, 0x4000);
+      hook.scrollToAddr(0xf000);
       await raf();
       out.grown = inView(0xf000);
       return out;
