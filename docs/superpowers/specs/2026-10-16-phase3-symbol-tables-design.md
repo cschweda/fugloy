@@ -70,10 +70,12 @@ appear in committed data. Pages are cited as each source prints them.
 | `soltoff` | Roy Soltoff, *The Programmer's Guide to LDOS/TRSDOS Version 6* (MISOSYS, 1983/84; free to redistribute) | LS-DOS 6 service calls | 99, 101–104 |
 | `m4-trm` | Tandy 26-2110, *TRS-80 Model 4 Technical Reference Manual* (1983) | Second source for service calls | 227, 331–335 |
 
-The Model I's memory-mapped device registers (`$37DE`–`$37EF`) cite `l2-1979`
-D-2 and `decker` 63–64, with `paay` 24 as a second cite for `$37ED`–`$37EF`;
-`m1-trh` documents the keyboard, video RAM, and port `$FF`. (The first draft
-listed `m1-trh` pages 12, 34, and 86; page 34 was wrong, and page 86 is a
+The Model I's memory-mapped device registers (`$37DE`–`$37EF`) cite `decker`
+63, and p. 64 as well for `$37E8`. Seven of them (`$37DE`, `$37DF`, `$37E0`,
+`$37E1`, `$37E4`, `$37E8`, `$37EC`) also cite `l2-1979` D-2; `$37ED`–`$37EF`
+cite `paay` 24 instead, since D-2 prints only `$37EC` of the disk controller
+block. `m1-trh` documents the keyboard, video RAM, and port `$FF`. (The first
+draft listed `m1-trh` pages 12, 34, and 86; page 34 was wrong, and page 86 is a
 circuit example, not a device table.)
 
 `kiwisincebirth/TRS-80-ROMS` at `736bcba` is a cross-check only: it has no
