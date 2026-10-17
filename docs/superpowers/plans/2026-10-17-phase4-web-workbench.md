@@ -440,7 +440,7 @@
 - Hint-file drop: a dropped text file that `parseHints` accepts is applied to the open program through `withHintText`. If no block matched, refuse with "these hints are for another program (no block matched)". Unmatched blocks are listed in the Hints tab.
 - Carry-over: when a program has no saved hints, scan `allHints()` for files whose blocks pair with this program's (`applyHints(...).matched.length > 0`), and offer the best one (most matched blocks) in `CarryOverDialog`.
 - `backup.ts`:
-  - `makeBackup(store): Promise<string>` gives JSON `{ fugloyBackup: 1, exportedAt, programs: [{ hash, name, hints, prefs? }] }`.
+  - `makeBackup(store): Promise<string>` gives JSON `{ fugloyBackup: 1, exportedAt, programs: [{ hash, name, hints?, prefs? }] }`. A program with settings but no hints is included (ruling during execution).
   - `restoreBackup(store, json, confirm: (name: string) => Promise<boolean>): Promise<{ added: number; replaced: number; skipped: number }>`.
   - Never includes manuals.
 
