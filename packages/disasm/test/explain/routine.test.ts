@@ -6,7 +6,7 @@ import { sentenceText } from '../../src/explain/index.js';
 import { summarizeRoutine, summaryNotes } from '../../src/explain/routine.js';
 import type { RoutineSummary } from '../../src/explain/routine.js';
 import { knownBefore } from '../../src/explain/track.js';
-import { openProgram, withHintText } from '../../src/session.js';
+import { openProgram, skeletonHints, withHintFile, withHintText } from '../../src/session.js';
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
 const seaRaw = openProgram(new Uint8Array(readFileSync(`${root}examples/sea-dragon/seadrg01.cmd`)), { name: 'seadrg01.cmd', selection: { machine: 3, dos: 'trsdos' } });
@@ -201,6 +201,26 @@ describe('summarizeRoutine facts', () => {
     // 7000: LD B,05H / 7002: DJNZ 7002H / JR 7000H
     const r = must(summarizeRoutine(raw([0x06, 0x05, 0x10, 0xfe, 0x18, 0xfa]), 0x7002));
     expect(text(r)).toMatch(/loops forever/);
+  });
+
+  it('code that runs off the end of the loaded image ends there; it does not loop forever', () => {
+    // 7000: NOP / 7001: NOP, then nothing loaded at $7002.
+    const t = text(must(summarizeRoutine(raw([0x00, 0x00]), 0x7000)));
+    expect(t).not.toMatch(/loops forever/);
+    expect(t).toMatch(/It ends by running off the end of the loaded code at \$7002\./);
+  });
+
+  it('code that falls into bytes not decoded as code ends there; it does not loop forever', () => {
+    // 7000: NOP, then $7001-$7002 declared bytes.
+    const bytes = new Uint8Array([0x00, 0x00, 0x00]);
+    const s0 = raw([...bytes]);
+    const s = withHintFile(s0, { ...skeletonHints(s0.module, bytes), hints: [{ directive: 'bytes' as const, length: 2, block: 0, offset: 1, line: 1 }] });
+    const r = must(summarizeRoutine(s, 0x7000));
+    expect(r.instructions).toBe(1);
+    const t = text(r);
+    expect(t).not.toMatch(/loops forever/);
+    expect(t).toMatch(/It ends by running into bytes not decoded as code at \$7001\./);
+    expect(links(r)).toContain(0x7001);
   });
 
   it('stops at 2,000 instructions and says so', () => {

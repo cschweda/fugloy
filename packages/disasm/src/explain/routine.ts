@@ -56,6 +56,10 @@ interface Exits {
   rewritten: number[];
   /** Jumps into loaded bytes not decoded as code: target → the jumps. */
   undecoded: Map<number, number[]>;
+  /** Falling through past the end of the loaded image: the first unloaded address → the instructions that fall there. */
+  runsOff: Map<number, number[]>;
+  /** Falling through into loaded bytes not decoded as code: that address → the instructions that fall there. */
+  fallsIntoData: Map<number, number[]>;
 }
 
 interface Body extends Exits {
@@ -116,7 +120,7 @@ function targetOf(ins: Instruction): number | null {
   return null;
 }
 
-const emptyExits = (): Exits => ({ returns: false, halts: false, onward: new Map(), runsInto: new Map(), indirect: [], rewritten: [], undecoded: new Map() });
+const emptyExits = (): Exits => ({ returns: false, halts: false, onward: new Map(), runsInto: new Map(), indirect: [], rewritten: [], undecoded: new Map(), runsOff: new Map(), fallsIntoData: new Map() });
 
 const add = (m: Map<number, number[]>, k: number, v: number): void => {
   const list = m.get(k);
@@ -127,8 +131,9 @@ const add = (m: Map<number, number[]>, k: number, v: number): void => {
 /**
  * Follows the routine from `start`: jumps and branches, not calls, up to the
  * cap. It stops at returns, at jumps it cannot follow (indirect, rewritten,
- * into undecoded bytes or outside the program), and at another routine's start,
- * whether jumped to or fallen into. Returns whether the cap cut it short.
+ * into undecoded bytes or outside the program), at another routine's start,
+ * whether jumped to or fallen into, and where it falls off the loaded image or
+ * into bytes not decoded as code. Returns whether the cap cut it short.
  */
 function walk(a: Analysis, ix: Index, start: number, visit: (at: number, ins: Instruction) => void, x: Exits = emptyExits()): boolean {
   const id = ++ix.walks;
@@ -138,9 +143,9 @@ function walk(a: Analysis, ix: Index, start: number, visit: (at: number, ins: In
     to &= 0xffff;
     if (to !== start && ix.startSet.has(to)) add(jumped ? x.onward : x.runsInto, to, from);
     else if (!a.space.image.isLoaded(to)) {
-      if (jumped) add(x.onward, to, from);
+      add(jumped ? x.onward : x.runsOff, to, from);
     } else if (!a.pass1.instructions.has(to)) {
-      if (jumped) add(x.undecoded, to, from);
+      add(jumped ? x.undecoded : x.fallsIntoData, to, from);
     } else work.push(to);
   };
   while (work.length > 0) {
@@ -329,6 +334,9 @@ function summarize(c: Ctx, ix: Index, start: number): RoutineSummary {
   if (b.undecoded.size > 0) {
     ends.push([{ text: 'jumping to ' }, ...capped([...b.undecoded.keys()].sort((p, q) => p - q).map((t) => [addrPiece(c, t)])), { text: `, which ${b.undecoded.size === 1 ? 'is' : 'are'} not decoded as code` }]);
   }
+  const fell = (m: Map<number, number[]>): Piece[] => capped([...m.keys()].sort((p, q) => p - q).map((t) => [addrPiece(c, t)]));
+  if (b.runsOff.size > 0) ends.push([{ text: 'running off the end of the loaded code at ' }, ...fell(b.runsOff)]);
+  if (b.fallsIntoData.size > 0) ends.push([{ text: 'running into bytes not decoded as code at ' }, ...fell(b.fallsIntoData)]);
   if (b.halts) ends.push([{ text: 'halting' }]);
   if (ends.length > 0) out.push(say('It ends by ', ends.flatMap((p, i) => (i === 0 ? p : [{ text: ', or by ' }, ...p])), b.truncated ? ' (among the paths followed).' : '.'));
   else if (!b.truncated) {
