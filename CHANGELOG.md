@@ -119,6 +119,92 @@ Releases are tagged `vX.Y.Z` on `main`.
   from a run) and TRSTools (its viewer disassembles `.CMD` files), it left out
   DASM80 and DSMBLR III, which read `.CMD` files, and `zdis` could not be
   identified.
+- The web workbench, phase 4 (`apps/web`, Nuxt 4 and Nuxt UI, generated as a
+  static site, no server): drop a `.CMD`, a `.BAS`, or a raw binary, or open
+  one of the four public-domain games with one click, and read its listing on
+  the left of two facing pages beside a Symbol, Index, Program, and Manual
+  tab on the right. The listing is the CLI's text, virtualized and
+  highlighted, with names and labels as links. Edit from the keyboard or a
+  right-click menu (C/D/W/S/T to mark, N to rename, ; to comment, G to go,
+  Alt+←/→ back and forward, ⌘Z/⇧⌘Z undo and redo); every edit is a hint-file
+  line, shown in the Hints tab. Hints and the machine and DOS choice save to
+  IndexedDB by program SHA-256, a build's hints are offered to another build
+  whose blocks match, and Back up and Restore move the work between browsers
+  as one JSON file. The Program tab is a spec sheet: the machine verdict with
+  its evidence, loading, memory needed and a memory map, what the program
+  talks to, code statistics, and the analysis's proposals with an "apply".
+  Export ▾ writes the zmac source, the hint file, the JSON IR, a `.CMD` load
+  module, and a `.CAS` tape. The `/manuals` page lists every cited work with
+  its archive.org cover; add your own PDF and a citation opens it at the cited
+  printed page, through a checked page table per archive.org scan. Also
+  `/technical-details` (the Inside Fugløy explainer, refreshed to phase 3's
+  output) and `/about`, a title, description, canonical URL on
+  `app.fugloy.dev`, Open Graph and Twitter card on every page, favicons,
+  `sitemap.xml`, `robots.txt`, and JSON-LD.
+- `@fugloy/disasm` grows what the workbench needs, all usable from the CLI or
+  any script: `openProgram`, `withHintText`, `withHintFile`, `withSelection`,
+  and `renderSession` (one session for opening, hinting, and rendering a
+  program; the CLI now runs through it); `listingRows`, `basRows`, and
+  `formatRow` (the listing as typed rows, the text renderers now a formatter
+  over them, byte-identical on 112 golden listings); `programFacts` (the spec
+  sheet's facts and an evidence-based machine fit); `writeCmd`/`CmdWriter`
+  (moved from the test suite), `writeSystemCas`, and `writeBasicCas`;
+  `nameProblem` (why a name is refused); and `MANUALS`/`manualPage` (the
+  printed-page tables of the archive.org scans).
+- The `at` hint directive: `at <addr> name <label>` and `at <addr> comment
+  <text>` name and comment addresses outside the loaded image (RAM variables,
+  unnamed operand targets). The listing header, the zmac source (an `EQU`),
+  and the IR use them like any name; on a loaded address one is not applied
+  and draws a warning, since the block-relative form survives relocation.
+- Symbol sources gain `url`, `catalog`, `archiveId` (derived from an
+  archive.org url), and `permissionUrl` (required wherever a source is marked
+  redistributable), replacing the free-text `locator`.
+- Browser tests in CI: a `web` job in `ci.yml` installs Chromium and runs the
+  web type check, the generate, the unit tests, the SEO checks on the
+  generated pages, and the Playwright specs (49 pass, 4 skip without the
+  gitignored samples and PDFs). `done-criterion.spec.ts` tells the workbench
+  story on Sea Dragon in one test: open it, go to `4B9E`, rename it `INIT`,
+  comment it, undo both and redo them, reload and find both saved, export the
+  hint file and zmac source and match the zmac byte for byte against
+  `@fugloy/cli`'s `run` for the downloaded hints, export a `.CMD` that reloads
+  through `loadCmd` to seadrg01's image and entry, and drop a JPEG. The
+  listing performance spec's timing limits apply only with `FUGLOY_PERF=1`.
+- Phase 4's checks, recorded 2026-10-17:
+  - The v1 done-criterion, met locally: `asylum.spec.ts` opens asylum16 in
+    Chromium, drops `fixtures/hints/asylum16.hints` on it, picks Model I, sees
+    `CALL $KBCHAR`, `CALL $CSHIN`, and `CALL $CSOFF`, renames `SUB_53F8` to
+    `TAPE_LOAD` (its caller at `$43CB` follows) and comments it, reloads, and
+    finds the rename, the comment, the hints, and Model I kept. It skips
+    without the sample.
+  - The exported Sea Dragon `.CMD` and `.CAS` run: `emulator-run.test.ts`
+    boots `@fugloy/emu` on the real Model III ROM to `READY`, loads each
+    export through the emulator's own loaders (`parseCmd`/`fastLoadCmd`, and
+    `parseCas`/`fastLoadSystem` with no checksum errors), runs five emulated
+    seconds, and finds the title screen ("BY: Wayne Westmoreland & Terry
+    Gilman", "(C) Copyright 1982"), identical in video RAM to the screen the
+    original `seadrg01.cmd` draws; ENTER then brings "1 or 2 Players?". This
+    stands in for a run by hand in trs80gp or trsjs. The tape is loaded by
+    the fast path, not by playing its pulses through `CLOAD`/`SYSTEM`. It
+    skips without the ROM.
+  - Listing performance in Chromium on an Apple M4 Max, with
+    `FUGLOY_PERF=1`: a raw 48K load of seadrg01 (18,562 rows) flings to the
+    bottom and back with frames at p50 16.7 ms and p95 16.8 ms and no long
+    task; 101 scrollbar jumps a frame apart, p95 16.7 ms; `scrollToAddr`
+    median 16.4 ms, max 18.0 ms; a rename's re-render 87.7 ms (a table
+    change 25 ms) with the cursor row unmoved. asylum16 (7,779 rows): the
+    same frame times, `scrollToAddr` median 15.3 ms, re-renders 16–44 ms.
+
+### Changed
+
+- A BASIC line with an empty body prints as `10`, not `10 ` with a trailing
+  space, in the listing (found when the text renderers became formatters
+  over rows).
+- MEMTOP's purpose in `rom-model3` no longer says it falls back to the top of
+  RAM; it is the Memory Size? answer.
+- The workbench's G box reads bare hex with a letter in it (`4B9E`) as an
+  address when no label has that name; an all-digit entry stays decimal.
+- In the workbench, Eliminator opens as Model I: `elimin8d` calls `$01D3`,
+  which only the Model I ROM has, though its README says it runs on both.
 
 ### Fixed
 
