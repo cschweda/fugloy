@@ -33,6 +33,17 @@ describe('the committed symbol data', () => {
     expect(SOURCES.map((s) => s.id)).toEqual(['m3-basic', 'paay', 'decker', 'l2-1979', 'm1-trh', 'm3-trm', 'trsdos13', 'ldos51', 'soltoff', 'm4-trm']);
   });
 
+  it('gives every archive.org source its archiveId, and every source a url or catalog number', () => {
+    for (const s of SOURCES) {
+      expect(s.url !== undefined || s.catalog !== undefined, s.id).toBe(true);
+      const m = /^https?:\/\/archive\.org\/details\/([^/?#\s]+)$/.exec(s.url ?? '');
+      expect(s.archiveId, s.id).toBe(m?.[1]);
+    }
+    expect(SOURCES.find((s) => s.id === 'ldos51')).toMatchObject({ year: '1982', circa: true, textUrl: 'http://www.tim-mann.org/trs80/doc/ld51man3.txt' });
+    expect(SOURCES.find((s) => s.id === 'soltoff')).toMatchObject({ redistributable: true, url: 'http://www.tim-mann.org/trs80/doc/Guide.txt' });
+    expect(SOURCES.find((s) => s.id === 'm4-trm')).toMatchObject({ catalog: '26-2110' });
+  });
+
   it('keeps titles with apostrophes and dashes whole through the generated literals', () => {
     expect(SOURCES.find((s) => s.id === 'trsdos13')?.title).toBe("TRS-80 Model III Disk System Owner's Manual");
     expect(SOURCES.find((s) => s.id === 'soltoff')).toMatchObject({ title: "The Programmer's Guide to LDOS/TRSDOS Version 6", year: '1983–84' });

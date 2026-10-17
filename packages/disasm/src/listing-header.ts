@@ -114,18 +114,28 @@ export interface BasNames {
  * the reverse; inside a span the name carries the decimal offset, `USRVEC+1`.
  */
 export function basNotes(line: BasLine, names: BasNames): string[] {
-  const notes: string[] = [];
+  return basFinds(line, names).map(({ addr, entry, offset }) => {
+    const tag = names.tag(entry);
+    return `;   ${addr} = ${$(addr)} ${entry.purpose} (${offset === 0 ? entry.name : `${entry.name}+${offset}`})${tag === undefined ? '' : ` ${tag}`}`;
+  });
+}
+
+/** The table entries the notes under a BASIC line name, in the order `basNotes` gives them (an entry may repeat). */
+export function basNoteEntries(line: BasLine, names: BasNames): TableEntry[] {
+  return basFinds(line, names).map((f) => f.entry);
+}
+
+/** What the tables name for each constant address of a BASIC line: a PEEK or POKE prefers a data name, a DEFUSR a code name. */
+function basFinds(line: BasLine, names: BasNames): { addr: number; entry: TableEntry; offset: number }[] {
+  const found: { addr: number; entry: TableEntry; offset: number }[] = [];
   for (const { addr, use } of basReferences(line)) {
     const asData = names.data(addr);
     const routine = names.code(addr);
     const asCode = routine === undefined ? undefined : { entry: routine, offset: 0 };
-    const found = use === 'data' ? (asData ?? asCode) : (asCode ?? asData);
-    if (found === undefined) continue;
-    const { entry, offset } = found;
-    const tag = names.tag(entry);
-    notes.push(`;   ${addr} = ${$(addr)} ${entry.purpose} (${offset === 0 ? entry.name : `${entry.name}+${offset}`})${tag === undefined ? '' : ` ${tag}`}`);
+    const hit = use === 'data' ? (asData ?? asCode) : (asCode ?? asData);
+    if (hit !== undefined) found.push({ addr, ...hit });
   }
-  return notes;
+  return found;
 }
 
 /** The last byte of a BASIC line's body, before its terminating `00`. */

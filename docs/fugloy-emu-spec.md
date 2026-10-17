@@ -27,7 +27,7 @@
 - The MCP protocol layer (`@fugloy/mcp` wraps this)
 - Recompilation to JS (Fugløy's job; the core supplies ground truth)
 
-The existing `cschweda/trs80-emulator`, the author's own MIT code, became `packages/emu` in phase 0, from commit `11612849` (v1.6.0). It is not derived from trsjs.48k.ca: George Phillips's site supplied some of its sample games, not code. Successor, not rewrite.
+The existing `cschweda/trs80-emulator`, the author's own MIT code, became `packages/emu` in phase 0, from commit `11612849` (v1.6.0). It is not derived from trsjs.48k.ca: Peter Phillips's site supplied some of its sample games, not code. Successor, not rewrite.
 
 ## 2. Design principles
 

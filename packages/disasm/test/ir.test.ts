@@ -9,6 +9,7 @@ import { analyze } from '../src/pipeline.js';
 import { loadBas } from '../src/bas.js';
 import { CMD_FIXTURES, HINT_FIXTURES } from './fixtures.js';
 import { writeBasic } from './writers/basic-tokenizer.js';
+import { selectSymbols } from '../src/symbols/select.js';
 
 describe('buildIr', () => {
   it('builds a versioned IR for the non-contiguous fixture and matches the committed snapshot', () => {
@@ -56,6 +57,16 @@ describe('buildIr for a .BAS program', () => {
     expect(buildIr(prog, a.pass1, 'p.bas', a).entries).toEqual([{ addr: 0x7000, evidence: 'line 20: DEFUSR0 = $7000', line: 20 }]);
     const mod = loadCmd(CMD_FIXTURES['non-contiguous']!());
     expect(buildIr(mod, analyze(mod).pass1, 'x.cmd', analyze(mod)).entries).toEqual([]);
+  });
+});
+
+describe('buildIr tableNames for a .BAS program', () => {
+  it('includes a name that only a note line speaks of', () => {
+    const prog = loadBas(writeBasic([{ number: 10, text: 'POKE 16526,0' }, { number: 20, text: 'END' }], 0x7000));
+    const a = analyze(prog, { tables: selectSymbols({ machine: 3, dos: 'none' }) });
+    expect(a.tablesUsed).toEqual([]);
+    const names = buildIr(prog, a.pass1, 'p.bas', a).tableNames ?? [];
+    expect(names.map((n) => `${n.name}:${n.key}`)).toEqual(['USRVEC:16526']);
   });
 });
 

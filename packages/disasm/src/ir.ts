@@ -6,6 +6,7 @@
  */
 import type { Diagnostic, Pass1, Xref } from './analysis/descent.js';
 import { inTableOrder } from './analysis/externals.js';
+import type { ExternalNames } from './analysis/externals.js';
 import { outsideComments } from './analysis/symbols.js';
 import type { Symbol } from './analysis/symbols.js';
 import type { MinedEntry } from './basic/entries.js';
@@ -15,9 +16,11 @@ import type { BasicBlock, Region } from './analysis/regions.js';
 import type { BasProgram } from './bas.js';
 import type { CmdModule } from './cmd.js';
 import { commentEntries } from './emit/operands.js';
+import { basNoteEntries } from './listing-header.js';
+import type { BasNames } from './listing-header.js';
 import type { Analysis, HintsSummary, Proposal } from './pipeline.js';
 import type { RawModule } from './raw.js';
-import type { Cite, Dos, EntryKind, Machine, TableId } from './symbols/types.js';
+import type { Cite, Dos, EntryKind, Machine, TableEntry, TableId } from './symbols/types.js';
 
 export type Module = CmdModule | BasProgram | RawModule;
 
@@ -64,6 +67,21 @@ export interface Ir {
   hints?: HintsSummary;
 }
 
+/** The table names the note lines of a .BAS listing speak of; the same lookup `basRows` makes, which counts a name the program took for a symbol of its own. */
+function basEntries(mod: Module, externals: ExternalNames): TableEntry[] {
+  if (mod.format !== 'bas') return [];
+  const free = externals.ignoringCollisions();
+  const names: BasNames = {
+    data: (addr) => {
+      const found = free.data(addr);
+      return found === undefined ? undefined : { entry: found.entry, offset: addr - found.entry.key };
+    },
+    code: (addr) => free.code(addr)?.entry,
+    tag: (entry) => free.machineTag(entry),
+  };
+  return mod.lines.flatMap((line) => basNoteEntries(line, names));
+}
+
 export function buildIr(
   mod: Module,
   pass1: Pass1,
@@ -74,7 +92,7 @@ export function buildIr(
   const tableNames: IrTableName[] | undefined =
     analysis?.externals === undefined || selection === undefined
       ? undefined
-      : inTableOrder([...(analysis.tablesUsed ?? []), ...commentEntries(pass1.instructions, analysis.externals, analysis.symbols)]).map((e) => ({
+      : inTableOrder([...(analysis.tablesUsed ?? []), ...commentEntries(pass1.instructions, analysis.externals, analysis.symbols), ...basEntries(mod, analysis.externals)]).map((e) => ({
           key: e.key,
           name: e.name,
           kind: e.kind,

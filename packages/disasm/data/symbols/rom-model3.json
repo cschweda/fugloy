@@ -1073,7 +1073,7 @@
       "name": "MEMTOP",
       "kind": "variable",
       "length": 2,
-      "purpose": "highest address left to BASIC, low byte first: the Memory Size? answer, or else the top of RAM",
+      "purpose": "highest address left to BASIC, low byte first: the Memory Size? answer",
       "cite": [{ "source": "decker", "page": "68" }],
       "coined": true
     },

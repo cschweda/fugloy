@@ -22,8 +22,19 @@ function q(s: string): string {
 /** Addresses as `0x002B`, ports as `0xEC`, service calls in decimal. */
 const keyLiteral = (e: TableEntry): string => (e.kind === 'svc' ? String(e.key) : `0x${e.key.toString(16).toUpperCase().padStart(e.kind === 'port' ? 2 : 4, '0')}`);
 
-const sourceLine = (s: Source): string =>
-  `  { id: ${q(s.id)}, author: ${q(s.author)}, title: ${q(s.title)}, publisher: ${q(s.publisher)}, year: ${q(s.year)}, ${s.edition === undefined ? '' : `edition: ${q(s.edition)}, `}locator: ${q(s.locator)} },`;
+const sourceLine = (s: Source): string => {
+  const fields = [
+    `id: ${q(s.id)}`, `author: ${q(s.author)}`, `title: ${q(s.title)}`, `publisher: ${q(s.publisher)}`, `year: ${q(s.year)}`,
+    ...(s.circa === undefined ? [] : [`circa: ${String(s.circa)}`]),
+    ...(s.edition === undefined ? [] : [`edition: ${q(s.edition)}`]),
+    ...(s.catalog === undefined ? [] : [`catalog: ${q(s.catalog)}`]),
+    ...(s.url === undefined ? [] : [`url: ${q(s.url)}`]),
+    ...(s.textUrl === undefined ? [] : [`textUrl: ${q(s.textUrl)}`]),
+    ...(s.archiveId === undefined ? [] : [`archiveId: ${q(s.archiveId)}`]),
+    ...(s.redistributable === undefined ? [] : [`redistributable: ${String(s.redistributable)}`]),
+  ];
+  return `  { ${fields.join(', ')} },`;
+};
 
 const entryLine = (e: TableEntry): string => {
   const cite = e.cite.map((c) => `{ source: ${q(c.source)}, page: ${q(c.page)} }`).join(', ');

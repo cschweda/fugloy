@@ -50,9 +50,20 @@ export interface Source {
   author: string;
   title: string;
   publisher: string;
+  /** Digits or a range of digits (`1982`, `1983–84`); `circa` says the year is approximate. */
   year: string;
+  circa?: boolean;
   edition?: string;
-  locator: string;
+  /** A catalog number as printed, `26-2103`, for a work with no copy online. */
+  catalog?: string;
+  /** Where to find the work: an archive.org details page, or the page of its text. */
+  url?: string;
+  /** A plain-text edition of the work, where one exists. */
+  textUrl?: string;
+  /** The archive.org identifier, parsed from `url` when it is an archive.org details page. */
+  archiveId?: string;
+  /** True where the work's text is free to redistribute. */
+  redistributable?: boolean;
 }
 
 /** How an address in either ROM table compares across the Model I and Model III ROMs. */

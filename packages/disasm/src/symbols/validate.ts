@@ -34,7 +34,7 @@ const ALLOWED_KINDS: Readonly<Record<TableId, readonly EntryKind[]>> = {
 
 const ENTRY_FIELDS = new Set(['addr', 'port', 'svc', 'name', 'kind', 'purpose', 'cite', 'length', 'coined', 'note']);
 const KEY_FIELDS = ['addr', 'port', 'svc'] as const;
-const SOURCE_FIELDS = new Set(['id', 'author', 'title', 'publisher', 'year', 'edition', 'locator']);
+const SOURCE_FIELDS = new Set(['id', 'author', 'title', 'publisher', 'year', 'circa', 'edition', 'catalog', 'url', 'textUrl', 'redistributable']);
 
 /** A name a source prints may start with `$` or `@` and end in one `$` (LS-DOS and LDOS print `@FLAGS$`, `@HIGH$`, `TIME$`); a name we coin may do neither. */
 const SOURCE_NAME = /^[$@]?[A-Z][A-Z0-9_]*\$?$/;
@@ -208,14 +208,45 @@ function readSources(raw: unknown, errors: string[]): { sources: Source[]; known
     const title = text('title');
     const publisher = text('publisher');
     const year = text('year');
-    const locator = text('locator');
-    let edition: string | undefined;
-    if (item.edition !== undefined) {
-      if (isText(item.edition)) edition = item.edition;
-      else fail('edition must be non-empty text');
-    }
-    if (!usable || id === undefined || author === undefined || title === undefined || publisher === undefined || year === undefined || locator === undefined) return;
-    sources.push({ id, author, title, publisher, year, ...(edition === undefined ? {} : { edition }), locator });
+    if (year !== undefined && !/^\d{4}(–\d{2,4})?$/.test(year)) fail('year must be digits or a range of digits, like 1982 or 1983–84 (circa is its own flag)');
+    const optional = (field: string): string | undefined => {
+      const value = item[field];
+      if (value === undefined) return undefined;
+      if (isText(value)) return value;
+      fail(`${field} must be non-empty text`);
+      return undefined;
+    };
+    const link = (field: string): string | undefined => {
+      const value = optional(field);
+      if (value !== undefined && !/^https?:\/\/\S+$/.test(value)) fail(`${field} must start with http:// or https://`);
+      return value;
+    };
+    const flag = (field: string): true | undefined => {
+      const value = item[field];
+      if (value === undefined) return undefined;
+      if (value === true) return true;
+      fail(`${field} must be true or false`);
+      return undefined;
+    };
+    const edition = optional('edition');
+    const catalog = optional('catalog');
+    const url = link('url');
+    const textUrl = link('textUrl');
+    const circa = flag('circa');
+    const redistributable = flag('redistributable');
+    if (url === undefined && catalog === undefined && item.url === undefined) fail('needs a url or a catalog number');
+    const archiveId = url === undefined ? undefined : /^https?:\/\/archive\.org\/details\/([^/?#\s]+)$/.exec(url)?.[1];
+    if (!usable || id === undefined || author === undefined || title === undefined || publisher === undefined || year === undefined) return;
+    sources.push({
+      id, author, title, publisher, year,
+      ...(circa === undefined ? {} : { circa }),
+      ...(edition === undefined ? {} : { edition }),
+      ...(catalog === undefined ? {} : { catalog }),
+      ...(url === undefined ? {} : { url }),
+      ...(textUrl === undefined ? {} : { textUrl }),
+      ...(archiveId === undefined ? {} : { archiveId }),
+      ...(redistributable === undefined ? {} : { redistributable }),
+    });
   });
   return { sources, known };
 }

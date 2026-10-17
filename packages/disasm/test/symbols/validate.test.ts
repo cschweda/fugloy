@@ -5,7 +5,7 @@ import { validateTables } from '../../src/symbols/validate.js';
 type Raw = Record<string, unknown>;
 type TableFile = { file: string; json: unknown };
 
-const source = (id: string): Raw => ({ id, author: 'A. Author', title: `The ${id} manual`, publisher: 'A Publisher', year: '1980', locator: 'https://example.org/manual' });
+const source = (id: string): Raw => ({ id, author: 'A. Author', title: `The ${id} manual`, publisher: 'A Publisher', year: '1980', url: 'https://example.org/manual' });
 const sources = { sources: ['m3-basic', 'paay', 'trsdos13', 'ldos51', 'soltoff'].map(source) };
 
 const cite = (src = 'm3-basic', page = '12/12'): Raw[] => [{ source: src, page }];
@@ -358,6 +358,34 @@ describe('validateTables', () => {
       expect(r.errors).toEqual([]);
       expect(r.sources).toEqual([{ ...source('paay'), edition: '2nd' }, source('decker')]);
       expect(r.sources[1]).not.toHaveProperty('edition');
+    });
+
+    it('takes year as digits or a digit range only, with circa as its own flag', () => {
+      expect(check({ sources: [{ ...source('a'), year: '1983–84' }, { ...source('b'), year: '1982', circa: true }] }).errors).toEqual([]);
+      for (const year of ['c. 1982', '1982?', '198', '1983-84x', ' 1982'])
+        expect(check({ sources: [{ ...source('a'), year }] }).errors).toEqual(['sources.json entry 0 "a": year must be digits or a range of digits, like 1982 or 1983–84 (circa is its own flag)']);
+      expect(check({ sources: [{ ...source('a'), circa: 'yes' }] }).errors).toEqual(['sources.json entry 0 "a": circa must be true or false']);
+    });
+
+    it('needs a url or a catalog number, and refuses the old locator', () => {
+      const bare = { ...source('a'), url: undefined };
+      expect(check({ sources: [bare] }).errors).toEqual(['sources.json entry 0 "a": needs a url or a catalog number']);
+      expect(check({ sources: [{ ...bare, catalog: 'Radio Shack catalog no. 26-2103' }] }).errors).toEqual([]);
+      expect(check({ sources: [{ ...source('a'), locator: 'x' }] }).errors).toEqual(['sources.json entry 0 "a": unknown field "locator"']);
+      expect(check({ sources: [{ ...source('a'), url: 'ftp://x' }] }).errors).toEqual(['sources.json entry 0 "a": url must start with http:// or https://']);
+    });
+
+    it('parses archiveId from an archive.org details url, and gives other sources none', () => {
+      const r = check({
+        sources: [
+          { ...source('a'), url: 'https://archive.org/details/Some_Manual_1980' },
+          { ...source('b'), url: 'http://www.tim-mann.org/trs80/doc/Guide.txt', textUrl: 'http://www.tim-mann.org/trs80/doc/Guide.txt', redistributable: true },
+        ],
+      });
+      expect(r.errors).toEqual([]);
+      expect(r.sources[0]).toMatchObject({ archiveId: 'Some_Manual_1980' });
+      expect(r.sources[1]).not.toHaveProperty('archiveId');
+      expect(r.sources[1]).toMatchObject({ redistributable: true });
     });
 
     it('rejects a registry that is not { sources: [...] }', () => {
