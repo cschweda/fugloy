@@ -90,15 +90,16 @@ async function open(r: ManualRequest): Promise<void> {
 }
 
 function draw(): void {
+  // Each draw is caught on its own, so one failure never stops later ones.
   chain = chain.then(async () => {
-    const d = doc.value;
-    const n = page.value;
-    const r = props.request;
-    await nextTick();
-    const c = canvas.value;
-    if (d === null || n === null || c === null || r === null) return;
-    const { renderPage } = await import('../../utils/pdf');
     try {
+      await nextTick();
+      const d = doc.value;
+      const n = page.value;
+      const r = props.request;
+      const c = canvas.value;
+      if (d === null || n === null || c === null || r === null) return;
+      const { renderPage } = await import('../../utils/pdf');
       const res = await renderPage(d, n, c, n === cited.value ? r.terms : undefined, { scale: ZOOMS[zoom.value] });
       if (n !== cited.value) mark.value = null;
       else if (res.found !== null) mark.value = res.found === r.name ? `${r.name} is marked on the page.` : `${r.name} is not in the page’s text; ${res.found} is marked.`;
@@ -122,7 +123,12 @@ async function setOffset(): Promise<void> {
   const r = props.request;
   const n = Number(offsetText.value);
   if (r === null || !Number.isInteger(n) || n < 1) return;
-  await manuals.setOffset(r.cite.source, n);
+  try {
+    await manuals.setOffset(r.cite.source, n);
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err);
+    return;
+  }
   await open(r);
   draw();
 }

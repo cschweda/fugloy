@@ -34,8 +34,8 @@ const hex = (n: number, digits: number): string => n.toString(16).toUpperCase().
 
 /**
  * What to look for on a page, best first: the name, then the address or port as
- * manuals print it (`0ECH`, `$EC`, `X'EC'`, `&HEC`; an address also bare and in
- * decimal, as the BASIC manuals give them).
+ * manuals print it (`0ECH`, `$EC`, `X'EC'`, `&HEC`; an address of $0100 or more
+ * also bare and in decimal, as the BASIC manuals give them).
  */
 export function highlightTerms(e: Pick<TableEntry, 'name' | 'key' | 'kind'>): string[] {
   if (e.kind === 'svc') return [e.name];
@@ -45,7 +45,8 @@ export function highlightTerms(e: Pick<TableEntry, 'name' | 'key' | 'kind'>): st
   const terms = [e.name, `${zeroed}H`];
   if (zeroed !== h) terms.push(`${h}H`);
   terms.push(`$${h}`, `X'${h}'`, `&H${h}`);
-  if (!port) terms.push(h, String(e.key));
+  // Bare hex and decimal only for a full address: `40` would mark any 40 on the page.
+  if (!port && e.key >= 0x100) terms.push(h, String(e.key));
   return terms;
 }
 

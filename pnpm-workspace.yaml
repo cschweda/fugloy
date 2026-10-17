@@ -5,3 +5,10 @@ packages:
 # "@fugloy/emu": "^0.1.0" in packages/mcp resolves to the local package, as npm
 # workspaces would; when published, the same range resolves from the registry.
 linkWorkspacePackages: true
+
+# Build scripts nobody needs: pdf.js's optional Node canvas (the site renders in
+# the browser) and vue-demi's Vue 2/3 switch. Listing them silences pnpm's
+# "Ignored build scripts" warning.
+ignoredBuiltDependencies:
+  - '@napi-rs/canvas'
+  - vue-demi

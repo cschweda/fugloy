@@ -89,8 +89,12 @@ async function confirmRemove(): Promise<void> {
   const s = removing.value;
   removing.value = null;
   if (s === null) return;
-  await manuals.remove(s.id);
-  message.value = { text: `Removed your copy of ${s.title} from this browser.`, error: false };
+  try {
+    await manuals.remove(s.id);
+    message.value = { text: `Removed your copy of ${s.title} from this browser.`, error: false };
+  } catch (err) {
+    message.value = { text: err instanceof Error ? err.message : String(err), error: true };
+  }
 }
 
 const offsets = ref<Record<string, string>>({});
@@ -100,16 +104,20 @@ async function saveOffset(id: string): Promise<void> {
     message.value = { text: 'The PDF page of printed page 1 is a whole number, 1 or more.', error: true };
     return;
   }
-  await manuals.setOffset(id, n);
-  message.value = { text: 'Saved: citations of this manual now open at that offset.', error: false };
+  try {
+    await manuals.setOffset(id, n);
+    message.value = { text: `Saved: printed page 1 is PDF page ${n}, so numbered citations of this manual open by that offset.`, error: false };
+  } catch (err) {
+    message.value = { text: err instanceof Error ? err.message : String(err), error: true };
+  }
 }
 
 const status = (e: ManualEntry): string => {
   if (!e.have) return 'Provide your own copy';
   const how = manuals.mapping(e.source.id);
   if (how === 'scan') return 'You have it: the archive.org scan';
-  if (how === 'assumed') return 'You have it: page mapping assumed from the archive.org scan';
-  if (how === 'offset') return 'You have it: pages found by the offset you set';
+  if (how === 'assumed') return 'You have it: page mapping assumed from the archive.org scan (set an offset below to override it)';
+  if (how === 'offset') return 'You have it: numbered pages found by the offset you set';
   return 'You have it: set which PDF page is printed page 1';
 };
 

@@ -76,10 +76,12 @@ async function defaultPageCount(blob: Blob): Promise<number | null> {
   }
 }
 
-function storeError(err: unknown): string {
+/** Why a write failed, for what was being done: adding the manual, saving its offset, or removing it. */
+function storeError(err: unknown, doing: 'add' | 'offset' | 'remove' = 'add'): string {
   const name = err instanceof DOMException || err instanceof Error ? err.name : '';
-  if (name === 'QuotaExceededError') return 'Your browser’s storage for this site is full, so the manual was not kept. Remove a manual you no longer need, or free space in the browser, and try again. The workbench keeps working.';
-  return `Your browser refused to store the manual (${err instanceof Error ? err.message : String(err)}). The workbench keeps working, and citations still link to archive.org.`;
+  const what = { add: 'the manual was not kept', offset: 'the page offset was not saved', remove: 'the manual was not removed' }[doing];
+  if (name === 'QuotaExceededError') return `Your browser’s storage for this site is full, so ${what}. Remove a manual you no longer need, or free space in the browser, and try again. The workbench keeps working.`;
+  return `Your browser refused the change, so ${what} (${err instanceof Error ? err.message : String(err)}). The workbench keeps working, and citations still link to archive.org.`;
 }
 
 export function createManuals(deps: ManualsDeps = {}): Manuals {
@@ -121,8 +123,10 @@ export function createManuals(deps: ManualsDeps = {}): Manuals {
     if (m === undefined) return 'unset';
     const scan = scanOf(id);
     if (scan !== undefined && scan.pdfSha256.includes(m.sha256)) return 'scan';
+    // An offset the user set beats a mapping only assumed from the page count.
+    if (m.offset !== undefined) return 'offset';
     if (scan !== undefined && m.pdfPages === scan.pdfPages) return 'assumed';
-    return m.offset === undefined ? 'unset' : 'offset';
+    return 'unset';
   }
 
   async function add(file: File, sourceId?: string): Promise<AddResult> {
@@ -159,18 +163,32 @@ export function createManuals(deps: ManualsDeps = {}): Manuals {
 
   async function remove(id: string): Promise<void> {
     const s = await start();
-    if (s !== null) await s.deleteManual(id);
+    if (s !== null) {
+      try {
+        await s.deleteManual(id);
+      } catch (err) {
+        throw new Error(storeError(err, 'remove'));
+      }
+    }
     const { [id]: _gone, ...rest } = stored.value;
     stored.value = rest;
   }
 
   async function setOffset(id: string, pdfPageOfPrinted1: number): Promise<void> {
     const s = await start();
-    if (s === null) return;
-    const m = await s.getManual(id);
-    if (m === undefined) return;
-    const next = { ...m, offset: pdfPageOfPrinted1 };
-    await s.putManual(id, next);
+    if (s === null) throw new Error(NO_STORAGE);
+    const next = await (async () => {
+      try {
+        const m = await s.getManual(id);
+        if (m === undefined) return undefined;
+        const n = { ...m, offset: pdfPageOfPrinted1 };
+        await s.putManual(id, n);
+        return n;
+      } catch (err) {
+        throw new Error(storeError(err, 'offset'));
+      }
+    })();
+    if (next === undefined) return;
     const { blob: _blob, ...facts } = next;
     stored.value = { ...stored.value, [id]: facts };
   }
@@ -179,13 +197,13 @@ export function createManuals(deps: ManualsDeps = {}): Manuals {
     await start();
     const m = stored.value[cite.source];
     if (m === undefined) return null;
-    const how = mapping(cite.source);
     const scan = scanOf(cite.source);
-    if ((how === 'scan' || how === 'assumed') && scan !== undefined) {
-      const p = manualPage(scan, cite.page);
-      if (p !== null) return p;
-    }
+    const table = (): number | null => (scan === undefined ? null : manualPage(scan, cite.page));
+    // A known scan: its table. Otherwise the user's offset for plain page numbers,
+    // then the scan table when the page count matches (assumed).
+    if (scan !== undefined && scan.pdfSha256.includes(m.sha256)) return table();
     if (m.offset !== undefined && /^\d+$/.test(cite.page)) return Number(cite.page) + m.offset - 1;
+    if (scan !== undefined && m.pdfPages === scan.pdfPages) return table();
     return null;
   }
 

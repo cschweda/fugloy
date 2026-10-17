@@ -79,6 +79,34 @@ describe('useManuals', () => {
     expect(await m.pdfPageFor({ source: 'm3-trm', page: '12/10' })).toBe(manualPage(M3, '12/10'));
   });
 
+  it('lets an offset the user set win over an assumed scan mapping', async () => {
+    const m = manuals({ pages: M3.pdfPages });
+    await m.add(file('a rebuilt archive.org PDF'), 'm3-trm');
+    expect(m.mapping('m3-trm')).toBe('assumed');
+    await m.setOffset('m3-trm', 9);
+    expect(m.mapping('m3-trm')).toBe('offset');
+    expect(await m.pdfPageFor({ source: 'm3-trm', page: '15' })).toBe(23);
+    // A page the offset cannot place still finds the scan table's page.
+    expect(await m.pdfPageFor({ source: 'm3-trm', page: '12/10' })).toBe(manualPage(M3, '12/10'));
+  });
+
+  it('reports a storage failure when setting an offset or removing', async () => {
+    const failing = async (): Promise<Store | null> => {
+      const s = (await openStore())!;
+      opened.push(s);
+      const quota = async (): Promise<never> => {
+        throw new DOMException('over quota', 'QuotaExceededError');
+      };
+      return { ...s, db: s.db, putManual: quota, deleteManual: quota };
+    };
+    await manuals().add(file('mine'), 'paay');
+    const m = manuals({ open: failing });
+    await m.refresh();
+    await expect(m.setOffset('paay', 3)).rejects.toThrow(/full/);
+    await expect(m.remove('paay')).rejects.toThrow(/full/);
+    expect(m.have('paay')).toBe(true);
+  });
+
   it('forgets a removed manual', async () => {
     const m = manuals();
     await m.add(file(KNOWN));
@@ -140,7 +168,11 @@ describe('manual links and highlights', () => {
     expect(highlightTerms({ name: 'MODEPORT', key: 0xec, kind: 'port' })).toEqual(['MODEPORT', '0ECH', 'ECH', '$EC', "X'EC'", '&HEC']);
     const t = highlightTerms({ name: 'KBWAIT', key: 0x0049, kind: 'routine' });
     expect(t.slice(0, 3)).toEqual(['KBWAIT', '0049H', '$0049']);
-    expect(t).toContain('73');
+    expect(t).not.toContain('73');
+    expect(highlightTerms({ name: 'KEY', key: 0x4b9e, kind: 'routine' })).toEqual(['KEY', '4B9EH', '$4B9E', "X'4B9E'", '&H4B9E', '4B9E', '19358']);
+    // Small keys get no bare-number forms: `40` would mark any 40 on the page.
+    expect(highlightTerms({ name: 'X', key: 0x40, kind: 'variable' })).toEqual(['X', '0040H', '$0040', "X'0040'", '&H0040']);
+    expect(highlightTerms({ name: 'P', key: 0x40, kind: 'port' })).toEqual(['P', '40H', '$40', "X'40'", '&H40']);
   });
 
   it('finds a term across stray spaces, at word boundaries only', () => {
