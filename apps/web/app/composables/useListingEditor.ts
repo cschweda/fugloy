@@ -5,6 +5,7 @@
 // the cursor; this returns the key bindings to merge into the page's map.
 import { computed, nextTick, ref } from 'vue';
 import type { ComputedRef, Ref } from 'vue';
+import { summarizeRoutine } from '@fugloy/disasm';
 import { editTargets, markRange } from '../utils/edit-targets';
 import type { EditTarget } from '../utils/edit-targets';
 import type { Edit, MarkKind } from '../utils/edits';
@@ -31,6 +32,18 @@ export interface Inline {
   top: number;
 }
 
+export interface Notes {
+  /** The address the comment goes above while `scope` is `line`: the cursor row. */
+  line: number;
+  /** The routine start and name, when the cursor is inside a routine that starts elsewhere; the comment can go above it. */
+  routine: { start: number; name: string } | null;
+  scope: 'routine' | 'line';
+  title: string;
+  text: string;
+  error: string | null;
+  left: number;
+  top: number;
+}
 
 const $a = (addr: number): string => `$${addr.toString(16).toUpperCase().padStart(4, '0')}`;
 
@@ -154,6 +167,71 @@ export function useListingEditor(opts: {
     closeInline();
   }
 
+  // The Block comment box.
+  const notes = ref<Notes | null>(null);
+
+  const notesAddr = (n: Notes): number => (n.routine !== null && n.scope === 'routine' ? n.routine.start : n.line);
+  const notesText = (addr: number): string => (session.value?.analysis.annotations.notes.get(addr) ?? []).join('\n');
+
+  /** `:` opens it at the cursor; Use as comment passes the routine's summary and opens it above the routine's start. */
+  async function openNotes(use?: { start: number; name: string; text: string }): Promise<void> {
+    const s = session.value;
+    const at = cursor.value;
+    if (s === null || at === null) return;
+    closeMenu(false);
+    inline.value = null;
+    opts.showListing();
+    editMessage.value = null;
+    const place = await cursorPlace();
+    if (place === null) return;
+    const where = { left: place.left, top: place.bottom + 2, error: null };
+    if (use !== undefined) {
+      notes.value = { ...where, line: use.start, routine: null, scope: 'line', title: `Block comment above the routine ${use.name}`, text: use.text };
+      return;
+    }
+    const r = summarizeRoutine(s, at);
+    const routine = r !== null && r.start !== at ? { start: r.start, name: r.name } : null;
+    const scope = routine === null ? 'line' : 'routine';
+    const addr = routine === null ? at : routine.start;
+    notes.value = { ...where, line: at, routine, scope, title: `Block comment above ${$a(addr)}`, text: notesText(addr) };
+  }
+
+  const notesValue = computed({
+    get: () => notes.value?.text ?? '',
+    set: (text: string) => {
+      if (notes.value !== null) notes.value = { ...notes.value, text, error: null };
+    },
+  });
+
+  const notesScope = computed({
+    get: () => notes.value?.scope ?? 'line',
+    set: (scope: 'routine' | 'line') => {
+      const n = notes.value;
+      if (n === null) return;
+      const next = { ...n, scope, error: null };
+      const addr = notesAddr(next);
+      notes.value = { ...next, title: `Block comment above ${$a(addr)}`, text: notesText(addr) };
+    },
+  });
+
+  function closeNotes(): void {
+    if (notes.value === null) return;
+    notes.value = null;
+    void nextTick(() => opts.listing.value?.focus());
+  }
+
+  function submitNotes(): void {
+    const n = notes.value;
+    if (n === null) return;
+    const error = ed.apply({ op: 'notes', addr: notesAddr(n), lines: n.text.split(/\r?\n/) });
+    if (error !== null) {
+      notes.value = { ...n, error };
+      return;
+    }
+    editMessage.value = null;
+    closeNotes();
+  }
+
   // The right-click menu.
   const menu = ref<{ x: number; y: number } | null>(null);
   const isMac = ref(false);
@@ -165,6 +243,7 @@ export function useListingEditor(opts: {
     table: () => mark('table'),
     name: () => void openInline('name'),
     comment: () => void openInline('comment'),
+    notes: () => void openNotes(),
     undo,
     redo,
   };
@@ -176,6 +255,7 @@ export function useListingEditor(opts: {
     { id: 'table', label: 'Jump table', keys: 'T', accel: 't' },
     { id: 'name', label: 'Rename…', keys: 'N', accel: 'n', rule: true },
     { id: 'comment', label: 'Comment…', keys: ';', accel: ';' },
+    { id: 'notes', label: 'Block comment…', keys: ':', accel: ':' },
     { id: 'undo', label: 'Undo', keys: isMac.value ? '⌘Z' : 'Ctrl+Z', disabled: !ed.canUndo.value, rule: true },
     { id: 'redo', label: 'Redo', keys: isMac.value ? '⇧⌘Z' : 'Ctrl+Y', disabled: !ed.canRedo.value },
   ]);
@@ -193,7 +273,7 @@ export function useListingEditor(opts: {
 
   function pickMenu(id: string): void {
     // Rename and Comment move focus to the inline editor instead.
-    closeMenu(id !== 'name' && id !== 'comment');
+    closeMenu(id !== 'name' && id !== 'comment' && id !== 'notes');
     MENU_ACTIONS[id]?.();
   }
 
@@ -218,6 +298,7 @@ export function useListingEditor(opts: {
     t: { run: () => mark('table') },
     n: { run: () => void openInline('name') },
     ';': { run: () => void openInline('comment') },
+    ':': { run: () => void openNotes() },
     'ctrl+z': { run: undo },
     'ctrl+shift+z': { run: redo },
     'ctrl+y': { run: redo },
@@ -235,6 +316,12 @@ export function useListingEditor(opts: {
     inlinePlaceholder,
     submitInline,
     closeInline,
+    notes,
+    notesValue,
+    notesScope,
+    openNotes,
+    submitNotes,
+    closeNotes,
     menu,
     menuItems,
     isMac,
@@ -244,6 +331,6 @@ export function useListingEditor(opts: {
     menuAtCursor,
     keys,
     /** True while the menu or the inline editor has the keys. */
-    busy: computed(() => menu.value !== null || inline.value !== null),
+    busy: computed(() => menu.value !== null || inline.value !== null || notes.value !== null),
   };
 }

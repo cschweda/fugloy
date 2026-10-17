@@ -3,12 +3,13 @@
 // four games); with one, two facing pages: the listing on the left, the
 // companion tabs on the right, and the status line under them.
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
-import { addressKey, withHintFile, withSelection } from '@fugloy/disasm';
+import { addressKey, summaryNotes, withHintFile, withSelection } from '@fugloy/disasm';
 import { download } from '~/utils/exports';
 import { MODEL3_DEFAULT } from '~/composables/useWorkbench';
 import type { Row, TableEntry } from '@fugloy/disasm';
 import ListingView from '~/components/listing/ListingView.vue';
 import InlineEdit from '~/components/listing/InlineEdit.vue';
+import NotesEdit from '~/components/listing/NotesEdit.vue';
 import RowMenu from '~/components/listing/RowMenu.vue';
 import HintsTab from '~/components/HintsTab.vue';
 import FirstScreen from '~/components/FirstScreen.vue';
@@ -295,7 +296,7 @@ const editor = useListingEditor({
     leftTab.value = 'listing';
   },
 });
-const { editMessage, inline, inlineValue, inlineChoice, menu } = editor;
+const { editMessage, inline, inlineValue, inlineChoice, menu, notes, notesValue, notesScope } = editor;
 
 function onFollow(target: number, info: FollowInfo): void {
   if (info.span === 'table') {
@@ -515,7 +516,11 @@ onBeforeUnmount(() => {
         <template #right>
           <PageTabs v-model="rightTab" :tabs="RIGHT_TABS" label="Right page" id-prefix="right" />
           <div id="right-panel-explain" v-show="rightTab === 'explain'" role="tabpanel" aria-labelledby="right-tab-explain" class="fg-panel" data-testid="explain-panel">
-            <ExplainTab :target="explainTarget" :active="rightTab === 'explain'" @go="go" @table="showTable" />
+            <ExplainTab :target="explainTarget" :active="rightTab === 'explain'" @go="go" @table="showTable">
+              <template #summary-actions="{ summary }">
+                <button type="button" class="fg-button fg-explain-use" data-testid="explain-use-comment" @click="editor.openNotes({ start: summary.start, name: summary.name, text: summaryNotes(summary).join('\n') })">Use as comment</button>
+              </template>
+            </ExplainTab>
           </div>
           <div id="right-panel-symbol" v-show="rightTab === 'symbol'" role="tabpanel" aria-labelledby="right-tab-symbol" class="fg-panel">
             <SymbolTab @go="go" @open-manual="openManual" />
@@ -556,6 +561,18 @@ onBeforeUnmount(() => {
       :top="inline.top"
       @submit="editor.submitInline"
       @cancel="editor.closeInline"
+    />
+    <NotesEdit
+      v-if="notes !== null && session !== null"
+      v-model="notesValue"
+      v-model:scope="notesScope"
+      :title="notes.title"
+      :routine="notes.routine"
+      :error="notes.error"
+      :left="notes.left"
+      :top="notes.top"
+      @submit="editor.submitNotes"
+      @cancel="editor.closeNotes"
     />
     <ConfirmDialog
       testid="saved-work-dialog"

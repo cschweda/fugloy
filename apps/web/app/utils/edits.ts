@@ -18,7 +18,9 @@ export type Edit =
   /** An empty name removes the user name there. */
   | { op: 'name'; addr: number; name: string }
   /** Empty text removes the comment there. */
-  | { op: 'comment'; addr: number; text: string };
+  | { op: 'comment'; addr: number; text: string }
+  /** Replaces every block-comment line above the address; empty `lines` removes them. */
+  | { op: 'notes'; addr: number; lines: string[] };
 
 export type EditResult = { file: HintFile } | { error: string };
 
@@ -130,6 +132,18 @@ export function applyEdit(s: Session, e: Edit): EditResult {
   const ro = readOnly(s);
   if (ro !== null) return { error: ro };
   const blocks = new Blocks(s, s.hintFile);
+
+  if (e.op === 'notes') {
+    const key = keyFor(s, blocks, e.addr);
+    if ('error' in key) return key;
+    if ('at' in key) return { error: 'notes describe loaded code' };
+    // One note per line: tabs become spaces; blank lines inside stay, blank lines at the end go.
+    const lines = e.lines.map((l) => l.replace(/\s+/g, ' ').trim());
+    while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+    const kept = remove(blocks.file, 'note', key);
+    const notes: Hint[] = lines.map((text) => ({ block: key.block, offset: key.offset, line: 0, directive: 'note', text }));
+    return { file: { ...kept, hints: [...kept.hints, ...notes] } };
+  }
 
   if (e.op === 'name' || e.op === 'comment') {
     const key = keyFor(s, blocks, e.addr);

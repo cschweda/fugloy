@@ -65,6 +65,21 @@ describe('applyEdit', () => {
     expect(named.applied.rejected).toBe(0);
   });
 
+  it('notes: adds block comment lines in order, replaces them, and an empty list removes them', () => {
+    const s0 = seaDragon();
+    const s1 = edited(s0, { op: 'notes', addr: 0x4b9e, lines: ['  first\tline ', '', 'third'] });
+    expect(s1.analysis.annotations.notes.get(0x4b9e)).toEqual(['first line', '', 'third']);
+    const text = writeHints(s1.hintFile);
+    expect(text).toMatch(/block 0:\$021F note first line\n.*block 0:\$021F note\n.*block 0:\$021F note third/s);
+    const s2 = edited(s1, { op: 'notes', addr: 0x4b9e, lines: ['only', '', ''] });
+    expect(s2.analysis.annotations.notes.get(0x4b9e)).toEqual(['only']);
+    expect(writeHints(edited(s2, { op: 'notes', addr: 0x4b9e, lines: [] }).hintFile)).toBe(writeHints(s0.hintFile));
+  });
+
+  it('notes: refuses an address the program does not load', () => {
+    expect(errorOf(seaDragon(), { op: 'notes', addr: 0x9000, lines: ['x'] })).toBe('notes describe loaded code');
+  });
+
   it('refuses to mark an address the program does not load', () => {
     expect(errorOf(seaDragon(), { op: 'mark', from: 0x9000, to: 0x9003, as: 'bytes' })).toMatch(/not loaded/);
     expect(errorOf(seaDragon(), { op: 'table', from: 0x9000, to: 0x9003 })).toMatch(/not loaded/);
