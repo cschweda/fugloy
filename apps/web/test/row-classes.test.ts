@@ -7,7 +7,8 @@ import ListingRow from '../app/components/listing/ListingRow.vue';
 
 const KINDS: SpanKind[] = ['mnemonic', 'register', 'condition', 'number', 'label', 'table', 'string', 'punct', 'directive'];
 
-const render = (row: Row): Promise<string> => renderToString(createSSRApp({ render: () => h(ListingRow, { row, cursor: false, selected: false }) }));
+const render = (row: Row, line?: number): Promise<string> =>
+  renderToString(createSSRApp({ render: () => h(ListingRow, { row, cursor: false, selected: false, ...(line === undefined ? {} : { line }) }) }));
 
 describe('spanClass', () => {
   it('gives each of the nine span kinds its own class', () => {
@@ -60,5 +61,11 @@ describe('ListingRow', () => {
     expect(html).toContain('>499F<');
     expect(html).toContain('>CD 9E 4B<');
     expect(html).toContain('; entry');
+  });
+
+  it('puts the line number in a gutter of its own, hidden from screen readers, and leaves it empty without one', async () => {
+    expect(await render(row, 1234)).toContain('<span class="fg-col-line" aria-hidden="true">1234</span>');
+    expect(await render({ kind: 'label', addr: 0x4b9e, name: 'SUB_4B9E', user: false }, 7)).toContain('<span class="fg-col-line" aria-hidden="true">7</span>');
+    expect(await render(row)).toContain('<span class="fg-col-line" aria-hidden="true"></span>');
   });
 });

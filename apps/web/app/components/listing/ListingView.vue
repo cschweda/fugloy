@@ -16,6 +16,8 @@ const props = defineProps<{
   selection: { from: number; to: number } | null;
   /** The first row is the header's show/hide toggle. */
   headerToggle?: boolean;
+  /** The line number of the first numbered row (the toggle has none): past the header lines while they are folded, so a line keeps its number either way. */
+  firstLine?: number;
 }>();
 
 const emit = defineEmits<{
@@ -43,6 +45,11 @@ const cursorIndex = shallowRef<number | null>(cursorRow(props.cursor));
 const first = computed(() => Math.max(0, top.value - OVERSCAN));
 const last = computed(() => Math.min(props.rows.length, top.value + viewRows.value + OVERSCAN));
 const shown = computed(() => props.rows.slice(first.value, last.value));
+/** The line number shown beside row `index`, in the whole listing; none for the header toggle. */
+const toggleRows = computed(() => (props.headerToggle === true ? 1 : 0));
+const lineOf = (index: number): number | undefined => (index < toggleRows.value ? undefined : (props.firstLine ?? 1) + index - toggleRows.value);
+/** The gutter is as wide as the last line number. */
+const gutter = computed(() => `${String(Math.max(1, (props.firstLine ?? 1) + props.rows.length - toggleRows.value - 1)).length}ch`);
 /** Row ids, by index in the listing, so the scroller can name the cursor row for assistive technology. */
 const rowId = (index: number): string => `fg-row-${index}`;
 /** The cursor row's id while it is rendered (aria-activedescendant must name an element in the document). */
@@ -216,9 +223,9 @@ function onMouseDown(e: MouseEvent): void {
   if (e.shiftKey) e.preventDefault();
 }
 
-/** The cursor row's box on screen, for an editor or menu placed at it; null while it is not rendered. */
+/** The box on screen of the cursor row's text (past the line, address and bytes columns), for an editor or menu placed at it; null while it is not rendered. */
 function cursorRect(): DOMRect | null {
-  return scroller.value?.querySelector('.fg-row-cursor')?.getBoundingClientRect() ?? null;
+  return scroller.value?.querySelector('.fg-row-cursor')?.querySelector('.fg-col-text, .fg-col-full')?.getBoundingClientRect() ?? null;
 }
 
 let resize: ResizeObserver | null = null;
@@ -256,13 +263,14 @@ defineExpose({ scrollToAddr, focus, cursorRect });
     @click="onClick"
     @contextmenu="onContextMenu"
   >
-    <div class="fg-listing-spacer" :style="{ height: totalHeight }">
+    <div class="fg-listing-spacer" :style="{ height: totalHeight, '--fg-line-w': gutter }">
       <div class="fg-listing-window" :style="{ transform: offset }">
         <ListingRow
           v-for="(row, i) in shown"
           :id="rowId(first + i)"
           :key="first + i"
           :row="row"
+          :line="lineOf(first + i)"
           :cursor="cursorIndex === first + i"
           :selected="isSelected(row)"
           :toggle="headerToggle === true && first + i === 0"

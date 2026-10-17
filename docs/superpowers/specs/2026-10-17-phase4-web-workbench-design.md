@@ -114,7 +114,9 @@ C: listing only).
   right (see "Export"). Links to Technical details and About.
 - **Left page**, tabs: **Listing** and **Hints**, plus a dimmed **Source ✎**
   tab marking where the editor will go.
-  - *Listing:* address, bytes, label, mnemonic and operands, comment.
+  - *Listing:* address, bytes, label, mnemonic and operands, comment, beside a
+    gutter of line numbers (each row's line in the whole listing, also while
+    the header is folded; added 2026-10-17 at the user's request).
     Virtualized. Syntax-highlighted: mnemonics, registers, numbers, program
     labels, and table names (ROM, hardware, DOS) each have a distinct color.
     Comments are muted italic. Table names and labels are links.

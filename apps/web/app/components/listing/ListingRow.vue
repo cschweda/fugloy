@@ -1,13 +1,13 @@
 <script setup lang="ts">
-// One listing row, laid out on the grid ListingView sets: address, bytes, text,
-// comment. Presentational only: ListingView handles clicks, follows, and context
+// One listing row, laid out on the grid ListingView sets: line number, address,
+// bytes, text, comment. Presentational only: ListingView handles clicks, follows, and context
 // menus for every row at once through the data-addr and data-target attributes.
 import type { Row } from '@fugloy/disasm';
 import { hexWord } from '@fugloy/z80';
 import { hexAddr, hexBytes, isFollowable, spanClass } from '../../utils/row-classes';
 import { spanUseKind } from '../../utils/xrefs';
 
-defineProps<{ row: Row; cursor: boolean; selected: boolean; /** The row is the header's show/hide toggle (a note row; ListingView handles the click). */ toggle?: boolean }>();
+defineProps<{ row: Row; cursor: boolean; selected: boolean; /** The row's line in the whole listing, 1-based; none for the header toggle. */ line?: number; /** The row is the header's show/hide toggle (a note row; ListingView handles the click). */ toggle?: boolean }>();
 </script>
 
 <template>
@@ -16,6 +16,7 @@ defineProps<{ row: Row; cursor: boolean; selected: boolean; /** The row is the h
     :class="{ 'fg-row-cursor': cursor, 'fg-row-selected': selected, [`fg-row-${row.kind}`]: true }"
     :data-addr="'addr' in row ? row.addr : undefined"
   >
+    <span class="fg-col-line" aria-hidden="true">{{ line }}</span>
     <template v-if="row.kind === 'code' || row.kind === 'data'">
       <span class="fg-col-addr">{{ hexAddr(row.addr) }}</span>
       <span class="fg-col-bytes">{{ hexBytes(row.bytes) }}</span>

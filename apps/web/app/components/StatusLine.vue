@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Size and blocks, percent decoded as code, entry, machine and DOS, and the
+// Size and blocks, listing lines, percent decoded as code, entry, machine and DOS, and the
 // save state of the hints (composables/usePersistence).
 import { computed } from 'vue';
 import { hex4 } from '@fugloy/z80';
@@ -17,6 +17,7 @@ const parts = computed(() => {
   const blocks = s.module.image.blocks.length;
   return [
     `${n(f.size)} bytes · ${n(blocks)} ${blocks === 1 ? 'block' : 'blocks'}`,
+    `${n(wb.rows.value.length)} lines`,
     `${f.code.percent}% code`,
     f.entry === null ? 'no entry' : `entry $${hex4(f.entry)}`,
     s.selection === undefined ? 'no symbol tables' : selectionLabel(s.selection),

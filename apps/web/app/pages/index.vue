@@ -129,6 +129,9 @@ const shownRows = computed<readonly Row[]>(() => {
   return [{ kind: 'note', text }, ...(headerOpen.value ? rows.value : rows.value.slice(n))];
 });
 
+/** The line number of the first numbered listing row: past the header while it is folded. */
+const firstLine = computed(() => (foldable.value && !headerOpen.value ? headerLines.value + 1 : 1));
+
 /** A program just opened: put the cursor on its entry (else its first instruction), past the header. */
 function showOpened(): void {
   if (session.value === null) return;
@@ -447,6 +450,7 @@ onBeforeUnmount(() => {
               class="min-h-0 flex-1"
               :rows="shownRows"
               :header-toggle="foldable"
+              :first-line="firstLine"
               :cursor="cursor"
               :selection="selection"
               @select="onSelect"

@@ -31,8 +31,6 @@ export interface Inline {
   top: number;
 }
 
-/** Where the inline editor and the keyboard-opened menu sit: past the address and bytes columns, where the row's text starts. */
-const TEXT_COLUMN = 140;
 
 const $a = (addr: number): string => `$${addr.toString(16).toUpperCase().padStart(4, '0')}`;
 
@@ -113,7 +111,7 @@ export function useListingEditor(opts: {
     },
   });
 
-  /** The cursor row's place on screen, after scrolling it into view. */
+  /** Where the cursor row's text starts on screen, after scrolling it into view. */
   async function cursorPlace(): Promise<{ left: number; bottom: number } | null> {
     const at = cursor.value;
     if (at === null) return null;
@@ -134,7 +132,7 @@ export function useListingEditor(opts: {
     editMessage.value = null;
     const place = await cursorPlace();
     if (place === null) return;
-    inline.value = { op, targets: editTargets(s, at), addr: at, text: inlineText(op, at), error: null, left: place.left + TEXT_COLUMN, top: place.bottom + 2 };
+    inline.value = { op, targets: editTargets(s, at), addr: at, text: inlineText(op, at), error: null, left: place.left, top: place.bottom + 2 };
   }
 
   function closeInline(): void {
@@ -209,7 +207,7 @@ export function useListingEditor(opts: {
   /** The ContextMenu key or Shift+F10: the menu opens on the cursor row. */
   async function menuAtCursor(): Promise<void> {
     const place = await cursorPlace();
-    if (place !== null) openMenu(place.left + TEXT_COLUMN, place.bottom);
+    if (place !== null) openMenu(place.left, place.bottom);
   }
 
   const keys: Record<string, KeyBinding> = {

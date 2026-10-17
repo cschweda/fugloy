@@ -202,3 +202,31 @@ test('a program dropped on the open workbench asks before it replaces the open o
   await expect(page.getByTestId('file-name')).toHaveText('seadrg06.cmd');
   await expect(page.getByTestId('open-error')).toHaveCount(0);
 });
+
+test('numbers every listing line in a gutter, counting folded header lines, and the status line gives the total', async ({ page }) => {
+  await ready(page);
+  await page.getByTestId('open-sea-dragon').click();
+  await expect(page.locator('.fg-row-cursor')).toHaveAttribute('data-addr', String(0x8881));
+  const line = (i: number): import('@playwright/test').Locator => page.locator('.fg-row').nth(i).locator('.fg-col-line');
+  // The listing's last line is the program's last; the status line names the same count.
+  const listing = page.locator('.fg-listing');
+  await listing.evaluate((el) => (el.scrollTop = el.scrollHeight));
+  const total = Number(/([\d,]+) lines/.exec(await page.getByTestId('status-line').innerText())![1]!.replace(/,/g, ''));
+  expect(total).toBeGreaterThan(1000);
+  await expect(page.locator('.fg-row').last().locator('.fg-col-line')).toHaveText(String(total));
+  // Folded, the toggle row has no number and the next row is the line after the header.
+  await listing.evaluate((el) => (el.scrollTop = 0));
+  const toggle = page.getByTestId('header-toggle');
+  const n = Number(/(\d+) header lines/.exec(await toggle.innerText())![1]);
+  await expect(line(0)).toHaveText('');
+  await expect(line(1)).toHaveText(String(n + 1));
+  // Open, the header's lines are 1 to n, and the numbers after it do not move.
+  await toggle.click();
+  await expect(page.locator('.fg-row-header').first()).toBeVisible();
+  await expect(line(1)).toHaveText('1');
+  await listing.evaluate((el, n) => (el.scrollTop = n * 20), n);
+  await expect(page.locator('.fg-row-header').last().locator('.fg-col-line')).toHaveText(String(n));
+  await expect(page.locator('.fg-row-header').last().locator('xpath=following-sibling::div[1]').locator('.fg-col-line')).toHaveText(String(n + 1));
+  // The gutter is not part of what a reader copies or hears.
+  expect(await page.locator('.fg-col-line').first().evaluate((el) => [getComputedStyle(el).userSelect, el.getAttribute('aria-hidden')])).toEqual(['none', 'true']);
+});

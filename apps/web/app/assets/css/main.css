@@ -74,6 +74,7 @@ html.dark body {
 :root {
   --fg-addr: #a3abb5;
   --fg-bytes: #9198a1; /* 4.97:1 on --fg-cursor, 5.51:1 on --fg-selected */
+  --fg-line: #9c9470; /* line numbers, a colour no token uses: 4.75:1 on --fg-cursor, 5.26:1 on --fg-selected */
   --fg-string: #ffa657;
   --fg-cursor: #1f2a3a;
   --fg-selected: #172231;
@@ -92,7 +93,7 @@ html.dark body {
 .fg-listing-window { position: absolute; top: 0; left: 0; min-width: 100%; will-change: transform; }
 .fg-row {
   display: grid;
-  grid-template-columns: 6ch 14ch minmax(24ch, max-content) max-content;
+  grid-template-columns: calc(var(--fg-line-w, 4ch) + 2ch) 6ch 14ch minmax(24ch, max-content) max-content;
   height: 20px;
   line-height: 20px;
   padding: 0 12px;
@@ -104,7 +105,8 @@ html.dark body {
 .fg-row-cursor { background: var(--fg-cursor); box-shadow: inset 2px 0 0 var(--fg-accent); }
 .fg-col-addr { color: var(--fg-addr); }
 .fg-col-bytes { color: var(--fg-bytes); }
-.fg-col-full { grid-column: 1 / -1; }
+.fg-col-line { color: var(--fg-line); text-align: right; padding-right: 1ch; margin-right: 1ch; border-right: 1px solid var(--fg-border); user-select: none; }
+.fg-col-full { grid-column: 2 / -1; }
 .fg-row-label .fg-col-full { font-weight: 600; }
 
 .fg-tok-mnemonic, .fg-tok-directive { color: var(--fg-mnemonic); }
