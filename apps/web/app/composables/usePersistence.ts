@@ -32,6 +32,10 @@ export interface Persistence {
   carry: ShallowRef<CarryCandidate | null>;
   /** Lines of a carried-over hint file that did not parse or cannot apply, for the Hints tab. */
   hintErrors: Ref<readonly string[]>;
+  /** Set when saved work exists that the user's early edit would overwrite; nothing saves until `resolveConflict`. */
+  conflict: ShallowRef<{ name: string; text: string } | null>;
+  /** Load: the saved work replaces the open hints (one undoable step, so the change can be undone back). Keep: the change replaces the saved work. */
+  resolveConflict(choice: 'load' | 'keep'): void;
   /** Applies the offered file as one undoable step. */
   acceptCarry(): void;
   dismissCarry(): void;
@@ -62,6 +66,8 @@ export function createPersistence(wb: Workbench, deps: PersistenceDeps = {}): Pe
   const loadHints = deps.loadHints ?? ((t, n, o) => useEditing().loadHints(t, n, o));
   const store = shallowRef<Store | null | undefined>(undefined);
   const carry = shallowRef<CarryCandidate | null>(null);
+  /** Stored hints the user has not seen, found after they had already edited: saving waits for their choice. */
+  const conflict = shallowRef<{ name: string; text: string } | null>(null);
   const hintErrors = ref<readonly string[]>([]);
   /** The hint text the open program opened with (committed or skeleton): changes from it are the user's. */
   const baseline = ref<string | null>(null);
@@ -128,7 +134,7 @@ export function createPersistence(wb: Workbench, deps: PersistenceDeps = {}): Pe
   /** Schedules a save when the open program's hint file differs from what is stored. */
   function check(): void {
     const s = wb.session.value;
-    if (s === null || !restored.value) return;
+    if (s === null || !restored.value || conflict.value !== null) return;
     const text = hintText(s);
     // Nothing stored: only a change from what the program opened with is worth saving.
     if (savedText.value === null ? text === baseline.value : text === savedText.value) {
@@ -146,26 +152,33 @@ export function createPersistence(wb: Workbench, deps: PersistenceDeps = {}): Pe
     timer = setTimeout(() => void flush(), SAVE_DELAY_MS);
   }
 
-  /** The user edited before the saved work arrived: their edit stands, and saves like any other. */
-  function settleEdited(): void {
-    restored.value = true;
-    check();
-  }
-
   async function restore(s: Session, gen: number): Promise<void> {
     const st = await start();
     if (gen !== generation) return;
-    if (wb.session.value !== s) return settleEdited();
     if (st === null) {
       restored.value = true;
+      check();
       return;
     }
     try {
       const [saved, prefs] = await Promise.all([st.getHints(s.hash), st.getPrefs(s.hash)]);
       if (gen !== generation) return;
-      if (wb.session.value !== s) return settleEdited();
-      let next = s;
-      if (prefs !== undefined && selKey(prefs) !== selKey(s.selection)) {
+      // The user may have acted while the saved work was being read.
+      const cur = wb.session.value;
+      if (cur === null) return;
+      if (hintText(cur) !== hintText(s)) {
+        // An edit. Stored hints that were never shown must not be overwritten: ask first.
+        if (saved !== undefined && saved.text !== hintText(cur)) conflict.value = saved;
+        else {
+          restored.value = true;
+          check();
+        }
+        if (conflict.value !== null) restored.value = true;
+        return;
+      }
+      // Nothing edited (a machine or DOS change may have happened): saved work applies to the session as it is now.
+      let next = cur;
+      if (cur === s && prefs !== undefined && selKey(prefs) !== selKey(s.selection)) {
         try {
           next = withSelection(next, prefs);
         } catch {
@@ -188,10 +201,14 @@ export function createPersistence(wb: Workbench, deps: PersistenceDeps = {}): Pe
         const have = new Set(stored.map((h) => h.hash));
         carried = bestCarryOver(s, [...stored, ...(await committed()).filter((h) => !have.has(h.hash))]);
         if (gen !== generation) return;
-        if (wb.session.value !== s) return settleEdited();
+        if (wb.session.value !== cur || hintText(cur) !== hintText(s)) {
+          restored.value = true;
+          check();
+          return;
+        }
       }
       lastSel = selKey(next.selection);
-      if (next !== s) wb.session.value = next;
+      if (next !== cur) wb.session.value = next;
       carry.value = carried;
     } catch {
       failed.value = true;
@@ -210,6 +227,7 @@ export function createPersistence(wb: Workbench, deps: PersistenceDeps = {}): Pe
     generation++;
     carry.value = null;
     hintErrors.value = [];
+    conflict.value = null;
     savedText.value = null;
     restored.value = false;
     const s = wb.session.value;
@@ -248,7 +266,7 @@ export function createPersistence(wb: Workbench, deps: PersistenceDeps = {}): Pe
     if (store.value === null || failed.value) return 'not saved (storage unavailable)';
     if (s === null) return 'no hints yet';
     if (savedText.value === null && hintText(s) === baseline.value) return s.hintFile.hints.length === 0 ? 'no hints yet' : 'no changes yet';
-    if (waiting.value || savedText.value !== hintText(s)) return 'unsaved';
+    if (conflict.value !== null || waiting.value || savedText.value !== hintText(s)) return 'unsaved';
     return 'saved';
   });
 
@@ -257,6 +275,19 @@ export function createPersistence(wb: Workbench, deps: PersistenceDeps = {}): Pe
     store,
     carry,
     hintErrors,
+    conflict,
+    resolveConflict(choice) {
+      const c = conflict.value;
+      conflict.value = null;
+      if (c === null) return;
+      if (choice === 'load') {
+        const refused = loadHints(c.text, c.name);
+        if (refused !== null) wb.report(`${c.name} could not be loaded: ${refused}`);
+        else savedText.value = c.text;
+      }
+      // Keep: the stored copy is replaced by the next save, which check() schedules now.
+      check();
+    },
     acceptCarry() {
       const c = carry.value;
       carry.value = null;

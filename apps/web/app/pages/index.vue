@@ -435,6 +435,17 @@ onBeforeUnmount(() => {
       @submit="editor.submitInline"
       @cancel="editor.closeInline"
     />
+    <ConfirmDialog
+      testid="saved-work-dialog"
+      :open="persistence.conflict.value !== null"
+      title="This program has saved work from before"
+      message="Load it (your last change is undone), or keep your change and replace the saved work?"
+      confirm-label="Load the saved work"
+      cancel-label="Keep my change and replace it"
+      no-escape
+      @confirm="persistence.resolveConflict('load')"
+      @cancel="persistence.resolveConflict('keep')"
+    />
     <CarryOverDialog :candidate="persistence.carry.value" :program="session?.name ?? ''" @accept="persistence.acceptCarry()" @dismiss="persistence.dismissCarry()" />
     <ConfirmDialog
       :open="pendingReplace !== null"

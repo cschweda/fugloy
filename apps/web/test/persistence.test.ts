@@ -25,6 +25,7 @@ const until = async (f: () => boolean | Promise<boolean>): Promise<void> => {
 };
 
 let opened: Store | null = null;
+const extra: Store[] = [];
 const rig = async (open = openStore) => {
   const wb = createWorkbench({ readExample });
   const ed = createEditing(wb);
@@ -33,6 +34,7 @@ const rig = async (open = openStore) => {
   return { wb, p, ed };
 };
 afterEach(async () => {
+  for (const e of extra.splice(0)) e.db.close();
   opened?.db.close();
   opened = null;
   await new Promise((r) => (indexedDB.deleteDatabase('fugloy').onsuccess = r));
@@ -142,5 +144,68 @@ describe('usePersistence prefs', () => {
     await a.wb.openExample('sea-dragon', 'seadrg02.cmd');
     await sleep(150);
     expect(await opened!.allPrefs()).toEqual([]);
+  });
+});
+
+describe('an edit before the saved work has been read', () => {
+  /** A store whose getHints answers only when released. */
+  const slow = async () => {
+    const real = (await openStore())!;
+    extra.push(real);
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const store: Store = { ...real, getHints: async (h) => (await gate, real.getHints(h)) };
+    return { real, store, release };
+  };
+  const SAVED = 'fugloy-hints 1\n';
+
+  async function setup() {
+    const first = await rig();
+    await first.wb.openExample('sea-dragon');
+    first.ed.apply({ op: 'name', addr: 0x4b9e, name: 'KEPT' });
+    await until(() => first.p.status.value === 'saved');
+    const { real, store, release } = await slow();
+    const wb = createWorkbench({ readExample });
+    const ed = createEditing(wb);
+    const p = createPersistence(wb, { open: async () => store, readExample, loadHints: ed.loadHints });
+    await p.start();
+    await wb.openExample('sea-dragon');
+    return { real, wb, ed, p, release, hash: wb.session.value!.hash };
+  }
+
+  it('does not overwrite the stored hints, and asks; Load shows the saved work, undoably', async () => {
+    const { real, wb, ed, p, release, hash } = await setup();
+    expect(ed.apply({ op: 'name', addr: 0x4b9e, name: 'EARLY' })).toBeNull();
+    release();
+    await until(() => p.conflict.value !== null);
+    await sleep(SAVE_DELAY_MS + 150);
+    expect((await real.getHints(hash))!.text).toContain('KEPT');
+    expect((await real.getHints(hash))!.text).not.toContain('EARLY');
+    p.resolveConflict('load');
+    expect(wb.session.value!.analysis.symbols.list().some((s) => s.name === 'KEPT')).toBe(true);
+    expect(wb.session.value!.analysis.symbols.list().some((s) => s.name === 'EARLY')).toBe(false);
+    await sleep(SAVE_DELAY_MS + 150);
+    expect((await real.getHints(hash))!.text).toContain('KEPT');
+    ed.undo();
+    expect(wb.session.value!.analysis.symbols.list().some((s) => s.name === 'EARLY')).toBe(true);
+    void SAVED;
+  });
+
+  it('Keep replaces the saved work with the early change', async () => {
+    const { real, p, ed, release, hash } = await setup();
+    ed.apply({ op: 'name', addr: 0x4b9e, name: 'EARLY' });
+    release();
+    await until(() => p.conflict.value !== null);
+    p.resolveConflict('keep');
+    await until(async () => (await real.getHints(hash))!.text.includes('EARLY'));
+    expect((await real.getHints(hash))!.text).not.toContain('KEPT');
+  });
+
+  it('a machine change during the read still applies the saved hints afterwards', async () => {
+    const { wb, release } = await setup();
+    wb.setSelection({ machine: 1, dos: 'ldos' });
+    release();
+    await until(() => wb.session.value!.analysis.symbols.list().some((s) => s.name === 'KEPT'));
+    expect(wb.session.value!.selection?.machine).toBe(1);
   });
 });
