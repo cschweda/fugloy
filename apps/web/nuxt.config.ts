@@ -30,6 +30,8 @@ export default defineNuxtConfig({
   // Dark only; a light theme is not built.
   colorMode: { preference: 'dark', fallback: 'dark' },
   devtools: { enabled: false },
+  // Netlify serves each generated page as a directory (/about/), so links carry the slash and take no redirect.
+  experimental: { defaults: { nuxtLink: { trailingSlash: 'append' } } },
   typescript: { strict: true },
   alias: fugloyAliases,
   // The Playwright checks' window.__fugloyTest hook (pages/index.vue) is compiled in only when

@@ -79,7 +79,7 @@ test('a citation without the manual links to archive.org and to adding it', asyn
   await expect(missing.getByTestId('archive-page')).toHaveAttribute('href', /\/page\/n25\/mode\/1up$/);
   await expect(missing).toContainText('cover image from archive.org');
   await missing.getByTestId('add-manual').click();
-  await expect(page).toHaveURL(/\/manuals\?add=m3-trm$/);
+  await expect(page).toHaveURL(/\/manuals\/\?add=m3-trm$/);
   await expect(page.getByTestId('manual-m3-trm')).toHaveClass(/fg-manual-wanted/);
 });
 

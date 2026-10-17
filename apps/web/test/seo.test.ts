@@ -125,6 +125,14 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
     expect(png.readUInt32BE(20)).toBe(630);
   });
 
+  it('links between pages with the trailing slash, so a crawler or a new tab takes no redirect', () => {
+    for (const p of PAGES) {
+      const hrefs = [...read(p.file).matchAll(/<a\b[^>]*\bhref="(\/[^"#?]*)/g)].map((m) => m[1]!).filter((h) => !h.startsWith('/pdfjs/'));
+      expect(hrefs.length, p.path).toBeGreaterThan(0);
+      expect(hrefs.filter((h) => !h.endsWith('/')), p.path).toEqual([]);
+    }
+  });
+
   it('lists the four pages in sitemap.xml, and robots.txt allows all and names it', () => {
     const sitemap = read('sitemap.xml');
     const locs = [...sitemap.matchAll(/<loc>([^<]*)<\/loc>/g)].map((m) => m[1]);

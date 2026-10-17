@@ -19,7 +19,7 @@ const reader = computed(() => {
   const p = s === undefined ? undefined : s.pages[props.cite.page];
   return s !== undefined && p !== undefined ? readerUrl(s.archiveId, p) : null;
 });
-const addHref = computed(() => `/manuals?add=${encodeURIComponent(props.cite.source)}`);
+const addHref = computed(() => `/manuals/?add=${encodeURIComponent(props.cite.source)}`);
 
 function add(e: MouseEvent): void {
   if (router === null || e.metaKey || e.ctrlKey || e.shiftKey) return;
