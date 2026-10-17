@@ -138,6 +138,30 @@ describe('dataRegion: what it refuses to claim', () => {
     expect(must(dataRegion(raw([0x21, 0x08, 0x70, 0x00, 0x22, 0x20, 0x70, 0xc9, 0x01, 0x02]), 0x7008)).pointers).toEqual([]);
   });
 
+  it('EX DE,HL in a data-reading loop leaves the direction unproven', () => {
+    // 7000 LD HL,700AH; 7003 LD A,(HL); INC HL; EX DE,HL; OR A; JR NZ,7003H; RET; 700A data.
+    const r = must(dataRegion(raw([0x21, 0x0a, 0x70, 0x7e, 0x23, 0xeb, 0xb7, 0x20, 0xfa, 0xc9, 0x01, 0x02, 0x00]), 0x700b));
+    expect(r.readers).toEqual([]);
+    const t = text(r).join(' ');
+    expect(t).not.toMatch(/stepping/);
+    expect(t).toContain('HL also changes in it at $7005 (EX DE,HL)');
+  });
+
+  it('ADD HL,DE with D 0 on the way in, but EX DE,HL in the loop: D is not proven 0 throughout', () => {
+    // 7000 LD D,0; 7002 LD HL,700CH; 7005 LD A,(HL); ADD HL,DE; EX DE,HL; OR A; JR NZ,7005H; RET; 700C data.
+    const r = must(dataRegion(raw([0x16, 0x00, 0x21, 0x0c, 0x70, 0x7e, 0x19, 0xeb, 0xb7, 0x20, 0xfa, 0xc9, 0x01, 0x02, 0x00]), 0x700d));
+    expect(r.readers).toEqual([]);
+    const t = text(r).join(' ');
+    expect(t).not.toMatch(/stepping/);
+    expect(t).not.toMatch(/D is 0/);
+  });
+
+  it("EX AF,AF' between LD A,(HL) and AND: no split", () => {
+    // 7000 LD HL,700BH; 7003 LD A,(HL); INC HL; EX AF,AF'; AND 0F0H; JR NZ,7003H; RET; 700B data.
+    const r = must(dataRegion(raw([0x21, 0x0b, 0x70, 0x7e, 0x23, 0x08, 0xe6, 0xf0, 0x20, 0xf9, 0xc9, 0x01, 0x02]), 0x700b));
+    expect(r.readers[0]!.splits).toEqual([]);
+  });
+
   // 7000 LD HL,700AH; 7003 LD A,(HL); INC HL; AND 0F0H; JR NZ,7003H; RET; 700A data.
   const andLoop = [0x21, 0x0a, 0x70, 0x7e, 0x23, 0xe6, 0xf0, 0x20, 0xfa, 0xc9, 0x01, 0x02];
 

@@ -138,14 +138,22 @@ export function knownBefore(a: Analysis, addr: number): Known {
   return from === undefined ? { regs } : { regs, from };
 }
 
-/** The registers an instruction may write: probed from two different full states, so a constant load is caught too. */
+/**
+ * The registers an instruction may write. Probed from two full states in which
+ * every register holds a value no other register holds, and each register's
+ * value differs between the two, so a copy (LD A,B), a swap (EX DE,HL) and a
+ * constant load (which can match at most one of the two) are all caught.
+ */
 export function written(ins: Instruction): Reg8Name[] {
   const out = new Set<Reg8Name>();
-  for (const v of [0x5a, 0xa5]) {
+  const names = Object.keys(unknownRegs()) as Reg8Name[];
+  for (const base of [0x10, 0xa0]) {
     const r = unknownRegs();
-    for (const n of Object.keys(r) as Reg8Name[]) r[n] = v;
+    names.forEach((n, i) => (r[n] = base + i));
     stepRegs(ins, r);
-    for (const n of Object.keys(r) as Reg8Name[]) if (r[n] !== v) out.add(n);
+    names.forEach((n, i) => {
+      if (r[n] !== base + i) out.add(n);
+    });
   }
   return [...out];
 }
@@ -172,16 +180,8 @@ function step(a: Analysis, at: number, ins: Instruction, regs: RegState): void {
   for (const n of written(ins)) regs[n] = null;
 }
 
-/** True when the instruction may change B: probed with two different B values so a constant load is caught too. */
-function writesB(ins: Instruction): boolean {
-  for (const b of [0x5a, 0xa5]) {
-    const r = unknownRegs();
-    r.B = b;
-    stepRegs(ins, r);
-    if (r.B !== b) return true;
-  }
-  return false;
-}
+/** True when the instruction may change B. */
+const writesB = (ins: Instruction): boolean => written(ins).includes('B');
 
 /**
  * The registers on entry to a loop from `head` to `end` (the instruction that

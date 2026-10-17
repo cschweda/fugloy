@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { pair } from '../../src/analysis/regs.js';
-import { djnzLoop, knownBefore } from '../../src/explain/track.js';
+import { decodeAt } from '@fugloy/z80';
+import { djnzLoop, knownBefore, written } from '../../src/explain/track.js';
 import { emptyAnnotations } from '../../src/hints/apply.js';
 import { analyze } from '../../src/pipeline.js';
 import { loadRaw } from '../../src/raw.js';
@@ -211,5 +212,21 @@ describe('Sea Dragon, with hints', () => {
     const k = knownBefore(sea, 0x5fc4);
     expect(pair(k.regs, 'HL')).toBeNull();
     expect(k.from?.jumpers).toEqual(expect.arrayContaining([0x5fd6, 0x5fde]));
+  });
+});
+
+describe('written', () => {
+  const w = (...bytes: number[]) => [...written(decodeAt(bytes, 0))].sort();
+  it('reports both sides of a swap, and the registers EX AF,AF\' and EXX replace', () => {
+    expect(w(0xeb)).toEqual(['D', 'E', 'H', 'L']); // EX DE,HL
+    expect(w(0x08)).toEqual(['A']); // EX AF,AF'
+    expect(w(0xd9)).toEqual(['B', 'C', 'D', 'E', 'H', 'L']); // EXX
+  });
+  it('reports copies and constant loads, and nothing for an instruction that writes no register', () => {
+    expect(w(0x78)).toEqual(['A']); // LD A,B
+    expect(w(0x3e, 0x00)).toEqual(['A']); // LD A,00H
+    expect(w(0x21, 0x00, 0x00)).toEqual(['H', 'L']); // LD HL,0000H
+    expect(w(0x00)).toEqual([]); // NOP
+    expect(w(0xb7)).toEqual(['A']); // OR A: A is unchanged in value, but the rule forgets it
   });
 });
