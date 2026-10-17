@@ -230,6 +230,45 @@ describe('comments for named transfers', () => {
     const lines = listingOf([0x00, 0xcd, 0x49, 0x00, 0xc9], { tables: different, annotations });
     expect(row(lines, 0x5201)).toEqual({ text: 'CALL $KBWAIT', comment: 'read the key; wait for a key [Model III]' });
   });
+
+  describe('of RST n', () => {
+    const rst08 = decodeAt([0xcf], 0);
+    const onModel3 = (comparison: RomComparison): string | undefined =>
+      externalComment(rst08, undefined, new ExternalNames(selectSymbols(MODEL_III, tablesOf({ 'rom-model3': [syncheck] }), comparison), () => false, []));
+
+    it('carry the machine tag after NAME: purpose, as a named transfer does (spec 4.6)', () => {
+      expect(onModel3({ '0008': 'different' })).toBe('$SYNCHK: check the next character [Model III]');
+      expect(onModel3({ '0008': 'model3-only' })).toBe('$SYNCHK: check the next character [Model III]');
+      expect(onModel3({})).toBe('$SYNCHK: check the next character [Model III]'); // an address the comparison does not list is not known to be shared
+      const sync1 = entry('rom-model1', 'routine', 0x0008, '$SYNCHK', { purpose: 'check the next character' });
+      const onModel1 = new ExternalNames(selectSymbols({ machine: 1, dos: 'none' }, tablesOf({ 'rom-model1': [sync1] }), { '0008': 'different' }), () => false, []);
+      expect(externalComment(rst08, undefined, onModel1)).toBe('$SYNCHK: check the next character [Model I]');
+    });
+
+    it('carry no tag where the comparison classes the vector as shared', () => {
+      expect(onModel3({ '0008': 'shared' })).toBe('$SYNCHK: check the next character');
+    });
+
+    it('are tagged in the comment column of a listing row, after the hint comment', () => {
+      const different = selectSymbols(MODEL_III, tablesOf({ 'rom-model3': [syncheck] }), { '0008': 'different' });
+      const annotations = { ...emptyAnnotations(), comments: new Map([[0x5201, 'check the comma']]) };
+      const lines = listingOf([0x00, 0xcf, 0x2c, 0xc9], { tables: different, annotations });
+      expect(row(lines, 0x5201)).toEqual({ text: 'RST 08H', comment: 'check the comma; $SYNCHK: check the next character [Model III]' });
+      expect(row(listingOf([0x00, 0xcf, 0x2c, 0xc9], { tables: model3 }), 0x5201).comment).toBe('$SYNCHK: check the next character'); // shared: untagged
+    });
+
+    it('are tagged in zmac source too', () => {
+      const different = selectSymbols(MODEL_III, tablesOf({ 'rom-model3': [syncheck] }), {});
+      expect(zmacOf([0xcf, 0x2c, 0xc9], { tables: different })).toContain('\tRST\t08H\t; $SYNCHK: check the next character [Model III]\n');
+    });
+
+    it('are not tagged when the vector is a service call, which is not a ROM name', () => {
+      // the empty comparison tags every ROM name, and a service call is not one
+      expect(externalComment(decodeAt([0xef], 0, 2), decodeAt([0x3e, 0x0a], 0), new ExternalNames(selectSymbols(MODEL_IV, tablesOf({ 'svc-lsdos6': [dsply] }), {}), () => false, []))).toBe(
+        '@DSPLY (SVC 10): display a line',
+      );
+    });
+  });
 });
 
 describe('service calls on a Model 4', () => {

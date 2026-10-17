@@ -53,7 +53,17 @@ function loadedIntoA(prev: Instruction | undefined): number | undefined {
   return dest?.kind === 'reg' && dest.reg === 'A' && src?.kind === 'imm8' ? src.value : undefined;
 }
 
-/** The comment for `RST vector`: the routine at that address, or on a Model 4 the service call the instruction before it selected. */
+/** `text`, then the machine tag (`[Model III]`, `[Model I]`) where the ROM name's address differs between the machines (spec §4.6). */
+function withTag(text: string, entry: TableEntry, externals: ExternalNames): string {
+  const tag = externals.machineTag(entry);
+  return tag === undefined ? text : `${text} ${tag}`;
+}
+
+/**
+ * The comment for `RST vector`: `NAME: purpose` of the routine at that address,
+ * tagged like any ROM name; or on a Model 4 the service call the instruction
+ * before it selected, which is no ROM name and carries no tag.
+ */
 function rstNote(vector: number, prev: Instruction | undefined, externals: ExternalNames, symbols: SymbolTable | undefined): ExternalNote | undefined {
   if (vector === 0x28 && externals.selection?.machine === 4) {
     const number = loadedIntoA(prev);
@@ -62,18 +72,19 @@ function rstNote(vector: number, prev: Instruction | undefined, externals: Exter
   }
   if (symbols?.has(vector)) return undefined;
   const found = externals.code(vector);
-  return found === undefined ? undefined : { entry: found.entry, text: `${found.entry.name}: ${found.entry.purpose}` };
+  return found === undefined ? undefined : { entry: found.entry, text: withTag(`${found.entry.name}: ${found.entry.purpose}`, found.entry, externals) };
 }
 
 /**
  * The table entry a comment on `ins` explains and the comment itself (design
  * spec §4.5): the purpose of a routine or vector that a jump, call, or relative
- * branch was named after, with the machine tag where the ROM name's address
- * differs between machines; for RST n, `NAME: purpose` of the routine at n; on
- * a Model 4, for RST 28H right after `LD A,n`, `NAME (SVC n): purpose` of
- * service call n. Nothing for any other instruction, and nothing where the
- * program's own symbol names the target. `prev` is the instruction directly
- * before `ins` (`previousInstruction`).
+ * branch was named after; for RST n, `NAME: purpose` of the routine at n. Both
+ * carry the machine tag where the ROM name's address differs between machines
+ * (§4.6). On a Model 4, for RST 28H right after `LD A,n`, `NAME (SVC n):
+ * purpose` of service call n, which is no ROM name and so is never tagged.
+ * Nothing for any other instruction, and nothing where the program's own
+ * symbol names the target. `prev` is the instruction directly before `ins`
+ * (`previousInstruction`).
  */
 export function externalNote(ins: Instruction, prev: Instruction | undefined, externals: ExternalNames, symbols?: SymbolTable): ExternalNote | undefined {
   for (const op of ins.operands) {
@@ -82,8 +93,7 @@ export function externalNote(ins: Instruction, prev: Instruction | undefined, ex
     if (operandUse(ins, op) !== 'code' || value === undefined || (symbols?.has(value) ?? false)) continue;
     const found = externals.code(value);
     if (found === undefined) continue;
-    const tag = externals.machineTag(found.entry);
-    return { entry: found.entry, text: tag === undefined ? found.entry.purpose : `${found.entry.purpose} ${tag}` };
+    return { entry: found.entry, text: withTag(found.entry.purpose, found.entry, externals) };
   }
   return undefined;
 }

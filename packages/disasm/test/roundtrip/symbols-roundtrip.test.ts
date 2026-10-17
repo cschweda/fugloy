@@ -114,6 +114,15 @@ describe('a program that uses every kind of reference, under in-memory tables', 
     }
   });
 
+  test('assembles back to the identical image when the comments carry machine tags, an RST\'s included', () => {
+    // an empty comparison does not class any ROM address as shared, so every ROM name's comment is tagged
+    const untrusted = selectSymbols({ machine: 3, dos: 'trsdos' }, tablesOf({ 'rom-model3': [syncheck, vdchar, kbwait, cursor], 'hardware-model3': [video, modeport], 'dos-trsdos13': [jp2dos] }), {});
+    const source = roundTrip(bytes, untrusted, annotations);
+    expect(source).toContain('\tCALL\t$KBWAIT\t; wait for a key [Model III]\n');
+    expect(source).toContain('\tRST\t08H\t; $SYNCHK: check the next character [Model III]\n');
+    expect(source).toContain('\tJP\tNZ,$JP2DOS\t; return to TRSDOS READY\n'); // a DOS name is not a ROM name
+  });
+
   test('defines each name once', () => {
     const source = roundTrip(bytes, tables, annotations);
     for (const name of ['$KBWAIT', '$VDCHAR', 'CURSOR', 'VIDEO', 'MODEPORT', '$JP2DOS']) {
