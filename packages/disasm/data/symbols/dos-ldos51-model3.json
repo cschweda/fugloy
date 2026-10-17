@@ -2,30 +2,6 @@
   "table": "dos-ldos51-model3",
   "entries": [
     {
-      "addr": "4015",
-      "name": "KIDCB$",
-      "kind": "variable",
-      "purpose": "keyboard device control block, 8 bytes; this entry names its first byte",
-      "cite": [{ "source": "ldos51", "page": "6-32" }],
-      "note": "the block spans 4015H-401CH (ldos51 6-32); the ROM variables CAPSLOCK (4019H) and CURBLINK (401CH) lie inside it and keep their ROM names"
-    },
-    {
-      "addr": "401D",
-      "name": "DODCB$",
-      "kind": "variable",
-      "purpose": "video device control block, 8 bytes; this entry names its first byte",
-      "cite": [{ "source": "ldos51", "page": "6-32" }],
-      "note": "the block spans 401DH-4024H (ldos51 6-32); the ROM variables CURADDR (4020H) and CURCHAR (4023H) lie inside it and keep their ROM names"
-    },
-    {
-      "addr": "4025",
-      "name": "PRDCB$",
-      "kind": "variable",
-      "purpose": "printer device control block, 8 bytes; this entry names its first byte",
-      "cite": [{ "source": "ldos51", "page": "6-32" }],
-      "note": "the block spans 4025H-402CH (ldos51 6-32); the ROM variables PRTPAGELEN (4028H), PRTLINECNT (4029H), and PRTWIDTH (402BH) lie inside it and keep their ROM names"
-    },
-    {
       "addr": "402D",
       "name": "@EXIT",
       "kind": "routine",

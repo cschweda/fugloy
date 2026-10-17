@@ -713,7 +713,7 @@ describe('the IR with table names', () => {
 });
 
 describe('commentEntries', () => {
-  it('lists the entries a comment names, in table order, once: RST vectors and service calls as well as transfers', () => {
+  it('lists the entries a comment names, in table order, once: RST entry points and service calls as well as transfers', () => {
     const a = program([0xcf, 0x2c, 0xcd, 0x49, 0x00, 0xcf, 0x2c, 0xc9], { tables: model3 });
     expect(commentEntries(a.pass1.instructions, a.externals, a.symbols)).toEqual([syncheck, kbwait]);
     const four = program([0x3e, 0x0a, 0xef, 0x3e, 0x0a, 0xef, 0xc9], { tables: model4 });
@@ -726,7 +726,7 @@ describe('commentEntries', () => {
   });
 });
 
-describe('with the committed DOS and service call tables', () => {
+describe('with the committed tables', () => {
   /** The generated tables for a machine and DOS, as the CLI uses them. */
   const real = (selection: SymbolSelection): SymbolSet => selectSymbols(selection);
   const listingWith = (selection: SymbolSelection, bytes: number[]): string[] => listingOf(bytes, { tables: real(selection) });
@@ -772,11 +772,24 @@ describe('with the committed DOS and service call tables', () => {
     expect(row(listingWith({ machine: 3, dos: 'ldos' }, [0x00, 0x2a, 0x11, 0x44, 0x3a, 0x27, 0x44, 0xc9]), 0x5204).text).toBe('LD A,(LDRV$)');
   });
 
-  it('gives a control block\'s address the ROM\'s name on a Model I and the LDOS name on a Model III: LD DE,4025H', () => {
+  it('names the RAM jump vectors on the default machine as on the Model I: LD A,(4012H) and LD (4013H),HL read INTVEC, LD DE,4000H SYNCHKVEC', () => {
+    const hook = [0x3a, 0x12, 0x40, 0x22, 0x13, 0x40, 0xc9];
+    const vector = [0x00, 0x11, 0x00, 0x40, 0xc9];
+    for (const selection of [MODEL_III, MODEL_I]) {
+      const where = `${selection.machine} ${selection.dos}`;
+      const lines = listingWith(selection, hook);
+      expect(row(lines, 0x5200).text, where).toBe('LD A,(INTVEC)');
+      expect(row(lines, 0x5203).text, where).toBe('LD (INTVEC+0001H),HL');
+      expect(lines.filter((l) => l.startsWith('; table name INTVEC = $4012: ')), where).toHaveLength(1);
+      expect(row(listingWith(selection, vector), 0x5201).text, where).toBe('LD DE,SYNCHKVEC');
+    }
+  });
+
+  it('gives a control block\'s address the ROM\'s name on both machines and under every DOS, LDOS\'s PRDCB$ being a note: LD DE,4025H', () => {
     const load = [0x00, 0x11, 0x25, 0x40, 0xc9];
-    expect(row(listingWith({ machine: 1, dos: 'ldos' }, load), 0x5201).text).toBe('LD DE,PRDCB');
-    expect(row(listingWith({ machine: 3, dos: 'ldos' }, load), 0x5201).text).toBe('LD DE,PRDCB$');
-    expect(row(listingWith({ machine: 3, dos: 'trsdos' }, load), 0x5201).text).toBe('LD DE,4025H');
+    for (const selection of [MODEL_I, { machine: 3, dos: 'ldos' }, MODEL_III, { machine: 3, dos: 'none' }] as const) {
+      expect(row(listingWith(selection, load), 0x5201).text, `${selection.machine} ${selection.dos}`).toBe('LD DE,PRDCB');
+    }
   });
 
   it('keeps the ROM names for the ROM-resident addresses LDOS also names: CALL 0049H is $KBWAIT under LDOS, not @KEY', () => {

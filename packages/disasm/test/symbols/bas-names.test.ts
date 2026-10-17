@@ -1,7 +1,8 @@
 /**
  * Names in .BAS listings (design spec §5.4): a note line after a BASIC line whose
  * PEEK, POKE, or DEFUSR argument is a constant address the selected tables name.
- * Tables here are in memory, so each test names its own entries.
+ * Tables here are in memory, so each test names its own entries, except in the
+ * last block, which lists with the committed tables as the CLI does.
  */
 import { describe, expect, it } from 'vitest';
 import { loadBas } from '../../src/bas.js';
@@ -13,6 +14,7 @@ import { analyze } from '../../src/pipeline.js';
 import { selectSymbols } from '../../src/symbols/select.js';
 import type { SymbolSelection, SymbolSet } from '../../src/symbols/select.js';
 import type { RomComparison } from '../../src/symbols/types.js';
+import { BAS_FIXTURES } from '../fixtures.js';
 import { tokenizeLine, writeBasic } from '../writers/basic-tokenizer.js';
 import type { BasicLineSpec } from '../writers/basic-tokenizer.js';
 import { entry, tablesOf } from './helpers.js';
@@ -414,5 +416,30 @@ describe('the machine tag on a note', () => {
     const lines = renderPass1Listing(analyze(own, { tables: names })).split('\n');
     expect(notes(lines)).toEqual([';   16526 = $408E USR vector (USRVEC) [Model I]', ';   16527 = $408F USR vector (USRVEC+1) [Model I]']);
     expect(notes(renderBasListing(own, { tables: names }).split('\n'))).toEqual(notes(lines));
+  });
+});
+
+describe('notes from the committed tables', () => {
+  /** The CLI's default: a Model III with TRSDOS 1.3. */
+  const DEFAULT = selectSymbols({ machine: 3, dos: 'trsdos' });
+  const ON_MODEL_I = selectSymbols(MODEL_I);
+
+  it('notes the program-start pointer that line 30 of prog-62c8.bas PEEKs, untagged, on the default machine as on the Model I', () => {
+    for (const names of [DEFAULT, ON_MODEL_I]) {
+      const lines = renderBasListing(loadBas(BAS_FIXTURES['prog-62c8']!()), { tables: names }).split('\n');
+      const at = lines.indexOf('30 X=PEEK(16548)+256*PEEK(16549)');
+      expect(at, names.selection.machine.toString()).toBeGreaterThan(0);
+      expect(lines.slice(at + 1, at + 4), names.selection.machine.toString()).toEqual([
+        expect.stringMatching(/^; {3}16548 = \$40A4 .+ \(PROGSTART\)$/),
+        expect.stringMatching(/^; {3}16549 = \$40A5 .+ \(PROGSTART\+1\)$/),
+        '40 IF X>0 THEN GOSUB 100 ELSE END',
+      ]);
+      expect(notes(lines), names.selection.machine.toString()).toHaveLength(2);
+    }
+  });
+
+  it('notes a POKE of the USR address on the default machine: POKE 16526 and 16527 are USRVEC, untagged', () => {
+    const lines = listing([{ number: 10, text: 'POKE 16526,0:POKE 16527,127:X=USR(0)' }], DEFAULT);
+    expect(notes(lines)).toEqual([expect.stringMatching(/^; {3}16526 = \$408E .+ \(USRVEC\)$/), expect.stringMatching(/^; {3}16527 = \$408F .+ \(USRVEC\+1\)$/)]);
   });
 });

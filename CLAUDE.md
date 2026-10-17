@@ -14,7 +14,7 @@ until the plan's kill criteria have been reviewed. If a task seems to need
 machinery from a later step, stop and say so.
 
 Current phase: **disasm phase 3 done** — symbol tables: eight cited JSON tables
-(608 entries) in `packages/disasm/data/symbols/`, compiled by `pnpm symbols`,
+(634 entries) in `packages/disasm/data/symbols/`, compiled by `pnpm symbols`,
 chosen with `--machine` and `--dos`. Design:
 `docs/superpowers/specs/2026-10-16-phase3-symbol-tables-design.md`; plan:
 `docs/superpowers/plans/2026-10-16-phase3-symbol-tables.md`. Not yet released

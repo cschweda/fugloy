@@ -92,7 +92,7 @@ the bytes it came from.
   61% of the game then decodes at its running address.
 - **It names the machine's own addresses.** ROM routines, hardware registers
   and ports, and DOS vectors and service calls come out by name, from eight
-  tables of 608 entries, each entry citing a page of a published source. The
+  tables of 634 entries, each entry citing a page of a published source. The
   Model I and Model III ROM maps are entered separately and compared, and a
   name the other machine's map does not confirm says which machine it came
   from. `--machine` and `--dos` choose the tables.
@@ -414,8 +414,12 @@ AEBC  CD 20 44      CALL $INIT              ; open a file, creating it if it doe
   ;   14400 = $3840 memory-mapped keyboard (KEYBOARD+64)
   ```
 
+  Both machines' ROM tables name the BASIC pointers programs reach for most,
+  such as the USR vector at 16526–16527 and the program-start pointer at
+  16548–16549, so their notes carry no machine tag.
+
 Every name cites a page. The tables are eight JSON files in
-`packages/disasm/data/symbols/`, 608 entries from ten published works, each
+`packages/disasm/data/symbols/`, 634 entries from ten published works, each
 with a purpose and a `cite`: a source and the page as that source prints it.
 Names are Tandy's where Tandy published one (`$KBWAIT`), a DOS manual's own
 spelling for DOS routines (`$INIT`, `@INIT`), and otherwise coined (`VIDEO`,

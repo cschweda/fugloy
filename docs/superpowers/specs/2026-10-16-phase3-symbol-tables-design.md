@@ -285,9 +285,10 @@ addresses never reach the table lookup.
 
 A line whose `PEEK`, `POKE`, or `DEFUSR` argument is a constant address in the
 selected tables is followed by a note line naming it, for example
-`;   16526 = $408E … (USRVEC) [Model I]`: the address in decimal and in hex, the
-purpose (elided here), the name in parentheses, and the machine tag of §4.6
-where it applies. Inside a span the name carries a decimal offset
+`;   16526 = $408E … (USRVEC)`: the address in decimal and in hex, the purpose
+(elided here), the name in parentheses, and the machine tag of §4.6 where it
+applies (`;   16445 = $403D … (PORTFFBITS) [Model I]`, an address only the
+Model I table names). Inside a span the name carries a decimal offset
 (`KEYBOARD+64`). A note line, not a trailing comment, because `;` is BASIC's
 PRINT separator and would read as program text. The phase-2C parser supplies
 the constants, so no column offsets are needed, and it keeps every statement's
@@ -318,17 +319,25 @@ operands at render time → listing, zmac (`EQU`s), IR.
 ## 7. Data scope for this phase
 
 - `rom-model3`: the 28 calls of Tandy's summary (`12/24`), its RAM addresses
-  (`12/25`–`12/26`), the RST vectors, and further entries from `decker`, to about
-  100. Built: 121 entries (27 of the 28 summary rows; the 28th, `$PRSTAT`, is in
-  `hardware-model3`).
+  (`12/25`–`12/26`), the RST entry points (`$0000`–`$0038`), and further entries
+  from `decker`, to about 100. Built: 150 entries (27 of the 28 summary rows; the
+  28th, `$PRSTAT`, is in `hardware-model3`). They include 29 entries of the
+  `$4000`-page RAM that Decker gives for both machines (his reserved RAM map
+  applies to the Model I and the Model III unless he marks an address, p. 64):
+  the RST jump vectors at `$4000`–`$4012` beside Tandy's `$400C`, the device
+  control blocks' fields, the BASIC pointers and flags, and the accumulators,
+  each under the Model I table's name, so the comparison classes them shared.
+  `$403D`, which Decker marks Model I only (p. 65), stays out.
 - `rom-model1`: about 100 from Paay's map (2–22) and reserved RAM (23–30).
-  Built: 125 entries. The comparison, as built: 73 addresses shared, 4
-  different, 48 Model I only, 44 Model III only.
+  Built: 125 entries. The comparison, as built: 102 addresses shared, 4
+  different, 19 Model I only, 44 Model III only.
 - Hardware: each machine's memory map regions and ports from its manual. Built:
   13 entries for the Model I, 17 for the Model III.
 - DOS: TRSDOS 1.3's documented routines and storage addresses (74–89), 24
-  entries; LDOS 5.1's maps (6-29 to 6-35), 107 entries for the Model I and 104
-  for the Model III.
+  entries; LDOS 5.1's maps (6-29 to 6-35), 107 entries for the Model I and 101
+  for the Model III. On both machines LDOS's names for the three device control
+  blocks (`KIDCB$`, `DODCB$`, `PRDCB$`) are notes on the ROM tables' entries at
+  each block's first byte, since the ROM names win in the `$4000` page.
 - `svc-lsdos6`: every call on Soltoff's 101–104, 97 entries.
 - First priority in every table: each external address asylum16 and Volcano
   Hunter reach. asylum16 with its hints reaches 17 ROM addresses: `$0000`; the

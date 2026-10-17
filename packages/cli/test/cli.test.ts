@@ -555,10 +555,16 @@ describe('--machine and --dos', () => {
   });
 
   it('tags the note of a ROM name that differs on the other machine, as an RST comment is, and not one both ROMs share', async () => {
-    // USRVEC is in the Model I ROM table only; PRTPAGELEN is in both (data/symbols/COMPARISON.md).
-    const { lines } = await listBasic([{ number: 10, text: 'X=PEEK(16526)' }, { number: 20, text: 'X=PEEK(16424)' }], '--machine', '1');
-    expect(lines[lines.indexOf('10 X=PEEK(16526)') + 1]).toMatch(/^; {3}16526 = \$408E .+ \(USRVEC\) \[Model I\]$/);
-    expect(lines[lines.indexOf('20 X=PEEK(16424)') + 1]).toMatch(/^; {3}16424 = \$4028 .+ \(PRTPAGELEN\)$/);
+    // PORTFFBITS (403DH) is in the Model I ROM table only; USRVEC and PRTPAGELEN are in both (data/symbols/COMPARISON.md).
+    const program: BasicLineSpec[] = [{ number: 10, text: 'X=PEEK(16445)' }, { number: 20, text: 'X=PEEK(16526)' }, { number: 30, text: 'X=PEEK(16424)' }];
+    const { lines } = await listBasic(program, '--machine', '1');
+    expect(lines[lines.indexOf('10 X=PEEK(16445)') + 1]).toMatch(/^; {3}16445 = \$403D .+ \(PORTFFBITS\) \[Model I\]$/);
+    expect(lines[lines.indexOf('20 X=PEEK(16526)') + 1]).toMatch(/^; {3}16526 = \$408E .+ \(USRVEC\)$/);
+    expect(lines[lines.indexOf('30 X=PEEK(16424)') + 1]).toMatch(/^; {3}16424 = \$4028 .+ \(PRTPAGELEN\)$/);
+    // The default machine names the USR vector too, and has nothing at 403DH, which the Model III uses otherwise.
+    const byDefault = (await listBasic(program)).lines;
+    expect(byDefault[byDefault.indexOf('10 X=PEEK(16445)') + 1]).toBe('20 X=PEEK(16526)');
+    expect(byDefault[byDefault.indexOf('20 X=PEEK(16526)') + 1]).toMatch(/^; {3}16526 = \$408E .+ \(USRVEC\)$/);
   });
 
   it('notes nothing in a BASIC listing under --machine 4, which names service calls only, nor with --sweep', async () => {

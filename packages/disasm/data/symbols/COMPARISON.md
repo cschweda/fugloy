@@ -6,9 +6,9 @@ Every address in either table. `shared` means both tables give it the same name 
 
 | Class | Addresses |
 | --- | ---: |
-| shared | 73 |
+| shared | 102 |
 | different | 4 |
-| model1-only | 48 |
+| model1-only | 19 |
 | model3-only | 44 |
 
 | Address | Class | Model I | Model III | Note |
@@ -134,44 +134,44 @@ Every address in either table. `shared` means both tables give it the same name 
 | `$3033` | model3-only | - | `$DATE` (routine) |  |
 | `$3036` | model3-only | - | `$TIME` (routine) |  |
 | `$3042` | model3-only | - | `$SETCAS` (routine) |  |
-| `$4000` | model1-only | `SYNCHKVEC` (vector) | - |  |
-| `$4003` | model1-only | `NEXTCHARVEC` (vector) | - |  |
-| `$4006` | model1-only | `CMPHLDEVEC` (vector) | - |  |
-| `$4009` | model1-only | `TESTNTFVEC` (vector) | - |  |
+| `$4000` | shared | `SYNCHKVEC` (vector) | `SYNCHKVEC` (vector) |  |
+| `$4003` | shared | `NEXTCHARVEC` (vector) | `NEXTCHARVEC` (vector) |  |
+| `$4006` | shared | `CMPHLDEVEC` (vector) | `CMPHLDEVEC` (vector) |  |
+| `$4009` | shared | `TESTNTFVEC` (vector) | `TESTNTFVEC` (vector) |  |
 | `$400C` | shared | `BREAKVEC` (vector) | `BREAKVEC` (vector) |  |
-| `$400F` | model1-only | `DEBUGVEC` (vector) | - |  |
-| `$4012` | model1-only | `INTVEC` (vector) | - |  |
-| `$4015` | model1-only | `KBDCB` (variable) | - | Model I: LDOS 5.1 names the whole 8-byte keyboard control block KIDCB$ (4015H-401CH, ldos51 6-29); this table keeps the ROM's own field names |
-| `$4016` | model1-only | `KBDRVADDR` (variable) | - |  |
+| `$400F` | shared | `DEBUGVEC` (vector) | `DEBUGVEC` (vector) |  |
+| `$4012` | shared | `INTVEC` (vector) | `INTVEC` (vector) |  |
+| `$4015` | shared | `KBDCB` (variable) | `KBDCB` (variable) | Model I: LDOS 5.1 names the whole 8-byte keyboard control block KIDCB$ (4015H-401CH, ldos51 6-29); this table keeps the ROM's own field names; Model III: LDOS 5.1 names the whole 8-byte keyboard control block KIDCB$ (4015H-401CH, ldos51 6-32); this table keeps the ROM's own field names: KBDRVADDR (4016H), CAPSLOCK (4019H), and CURBLINK (401CH) |
+| `$4016` | shared | `KBDRVADDR` (variable) | `KBDRVADDR` (variable) |  |
 | `$4019` | model3-only | - | `CAPSLOCK` (variable) |  |
 | `$401C` | model3-only | - | `CURBLINK` (variable) |  |
-| `$401D` | model1-only | `VDDCB` (variable) | - | Model I: LDOS 5.1 names the whole 8-byte video control block DODCB$ (401DH-4024H, ldos51 6-29); this table keeps the ROM's own field names |
-| `$401E` | model1-only | `VDDRVADDR` (variable) | - |  |
+| `$401D` | shared | `VDDCB` (variable) | `VDDCB` (variable) | Model I: LDOS 5.1 names the whole 8-byte video control block DODCB$ (401DH-4024H, ldos51 6-29); this table keeps the ROM's own field names; Model III: LDOS 5.1 names the whole 8-byte video control block DODCB$ (401DH-4024H, ldos51 6-32); this table keeps the ROM's own field names: VDDRVADDR (401EH), CURADDR (4020H), and CURCHAR (4023H) |
+| `$401E` | shared | `VDDRVADDR` (variable) | `VDDRVADDR` (variable) |  |
 | `$4020` | shared | `CURADDR` (variable) | `CURADDR` (variable) |  |
 | `$4023` | model3-only | - | `CURCHAR` (variable) |  |
-| `$4025` | model1-only | `PRDCB` (variable) | - | Model I: LDOS 5.1 names the whole 8-byte printer control block PRDCB$ (4025H-402CH, ldos51 6-29); this table keeps the ROM's own field names |
-| `$4026` | model1-only | `PRDRVADDR` (variable) | - |  |
+| `$4025` | shared | `PRDCB` (variable) | `PRDCB` (variable) | Model I: LDOS 5.1 names the whole 8-byte printer control block PRDCB$ (4025H-402CH, ldos51 6-29); this table keeps the ROM's own field names; Model III: LDOS 5.1 names the whole 8-byte printer control block PRDCB$ (4025H-402CH, ldos51 6-32); this table keeps the ROM's own field names: PRDRVADDR (4026H), PRTPAGELEN (4028H), PRTLINECNT (4029H), and PRTWIDTH (402BH) |
+| `$4026` | shared | `PRDRVADDR` (variable) | `PRDRVADDR` (variable) |  |
 | `$4028` | shared | `PRTPAGELEN` (variable) | `PRTPAGELEN` (variable) | Model I: start-up sets 67 on both machines; the Model III counts the page length plus one, so a 66-line form wants 66 here (decker 9) |
 | `$4029` | shared | `PRTLINECNT` (variable) | `PRTLINECNT` (variable) | Model I: the Model III holds this count plus one (decker 9) |
 | `$402B` | model3-only | - | `PRTWIDTH` (variable) |  |
-| `$4036` | model1-only | `KBROWS` (variable) | - |  |
+| `$4036` | shared | `KBROWS` (variable) | `KBROWS` (variable) | Model III: the Model III's start-up fills all seven bytes with AAH (decker 88) |
 | `$403D` | model1-only | `PORTFFBITS` (variable) | - | Model I: Paay calls this the print size flag, 0 for 64 characters and F8H for 32; Decker gives it as the bits last sent to port FFH (decker 11); the Model III keeps its port ECH bits at 4210H (decker 12) |
-| `$408E` | model1-only | `USRVEC` (variable) | - |  |
-| `$4093` | model1-only | `INPORT` (vector) | - |  |
-| `$4096` | model1-only | `OUTPORT` (vector) | - |  |
-| `$4099` | model1-only | `INKEYBUF` (variable) | - |  |
-| `$409B` | model1-only | `PRTCOLUMN` (variable) | - |  |
-| `$409C` | model1-only | `OUTDEVFLAG` (variable) | - |  |
-| `$40A4` | model1-only | `PROGSTART` (variable) | - |  |
-| `$40A6` | model1-only | `LINEPOS` (variable) | - |  |
-| `$40A7` | model1-only | `IOBUFPTR` (variable) | - |  |
-| `$40AF` | model1-only | `NTF` (variable) | - |  |
-| `$40B1` | model1-only | `MEMTOP` (variable) | - |  |
-| `$40F9` | model1-only | `VARSTART` (variable) | - |  |
-| `$40FB` | model1-only | `ARRAYSTART` (variable) | - |  |
-| `$40FD` | model1-only | `FREESTART` (variable) | - |  |
-| `$411D` | model1-only | `ACC` (variable) | - |  |
-| `$4127` | model1-only | `AACC` (variable) | - |  |
+| `$408E` | shared | `USRVEC` (variable) | `USRVEC` (variable) |  |
+| `$4093` | shared | `INPORT` (vector) | `INPORT` (vector) |  |
+| `$4096` | shared | `OUTPORT` (vector) | `OUTPORT` (vector) |  |
+| `$4099` | shared | `INKEYBUF` (variable) | `INKEYBUF` (variable) |  |
+| `$409B` | shared | `PRTCOLUMN` (variable) | `PRTCOLUMN` (variable) |  |
+| `$409C` | shared | `OUTDEVFLAG` (variable) | `OUTDEVFLAG` (variable) |  |
+| `$40A4` | shared | `PROGSTART` (variable) | `PROGSTART` (variable) |  |
+| `$40A6` | shared | `LINEPOS` (variable) | `LINEPOS` (variable) |  |
+| `$40A7` | shared | `IOBUFPTR` (variable) | `IOBUFPTR` (variable) |  |
+| `$40AF` | shared | `NTF` (variable) | `NTF` (variable) |  |
+| `$40B1` | shared | `MEMTOP` (variable) | `MEMTOP` (variable) |  |
+| `$40F9` | shared | `VARSTART` (variable) | `VARSTART` (variable) |  |
+| `$40FB` | shared | `ARRAYSTART` (variable) | `ARRAYSTART` (variable) |  |
+| `$40FD` | shared | `FREESTART` (variable) | `FREESTART` (variable) |  |
+| `$411D` | shared | `ACC` (variable) | `ACC` (variable) |  |
+| `$4127` | shared | `AACC` (variable) | `AACC` (variable) |  |
 | `$41E8` | model3-only | - | `RSRXBUF` (variable) |  |
 | `$41F0` | model3-only | - | `RSTXBUF` (variable) |  |
 | `$41F8` | model3-only | - | `RSBAUD` (variable) |  |

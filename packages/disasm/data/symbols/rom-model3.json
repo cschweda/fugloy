@@ -800,12 +800,84 @@
       "cite": [{ "source": "m3-basic", "page": "12/19" }]
     },
     {
+      "addr": "4000",
+      "name": "SYNCHKVEC",
+      "kind": "vector",
+      "length": 3,
+      "purpose": "RAM jump that RST 08H passes through; start-up aims it at the syntax test at 1C96H",
+      "cite": [{ "source": "decker", "page": "51" }],
+      "coined": true
+    },
+    {
+      "addr": "4003",
+      "name": "NEXTCHARVEC",
+      "kind": "vector",
+      "length": 3,
+      "purpose": "RAM jump that RST 10H passes through; start-up aims it at 1D78H, which fetches the next BASIC text character",
+      "cite": [{ "source": "decker", "page": "51" }],
+      "coined": true
+    },
+    {
+      "addr": "4006",
+      "name": "CMPHLDEVEC",
+      "kind": "vector",
+      "length": 3,
+      "purpose": "RAM jump that RST 18H passes through; start-up aims it at 1C90H, which compares HL with DE",
+      "cite": [{ "source": "decker", "page": "52" }],
+      "coined": true
+    },
+    {
+      "addr": "4009",
+      "name": "TESTNTFVEC",
+      "kind": "vector",
+      "length": 3,
+      "purpose": "RAM jump that RST 20H passes through; start-up aims it at 25D9H, which reports the type of the number in the accumulator",
+      "cite": [{ "source": "decker", "page": "52" }],
+      "coined": true
+    },
+    {
       "addr": "400C",
       "name": "BREAKVEC",
       "kind": "vector",
       "length": 3,
       "purpose": "jump vector the keyboard scan takes when BREAK is pressed; a RET at start-up",
       "cite": [{ "source": "m3-basic", "page": "12/25" }, { "source": "m3-basic", "page": "12/22" }, { "source": "decker", "page": "52" }],
+      "coined": true
+    },
+    {
+      "addr": "400F",
+      "name": "DEBUGVEC",
+      "kind": "vector",
+      "length": 3,
+      "purpose": "RAM jump that RST 30H passes through: just a RET until a DOS puts its DEBUG entry here",
+      "cite": [{ "source": "decker", "page": "52" }],
+      "coined": true
+    },
+    {
+      "addr": "4012",
+      "name": "INTVEC",
+      "kind": "vector",
+      "length": 3,
+      "purpose": "RAM jump that RST 38H, the maskable interrupt, passes through; the Model III sets it to jump to its interrupt handler at 3018H",
+      "cite": [{ "source": "decker", "page": "52" }],
+      "coined": true
+    },
+    {
+      "addr": "4015",
+      "name": "KBDCB",
+      "kind": "variable",
+      "purpose": "type byte opening the keyboard's 8-byte control block: 1, an input-only device",
+      "cite": [{ "source": "decker", "page": "8" }],
+      "coined": true,
+      "note": "LDOS 5.1 names the whole 8-byte keyboard control block KIDCB$ (4015H-401CH, ldos51 6-32); this table keeps the ROM's own field names: KBDRVADDR (4016H), CAPSLOCK (4019H), and CURBLINK (401CH)"
+    },
+    {
+      "addr": "4016",
+      "name": "KBDRVADDR",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "keyboard driver address, low byte first; the Model III starts it at its ROM driver, 3024H",
+      "cite": [{ "source": "decker", "page": "8" }, { "source": "decker", "page": "14" }],
       "coined": true
     },
     {
@@ -825,6 +897,24 @@
       "coined": true
     },
     {
+      "addr": "401D",
+      "name": "VDDCB",
+      "kind": "variable",
+      "purpose": "type byte opening the video display's 8-byte control block: 7, a device that reads and writes",
+      "cite": [{ "source": "decker", "page": "8" }],
+      "coined": true,
+      "note": "LDOS 5.1 names the whole 8-byte video control block DODCB$ (401DH-4024H, ldos51 6-32); this table keeps the ROM's own field names: VDDRVADDR (401EH), CURADDR (4020H), and CURCHAR (4023H)"
+    },
+    {
+      "addr": "401E",
+      "name": "VDDRVADDR",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "video driver address, low byte first; the Model III starts it at its ROM driver, 0473H",
+      "cite": [{ "source": "decker", "page": "8" }, { "source": "decker", "page": "15" }],
+      "coined": true
+    },
+    {
       "addr": "4020",
       "name": "CURADDR",
       "kind": "variable",
@@ -839,6 +929,24 @@
       "kind": "variable",
       "purpose": "ASCII code of the cursor character, 176 at start-up",
       "cite": [{ "source": "m3-basic", "page": "12/25" }, { "source": "decker", "page": "8" }],
+      "coined": true
+    },
+    {
+      "addr": "4025",
+      "name": "PRDCB",
+      "kind": "variable",
+      "purpose": "type byte opening the printer's 8-byte control block: 6, an output-only device",
+      "cite": [{ "source": "decker", "page": "8" }],
+      "coined": true,
+      "note": "LDOS 5.1 names the whole 8-byte printer control block PRDCB$ (4025H-402CH, ldos51 6-32); this table keeps the ROM's own field names: PRDRVADDR (4026H), PRTPAGELEN (4028H), PRTLINECNT (4029H), and PRTWIDTH (402BH)"
+    },
+    {
+      "addr": "4026",
+      "name": "PRDRVADDR",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "printer driver address, low byte first; the Model III starts it at its ROM driver, 03C2H",
+      "cite": [{ "source": "decker", "page": "8" }, { "source": "decker", "page": "16" }],
       "coined": true
     },
     {
@@ -863,6 +971,155 @@
       "kind": "variable",
       "purpose": "printer maximum line length less two; 255 means no maximum",
       "cite": [{ "source": "m3-basic", "page": "12/25" }, { "source": "decker", "page": "8" }],
+      "coined": true
+    },
+    {
+      "addr": "4036",
+      "name": "KBROWS",
+      "kind": "variable",
+      "length": 7,
+      "purpose": "one byte per keyboard row, 3801H to 3840H, as last read; the scan compares them to find newly pressed keys",
+      "cite": [{ "source": "decker", "page": "64" }, { "source": "decker", "page": "65" }, { "source": "decker", "page": "88" }],
+      "coined": true,
+      "note": "the Model III's start-up fills all seven bytes with AAH (decker 88)"
+    },
+    {
+      "addr": "408E",
+      "name": "USRVEC",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "entry address of the machine-code routine BASIC's USR calls, low byte first",
+      "cite": [{ "source": "m3-basic", "page": "12/2" }, { "source": "decker", "page": "66" }],
+      "coined": true
+    },
+    {
+      "addr": "4093",
+      "name": "INPORT",
+      "kind": "vector",
+      "length": 3,
+      "purpose": "three-byte RAM subroutine that reads a port into A and returns; the port number goes in its middle byte, 4094H",
+      "cite": [{ "source": "decker", "page": "66" }],
+      "coined": true
+    },
+    {
+      "addr": "4096",
+      "name": "OUTPORT",
+      "kind": "vector",
+      "length": 3,
+      "purpose": "three-byte RAM subroutine that writes A to a port and returns; the port number goes in its middle byte, 4097H",
+      "cite": [{ "source": "decker", "page": "66" }],
+      "coined": true
+    },
+    {
+      "addr": "4099",
+      "name": "INKEYBUF",
+      "kind": "variable",
+      "purpose": "INKEY$'s one-key store: INKEY$ returns a nonzero byte found here and scans the keyboard only when it is 0",
+      "cite": [{ "source": "decker", "page": "66" }],
+      "coined": true
+    },
+    {
+      "addr": "409B",
+      "name": "PRTCOLUMN",
+      "kind": "variable",
+      "purpose": "the printer's column, as a count of the characters on its current line so far",
+      "cite": [{ "source": "decker", "page": "66" }],
+      "coined": true
+    },
+    {
+      "addr": "409C",
+      "name": "OUTDEVFLAG",
+      "kind": "variable",
+      "purpose": "where the ROM's output routines send characters: 0 the screen, 1 the printer, FFH the cassette",
+      "cite": [{ "source": "decker", "page": "67" }],
+      "coined": true
+    },
+    {
+      "addr": "40A4",
+      "name": "PROGSTART",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "where the BASIC program's text begins in memory, low byte first",
+      "cite": [{ "source": "decker", "page": "67" }],
+      "coined": true
+    },
+    {
+      "addr": "40A6",
+      "name": "LINEPOS",
+      "kind": "variable",
+      "purpose": "column the cursor is in on its screen line, which POS reports",
+      "cite": [{ "source": "decker", "page": "67" }],
+      "coined": true
+    },
+    {
+      "addr": "40A7",
+      "name": "IOBUFPTR",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "pointer to the line input buffer, which Level II, the Model III, and Disk BASIC each place differently",
+      "cite": [{ "source": "decker", "page": "5" }, { "source": "decker", "page": "67" }],
+      "coined": true
+    },
+    {
+      "addr": "40AF",
+      "name": "NTF",
+      "kind": "variable",
+      "purpose": "code for the kind of number in the accumulator: 2 integer, 4 single, 8 double precision, 3 string",
+      "cite": [{ "source": "decker", "page": "68" }],
+      "coined": true
+    },
+    {
+      "addr": "40B1",
+      "name": "MEMTOP",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "highest address left to BASIC, low byte first: the Memory Size? answer, or else the top of RAM",
+      "cite": [{ "source": "decker", "page": "68" }],
+      "coined": true
+    },
+    {
+      "addr": "40F9",
+      "name": "VARSTART",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "where the simple variables begin, just past the zero bytes that close the program text",
+      "cite": [{ "source": "decker", "page": "70" }],
+      "coined": true
+    },
+    {
+      "addr": "40FB",
+      "name": "ARRAYSTART",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "where the array variables start, just above the simple ones",
+      "cite": [{ "source": "decker", "page": "71" }],
+      "coined": true
+    },
+    {
+      "addr": "40FD",
+      "name": "FREESTART",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "first byte after the arrays: the bottom of the memory BASIC has left free",
+      "cite": [{ "source": "decker", "page": "71" }],
+      "coined": true
+    },
+    {
+      "addr": "411D",
+      "name": "ACC",
+      "kind": "variable",
+      "length": 8,
+      "purpose": "primary accumulator, where most arithmetic happens; a double fills all eight bytes, any other type starts at 4121H",
+      "cite": [{ "source": "decker", "page": "26" }, { "source": "decker", "page": "27" }],
+      "coined": true
+    },
+    {
+      "addr": "4127",
+      "name": "AACC",
+      "kind": "variable",
+      "length": 8,
+      "purpose": "second accumulator, mostly for double precision; a number in it always starts, low byte first, at 4127H",
+      "cite": [{ "source": "decker", "page": "26" }, { "source": "decker", "page": "27" }],
       "coined": true
     },
     {

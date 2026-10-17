@@ -23,6 +23,7 @@ This plan is the execution record, so the tasks below stay as written. Where the
 - **Task 10.** The parser keeps every statement's expressions, so a `PEEK` is noted in an `IF`, `PRINT`, `FOR`, `ON`, or `DEF FN`, not only in an assignment.
 - **Task 11.** asylum16 names 16 of the 17 ROM addresses it reaches. Volcano Hunter calls no ROM or DOS routine, so its hint file only relocates the game; the two `entry` hints first written at `$4000` and `$4003`, bytes nothing executes, were dropped.
 - **Task 12.** The Landscape table gained rows for DASM80 and DSMBLR III, found while checking the others.
+- **Final review.** The final review added the shared RAM page to `rom-model3`: the 29 `$4000`-page entries Decker gives for both machines (the RST jump vectors, the device control block fields, the BASIC pointers and flags, the accumulators), under `rom-model1`'s names so the comparison classes them shared, with LDOS's `KIDCB$`, `DODCB$`, and `PRDCB$` moved into notes on the Model III ROM entries, as on the Model I.
 
 ## Global Constraints
 

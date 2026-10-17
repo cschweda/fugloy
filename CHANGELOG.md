@@ -48,20 +48,21 @@ Releases are tagged `vX.Y.Z` on `main`.
 - Symbol tables, phase 3: listings, zmac source, and the IR name the ROM,
   hardware, and DOS addresses a program uses outside its own image, and every
   name cites a page of a published work. The tables are eight hand-edited JSON
-  files in `packages/disasm/data/symbols/`, 608 entries from ten works, each
+  files in `packages/disasm/data/symbols/`, 634 entries from ten works, each
   with a purpose and a citation (the source, and the page as it prints it):
   - `rom-model1` 125 entries (Paay's *Level II ROM Reference Manual*, Decker's
     *TRS-80 ROM Routines Documented*, Radio Shack's *Level II BASIC Reference
-    Manual*) and `rom-model3` 121 (Tandy's *Model III Operation and BASIC
-    Language Reference Manual*, chapter 12, and Decker), entered separately and
-    compared: `COMPARISON.md` lists 73 addresses as shared, 4 as different, 48
-    as Model I only, and 44 as Model III only, and a test fails when a
-    difference has no note.
+    Manual*) and `rom-model3` 150 (Tandy's *Model III Operation and BASIC
+    Language Reference Manual*, chapter 12, and Decker, with the `$4000`-page
+    RAM he gives for both machines), entered separately and compared:
+    `COMPARISON.md` lists 102 addresses as shared, 4 as different, 19 as Model I
+    only, and 44 as Model III only, and a test fails when a difference has no
+    note.
   - `hardware-model1` 13 and `hardware-model3` 17, ports included (Radio
     Shack's Model I technical handbook, the Level II manual, Decker, and Paay;
     the Model III *Technical Reference Manual*).
   - `dos-trsdos13` 24 (the TRSDOS 1.3 owner's manual), `dos-ldos51-model1` 107
-    and `dos-ldos51-model3` 104 (the LDOS 5.1 manual), and `svc-lsdos6`, 97
+    and `dos-ldos51-model3` 101 (the LDOS 5.1 manual), and `svc-lsdos6`, 97
     service calls (Soltoff's *Programmer's Guide to LDOS/TRSDOS Version 6* and
     the Model 4 *Technical Reference Manual*).
   - `pnpm symbols` validates the files (schema, hex ranges, citations, names
@@ -100,9 +101,9 @@ Releases are tagged `vX.Y.Z` on `main`.
   memory-mapped keyboard (KEYBOARD+64)`. The parser now keeps every statement's
   expressions, so a `PEEK` is found in an `IF` condition, a `PRINT` item, a
   `FOR` bound, an `ON` selector, and a `DEF FN` body as well as in an
-  assignment; `USR`'s argument is a value and gets no note. The Model I tables
-  also name 16526/16527 (the USR vector) and 16548/16549 (the program-start
-  pointer), tagged `[Model I]`.
+  assignment; `USR`'s argument is a value and gets no note. Both machines' ROM
+  tables name 16526/16527 (the USR vector) and 16548/16549 (the program-start
+  pointer), so those notes carry no machine tag.
 - Real programs: asylum16, listed with `fixtures/hints/asylum16.hints` under
   `--machine 1`, has 16 of the 17 ROM addresses it reaches named. The 17th,
   `$0112`, is banner text in the ROM, not a routine, and no table names it,

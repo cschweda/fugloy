@@ -200,14 +200,14 @@ describe('the Model III ROM table', () => {
     expect(at(0x003b)?.name).toBe('$PRCHAR');
   });
 
-  it('has the eight RST vectors, 0x00 through 0x38, as routines', () => {
+  it('has the eight RST entry points, 0x00 through 0x38, as routines', () => {
     for (const key of [0x00, 0x08, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38]) expect(at(key), `RST ${key.toString(16)}`).toMatchObject({ kind: 'routine' });
     expect(at(0x00)?.name).toBe('$RESET');
   });
 
   // Decker's "Page N" line closes page N (its contents puts chapter 4 at p. 50, and its own address index lists 0008 and 0010 under 51, and
   // 0018, 0020, 0028, 0030, and 0038 under 52), so the RST text above "Page 51" is on p. 51 and the text above "Page 52" on p. 52.
-  it('cites Decker on printed pages 51 and 52 for the RST vectors it describes', () => {
+  it('cites Decker on printed pages 51 and 52 for the RST entry points it describes', () => {
     for (const key of [0x08, 0x10]) expect(pages(at(key), 'decker'), `RST ${key.toString(16)}`).toEqual(['51']);
     for (const key of [0x18, 0x20, 0x28, 0x30, 0x38]) expect(pages(at(key), 'decker'), `RST ${key.toString(16)}`).toEqual(['52']);
     for (const key of [0x08, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38]) expect(at(key)?.coined, `RST ${key.toString(16)}`).toBe(true);
@@ -308,7 +308,54 @@ describe('the Model III ROM table', () => {
     expect(rom.some((e) => e.cite.some((c) => c.source === 'kiwisincebirth'))).toBe(false);
   });
 
-  it('names the ROM, the RST vectors, and the RAM it documents through selectSymbols, under every DOS', () => {
+  // The reserved RAM that Decker's chapter 5 gives for both machines (from 4000H on, everything "applies equally to the Model I and the Model III
+  // unless otherwise noted", p. 64), each with the pages that describe it, which his own address index lists it under: the RST jump vectors on
+  // pp. 51 and 52, the device control blocks on p. 8, the keyboard rows on pp. 64 and 65, the input buffer pointer on pp. 5 and 67, the accumulators
+  // on pp. 26 and 27, and the rest on pp. 66 to 71. Pages 14 to 16 (the Model III ROM driver each control block holds) and 88 (the Model III's
+  // start-up bytes for the keyboard rows) are cited for the Model III facts those entries add. Each entry takes the Model I table's name, kind,
+  // length, and coined flag, so the comparison classes it shared.
+  const RAM_PAGE: readonly (readonly [number, string, readonly string[]])[] = [
+    [0x4000, 'SYNCHKVEC', ['51']], [0x4003, 'NEXTCHARVEC', ['51']], [0x4006, 'CMPHLDEVEC', ['52']], [0x4009, 'TESTNTFVEC', ['52']],
+    [0x400f, 'DEBUGVEC', ['52']], [0x4012, 'INTVEC', ['52']], [0x4015, 'KBDCB', ['8']], [0x4016, 'KBDRVADDR', ['8', '14']],
+    [0x401d, 'VDDCB', ['8']], [0x401e, 'VDDRVADDR', ['8', '15']], [0x4025, 'PRDCB', ['8']], [0x4026, 'PRDRVADDR', ['8', '16']],
+    [0x4036, 'KBROWS', ['64', '65', '88']], [0x408e, 'USRVEC', ['66']], [0x4093, 'INPORT', ['66']], [0x4096, 'OUTPORT', ['66']],
+    [0x4099, 'INKEYBUF', ['66']], [0x409b, 'PRTCOLUMN', ['66']], [0x409c, 'OUTDEVFLAG', ['67']], [0x40a4, 'PROGSTART', ['67']],
+    [0x40a6, 'LINEPOS', ['67']], [0x40a7, 'IOBUFPTR', ['5', '67']], [0x40af, 'NTF', ['68']], [0x40b1, 'MEMTOP', ['68']],
+    [0x40f9, 'VARSTART', ['70']], [0x40fb, 'ARRAYSTART', ['71']], [0x40fd, 'FREESTART', ['71']], [0x411d, 'ACC', ['26', '27']],
+    [0x4127, 'AACC', ['26', '27']],
+  ];
+
+  it('enters the 29 addresses of the RAM page Decker gives for both machines under the Model I table\'s names, citing his pages', () => {
+    expect(RAM_PAGE).toHaveLength(29);
+    for (const [key, name, decker] of RAM_PAGE) {
+      const model1 = TABLES['rom-model1'].find((e) => e.key === key);
+      expect(at(key), name).toMatchObject({ name, kind: model1?.kind, length: model1?.length, coined: true });
+      expect(pages(at(key), 'decker'), name).toEqual(decker);
+    }
+    // Decker p. 65 marks 403DH "Model I ONLY", and the Model III keeps DOS interrupt vectors there, so it has no Model III entry.
+    expect(at(0x403d)).toBeUndefined();
+  });
+
+  it('cites Tandy 12/2 for the USR address, 16526-16527, the one address of the 29 that chapter 12 prints', () => {
+    expect(pages(at(0x408e), 'm3-basic')).toEqual(['12/2']);
+    for (const [key, name] of RAM_PAGE) if (key !== 0x408e) expect(pages(at(key), 'm3-basic'), name).toEqual([]);
+  });
+
+  it('says what the Model III holds where it differs: 4012H jumps to its interrupt handler, and each control block points at its own ROM driver', () => {
+    // Decker p. 52: on the Model III, 4012H holds a jump to 3018H, the maskable interrupt handler.
+    expect(at(0x4012)?.purpose).toContain('3018H');
+    expect(at(0x3018)?.name).toBe('IRQHANDLER');
+    // Decker pp. 14, 15, and 16 give the Model III ROM's keyboard, video, and printer drivers as the control blocks hold them.
+    const DRIVERS: readonly (readonly [number, string, number, string])[] = [
+      [0x4016, '3024H', 0x3024, 'KBDRIVER'], [0x401e, '0473H', 0x0473, 'VDDRIVER'], [0x4026, '03C2H', 0x03c2, 'PRDRIVER'],
+    ];
+    for (const [key, text, driver, name] of DRIVERS) {
+      expect(at(key)?.purpose, name).toContain(text);
+      expect(at(driver)?.name, name).toBe(name);
+    }
+  });
+
+  it('names the ROM, the RST entry points, and the RAM it documents through selectSymbols, under every DOS', () => {
     for (const dos of ['trsdos', 'ldos', 'none'] as const) {
       const set = selectSymbols({ machine: 3, dos });
       expect(set.code(0x0049)?.name, dos).toBe('$KBWAIT');
@@ -317,6 +364,9 @@ describe('the Model III ROM table', () => {
       expect(set.code(0x400c)?.name, dos).toBe('BREAKVEC');
       expect(set.data(0x4021)).toMatchObject({ entry: { name: 'CURADDR' }, offset: 1 });
       expect(set.data(0x4219)).toMatchObject({ entry: { name: 'TIMEDATE' }, offset: 2 });
+      expect(set.data(0x4013), dos).toMatchObject({ entry: { name: 'INTVEC' }, offset: 1 });
+      expect(set.data(0x4025), dos).toMatchObject({ entry: { name: 'PRDCB', table: 'rom-model3' }, offset: 0 });
+      expect(set.data(0x40a5), dos).toMatchObject({ entry: { name: 'PROGSTART' }, offset: 1 });
     }
   });
 });
@@ -338,7 +388,16 @@ describe('the Model I ROM table', () => {
     0x039c, 0x05d9, 0x07b2, 0x093e, 0x0a7f, 0x0a9a, 0x0af4, 0x0af6, 0x0e6c, 0x0faf, 0x1997, 0x19a2, 0x19ae, 0x1a19, 0x1af8, 0x1b2c, 0x1bb3, 0x1e4a, 0x1e5a,
     0x20f9, 0x20fe, 0x213f, 0x2169, 0x21c9, 0x2337, 0x260d, 0x28a7, 0x2b05, 0x2b75, 0x2bf5, 0x2c1f,
   ] as const;
-  const SHARED_RAM = [0x400c, 0x4020, 0x4028, 0x4029] as const;
+  // The reserved RAM both tables enter: Tandy's 12/25 addresses, and the rest of the page Decker gives for both machines (pp. 8, 26-27, 51-52, 64-71).
+  const SHARED_RAM = [
+    0x4000, 0x4003, 0x4006, 0x4009, 0x400c, 0x400f, 0x4012, 0x4015, 0x4016, 0x401d, 0x401e, 0x4020, 0x4025, 0x4026, 0x4028, 0x4029, 0x4036,
+    0x408e, 0x4093, 0x4096, 0x4099, 0x409b, 0x409c, 0x40a4, 0x40a6, 0x40a7, 0x40af, 0x40b1, 0x40f9, 0x40fb, 0x40fd, 0x411d, 0x4127,
+  ] as const;
+  // Decker's reserved RAM map applies to both machines unless he marks an address (p. 64), so each Model I entry from 4000H to 412FH is shared but these,
+  // each for the reason its Decker page gives.
+  const MODEL_I_ONLY_RAM: readonly number[] = [
+    0x403d, // p. 65 marks 403DH "Model I ONLY" (the bits last sent to port FFH); on the Model III, 403DH-407FH hold DOS interrupt vectors
+  ];
   // Addresses both tables enter for different things: the Model I routine differs from the Model III one, so the entries carry a note saying how. At 0212 the Model III
   // has only XOR A; RET (Decker p. 17: the routine "is not present in the Model III"), so the Model I's drive-select routine gets its own name.
   const DIFFERENT = [0x0050, 0x01d9, 0x0212, 0x03c2] as const;
@@ -362,7 +421,7 @@ describe('the Model I ROM table', () => {
     expect(pages(at(0x0049), 'm3-basic')).toEqual(['12/12']);
   });
 
-  it('has the eight RST vectors, 0x00 through 0x38, named as the Model III table names them', () => {
+  it('has the eight RST entry points, 0x00 through 0x38, named as the Model III table names them', () => {
     for (const key of [0x00, 0x08, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38]) {
       expect(at(key), `RST ${key.toString(16)}`).toMatchObject({ kind: 'routine', name: atModel3(key)?.name });
     }
@@ -379,6 +438,21 @@ describe('the Model I ROM table', () => {
       // Entered from the Model I sources, not copied from the Model III table.
       expect(entry?.purpose, hex4(key)).not.toBe(atModel3(key)?.purpose);
     }
+  });
+
+  it('classes shared every Model I entry from 4000H to 412FH, under the Model III name, kind, and length, but the one Decker marks Model I only', () => {
+    const ram = rom.filter((e) => e.key >= 0x4000 && e.key <= 0x412f);
+    expect(ram.map((e) => e.key)).toEqual(expect.arrayContaining([...MODEL_I_ONLY_RAM]));
+    for (const e of ram) {
+      const key = hex4(e.key);
+      if (MODEL_I_ONLY_RAM.includes(e.key)) {
+        expect(ROM_COMPARISON[key], `${key} ${e.name}`).toBe('model1-only');
+        continue;
+      }
+      expect(ROM_COMPARISON[key], `${key} ${e.name}`).toBe('shared');
+      expect(atModel3(e.key), `${key} ${e.name}`).toMatchObject({ name: e.name, kind: e.kind, length: e.length, coined: e.coined });
+    }
+    expect(ram.filter((e) => !MODEL_I_ONLY_RAM.includes(e.key)).map((e) => e.key)).toEqual([...SHARED_RAM]);
   });
 
   it('classes as different, each with a note, the four addresses where the two ROMs hold different routines', () => {
@@ -554,10 +628,11 @@ describe('the Model I ROM table', () => {
     expect(at(0x403d)?.note).toContain('(decker 12)');
   });
 
-  it('names the Model I ROM, RST vectors, and RAM it documents through selectSymbols, under both Model I DOS choices', () => {
+  it('names the Model I ROM, RST entry points, and RAM it documents through selectSymbols, under both Model I DOS choices', () => {
     for (const dos of ['ldos', 'none'] as const) {
       const set = selectSymbols({ machine: 1, dos });
       expect(set.code(0x0049)?.name, dos).toBe('$KBWAIT');
+      expect(set.code(0x0038)?.name, dos).toBe(at(0x38)?.name);
       expect(set.code(0x0033)?.name, dos).toBe('$VDCHAR');
       expect(set.code(0x03e3)?.name, dos).toBe('KBDRIVER');
       expect(set.data(0x4017)).toMatchObject({ entry: { name: 'KBDRVADDR' }, offset: 1 });
@@ -572,6 +647,11 @@ describe('the Model I ROM table', () => {
     expect(set.machineTag(at(0x0060)!)).toBeUndefined();
     expect(set.machineTag(at(0x01d9)!)).toBe('[Model I]');
     expect(set.machineTag(at(0x03e3)!)).toBe('[Model I]');
+    // On the RAM page, the BASIC pointers and the RST jump vectors are the Model III's too; the port FFH bits at 403DH are not.
+    expect(set.machineTag(at(0x408e)!)).toBeUndefined();
+    expect(set.machineTag(at(0x40a4)!)).toBeUndefined();
+    expect(set.machineTag(at(0x4012)!)).toBeUndefined();
+    expect(set.machineTag(at(0x403d)!)).toBe('[Model I]');
   });
 });
 
@@ -715,7 +795,7 @@ describe('the LDOS 5.1 tables', () => {
   // Labels whose address the ROM table already covers: the ROM table keeps the address, and its entry's note carries the LDOS name.
   const ROM_KEEPS: Readonly<Record<1 | 3, readonly (readonly [string, string])[]>> = {
     1: [['KIDCB$', 'KBDCB'], ['DODCB$', 'VDDCB'], ['PRDCB$', 'PRDCB']],
-    3: [['TIME$', 'TIMEDATE'], ['DATE$', 'TIMEDATE'], ['JDCB$', 'ROUTEDST'], ['JRET$', 'ROUTESRC']],
+    3: [['KIDCB$', 'KBDCB'], ['DODCB$', 'VDDCB'], ['PRDCB$', 'PRDCB'], ['TIME$', 'TIMEDATE'], ['DATE$', 'TIMEDATE'], ['JDCB$', 'ROUTEDST'], ['JRET$', 'ROUTESRC']],
   };
 
   it('names @CMD at 4400H on the Model I and at 4296H on the Model III, and @EXIT at 402DH on both', () => {
@@ -768,9 +848,9 @@ describe('the LDOS 5.1 tables', () => {
     expect(entryNamed(model3, 'EXTDBG$')).toMatchObject({ key: 0x4400 });
   });
 
-  it('holds 107 Model I entries and 104 Model III entries, each in the spelling the Tandy edition prints, uncoined', () => {
+  it('holds 107 Model I entries and 101 Model III entries, each in the spelling the Tandy edition prints, uncoined', () => {
     expect(model1).toHaveLength(107);
-    expect(model3).toHaveLength(104);
+    expect(model3).toHaveLength(101);
     for (const e of [...model1, ...model3]) expect(e.coined, e.name).toBe(false);
   });
 
@@ -844,25 +924,34 @@ describe('the LDOS 5.1 tables', () => {
     }
   });
 
-  // The Model III ROM table has no entry at a control block's first byte, so the DOS table names that byte (length 1) and leaves the block's other bytes, where
-  // the ROM keeps its own variables, to the ROM names; the Model I ROM table has KBDCB, VDDCB, and PRDCB there, so on the Model I the names are notes.
-  it('names the first byte of each Model III control block and notes the ROM variables inside it, which keep their ROM names', () => {
-    const BLOCKS: readonly (readonly [string, number, readonly string[]])[] = [
-      ['KIDCB$', 0x4015, ['CAPSLOCK', 'CURBLINK']],
-      ['DODCB$', 0x401d, ['CURADDR', 'CURCHAR']],
-      ['PRDCB$', 0x4025, ['PRTPAGELEN', 'PRTLINECNT', 'PRTWIDTH']],
+  // Both ROM tables enter each control block field by field, starting with its type byte (KBDCB, VDDCB, PRDCB), so on both machines LDOS's name for the
+  // whole block is a note on the ROM's first entry, citing that machine's map page; on the Model III the note also names the ROM fields inside the block.
+  it('leaves each control block to the ROM names on both machines, LDOS\'s KIDCB$, DODCB$, and PRDCB$ being notes on the ROM entries at their first bytes', () => {
+    const BLOCKS: readonly (readonly [string, number, string, readonly string[]])[] = [
+      ['KIDCB$', 0x4015, 'KBDCB', ['KBDRVADDR', 'CAPSLOCK', 'CURBLINK']],
+      ['DODCB$', 0x401d, 'VDDCB', ['VDDRVADDR', 'CURADDR', 'CURCHAR']],
+      ['PRDCB$', 0x4025, 'PRDCB', ['PRDRVADDR', 'PRTPAGELEN', 'PRTLINECNT', 'PRTWIDTH']],
     ];
-    const set = selectSymbols({ machine: 3, dos: 'ldos' });
-    for (const [name, key, inside] of BLOCKS) {
-      expect(entryNamed(model3, name), name).toMatchObject({ key, length: 1, kind: 'variable' });
-      for (const rom of inside) {
-        expect(entryNamed(model3, name)?.note, name).toContain(rom);
-        expect(TABLES['rom-model3'].some((e) => e.name === rom), rom).toBe(true);
+    for (const [machine, dos, page] of [[1, model1, '6-29'], [3, model3, '6-32']] as const) {
+      const set = selectSymbols({ machine, dos: 'ldos' });
+      for (const [name, key, rom, inside] of BLOCKS) {
+        const where = `${name} on the Model ${machine}`;
+        expect(dos.filter((e) => e.key === key || e.name === name), where).toEqual([]);
+        const entry = set.data(key)?.entry;
+        expect(entry, where).toMatchObject({ table: `rom-model${machine}`, name: rom, kind: 'variable', length: 1 });
+        expect(entry?.note, where).toContain(`${name} (`);
+        expect(entry?.note, where).toContain(`ldos51 ${page}`);
+        if (machine !== 3) continue;
+        for (const field of inside) {
+          expect(entry?.note, `${where}: ${field}`).toContain(field);
+          expect(TABLES['rom-model3'].some((e) => e.name === field), field).toBe(true);
+        }
       }
-      expect(set.data(key)?.entry.name, name).toBe(name);
     }
-    expect(set.data(0x4019)?.entry.name).toBe('CAPSLOCK');
-    expect(set.data(0x4028)?.entry.name).toBe('PRTPAGELEN');
+    const modelIII = selectSymbols({ machine: 3, dos: 'ldos' });
+    expect(modelIII.data(0x4017)).toMatchObject({ entry: { name: 'KBDRVADDR' }, offset: 1 });
+    expect(modelIII.data(0x4019)?.entry.name).toBe('CAPSLOCK');
+    expect(modelIII.data(0x4028)?.entry.name).toBe('PRTPAGELEN');
     const modelI = selectSymbols({ machine: 1, dos: 'ldos' });
     expect(modelI.data(0x4025)?.entry.name).toBe('PRDCB');
     expect(modelI.data(0x4016)?.entry.name).toBe('KBDRVADDR');

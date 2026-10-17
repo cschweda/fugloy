@@ -143,12 +143,12 @@ it('the checks see a CALL and a JP left numeric, and a transfer whose name is mi
 const ASYLUM = 'asylum16.cmd';
 const MODEL_I: SymbolSelection = { machine: 1, dos: 'ldos' };
 const asylum = memo(() => listed(ASYLUM, MODEL_I, 'asylum16.hints'));
-/** The 16 ROM routines and RST vectors its pass 1 reaches with the hints: the RST vectors, and the keyboard, display, cassette, and BASIC routines. */
+/** The 16 ROM routines and RST entry points its pass 1 reaches with the hints: the RST entry points, and the keyboard, display, cassette, and BASIC routines. */
 const ASYLUM_ROUTINES = [0x0000, 0x0008, 0x0010, 0x0020, 0x002b, 0x0030, 0x0033, 0x0038, 0x01f8, 0x0212, 0x0235, 0x0264, 0x0287, 0x0296, 0x093e, 0x1a19];
 /** The one other ROM address it reaches, by `CALL NC,0112H`: banner text in the ROM, no routine, and no source names it, so it stays a number. */
 const ASYLUM_BANNER = 0x0112;
 
-skipIfMissing(ASYLUM)('asylum16: with its hints, pass 1 reaches 16 ROM routines and RST vectors, and $0112, which is banner text and no routine', () => {
+skipIfMissing(ASYLUM)('asylum16: with its hints, pass 1 reaches 16 ROM routines and RST entry points, and $0112, which is banner text and no routine', () => {
   const l = asylum();
   const rom = l.a.pass1.externals.filter((x) => x < 0x3800);
   expect(rom).toEqual(expect.arrayContaining(ASYLUM_ROUTINES));
@@ -156,7 +156,7 @@ skipIfMissing(ASYLUM)('asylum16: with its hints, pass 1 reaches 16 ROM routines 
   expect(l.a.pass1.instructions.has(0x43ae)).toBe(true); // the game, at its runtime address
 });
 
-skipIfMissing(ASYLUM)('asylum16: names every ROM routine and RST vector it reaches, in the operand or the RST comment, and defines each in the legend', () => {
+skipIfMissing(ASYLUM)('asylum16: names every ROM routine and RST entry point it reaches, in the operand or the RST comment, and defines each in the legend', () => {
   const l = asylum();
   expect(reachedNamed(l)).toEqual(expect.arrayContaining(ASYLUM_ROUTINES));
   expect(reachedNamed(l)).not.toContain(ASYLUM_BANNER);
