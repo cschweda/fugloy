@@ -121,7 +121,7 @@ function fillStep(ins: Instruction): 'DH' | 'EL' | 'INCDE' | 'DE' | 'BC' | null 
 }
 
 /** `row 3` or `rows 1–2`; `from row 1, column 5 to row 2, column 9` when the range is not whole rows. */
-function screenRange(start: number, end: number): { rows: string; whole: boolean; aligned: boolean } {
+export function screenRange(start: number, end: number): { rows: string; whole: boolean; aligned: boolean } {
   const s = screenCell(start)!;
   const e = screenCell(end)!;
   const aligned = s.column === 0 && e.column === 63;
