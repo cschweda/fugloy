@@ -80,3 +80,5 @@ export type { OpenOptions, Session } from './session.js';
 export { CmdWriter, writeCmd } from './write/cmd.js';
 export { writeBasicCas, writeSystemCas } from './write/cas.js';
 export { exportName } from './write/name.js';
+export { explainLine, screenCell, sentenceText } from './explain/index.js';
+export type { DataRegion, Details, Explanation, Piece, Preview, Sentence } from './explain/index.js';

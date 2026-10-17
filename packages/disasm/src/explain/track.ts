@@ -79,33 +79,67 @@ function fallThrough(a: Analysis, ix: Index, addr: number): { at: number; ins: I
   return endsPath(ins) ? null : { at, ins };
 }
 
-/** What is proven about registers just before the instruction at `addr` runs. */
-export function knownBefore(a: Analysis, addr: number): Known {
+/** Why the backward walk stopped at `at`, the first instruction of its chain (or the line itself when the chain is empty). */
+export type WalkStop =
+  /** `at` is an xref target: control also arrives by the jumps and calls in `from`. */
+  | 'merge'
+  /** `at` has a label nothing jumps to or calls (a data reference, a table, a user name): it may be reached another way. */
+  | 'label'
+  /** `at` is an entry point. */
+  | 'root'
+  /** The 32-instruction cap. */
+  | 'cap'
+  /** The instruction before `at` is a CALL or RST (`pred`). */
+  | 'call'
+  /** No single instruction falls through into `at` (data before it, several, or a jump or return). */
+  | 'none';
+
+export interface Walk {
+  /** The straight-line instructions before the line, nearest first. */
+  chain: { at: number; ins: Instruction }[];
+  /** Where the walk stopped. */
+  at: number;
+  stop: WalkStop;
+  from?: Known['from'];
+  /** The instruction that falls through into `at`, when there is exactly one and it does not end the path (a CALL, for stop 'call' and sometimes 'merge'). */
+  pred?: number;
+}
+
+/** The backward walk knownBefore replays: straight-line code to the previous merge point, label, entry point, call, or cap. */
+export function walkBack(a: Analysis, addr: number): Walk {
   const ix = index(a);
   const chain: { at: number; ins: Instruction }[] = [];
   let cur = addr;
-  let from: Known['from'];
+  const done = (stop: WalkStop, extra: Partial<Walk> = {}): Walk => {
+    const pred = fallThrough(a, ix, cur);
+    return { chain, at: cur, stop, ...(pred === null ? {} : { pred: pred.at }), ...extra };
+  };
   for (;;) {
     const merge = ix.into.get(cur);
-    if (merge !== undefined) {
-      from = { addr: cur, callers: [...merge.callers], jumpers: [...merge.jumpers] };
-      break;
-    }
+    if (merge !== undefined) return done('merge', { from: { addr: cur, callers: [...merge.callers], jumpers: [...merge.jumpers] } });
     // Any other label (a data reference, a table, a user name) may be entered by JP (HL) or a pushed RET.
-    if (a.symbols.has(cur) || ix.roots.has(cur) || chain.length >= CAP) break;
+    if (ix.roots.has(cur)) return done('root');
+    if (a.symbols.has(cur)) return done('label');
+    if (chain.length >= CAP) return done('cap');
     const pred = fallThrough(a, ix, cur);
+    if (pred === null) return done('none');
     // A CALL or RST, conditional or not, leaves everything unknown after it.
-    if (pred === null || pred.ins.flow.kind === 'call') break;
+    if (pred.ins.flow.kind === 'call') return done('call');
     chain.push(pred);
     cur = pred.at;
   }
+}
+
+/** What is proven about registers just before the instruction at `addr` runs. */
+export function knownBefore(a: Analysis, addr: number): Known {
+  const { chain, from } = walkBack(a, addr);
   const regs = unknownRegs();
   for (let i = chain.length - 1; i >= 0; i--) step(a, chain[i]!.at, chain[i]!.ins, regs);
   return from === undefined ? { regs } : { regs, from };
 }
 
 /** The registers an instruction may write: probed from two different full states, so a constant load is caught too. */
-function written(ins: Instruction): Reg8Name[] {
+export function written(ins: Instruction): Reg8Name[] {
   const out = new Set<Reg8Name>();
   for (const v of [0x5a, 0xa5]) {
     const r = unknownRegs();
