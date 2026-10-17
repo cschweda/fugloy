@@ -3,16 +3,20 @@
  * comments and `XXXXH` in assembly, per the project conventions.
  */
 import { hex4, hexByte, hexWord } from '@fugloy/z80';
-import { renderInstruction } from './emit/operands.js';
+import { commentEntries, externalComment, previousInstruction, renderInstruction } from './emit/operands.js';
+import { externalUses, inTableOrder } from './analysis/externals.js';
 import { Kind } from './analysis/map.js';
 import type { BasLine, BasProgram } from './bas.js';
 import { codeLineLabel } from './basic/structure.js';
 import { dbItems } from './emit/strings.js';
 import { filePieces } from './analysis/relocate.js';
+import { rowStarts } from './analysis/words.js';
 import type { CmdModule } from './cmd.js';
 import type { MemoryImage } from './memory.js';
 import type { RawModule } from './raw.js';
 import type { Analysis } from './pipeline.js';
+import { describeSelection } from './symbols/select.js';
+import type { TableEntry } from './symbols/types.js';
 import { linearSweep } from './sweep.js';
 import type { ListingLine, Section } from './sweep.js';
 
@@ -125,8 +129,18 @@ export function renderRawListing(mod: RawModule, opts: RenderOptions = {}): stri
 /** Roots named in the pass 1 header before the rest are counted. */
 const MAX_ROOTS = 8;
 
+/** Where a table name points, as the legend says it: `$0049`, `port $EC`, or `SVC 10`. */
+function legendWhere(e: TableEntry): string {
+  return e.kind === 'port' ? `port $${hex2(e.key)}` : e.kind === 'svc' ? `SVC ${e.key}` : $(e.key);
+}
+
+/** `; table name $KBWAIT = $0049: wait for a key (m3-basic 12/12)` */
+function legendLine(e: TableEntry): string {
+  return `; table name ${e.name} = ${legendWhere(e)}: ${e.purpose} (${e.cite.map((c) => `${c.source} ${c.page}`).join(', ')})`;
+}
+
 export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {}): string {
-  const { module: mod, pass1, roots, symbols, annotations, hints, entries, space } = analysis;
+  const { module: mod, pass1, roots, symbols, annotations, hints, entries, space, externals } = analysis;
   const { image } = mod;
   const { map, instructions } = pass1;
   /** Bytes at runtime addresses; the file image itself when nothing is relocated. */
@@ -144,13 +158,30 @@ export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {})
   }
   const pct = loaded === 0 ? 0 : Math.round((code / loaded) * 100);
   const rootList = roots.length <= MAX_ROOTS ? roots.map($).join(', ') : `${roots.slice(0, MAX_ROOTS).map($).join(', ')} and ${roots.length - MAX_ROOTS} more`;
+  /** `2 external targets`, and with tables `2 external targets (1 named)`: how many a ROM, hardware, or DOS name stands for. */
+  const targets = `${plural(pass1.externals.length, 'external target')}${
+    externals.selection !== undefined && pass1.externals.length > 0 ? ` (${pass1.externals.filter((a) => externals.code(a) !== undefined).length} named)` : ''
+  }`;
   const rootText = roots.length === 0
     ? 'no roots; use --entry <hex> or --sweep'
-    : `roots ${rootList}; ${code} of ${loaded} bytes decoded as code (${pct}%)${data > 0 ? `; ${data} typed as data` : ''}; ${plural(pass1.externals.length, 'external target')}; ${plural(pass1.diagnostics.length, 'note')}`;
+    : `roots ${rootList}; ${code} of ${loaded} bytes decoded as code (${pct}%)${data > 0 ? `; ${data} typed as data` : ''}; ${targets}; ${plural(pass1.diagnostics.length, 'note')}`;
   const out: string[] = [mod.format === 'cmd' ? cmdHeadline(mod, opts) : mod.format === 'raw' ? rawHeadline(mod, opts) : basHeadline(mod, opts)];
   const { rebasedFrom } = analysis;
   if (rebasedFrom !== undefined) out.push(`; rebased from ${$(rebasedFrom)} to ${$(runs[0]?.start ?? 0)}`);
   out.push(`; pass 1: ${rootText}`);
+  if (externals.selection !== undefined) {
+    out.push(`; symbols: ${describeSelection(externals.selection)}`);
+    // Every name the listing shows: those in operands and DW rows (which zmac defines) and those only a comment speaks of.
+    for (const e of inTableOrder([...analysis.tablesUsed, ...commentEntries(pass1.instructions, externals, symbols)])) out.push(legendLine(e));
+    // A table name the program's own name took, if the program refers to the address: said so, since the address then stays a number.
+    const free = externals.ignoringCollisions();
+    const wouldHaveNamed = new Set([...externalUses(pass1.instructions.values(), free, symbols), ...commentEntries(pass1.instructions, free, symbols)]);
+    for (const e of externals.dropped) {
+      if (!wouldHaveNamed.has(e)) continue;
+      const own = symbols.list().find((s) => s.name.toUpperCase() === e.name.toUpperCase())?.name ?? e.name;
+      out.push(`; table name ${e.name} not used: the program has its own ${own}`);
+    }
+  }
   /** A .BAS line lists as code when it does not parse, or when a hint had any of its body decoded anyway. */
   const lastBodyByte = (line: BasLine): number => line.bodyAddr + (line.body.length > 0 && line.body[line.body.length - 1] === 0 ? line.body.length - 1 : line.body.length) - 1;
   const listsAsCode = (line: BasLine): boolean => {
@@ -189,16 +220,17 @@ export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {})
   const inOldRange = (v: number): boolean => rebasedFrom !== undefined && v >= rebasedFrom && v < rebasedFrom + loaded;
   const stale = (addr: number): boolean =>
     instructions.get(addr)?.operands.some((o) => (o.kind === 'imm16' && inOldRange(o.value)) || (o.kind === 'mem' && inOldRange(o.addr))) ?? false;
-  const commentFor = (addr: number): string | undefined => {
+  /** The comment column of the row at `addr`: the entry mark, the hint comment, what the tables say (`note`), and the stale-operand warning. */
+  const commentFor = (addr: number, note?: string): string | undefined => {
     const parts: string[] = [];
     if (rootSet.has(addr)) parts.push('entry');
     const text = annotations.comments.get(addr);
     if (text !== undefined) parts.push(text);
+    if (note !== undefined) parts.push(note);
     if (stale(addr)) parts.push(`stale: original base ${$(rebasedFrom!)}`);
     return parts.length === 0 ? undefined : parts.join('; ');
   };
-  const regionStarts = new Set(annotations.overrides.map((o) => o.addr & 0xffff));
-  const startsRow = (addr: number): boolean => symbols.has(addr) || annotations.comments.has(addr) || instructions.has(addr) || regionStarts.has(addr);
+  const startsRow = rowStarts(symbols, annotations, instructions);
   /** Rows for runtime addresses [from, to]: label lines, instructions, and data rows of up to four bytes. */
   const rows = (from: number, to: number): void => {
     let addr = from;
@@ -207,7 +239,8 @@ export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {})
       if (symbol !== undefined && map.kind(addr) !== Kind.Tail) out.push(`${symbol.name}:`);
       const ins = instructions.get(addr);
       if (ins !== undefined && addr + ins.length - 1 <= to) {
-        out.push(formatListingLine({ addr, bytes: ins.bytes, text: renderInstruction(ins, symbols), ins }, commentFor(addr)));
+        const note = externalComment(ins, previousInstruction(instructions, symbols, addr), externals, symbols);
+        out.push(formatListingLine({ addr, bytes: ins.bytes, text: renderInstruction(ins, symbols, externals), ins }, commentFor(addr, note)));
         addr += ins.length;
         continue;
       }
@@ -220,7 +253,7 @@ export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {})
         const words: string[] = [];
         for (let i = 0; i < n; i += 2) {
           const value = view.bytes[addr + i]! | (view.bytes[addr + i + 1]! << 8);
-          words.push(symbols.get(value)?.name ?? hexWord(value));
+          words.push(symbols.get(value)?.name ?? externals.word(addr + i, value)?.text ?? hexWord(value));
         }
         text = `DW ${words.join(',')}`;
       } else if (kind === Kind.String) {

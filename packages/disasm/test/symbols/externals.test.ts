@@ -8,6 +8,7 @@ import type { Instruction } from '@fugloy/z80';
 import { describe, expect, it } from 'vitest';
 import { ExternalNames, externalUses } from '../../src/analysis/externals.js';
 import { SymbolTable } from '../../src/analysis/symbols.js';
+import type { DataWord } from '../../src/analysis/words.js';
 import { emptyAnnotations } from '../../src/hints/apply.js';
 import * as disasm from '../../src/index.js';
 import { analyze } from '../../src/pipeline.js';
@@ -203,10 +204,64 @@ describe('ExternalNames and the names the program uses itself', () => {
   });
 });
 
+describe('ExternalNames and DW words', () => {
+  const words: DataWord[] = [
+    { addr: 0x5210, value: 0x0049, jump: true }, // a jump-table entry: a routine
+    { addr: 0x5212, value: 0x3c00, jump: false }, // a typed word: an address in the screen
+    { addr: 0x5214, value: 0x3d40, jump: false }, // inside the screen
+    { addr: 0x5216, value: 0x0049, jump: false }, // a typed word equal to a routine's address: not a data address
+    { addr: 0x5218, value: 0x3c00, jump: true }, // a table entry equal to a screen address: not a code address
+  ];
+  const withWords = new ExternalNames(model3, nothingLoaded, [], words);
+
+  it('names a jump-table entry from the code names and any other typed word from the data names', () => {
+    expect(withWords.word(0x5210, 0x0049)).toEqual({ entry: kbwait, text: '$KBWAIT' });
+    expect(withWords.word(0x5212, 0x3c00)).toEqual({ entry: video, text: 'VIDEO' });
+    expect(withWords.word(0x5214, 0x3d40)).toEqual({ entry: video, text: 'VIDEO+0140H' });
+    expect(withWords.word(0x5216, 0x0049)).toBeUndefined();
+    expect(withWords.word(0x5218, 0x3c00)).toBeUndefined();
+  });
+
+  it('names a word only where it was listed and only for the value listed there', () => {
+    expect(withWords.word(0x5211, 0x0049)).toBeUndefined(); // an address no word starts at
+    expect(withWords.word(0x5210, 0x3c00)).toBeUndefined(); // another value at the listed address
+    expect(new ExternalNames(model3, nothingLoaded, []).word(0x5210, 0x0049)).toBeUndefined(); // no words listed
+    expect(new ExternalNames(undefined, nothingLoaded, [], words).word(0x5210, 0x0049)).toBeUndefined(); // no tables
+  });
+
+  it('lists the words that take a name, with their value', () => {
+    expect(withWords.namedWords().map((w) => [w.addr, w.value, w.name.text])).toEqual([
+      [0x5210, 0x0049, '$KBWAIT'],
+      [0x5212, 0x3c00, 'VIDEO'],
+      [0x5214, 0x3d40, 'VIDEO+0140H'],
+    ]);
+  });
+
+  it('names no word at a loaded address and none whose table name the program has taken', () => {
+    expect(new ExternalNames(model3, loadedBetween(0x3c00, 0x3fff), [], words).word(0x5212, 0x3c00)).toBeUndefined();
+    const taken = new ExternalNames(model3, nothingLoaded, ['video'], words);
+    expect(taken.word(0x5212, 0x3c00)).toBeUndefined();
+    expect(taken.word(0x5210, 0x0049)).toEqual({ entry: kbwait, text: '$KBWAIT' });
+    expect(taken.namedWords().map((w) => w.name.text)).toEqual(['$KBWAIT']);
+  });
+
+  it('shows, ignoring collisions, what the program would have named had its own names not taken the table\'s', () => {
+    const taken = new ExternalNames(model3, nothingLoaded, ['video', 'cursor'], words);
+    const free = taken.ignoringCollisions();
+    expect(taken.data(0x3c00)).toBeUndefined();
+    expect(free.data(0x3c00)).toEqual({ entry: video, text: 'VIDEO' });
+    expect(free.word(0x5212, 0x3c00)).toEqual({ entry: video, text: 'VIDEO' });
+    expect(free.dropped).toEqual([]);
+    expect(free.selection).toEqual(MODEL_III);
+    expect(taken.dropped).toEqual([cursor, video]); // the original is untouched
+  });
+});
+
 describe('externalUses', () => {
   /** The instruction these bytes decode to when they sit at `at`. */
   const ins = (bytes: number[], at = 0x5200): Instruction => decodeAt(bytes, 0, at);
-  const used = (instructions: Instruction[], names: ExternalNames = external): string[] => externalUses(instructions, names).map((e) => e.name);
+  const noSymbols = new SymbolTable();
+  const used = (instructions: Instruction[], names: ExternalNames = external): string[] => externalUses(instructions, names, noSymbols).map((e) => e.name);
 
   it.each([
     ['CALL 0049H', [0xcd, 0x49, 0x00], '$KBWAIT'],
@@ -295,12 +350,12 @@ describe('externalUses', () => {
     const expected = ['$VDCHAR', '$KBWAIT', 'CURSOR', 'MODEPORT', 'VIDEO', '$JP2DOS'];
     expect(used(program)).toEqual(expected);
     expect(used([...program].reverse())).toEqual(expected);
-    expect(externalUses(program, external)[0]).toBe(vdchar);
+    expect(externalUses(program, external, noSymbols)[0]).toBe(vdchar);
   });
 
   it('takes any iterable of instructions, as Pass 1 keeps them in a Map', () => {
     const instructions = new Map([[0x5200, ins([0xcd, 0x49, 0x00])]]);
-    expect(externalUses(instructions.values(), external)).toEqual([kbwait]);
+    expect(externalUses(instructions.values(), external, noSymbols)).toEqual([kbwait]);
   });
 
   it('skips an address the program has loaded', () => {
@@ -325,6 +380,24 @@ describe('externalUses', () => {
     const symbols = new SymbolTable();
     symbols.set({ addr: 0x00ec, name: 'MINE', kind: 'data', source: 'user' });
     expect(externalUses([ins([0xd3, 0xec])], external, symbols)).toEqual([modeport]);
+  });
+
+  it('lists the entries the DW words take, once, in table order with the rest', () => {
+    const words: DataWord[] = [
+      { addr: 0x5210, value: 0x0049, jump: true },
+      { addr: 0x5212, value: 0x3c00, jump: false },
+      { addr: 0x5214, value: 0x3d40, jump: false },
+    ];
+    const named = new ExternalNames(model3, nothingLoaded, [], words);
+    expect(externalUses([ins([0xcd, 0x33, 0x00])], named, noSymbols)).toEqual([vdchar, kbwait, video]);
+    expect(externalUses([], named, noSymbols)).toEqual([kbwait, video]);
+  });
+
+  it('skips a DW word whose value the program has a symbol for, which the renderer names first', () => {
+    const symbols = new SymbolTable();
+    symbols.set({ addr: 0x3c00, name: 'MINE', kind: 'data', source: 'user' });
+    const named = new ExternalNames(model3, nothingLoaded, [], [{ addr: 0x5212, value: 0x3c00, jump: false }, { addr: 0x5214, value: 0x4020, jump: false }]);
+    expect(externalUses([], named, symbols)).toEqual([cursor]);
   });
 
   it('lists no service call: those only ever appear in comments', () => {

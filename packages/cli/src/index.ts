@@ -294,7 +294,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
     const plainBasic =
       mod.format === 'bas' && entries.length === 0 && hints === undefined && rebasedFrom === undefined && analysis.entries.length === 0 && mod.lines.every((l) => l.parsed);
     if (format === 'listing' && plainBasic && mod.format === 'bas') text = renderBasListing(mod, { source });
-    else if (format === 'zmac') text = emitZmac(mod.image, analysis.pass1, analysis.transfer, { source, symbols: analysis.symbols, annotations: analysis.annotations, space: analysis.space });
+    else if (format === 'zmac') text = emitZmac(mod.image, analysis.pass1, analysis.transfer, { source, symbols: analysis.symbols, annotations: analysis.annotations, space: analysis.space, externals: analysis.externals, tablesUsed: analysis.tablesUsed });
     else if (format === 'ir') text = `${JSON.stringify(buildIr(mod, analysis.pass1, source, analysis), null, 2)}\n`;
     else text = renderPass1Listing(analysis, { source });
   }

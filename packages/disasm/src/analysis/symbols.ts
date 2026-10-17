@@ -4,7 +4,7 @@
  * TBL_ for declared tables) and user names from the hint file replace them.
  * Pass 2 never changes what a byte is.
  */
-import type { Instruction } from '@fugloy/z80';
+import type { Instruction, Operand } from '@fugloy/z80';
 import type { Annotations } from '../hints/apply.js';
 import type { MemoryImage } from '../memory.js';
 import type { Pass1 } from './descent.js';
@@ -57,6 +57,49 @@ export function dataReference(ins: Instruction): number | null {
   const [first, second] = ins.operands;
   if (ins.mnemonic === 'LD' && first?.kind === 'reg16' && DATA_REGS.has(first.reg) && second?.kind === 'imm16') return second.value;
   return null;
+}
+
+/** Which table an operand may take a name from: the code names, the data names, or the port names. */
+export type OperandUse = 'code' | 'data' | 'port';
+
+/**
+ * Which operands may take a name, and from which table (design spec §4.5). The
+ * one rule the renderer (emit/operands.ts) and `externalUses` both follow, so
+ * the names a listing prints and the names zmac defines cannot drift apart:
+ * a relative target, and the 16-bit immediate of a jump or call, are code
+ * addresses; the immediate `dataReference` reads as an address, and every
+ * `(nn)`, are data addresses; an IN/OUT `(n)` is a port. RST, 8-bit
+ * immediates, and every other 16-bit immediate (`LD SP,nn`) are numbers.
+ */
+export function operandUse(ins: Instruction, op: Operand): OperandUse | undefined {
+  switch (op.kind) {
+    case 'rel':
+      return 'code';
+    case 'imm16':
+      if (ins.flow.kind === 'jump' || ins.flow.kind === 'call') return 'code';
+      return dataReference(ins) === op.value ? 'data' : undefined;
+    case 'mem':
+      return 'data';
+    case 'port':
+      return 'port';
+    default:
+      return undefined;
+  }
+}
+
+/** The address (or, for IN/OUT, the port number) an operand names, for the operands `operandUse` classifies. */
+export function operandValue(op: Operand): number | undefined {
+  switch (op.kind) {
+    case 'rel':
+      return op.target;
+    case 'mem':
+      return op.addr;
+    case 'imm16':
+    case 'port':
+      return op.value;
+    default:
+      return undefined;
+  }
 }
 
 export function synthesizeSymbols(pass1: Pass1, annotations: Annotations, image: MemoryImage): SymbolTable {

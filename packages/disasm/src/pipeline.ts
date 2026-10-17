@@ -15,6 +15,7 @@ import { analysisSpace } from './analysis/relocate.js';
 import type { AnalysisSpace } from './analysis/relocate.js';
 import { synthesizeSymbols } from './analysis/symbols.js';
 import type { SymbolTable } from './analysis/symbols.js';
+import { dataWords, rowStarts } from './analysis/words.js';
 import type { BasProgram } from './bas.js';
 import { mineEntries } from './basic/entries.js';
 import type { MinedEntry } from './basic/entries.js';
@@ -64,7 +65,7 @@ export interface Analysis {
   symbols: SymbolTable;
   /** Table names for addresses outside the image, minus any the program already uses as its own; names nothing without `tables`. */
   externals: ExternalNames;
-  /** The table entries the instructions are named with, in table order then by key; empty without `tables`. */
+  /** The table entries the instructions' operands and the DW words are named with (each gets a zmac EQU), in table order then by key; empty without `tables`. An RST vector or service call that only a comment names is not here. */
   tablesUsed: TableEntry[];
   hints?: HintsSummary;
   /** Entry points a .BAS program's text plants, with evidence (null address when unresolved); empty for other formats. */
@@ -134,8 +135,20 @@ export function analyze(mod: Module, opts: AnalyzeOptions = {}): Analysis {
   }
   const identities = blockIdentities(mod.image);
   const proposals: Proposal[] = [...proposeTables(space.image, pass1, identities, space.toFile), ...proposeMovers(mod.image, pass1, identities, space.relocations)];
-  // Table names come last: they give way to the loaded image and to every name above, so those must be final.
-  const externals = new ExternalNames(opts.tables, (addr) => space.image.isLoaded(addr), symbols.list().map((s) => s.name));
+  // Table names come last: they give way to the loaded image and to every name above, so those must be final. A .BAS program's line headers
+  // are typed as words but are a pointer and a line number, never an address to name.
+  const words =
+    opts.tables === undefined
+      ? []
+      : dataWords({
+          image: mod.image,
+          space,
+          map: pass1.map,
+          tables: annotations.tables,
+          startsRow: rowStarts(symbols, annotations, pass1.instructions),
+          skip: (addr) => frame?.has(addr) ?? false,
+        });
+  const externals = new ExternalNames(opts.tables, (addr) => space.image.isLoaded(addr), symbols.list().map((s) => s.name), words);
   const tablesUsed = externalUses(pass1.instructions.values(), externals, symbols);
   const analysis: Analysis = { module: mod, pass1, entry, roots: pass1.roots, transfer, annotations, symbols, externals, tablesUsed, entries, proposals, space, relocationErrors };
   if (opts.hints !== undefined) analysis.hints = opts.hints;
