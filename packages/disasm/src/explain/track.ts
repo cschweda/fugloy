@@ -184,13 +184,41 @@ function writesB(ins: Instruction): boolean {
 }
 
 /**
- * For a DJNZ at `addr`: its loop (head = target, end = addr) and B's value on
- * entry when proven, else count null. A count of 0 means 256 passes. The count
- * holds only when every xref into the head comes from this DJNZ, nothing from
- * outside head..end jumps into the body, no label at an instruction start in
+ * The registers on entry to a loop from `head` to `end` (the instruction that
+ * jumps back), when it is entered only by falling into its head: every xref
+ * into the head comes from `end`, nothing from outside head..end jumps into
+ * the body, no root lies in it, and no label at an instruction start in
  * head..end exists other than ones made only by jumps from inside head..end (a
  * data reference, table, user name or root there may mean an indirect
- * re-entry), and no body instruction writes B or is a CALL, RST or EXX.
+ * re-entry). Null otherwise, or when no single instruction falls into the head.
+ */
+export function loopEntry(a: Analysis, head: number, end: number): RegState | null {
+  const inside = (p: number): boolean => p >= head && p <= end;
+  const ix = index(a);
+  for (const x of a.pass1.xrefs) {
+    if (x.to === head && x.from !== end) return null;
+    if (x.to !== head && inside(x.to) && !inside(x.from)) return null;
+  }
+  for (const r of ix.roots) if (inside(r)) return null;
+  for (const sym of a.symbols.list()) {
+    // A label inside an instruction's bytes is an operand the program rewrites (Sea Dragon's DATA_49C1, the
+    // displacement of LD A,(IY+d)), not a place control enters; only labels at instruction starts can re-enter.
+    if (!inside(sym.addr) || !a.pass1.instructions.has(sym.addr)) continue;
+    // Xrefs from outside were already ruled out above; what is left is a label not made by jumps alone.
+    if (sym.source === 'user' || ix.dataRefs.has(sym.addr) || !ix.into.has(sym.addr)) return null;
+  }
+  const pred = fallThrough(a, ix, head);
+  if (pred === null) return null;
+  const regs = knownBefore(a, pred.at).regs;
+  step(a, pred.at, pred.ins, regs);
+  return regs;
+}
+
+/**
+ * For a DJNZ at `addr`: its loop (head = target, end = addr) and B's value on
+ * entry when proven, else count null. A count of 0 means 256 passes. The count
+ * holds only when the loop is entered only by falling into its head
+ * (`loopEntry`), and no body instruction writes B or is a CALL, RST or EXX.
  */
 export function djnzLoop(a: Analysis, addr: number): { head: number; end: number; count: number | null } | null {
   const ins = a.pass1.instructions.get(addr);
@@ -202,30 +230,11 @@ export function djnzLoop(a: Analysis, addr: number): { head: number; end: number
   // A forward DJNZ is not a loop.
   if (head > end) return null;
   const loop = { head, end };
-  const inside = (p: number): boolean => p >= head && p <= end;
-
-  const ix = index(a);
-  for (const x of a.pass1.xrefs) {
-    if (x.to === head && x.from !== addr) return { ...loop, count: null };
-    if (x.to !== head && inside(x.to) && !inside(x.from)) return { ...loop, count: null };
-  }
-  for (const r of ix.roots) if (inside(r)) return { ...loop, count: null };
-  for (const sym of a.symbols.list()) {
-    // A label inside an instruction's bytes is an operand the program rewrites (Sea Dragon's DATA_49C1, the
-    // displacement of LD A,(IY+d)), not a place control enters; only labels at instruction starts can re-enter.
-    if (!inside(sym.addr) || !a.pass1.instructions.has(sym.addr)) continue;
-    // Xrefs from outside were already ruled out above; what is left is a label not made by jumps alone.
-    if (sym.source === 'user' || ix.dataRefs.has(sym.addr) || !ix.into.has(sym.addr)) return { ...loop, count: null };
-  }
   for (const [at, body] of a.pass1.instructions) {
     if (at < head || at >= end) continue;
     const m = body.mnemonic;
     if (m === 'CALL' || m === 'RST' || m === 'EXX' || writesB(body)) return { ...loop, count: null };
   }
-
-  const pred = fallThrough(a, ix, head);
-  if (pred === null) return { ...loop, count: null };
-  const regs = knownBefore(a, pred.at).regs;
-  step(a, pred.at, pred.ins, regs);
-  return { ...loop, count: regs.B };
+  const regs = loopEntry(a, head, end);
+  return { ...loop, count: regs === null ? null : regs.B };
 }

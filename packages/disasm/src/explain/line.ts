@@ -16,6 +16,7 @@ import { addrPiece, andList, loaded, say, screenText, tableName, word$ } from '.
 import type { Ctx } from './machine.js';
 import type { LineCtx } from './phrase.js';
 import { words } from './words.js';
+import { patternAt } from './patterns.js';
 import type { Explanation, Piece, Preview, Sentence } from './types.js';
 
 type ListRow = Extract<Row, { kind: 'code' | 'data' }>;
@@ -278,11 +279,13 @@ export function explainLine(s: Session, addr: number): Explanation {
   if (isRoot && !from.entry) {
     sentences.push(say(at === a.entry ? 'This is where the program starts (its entry point).' : 'This is an entry point the analysis starts from.'));
   }
+  const pattern = patternAt(c, at);
   return {
     kind: 'code',
     addr: at,
     line,
     sentences,
+    ...(pattern === undefined ? {} : { pattern }),
     previews: lc.refs.map((x) => preview(c, r, x.addr, x.use)),
     details: {
       bytes: ins.length,
