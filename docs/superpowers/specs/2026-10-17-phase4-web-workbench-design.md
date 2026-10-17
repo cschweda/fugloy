@@ -47,7 +47,9 @@ confirmed as out of scope for phase 4.)
 4. Full SEO as the plan and `CLAUDE.md` specify, plus the "Technical details"
    page hosting the Inside Fugløy explainer.
 5. Deployed to Netlify at `app.fugloy.dev`. `netlify.toml` already exists.
-6. **Runnable exports** (added by the user during design): the loaded program
+6. **Bring-your-own manuals** (added by the user during design): read the
+   cited manual page inside Fugløy from your own PDF. See "Manuals".
+7. **Runnable exports** (added by the user during design): the loaded program
    as a `.CMD` load module and as a `.CAS` cassette image that other TRS-80
    emulators (trs80gp, trsjs, the user's own) can run. See "Export".
 
@@ -127,7 +129,8 @@ C: listing only).
   **Run ▶** tab marking where the emulator will go.
   - *Symbol:* the selected name's address, description, citation (source and
     page, from `sources.json`), and every place the program uses it, each a
-    link. For a program label: its cross-references (callers, jumpers,
+    link. Clicking a citation opens the **Manual** tab at that page (see
+    "Manuals"). For a program label: its cross-references (callers, jumpers,
     readers).
   - *Index:* every label, routine, table name, and proposal, filterable,
     each a link into the listing.
@@ -288,6 +291,51 @@ trsjs) before the phase is called done, and the result recorded.
 A program whose blocks overlap or that relocates itself exports the file's
 load image (what the loader put in memory), not the runtime view.
 
+### Manuals (bring your own)
+
+The user wants to read the cited manuals inside Fugløy. Most of them (the
+Tandy and Radio Shack manuals, Paay, Decker) are still under copyright, so the
+site hosts none of their text or page images. Instead they work like ROMs:
+**you provide your own copy**, it stays in your browser, and Fugløy shows it.
+
+- **Manuals page** (`/manuals`, linked from the top bar): every source in
+  `sources.json`, by exact title, author or publisher, year, and edition or
+  catalog number, with a plain note that these must be provided
+  independently, and a link to where a scan is known to exist (the
+  `locator`). Each entry shows whether you have it.
+- **The cover when you don't have it** (the user's request, so you can be
+  sure you're finding the right book): for sources scanned on archive.org,
+  the cover comes from archive.org's item-image service
+  (`https://archive.org/services/img/<identifier>`, checked 2026-10-17 for
+  the Model III TRM: a JPEG). It is fetched from archive.org, not hosted by
+  Fugløy. The page says so, and the request carries nothing about your
+  files. Sources without a scan (the Model I Technical Reference Handbook,
+  26-2103, and the Model 4 TRM, 26-2110) show a plain title card. Once you
+  have added a manual, its entry shows page 1 of your own copy instead.
+- **Adding a manual:** drop a PDF on the Manuals page (or from the "Add this
+  manual" link a citation shows). Fugløy recognizes the archive.org scans by
+  SHA-256. For any other PDF you pick which manual it is. The file is stored
+  in IndexedDB, never uploaded, and can be removed.
+- **Manual tab** on the right page, beside Symbol, Index and Program:
+  renders your copy at the cited **printed** page, sharp at any zoom. When
+  the PDF has a text layer, the name or address you came from is highlighted
+  on the page. You can page through freely, and back returns to the listing.
+- **Printed page → PDF page.** Scans start with covers and blanks, so `p.15`
+  is rarely PDF page 15. For each known archive.org scan, a small checked
+  table in the repository (data, not code) maps printed pages to PDF pages.
+  It is verified by hand the way phase 3's citations were, including the
+  front matter and any roman-numbered pages. For any other PDF you set the
+  mapping once ("which PDF page is printed page 1?"), stored with the file.
+- **Without the manual**, a citation shows its title and page, the cover, and
+  "Add this manual". Nothing is broken.
+- **Hosted, anchored text** for sources we may redistribute (Soltoff's
+  *Programmer's Guide to LDOS/TRSDOS 6* is free to redistribute) is a later
+  idea, not phase 4.
+
+My calls: PDF rendering uses PDF.js (`pdfjs-dist`), a dependency of
+`apps/web` only, loaded lazily the first time a manual is opened, so the
+workbench's first load stays fast. This adds roughly a week to the phase.
+
 ### Pages
 
 - `/` — the workbench.
@@ -295,12 +343,13 @@ load image (what the loader put in memory), not the runtime view.
   `docs/technical-details/inside-fugloy.html` (a page fragment the host
   wraps). Its numbers are as of phase 2; updating them and its pre-phase-3
   sample output is part of this phase (deferred from phase 3).
+- `/manuals` — your manuals (above).
 - `/about` — what Fugløy is, that files never leave your machine, credits
   (the symbol tables' sources, zmac, the public-domain release of the
   Westmoreland and Gilman games with the trs-80.org quote), a link to the
   repository.
 
-All three share the top bar.
+All four share the top bar.
 
 ### SEO (from the plan and CLAUDE.md, unchanged)
 
@@ -334,7 +383,8 @@ prototyped first. Order:
 4. Right page: Symbol, Index, Program.
 5. Editing and the hint-file round trip, undo/redo, back/forward.
 6. IndexedDB persistence, hint-file drop, export.
-7. Technical details and About pages; SEO; favicons.
+7. Manuals: the Manuals page, the Manual tab, the page tables for the
+   archive.org scans. Then Technical details and About; SEO; favicons.
 8. Playwright flow; Netlify deploy (ask the user before the first deploy and
    before any DNS change).
 
@@ -401,6 +451,8 @@ Not built now, but phase 4 must not block it:
 - Plan, "Web app": the header's "detected machine" becomes the spec sheet's
   evidence-based machine verdict. Add the spec sheet to the side panel and
   the `.CMD` and `.CAS` exports to step 5.
+- Plan, "Web app": add the Manuals page and Manual tab (bring your own,
+  covers from archive.org, nothing hosted).
 - Plan, "Stack": `apps/web` confirmed. `CLAUDE.md`: drop the "settle the name
   before phase 4" note.
 - `CLAUDE.md` "Current phase" updated as phase 4 progresses.
