@@ -9,12 +9,17 @@
 # Without the relocate below, pass 1 follows that JP to the file's $6132, which holds data, decodes it as code,
 # and ends with 26% of the program decoded and 37 notes; with it, the game decodes at its runtime address.
 #
-# The game itself calls no ROM or DOS routine: it writes video memory, reads the keyboard at $3800 and port $00
-# (a joystick, merged with the arrow-key row at $3840), and writes port $EC (modes) and port $FF (sound). The only
-# ROM routine in the file is the CALL 0060H pair that the title block leaves in the RST 08H and RST 10H RAM vectors.
+# The game calls no ROM or DOS routine. It writes video memory, reads the keyboard at $3800 and port $00
+# (a joystick, merged with the arrow-key row at $3840), and writes port $EC (modes) and port $FF (sound), so
+# what a listing names is that hardware: MODEPORT, CASSETTE, and KEYBOARD.
 #
 # Left alone, with reasons:
-#   - pass 1's three table proposals ($3DD6, $3F8A, $3F92) are title-screen graphics bytes that happen to point into code.
+#   - The six bytes the title block writes past video RAM, at $4000-$4005, read as CALL 0060H twice, at $4000
+#     and $4003, the RST 08H and RST 10H RAM vectors. Nothing in the game executes them: its decoded code has no
+#     RST and no EI, nothing calls or jumps to either address, and the routine at $6886 fills $4000-$407F with 80H.
+#     They stay data, so no ROM routine is named.
+#   - Pass 1's three table proposals ($3DD6, $3F8A, $3F92) are title-screen ASCII text, "Cracke" of "Cracked by",
+#     "th fue" and "to cit" of "Bring th fuel to city to ...", that happens to read as addresses pointing into code.
 #   - $903D-$905A (save the screen at $9134, copy the six bytes at $905B to $43E8, show a message through CALL 4467H, loop)
 #     is reached from nowhere in the file, and its CALL 4467H lands inside the relocated game, so no table could name it.
 #     $911B (restore the screen, fall into $9126) is jumped to only by those six bytes. Both stay data.
@@ -22,10 +27,6 @@ fugloy-hints 1
 program sha256 e64e0096a9961ab6a59eb997fc1f65787cc9f83a2e0924594a890d4e5a1c2854
 block 0 length $0406 hash a298eb43d6f4d7d6    # start $3C00
 block 1 length $3E5A hash b1f71879b636452d    # start $52E9
-block 0:$0400 entry
-block 0:$0400 comment the RST 08H RAM vector (the Model I table's SYNCHKVEC): the title block's six bytes past video RAM leave CALL 0060H here, until the routine at $6886 fills $4000-$407F with 80H
-block 0:$0403 entry
-block 0:$0403 comment the RST 10H RAM vector (NEXTCHARVEC): the second CALL 0060H of the title block's overrun; the same fill ends it
 block 1:$0000 relocate $42E9 $3D14
 block 1:$0000 comment the game as saved at $52E9; the LDIR at $9126 moves it down $1000 to $42E9 before it runs
 block 1:$1E49 name GAME

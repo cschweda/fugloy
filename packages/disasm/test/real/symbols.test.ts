@@ -13,6 +13,7 @@ import { emitZmac } from '../../src/emit/zmac.js';
 import { applyHints, emptyAnnotations } from '../../src/hints/apply.js';
 import { parseHints } from '../../src/hints/format.js';
 import { programHash } from '../../src/hints/identity.js';
+import { buildIr } from '../../src/ir.js';
 import { renderPass1Listing } from '../../src/listing.js';
 import { analyze } from '../../src/pipeline.js';
 import type { Analysis } from '../../src/pipeline.js';
@@ -100,6 +101,9 @@ function unnamedTransfers({ a, tables, listing: text }: Listed): string[] {
 /** The addresses pass 1 reaches outside the program that the tables name. */
 const reachedNamed = ({ a, tables }: Listed): number[] => a.pass1.externals.filter((x) => tables.code(x) !== undefined);
 
+/** Every table name the listing shows, with the table it comes from: the `tableNames` of the IR that `--format ir` writes. */
+const shownNames = ({ mod, a }: Listed): { name: string; table: string }[] => buildIr(mod, a.pass1, undefined, a).tableNames ?? [];
+
 /** `it` only when the sample is present and zmac is too (FUGLOY_REQUIRE_ZMAC=1 makes a missing zmac a failure). */
 const withZmac = (file: string): typeof it | typeof it.skip => (resolveSample(file) === null ? it.skip : skipIfNoZmac());
 
@@ -139,28 +143,32 @@ it('the checks see a CALL and a JP left numeric, and a transfer whose name is mi
 const ASYLUM = 'asylum16.cmd';
 const MODEL_I: SymbolSelection = { machine: 1, dos: 'ldos' };
 const asylum = memo(() => listed(ASYLUM, MODEL_I, 'asylum16.hints'));
-/** The ROM addresses its pass 1 reaches with the hints: the RST vectors, the keyboard, display, cassette, and BASIC routines it calls, and $0112, which is banner text and no routine. */
-const ASYLUM_ROM = [0x0000, 0x0008, 0x0010, 0x0020, 0x002b, 0x0030, 0x0033, 0x0038, 0x0112, 0x01f8, 0x0212, 0x0235, 0x0264, 0x0287, 0x0296, 0x093e, 0x1a19];
+/** The 16 ROM routines and RST vectors its pass 1 reaches with the hints: the RST vectors, and the keyboard, display, cassette, and BASIC routines. */
+const ASYLUM_ROUTINES = [0x0000, 0x0008, 0x0010, 0x0020, 0x002b, 0x0030, 0x0033, 0x0038, 0x01f8, 0x0212, 0x0235, 0x0264, 0x0287, 0x0296, 0x093e, 0x1a19];
+/** The one other ROM address it reaches, by `CALL NC,0112H`: banner text in the ROM, no routine, and no source names it, so it stays a number. */
+const ASYLUM_BANNER = 0x0112;
 
-skipIfMissing(ASYLUM)('asylum16: with its hints, pass 1 reaches the ROM routines the game calls', () => {
+skipIfMissing(ASYLUM)('asylum16: with its hints, pass 1 reaches 16 ROM routines and RST vectors, and $0112, which is banner text and no routine', () => {
   const l = asylum();
   const rom = l.a.pass1.externals.filter((x) => x < 0x3800);
-  expect(rom).toEqual(expect.arrayContaining(ASYLUM_ROM));
+  expect(rom).toEqual(expect.arrayContaining(ASYLUM_ROUTINES));
+  expect(rom).toContain(ASYLUM_BANNER);
   expect(l.a.pass1.instructions.has(0x43ae)).toBe(true); // the game, at its runtime address
 });
 
-skipIfMissing(ASYLUM)('asylum16: names every ROM routine it reaches, in the operand or the RST comment, and defines each in the legend', () => {
+skipIfMissing(ASYLUM)('asylum16: names every ROM routine and RST vector it reaches, in the operand or the RST comment, and defines each in the legend', () => {
   const l = asylum();
-  expect(reachedNamed(l)).toEqual(expect.arrayContaining(ASYLUM_ROM.filter((x) => x !== 0x0112)));
+  expect(reachedNamed(l)).toEqual(expect.arrayContaining(ASYLUM_ROUTINES));
+  expect(reachedNamed(l)).not.toContain(ASYLUM_BANNER);
   expect(unnamedTransfers(l)).toEqual([]);
 });
 
 skipIfMissing(ASYLUM)('asylum16: no CALL or JP goes to a bare number that the Model I tables name', () => {
   const l = asylum();
   expect(leftNumeric(l)).toEqual([]);
-  // what stays numeric is no routine of the ROM: banner text at $0112, and addresses of the load file that decoded data produced
+  // the only ROM address left numeric is the banner text at $0112; the other numeric targets are above the game's runtime image, in no ROM or DOS table
   const unnamed = l.a.pass1.externals.filter((x) => x < 0x3800 && l.tables.code(x) === undefined);
-  expect(unnamed).toEqual([0x0112]);
+  expect(unnamed).toEqual([ASYLUM_BANNER]);
 });
 
 skipIfMissing(ASYLUM)('asylum16: calls the display routine by name, CALL $VDCHAR, with its purpose', () => {
@@ -178,12 +186,14 @@ withZmac(ASYLUM)('asylum16: the zmac source, with the table names defined, assem
 });
 
 // Volcano Hunter writes Model III port $EC (clock interrupt, video, cassette motor, and I/O bus modes), so the default machine fits.
-// The game calls no ROM or DOS routine, so pass 1 alone reaches none; its hints (fixtures/hints/volcano.hints) move the game to the address
-// it runs at and reach the one ROM routine the file holds.
+// The game calls no ROM or DOS routine, with or without hints: what its listing can name is its hardware, the ports $EC and $FF and the
+// keyboard. Its hints (fixtures/hints/volcano.hints) move the game to the address it runs at.
 const VOLCANO = 'volcano.cmd';
 const MODEL_III: SymbolSelection = { machine: 3, dos: 'trsdos' };
 const volcano = memo(() => listed(VOLCANO, MODEL_III));
 const volcanoHinted = memo(() => listed(VOLCANO, MODEL_III, 'volcano.hints'));
+/** The tables a Volcano listing may name from: the hardware's only, since the game calls nothing in the ROM or the DOS. */
+const HARDWARE_ONLY = new Set(['hardware-model3']);
 
 skipIfMissing(VOLCANO)('volcano: writes the mode port by name, OUT (MODEPORT),A, and defines it in the legend', () => {
   const l = volcano();
@@ -192,11 +202,12 @@ skipIfMissing(VOLCANO)('volcano: writes the mode port by name, OUT (MODEPORT),A,
   expect(l.listing).toContain('; symbols: Model III ROM, hardware, TRSDOS 1.3\n');
 });
 
-skipIfMissing(VOLCANO)('volcano: pass 1 alone reaches no ROM or DOS address, so no transfer is left unnamed or numeric', () => {
+skipIfMissing(VOLCANO)('volcano: pass 1 alone reaches no ROM or DOS address, so no transfer is left unnamed or numeric and the names are all hardware', () => {
   const l = volcano();
   expect(l.a.pass1.externals).toEqual([]);
   expect(unnamedTransfers(l)).toEqual([]);
   expect(leftNumeric(l)).toEqual([]);
+  expect(new Set(shownNames(l).map((n) => n.table))).toEqual(HARDWARE_ONLY);
 });
 
 withZmac(VOLCANO)('volcano: the zmac source, with MODEPORT defined, assembles to the same image and entry', () => {
@@ -217,21 +228,33 @@ skipIfMissing(VOLCANO)('volcano: its hints move the game to $42E9, where pass 1 
   expect(volcano().a.pass1.diagnostics.length).toBeGreaterThan(0);
 });
 
-skipIfMissing(VOLCANO)('volcano: with its hints, pass 1 reaches the ROM delay from the RST vectors and names it, CALL $DELAY at $4000 and $4003', () => {
+skipIfMissing(VOLCANO)('volcano: with its hints, the listing names the game\'s hardware, OUT (MODEPORT),A and OUT (CASSETTE),A, and no ROM or DOS call', () => {
   const l = volcanoHinted();
-  expect(l.a.pass1.externals).toEqual([0x0060]);
-  expect(reachedNamed(l)).toEqual([0x0060]);
-  const purpose = l.tables.code(0x0060)!.purpose;
-  expect(l.listing).toMatch(new RegExp(`^4000 {2}CD 60 00 +CALL \\$DELAY +; entry; .*; ${escapeRe(purpose)}$`, 'm'));
-  expect(l.listing).toMatch(new RegExp(`^4003 {2}CD 60 00 +CALL \\$DELAY +; entry; .*; ${escapeRe(purpose)}$`, 'm'));
-  expect(l.listing).toMatch(/^; table name \$DELAY = \$0060: /m);
+  expect(l.listing).toMatch(/^73E1 {2}D3 FF +OUT \(CASSETTE\),A$/m);
+  expect(l.listing).toMatch(/^; table name MODEPORT = port \$EC: /m);
+  expect(l.listing).toMatch(/^; table name CASSETTE = port \$FF: /m);
+  // the game calls nothing outside itself, so it reaches no ROM or DOS address and every name the listing shows is hardware's
+  expect(l.a.pass1.externals).toEqual([]);
   expect(unnamedTransfers(l)).toEqual([]);
   expect(leftNumeric(l)).toEqual([]);
+  const shown = shownNames(l);
+  expect(shown.map((n) => n.name)).toEqual(expect.arrayContaining(['MODEPORT', 'CASSETTE']));
+  expect(new Set(shown.map((n) => n.table))).toEqual(HARDWARE_ONLY);
 });
 
-withZmac(VOLCANO)('volcano: with its hints, the zmac source assembles to the same image and entry, the game under .PHASE and the delay by name', () => {
+skipIfMissing(VOLCANO)('volcano: the CALL 0060H pair the title block leaves at $4000 and $4003 stays data, since nothing in the game executes it', () => {
+  const l = volcanoHinted();
+  // $4000 and $4003 are the RST 08H and RST 10H RAM vectors; the decoded game has no RST, no EI, and no CALL or JP to either, and fills $4000-$407F with 80H
+  const decoded = [...l.a.pass1.instructions.values()];
+  expect(decoded.filter((ins) => ins.mnemonic === 'RST' || ins.mnemonic === 'EI')).toEqual([]);
+  expect(l.a.pass1.xrefs.filter((x) => x.to === 0x4000 || x.to === 0x4003)).toEqual([]);
+  expect(l.a.pass1.instructions.has(0x4000)).toBe(false);
+  expect(l.a.pass1.instructions.has(0x4003)).toBe(false);
+});
+
+withZmac(VOLCANO)('volcano: with its hints, the zmac source assembles to the same image and entry, the game under .PHASE and the ports by name', () => {
   const source = expectRoundTrip(volcanoHinted(), VOLCANO);
   expect(source).toContain('\t.PHASE\t42E9H\n');
-  expect(source).toContain('\tCALL\t$DELAY');
-  expect(source).toContain('$DELAY\tEQU\t0060H');
+  expect(source).toContain('\tOUT\t(CASSETTE),A');
+  expect(source).toContain('CASSETTE\tEQU\t0FFH');
 });
