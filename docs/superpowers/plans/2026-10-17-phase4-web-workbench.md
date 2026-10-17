@@ -501,7 +501,7 @@
 - [ ] **Step 3: Build each table by hand.**
   - Source: the archive.org PDFs in the gitignored `docs/reference/`. Download any missing one there; never commit it.
   - Find each cited printed page by its printed number, and record its PDF page and the file's SHA-256 and page count.
-  - About 130 distinct pages across `m3-trm`, `m3-basic`, `ldos51`, `paay`, `decker`, `l2-1979`, `trsdos13`, `soltoff`.
+  - 118 distinct pages across `m3-trm`, `m3-basic`, `ldos51`, `paay`, `decker`, `l2-1979`, `trsdos13` (as built; `soltoff` has no `archiveId` after Task 6, so it has no table).
   - Check each by reading the page, as phase 3 did.
 - [ ] **Step 4: Run** `pnpm symbols && pnpm typecheck && pnpm test`. Expected: PASS, generated module in sync.
 - [ ] **Step 5: Commit** `p4: map every cited page to its page in the archive.org scan`
