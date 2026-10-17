@@ -17,6 +17,9 @@
     "clean": "rm -rf packages/*/dist",
     "fixtures": "tsx packages/disasm/scripts/write-fixtures.ts",
     "symbols": "tsx packages/disasm/scripts/write-symbols.ts",
+    "test:web": "pnpm --filter @fugloy/web test",
+    "web:dev": "pnpm --filter @fugloy/web dev",
+    "web:generate": "pnpm --filter @fugloy/web generate",
     "fugloy": "node packages/cli/bin/fugloy.js",
     "zmac:install": "bash scripts/install-zmac.sh",
     "zex:install": "bash scripts/install-zex.sh"

@@ -1,0 +1,37 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+/* Theme tokens from the approved mockup (layout A). Dark first. */
+:root {
+  --fg-bg: #0d1117;
+  --fg-surface: #161b22;
+  --fg-border: #30363d;
+  --fg-text: #c9d1d9;
+  --fg-text-strong: #f0f6fc;
+  --fg-muted: #8b949e;
+  --fg-accent: #f78166;
+
+  --fg-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+
+  --fg-mnemonic: #ff7b72;
+  --fg-register: #79c0ff;
+  --fg-number: #a5d6ff;
+  --fg-label: #d2a8ff;
+  --fg-table: #7ee787;
+  --fg-comment: #8b949e;
+}
+
+html, body, #__nuxt { height: 100%; }
+
+html.dark body {
+  background: var(--fg-bg);
+  color: var(--fg-text);
+}
+
+.fg-mono { font-family: var(--fg-mono); }
+.fg-mnemonic { color: var(--fg-mnemonic); }
+.fg-register { color: var(--fg-register); }
+.fg-number { color: var(--fg-number); }
+.fg-label { color: var(--fg-label); }
+.fg-table { color: var(--fg-table); text-decoration: underline dotted; }
+.fg-comment { color: var(--fg-comment); font-style: italic; }

@@ -1,0 +1,33 @@
+{
+  "name": "@fugloy/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare-examples": "tsx scripts/prepare-examples.ts",
+    "predev": "pnpm run prepare-examples",
+    "dev": "nuxt dev",
+    "pregenerate": "pnpm run prepare-examples",
+    "generate": "nuxt generate",
+    "typecheck": "nuxt prepare && nuxt typecheck",
+    "pretest": "nuxt prepare && pnpm run prepare-examples",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fugloy/disasm": "workspace:*",
+    "@fugloy/z80": "workspace:*",
+    "@nuxt/ui": "^4.12.0",
+    "nuxt": "^4.6.2",
+    "tailwindcss": "^4.0.0",
+    "vue": "^3.5.44",
+    "vue-router": "^5.4.0"
+  },
+  "devDependencies": {
+    "@nuxt/test-utils": "^4.3.4",
+    "@types/node": "^22.20.5",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.4",
+    "vue-tsc": "^3.3.13"
+  }
+}

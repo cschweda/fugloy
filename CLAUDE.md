@@ -33,8 +33,8 @@ for every opcode. Disassembler phase 2 shipped as v0.2.0, phase 1 as v0.1.0.
   tables, IR, emitters. No DOM, no Node APIs; must run in a browser.
 - `packages/cli` — Node wrapper over disasm. The only package that touches `fs`.
 - `apps/web` — Nuxt 4 + Nuxt UI, static generation, no server routes (phase 4).
-  The emu spec calls this folder `apps/workbench`; settle the name before
-  phase 4 creates it.
+  The folder is `apps/web` (package `@fugloy/web`); the emu spec's
+  `apps/workbench` means the same app. Its tests run with `pnpm test:web`.
 - `packages/emu` — headless, deterministic TRS-80 emulator core, plain
   JavaScript ESM, no DOM, no Node APIs. Spec: `docs/fugloy-emu-spec.md`.
   Extracted from `cschweda/trs80-emulator` in its phase 0 (`NOTICE.md`); tests
