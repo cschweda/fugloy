@@ -60,3 +60,7 @@ export { analysisSpace, filePieces } from './analysis/relocate.js';
 export type { AnalysisSpace, FilePiece, Relocation } from './analysis/relocate.js';
 export { basIdentityNormalizer } from './hints/identity.js';
 export type { IdentityNormalizer } from './hints/identity.js';
+export { defaultDos, describeSelection, SelectionError, selectSymbols, SymbolSet, tablesFor } from './symbols/select.js';
+export type { SymbolSelection } from './symbols/select.js';
+export { SOURCES, TABLES } from './symbols/tables.generated.js';
+export type { Cite, Dos, EntryKind, Machine, RomClass, RomComparison, Source, TableEntry, TableId } from './symbols/types.js';
