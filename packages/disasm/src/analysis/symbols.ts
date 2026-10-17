@@ -16,6 +16,8 @@ export interface Symbol {
   name: string;
   kind: SymbolKind;
   source: 'synth' | 'user';
+  /** The `at` comment of a user name at an address the program does not load. */
+  comment?: string;
 }
 
 /** Higher wins when two uses meet at one address. */
@@ -121,7 +123,8 @@ export function synthesizeSymbols(pass1: Pass1, annotations: Annotations, image:
   }
   for (const [addr, name] of annotations.names) {
     const current = table.get(addr);
-    table.set({ addr: addr & 0xffff, name, kind: current?.kind ?? 'data', source: 'user' });
+    const comment = image.isLoaded(addr) ? undefined : annotations.comments.get(addr);
+    table.set({ addr: addr & 0xffff, name, kind: current?.kind ?? 'data', source: 'user', ...(comment === undefined ? {} : { comment }) });
   }
   return table;
 }

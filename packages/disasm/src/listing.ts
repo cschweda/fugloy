@@ -227,6 +227,10 @@ export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {})
       out.push(`; table name ${e.name} not used: the program has its own ${own}`);
     }
   }
+  // A user name outside the program (an `at` hint): the one place the listing says what it is.
+  for (const s of symbols.list()) {
+    if (s.source === 'user' && !space.image.isLoaded(s.addr)) out.push(`; name ${s.name} = ${$(s.addr)}${s.comment === undefined ? '' : `: ${s.comment}`}`);
+  }
   /** A .BAS line lists as code when it does not parse, or when a hint had any of its body decoded anyway. */
   const lastBodyByte = (line: BasLine): number => line.bodyAddr + (line.body.length > 0 && line.body[line.body.length - 1] === 0 ? line.body.length - 1 : line.body.length) - 1;
   const listsAsCode = (line: BasLine): boolean => {

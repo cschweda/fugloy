@@ -79,6 +79,10 @@ export function emitZmac(image: MemoryImage, pass1: Pass1, entry: number | null,
     if (e.kind !== 'svc') out.push(`${e.name}\tEQU\t${e.kind === 'port' ? hexByte(e.key) : hexWord(e.key)}\t; ${e.purpose}`);
   }
   if (symbols !== undefined) {
+    // A user name outside the program (an `at` hint) has no label line to define it.
+    for (const s of symbols.list()) {
+      if (s.source === 'user' && !view.isLoaded(s.addr)) out.push(`${s.name}\tEQU\t${hexWord(s.addr)}${s.comment === undefined ? '' : `\t; ${s.comment}`}`);
+    }
     for (const s of symbols.list()) if (map.kind(s.addr) === Kind.Tail) out.push(`${s.name}\tEQU\t${hexWord(s.addr)}`);
   }
   /** The hint comment at `addr`, then what the tables say about the row, as one comment. */

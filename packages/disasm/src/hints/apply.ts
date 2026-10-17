@@ -84,10 +84,25 @@ export function applyHints(file: HintFile, image: MemoryImage, programHash?: str
   }
   const { space, errors } = analysisSpace(image, relocations);
   const annotations = emptyAnnotations();
+  /** The block:offset spelling of a loaded runtime address, for the warning (block 0 when no hint block matched it). */
+  const loadedKey = (addr: number): string => {
+    const i = runs.findIndex((r) => addr >= r.start && addr <= r.end);
+    return `${Math.max(i, 0)}:$${hex4(i < 0 ? 0 : addr - runs[i]!.start)}`;
+  };
   annotations.relocations = space.relocations;
+  // Address-keyed hints: only for runtime addresses the program does not load.
+  for (const hint of file.hints) {
+    if (hint.at === undefined || (hint.directive !== 'name' && hint.directive !== 'comment')) continue;
+    if (image.isLoaded(hint.at) || space.image.isLoaded(hint.at)) {
+      warnings.push(`at $${hex4(hint.at)} names a loaded address; use block ${loadedKey(hint.at)} instead`);
+      continue;
+    }
+    if (hint.directive === 'name') annotations.names.set(hint.at, hint.name);
+    else annotations.comments.set(hint.at, hint.text);
+  }
   for (const hint of file.hints) {
     const run = runOf.get(hint.block);
-    if (run === undefined || hint.directive === 'relocate') continue;
+    if (run === undefined || hint.directive === 'relocate' || hint.at !== undefined) continue;
     const fileAddr = (run.start + hint.offset) & 0xffff;
     // A hint inside a relocated source stays inside it; one before a source stops where the source starts.
     const moved = space.relocations.find((r) => fileAddr >= r.fileAddr && fileAddr < r.fileAddr + r.length);

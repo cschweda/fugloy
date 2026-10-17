@@ -27,7 +27,8 @@ export type Directive =
   | { directive: 'comment'; text: string }
   | { directive: 'relocate'; addr: number; length: number };
 
-export type Hint = Directive & { block: number; offset: number; line: number };
+/** `at` is set only on a `name` or `comment` keyed by a runtime address (an `at` line); `block` and `offset` are then both -1. */
+export type Hint = Directive & { block: number; offset: number; line: number; at?: number };
 
 export interface HintFile {
   version: 1;
@@ -110,6 +111,33 @@ export function parseHints(text: string): { file: HintFile; errors: HintError[] 
     if (tokens[0] === 'program' && tokens[1] === 'sha256') {
       if (tokens[2] === undefined || !/^[0-9a-f]{64}$/i.test(tokens[2])) { fail('bad program hash'); continue; }
       program = tokens[2].toLowerCase();
+      continue;
+    }
+    if (tokens[0] === 'at') {
+      // at <addr> name <label> | at <addr> comment <text to end of line>
+      if (tokens[1] === undefined || tokens[2] === undefined) { fail('unexpected line'); continue; }
+      const at = parseNumber(tokens[1]);
+      if (at === null) { fail(`bad number "${tokens[1]}"`); continue; }
+      if (at > 0xffff) { fail(`address $${at.toString(16).toUpperCase()} is past $FFFF`); continue; }
+      const base = { block: -1, offset: -1, line, at };
+      if (tokens[2] === 'comment') {
+        const from = raw.indexOf('comment', raw.indexOf(tokens[1]) + tokens[1].length);
+        hints.push({ ...base, directive: 'comment', text: raw.slice(from + 'comment'.length).trim() });
+        continue;
+      }
+      if (tokens[2] !== 'name') { fail(`unknown directive "${tokens[2]}"`); continue; }
+      const name = tokens[3];
+      if (name === undefined) { fail('name needs an identifier'); continue; }
+      if (tokens[4] !== undefined && !tokens[4].startsWith('#')) { fail(`unexpected argument "${tokens[4]}"`); continue; }
+      const problem = nameProblem(name);
+      if (problem !== null) { fail(problem); continue; }
+      const key = `at:${at}`;
+      if (named.has(key)) { fail(`address $${hex4(at)} already has a name`); continue; }
+      const elsewhere = usedNames.get(name.toUpperCase());
+      if (elsewhere !== undefined) { fail(`name "${name}" is already used at ${elsewhere}`); continue; }
+      named.add(key);
+      usedNames.set(name.toUpperCase(), `$${hex4(at)}`);
+      hints.push({ ...base, directive: 'name', name });
       continue;
     }
     if (tokens[0] !== 'block' || tokens[1] === undefined) { fail('unexpected line'); continue; }
@@ -254,7 +282,7 @@ export function writeHints(file: HintFile): string {
   for (const b of [...file.blocks].sort((x, y) => x.index - y.index)) {
     out.push(`block ${b.index} length ${num(b.length)} hash ${b.hash}${b.start === undefined ? '' : `    # start ${num(b.start)}`}`);
   }
-  const sorted = file.hints.map((h, i) => ({ h, i })).sort((x, y) => x.h.block - y.h.block || x.h.offset - y.h.offset || x.i - y.i);
-  for (const { h } of sorted) out.push(`block ${h.block}:${num(h.offset)} ${directiveText(h)}`);
+  const sorted = file.hints.map((h, i) => ({ h, i })).sort((x, y) => x.h.block - y.h.block || x.h.offset - y.h.offset || (x.h.at ?? 0) - (y.h.at ?? 0) || x.i - y.i);
+  for (const { h } of sorted) out.push(h.at === undefined ? `block ${h.block}:${num(h.offset)} ${directiveText(h)}` : `at ${num(h.at)} ${directiveText(h)}`);
   return `${out.join('\n')}\n`;
 }
