@@ -69,7 +69,7 @@ export function isValidName(name: string): boolean {
 }
 
 /** Why a name is invalid, or null when it is valid. */
-function nameProblem(name: string): string | null {
+export function nameProblem(name: string): string | null {
   if (!IDENTIFIER.test(name)) return `name "${name}" is not an identifier`;
   if (RESERVED.has(name.toUpperCase())) return `name "${name}" is reserved`;
   if (SYNTH_NAME.test(name)) return `name "${name}" has the shape of a generated label`;

@@ -38,7 +38,7 @@ export type { Row, Span, SpanKind } from './rows.js';
 export { sha256, sha256Hex } from './hash.js';
 export { blockIdentities, IDENTITY_BYTES, programHash } from './hints/identity.js';
 export type { BlockIdentity } from './hints/identity.js';
-export { isValidName, parseHints, parseNumber, RESERVED, SYNTH_NAME, writeHints } from './hints/format.js';
+export { isValidName, nameProblem, parseHints, parseNumber, RESERVED, SYNTH_NAME, writeHints } from './hints/format.js';
 export type { Directive, Hint, HintBlock, HintError, HintFile } from './hints/format.js';
 export { applyHints, emptyAnnotations } from './hints/apply.js';
 export type { Annotations, Applied, Override, OverrideKind, TableHint } from './hints/apply.js';
