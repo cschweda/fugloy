@@ -35,7 +35,8 @@ const metas = (html: string, key: 'name' | 'property', value: string): number =>
   (html.match(/<meta\b[^>]*>/g) ?? []).filter((t) => new RegExp(`\\b${key}="${value}"`).test(t)).length;
 
 describe.skipIf(!built)('SEO of the generated pages', () => {
-  const titles = PAGES.map((p) => /<title>([^<]*)<\/title>/.exec(read(p.file))?.[1]);
+  // A skipped describe still runs its body to collect the tests, so read nothing when the site is not built.
+  const titles = built ? PAGES.map((p) => /<title>([^<]*)<\/title>/.exec(read(p.file))?.[1]) : [];
 
   it('gives every page its own title', () => {
     expect(titles).toEqual(PAGES.map((p) => p.title));
