@@ -76,6 +76,14 @@ describe('knownBefore on synthetic code', () => {
     expect(knownBefore(prog([0x3e, 0x05, 0x00, 0x77, 0xc9]), 0x7003).regs.A).toBe(5);
   });
 
+  it('an immediate the program rewrites is not proven', () => {
+    // 7000 LD (7004H),A; 7003 LD C,9 (7004 is its operand); 7005 LD (HL),C; 7006 RET
+    const a = prog([0x32, 0x04, 0x70, 0x0e, 0x09, 0x71, 0xc9]);
+    expect(knownBefore(a, 0x7005).regs.C).toBeNull();
+    // Unpatched, the same LD C,9 is proven.
+    expect(knownBefore(prog([0x00, 0x00, 0x00, 0x0e, 0x09, 0x71, 0xc9]), 0x7005).regs.C).toBe(9);
+  });
+
   it('cap: a value set more than 32 instructions back is not reached', () => {
     // LD A,5; 40 NOPs; LD (HL),A; RET
     const far = prog([0x3e, 0x05, ...Array(40).fill(0), 0x77, 0xc9]);
@@ -159,6 +167,14 @@ describe('djnzLoop on synthetic code', () => {
     // 7000 LD B,4; 7002 head: LD (7006H),A; 7005 LD C,0 (7006 is its operand); 7007 DJNZ 7002; 7009 RET
     const a = prog([0x06, 0x04, 0x32, 0x06, 0x70, 0x0e, 0x00, 0x10, 0xf9, 0xc9]);
     expect(djnzLoop(a, 0x7007)).toEqual({ head: 0x7002, end: 0x7007, count: 4 });
+    // ...but the rewritten LD C,0 proves nothing about C.
+    expect(knownBefore(a, 0x7007).regs.C).toBeNull();
+  });
+
+  it('a rewritten LD B,n before the head gives no count', () => {
+    // 7000 LD (7004H),A; 7003 LD B,4 (7004 is its operand); 7005 head: NOP; 7006 DJNZ 7005; 7008 RET
+    const a = prog([0x32, 0x04, 0x70, 0x06, 0x04, 0x00, 0x10, 0xfd, 0xc9]);
+    expect(djnzLoop(a, 0x7006)).toEqual({ head: 0x7005, end: 0x7006, count: null });
   });
 
   it('is null for a forward DJNZ, which is not a loop', () => {

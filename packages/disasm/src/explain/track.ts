@@ -12,7 +12,7 @@ import type { Instruction } from '@fugloy/z80';
 import { endsPath } from '../analysis/descent.js';
 import { dataReference } from '../analysis/symbols.js';
 import { stepRegs, unknownRegs } from '../analysis/regs.js';
-import type { RegState } from '../analysis/regs.js';
+import type { Reg8Name, RegState } from '../analysis/regs.js';
 import type { Analysis } from '../pipeline.js';
 
 export interface Known {
@@ -82,7 +82,7 @@ function fallThrough(a: Analysis, ix: Index, addr: number): { at: number; ins: I
 /** What is proven about registers just before the instruction at `addr` runs. */
 export function knownBefore(a: Analysis, addr: number): Known {
   const ix = index(a);
-  const chain: Instruction[] = [];
+  const chain: { at: number; ins: Instruction }[] = [];
   let cur = addr;
   let from: Known['from'];
   for (;;) {
@@ -96,12 +96,37 @@ export function knownBefore(a: Analysis, addr: number): Known {
     const pred = fallThrough(a, ix, cur);
     // A CALL or RST, conditional or not, leaves everything unknown after it.
     if (pred === null || pred.ins.flow.kind === 'call') break;
-    chain.push(pred.ins);
+    chain.push(pred);
     cur = pred.at;
   }
   const regs = unknownRegs();
-  for (let i = chain.length - 1; i >= 0; i--) stepRegs(chain[i]!, regs);
+  for (let i = chain.length - 1; i >= 0; i--) step(a, chain[i]!.at, chain[i]!.ins, regs);
   return from === undefined ? { regs } : { regs, from };
+}
+
+/** The registers an instruction may write: probed from two different full states, so a constant load is caught too. */
+function written(ins: Instruction): Reg8Name[] {
+  const out = new Set<Reg8Name>();
+  for (const v of [0x5a, 0xa5]) {
+    const r = unknownRegs();
+    for (const n of Object.keys(r) as Reg8Name[]) r[n] = v;
+    stepRegs(ins, r);
+    for (const n of Object.keys(r) as Reg8Name[]) if (r[n] !== v) out.add(n);
+  }
+  return [...out];
+}
+
+/**
+ * One forward step of the replay. When a label lies inside the instruction's
+ * bytes (at+1..at+len-1), the program may rewrite its operand, so whatever it
+ * writes is unproven and becomes unknown instead of the decoded value.
+ */
+function step(a: Analysis, at: number, ins: Instruction, regs: RegState): void {
+  let patched = false;
+  for (let i = 1; i < ins.length && !patched; i++) patched = a.symbols.has((at + i) & 0xffff);
+  if (!patched) return stepRegs(ins, regs);
+  stepRegs(ins, regs);
+  for (const n of written(ins)) regs[n] = null;
 }
 
 /** True when the instruction may change B: probed with two different B values so a constant load is caught too. */
@@ -158,6 +183,6 @@ export function djnzLoop(a: Analysis, addr: number): { head: number; end: number
   const pred = fallThrough(a, ix, head);
   if (pred === null) return { ...loop, count: null };
   const regs = knownBefore(a, pred.at).regs;
-  stepRegs(pred.ins, regs);
+  step(a, pred.at, pred.ins, regs);
   return { ...loop, count: regs.B };
 }
