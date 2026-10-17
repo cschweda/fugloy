@@ -249,6 +249,22 @@ build of the same game), the workbench offers to carry them over.
 Bundled examples with committed hints start from those hints; the user's
 edits then save over them locally.
 
+**Hosting and storage (decided with the user, 2026-10-17).** Netlify serves
+static files only. Everything the user adds (hints, settings, manuals, and
+later ROMs) lives in that browser's IndexedDB, on that machine. The workbench
+asks for persistent storage (`navigator.storage.persist()`) so the browser
+does not evict it. There is no server storage, no accounts, no Supabase, no
+droplet. The user explicitly does not want to host or be responsible for
+copyrighted material, and moves between a Mac and a PC, adding manuals once
+on each.
+
+**Back up / Restore** (on the Manuals page, and in the top bar's menu): one
+JSON file holding every saved hint file (as hint-file text, keyed by program
+SHA-256, with the file name) and the per-program settings (machine, DOS).
+Restore merges it in. For a program present in both, the restored copy wins
+only after a confirmation naming the program. The backup never contains
+manuals, ROMs, or program files, only the user's own work.
+
 ### Machine and DOS
 
 The spec sheet's machine verdict (above) is evidence from the cited tables,
