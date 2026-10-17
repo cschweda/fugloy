@@ -96,7 +96,7 @@
       "svc": 13,
       "name": "@MSG",
       "kind": "svc",
-      "purpose": "send a message line to a device",
+      "purpose": "route a message line to its output device",
       "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
     },
     {
@@ -145,7 +145,7 @@
       "svc": 20,
       "name": "@CHNIO",
       "kind": "svc",
-      "purpose": "pass a character to the next module in a device chain",
+      "purpose": "used by a device filter to pass an I/O request on to the module chained after it",
       "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
     },
     {

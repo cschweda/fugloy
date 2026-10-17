@@ -619,7 +619,7 @@
       "addr": "4475",
       "name": "INTVC$",
       "kind": "variable",
-      "purpose": "eight vectors, one for each bit of the interrupt latch",
+      "purpose": "interrupt vector table with an entry for each of the latch's eight bits",
       "cite": [{ "source": "ldos51", "page": "6-34" }],
       "note": "the Model III text edition of the manual spells it INTVCT$; the map prints only the start address; the Model I map gives the area as 16 bytes (6-29)"
     },
@@ -644,7 +644,7 @@
       "name": "DCT$",
       "kind": "variable",
       "length": 80,
-      "purpose": "area reserved for the drive code table",
+      "purpose": "RAM that holds the drive code table",
       "cite": [{ "source": "ldos51", "page": "6-34" }]
     },
     {
