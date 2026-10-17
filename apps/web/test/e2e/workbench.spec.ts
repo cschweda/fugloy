@@ -1,4 +1,6 @@
 // The first screen and opening programs, in a browser against the generated site.
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
@@ -8,6 +10,27 @@ const ready = async (page: Page): Promise<void> => {
 };
 const pick = (page: Page, name: string, bytes: number[] | Buffer): Promise<void> =>
   page.getByTestId('file-input').setInputFiles({ name, mimeType: 'application/octet-stream', buffer: Buffer.from(bytes) });
+
+const seadrg06 = (): number[] => Array.from(readFileSync(fileURLToPath(new URL('../../../../examples/sea-dragon/seadrg06.cmd', import.meta.url))));
+
+/** Drags a file over `selector` and drops it, as a browser would; says whether the page stopped the browser's default (opening the file). */
+const drop = (page: Page, selector: string, name: string, bytes: number[]): Promise<{ dragover: boolean; drop: boolean }> =>
+  page.evaluate(
+    ({ selector, name, bytes }) => {
+      const target = document.querySelector(selector)!;
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(new File([new Uint8Array(bytes)], name));
+      const fire = (type: string): boolean => {
+        const e = new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer });
+        target.dispatchEvent(e);
+        return e.defaultPrevented;
+      };
+      fire('dragenter');
+      const dragover = fire('dragover');
+      return { dragover, drop: fire('drop') };
+    },
+    { selector, name, bytes },
+  );
 
 test('one click opens Sea Dragon with its hints, as Model III', async ({ page }) => {
   await ready(page);
@@ -115,4 +138,41 @@ test('a narrow screen shows one page at a time and never scrolls sideways', asyn
   await expect(page.getByTestId('program-panel')).toBeVisible();
   await expect(page.locator('.fg-listing')).toBeHidden();
   expect(await noSideScroll()).toBe(true);
+});
+
+test('a file dropped outside the drop zone on the first screen opens, and the browser does not', async ({ page }) => {
+  await ready(page);
+  expect(await drop(page, '.fg-first-games', 'seadrg06.cmd', seadrg06())).toEqual({ dragover: true, drop: true });
+  await expect(page.getByTestId('file-name')).toHaveText('seadrg06.cmd');
+  await expect(page).toHaveURL(/localhost:4173\/$/);
+});
+
+test('a PDF dropped on the open workbench suggests Manuals and keeps the program', async ({ page }) => {
+  await ready(page);
+  await page.getByTestId('open-sea-dragon').click();
+  await expect(page.locator('.fg-listing')).toBeVisible();
+  expect(await drop(page, '.fg-listing', 'trm.pdf', Array.from(Buffer.from('%PDF-1.7\n')))).toEqual({ dragover: true, drop: true });
+  await expect(page.getByTestId('open-error')).toContainText('trm.pdf is not a .CMD or .BAS program.');
+  await expect(page.getByTestId('open-error').getByRole('link', { name: 'Manuals' })).toBeVisible();
+  await expect(page.getByTestId('confirm-dialog')).toBeHidden();
+  await expect(page.getByTestId('file-name')).toHaveText('seadrg01.cmd');
+  await expect(page.locator('.fg-row-label', { hasText: 'L497F:' })).toBeVisible();
+});
+
+test('a program dropped on the open workbench asks before it replaces the open one', async ({ page }) => {
+  await ready(page);
+  await page.getByTestId('open-sea-dragon').click();
+  await expect(page.locator('.fg-listing')).toBeVisible();
+  await drop(page, '[data-testid=program-panel]', 'seadrg06.cmd', seadrg06());
+  const dialog = page.getByTestId('confirm-dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('Open seadrg06.cmd in place of seadrg01.cmd?');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByTestId('file-name')).toHaveText('seadrg01.cmd');
+  await drop(page, '.fg-listing', 'seadrg06.cmd', seadrg06());
+  await dialog.getByRole('button', { name: 'Replace' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByTestId('file-name')).toHaveText('seadrg06.cmd');
+  await expect(page.getByTestId('open-error')).toHaveCount(0);
 });

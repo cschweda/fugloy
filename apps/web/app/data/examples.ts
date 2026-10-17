@@ -64,7 +64,9 @@ export const EXAMPLES: readonly Example[] = [
     authors: AUTHORS,
     publisher: 'Adventure International',
     year: 1981,
-    machine: 3,
+    // Model I: the main build, elimin8d, calls $01D3 (BASICRANDOM), which only the
+    // Model I ROM has, so its machine verdict is model1 (programFacts).
+    machine: 1,
     mainBuild: 'elimin8d.cmd',
     builds: ['elimin8d.cmd', 'elimin8f.cmd', 'elimin8g.cmd', 'elimin8h.cmd', 'elimin8c.cmd', 'elimin8e.cmd', 'elimin8a.cmd'],
     rights: RIGHTS,

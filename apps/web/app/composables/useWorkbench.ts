@@ -5,7 +5,7 @@
 // fs in the tests), and drag and drop live in the components.
 import { computed, ref, shallowRef } from 'vue';
 import type { ComputedRef, Ref, ShallowRef } from 'vue';
-import { basRows, defaultDos, listingRows, OpenError, openProgram, programFacts, selectSymbols, withHintText, withSelection } from '@fugloy/disasm';
+import { basRows, defaultDos, detectFormat, listingRows, OpenError, openProgram, programFacts, selectSymbols, withHintText, withSelection } from '@fugloy/disasm';
 import type { ProgramFacts, Row, Session, SymbolSelection } from '@fugloy/disasm';
 import { exampleById } from '../data/examples';
 import type { Example, ExampleId } from '../data/examples';
@@ -59,7 +59,12 @@ export interface Workbench {
   busy: Ref<boolean>;
   openBytes(bytes: Uint8Array, name: string, opts?: OpenOpts): void;
   openRaw(base: number): void;
+  /** Ignored while an example is loading. */
   openExample(id: ExampleId, build?: string): Promise<void>;
+  /** Shows a problem that is not about the bytes (a file that could not be read), clearing any raw offer. */
+  report(message: string): void;
+  /** Whether opening these bytes would replace the open program: one is open, and they are a .CMD or .BAS. */
+  wouldReplace(bytes: Uint8Array): boolean;
   setSelection(sel: SymbolSelection): void;
   close(): void;
 }
@@ -122,8 +127,8 @@ export function createWorkbench(deps: { readExample: ExampleReader }): Workbench
         s = withHintText(s, opts.hintText, opts.hintSource);
       } catch (err) {
         // The program still opens, without the hints, and says why.
-        if (err instanceof OpenError) fail(`${opts.hintSource ?? 'the hints'}: ${err.message}; opened without them.`, err.details);
-        else throw err;
+        const what = err instanceof OpenError ? err.message : `could not apply (${err instanceof Error ? err.message : String(err)})`;
+        fail(`${opts.hintSource ?? 'the hints'}: ${what}; opened without them.`, err instanceof OpenError ? err.details : []);
       }
     }
     if (opts.selection === undefined) {
@@ -145,19 +150,28 @@ export function createWorkbench(deps: { readExample: ExampleReader }): Workbench
     openBytes(c.bytes, c.name, { base });
   }
 
+  function report(message: string): void {
+    clearProblem();
+    fail(message);
+  }
+
+  function wouldReplace(bytes: Uint8Array): boolean {
+    return session.value !== null && bytes.length > 0 && detectFormat(bytes) !== 'raw';
+  }
+
   async function openExample(id: ExampleId, build?: string): Promise<void> {
+    if (busy.value) return;
     const e = exampleById(id);
     const file = build ?? e.mainBuild;
     if (!e.builds.includes(file)) {
-      fail(`${e.title} has no build ${file}.`);
+      report(`${e.title} has no build ${file}.`);
       return;
     }
     busy.value = true;
     try {
       const bytes = await deps.readExample(`${e.id}/${file}`);
       if (bytes === null) {
-        clearProblem();
-        fail(`could not load ${file}.`);
+        report(`could not load ${file}.`);
         return;
       }
       let hintText: string | undefined;
@@ -195,7 +209,7 @@ export function createWorkbench(deps: { readExample: ExampleReader }): Workbench
     openCount.value++;
   }
 
-  return { session, rows, facts, example, cursor, selection, error, errorDetails, rawCandidate, suggestManuals, openCount, busy, openBytes, openRaw, openExample, setSelection, close };
+  return { session, rows, facts, example, cursor, selection, error, errorDetails, rawCandidate, suggestManuals, openCount, busy, openBytes, openRaw, openExample, report, wouldReplace, setSelection, close };
 }
 
 let shared: Workbench | null = null;

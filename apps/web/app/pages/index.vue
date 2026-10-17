@@ -7,6 +7,8 @@ import { addressKey, withHintFile, withSelection } from '@fugloy/disasm';
 import type { Row } from '@fugloy/disasm';
 import ListingView from '~/components/listing/ListingView.vue';
 import FirstScreen from '~/components/FirstScreen.vue';
+import ConfirmDialog from '~/components/ConfirmDialog.vue';
+import OpenProblem from '~/components/OpenProblem.vue';
 import StatusLine from '~/components/StatusLine.vue';
 import FacingPages from '~/components/workbench/FacingPages.vue';
 import PageTabs from '~/components/workbench/PageTabs.vue';
@@ -57,6 +59,42 @@ function showOpened(): void {
 }
 // Sync, so a scroll asked for in the same tick as the open (after it) wins over this default.
 watch(wb.openCount, showOpened, { flush: 'sync' });
+
+// Files dropped anywhere on the page, or picked on the first screen. The layout
+// stops the browser opening a dropped file; this decides what to do with it.
+const reading = ref(false);
+/** A program dropped over the open one, waiting for "Replace". */
+const pendingReplace = ref<{ bytes: Uint8Array; name: string } | null>(null);
+
+async function receive(file: File): Promise<void> {
+  reading.value = true;
+  let bytes: Uint8Array;
+  try {
+    bytes = new Uint8Array(await file.arrayBuffer());
+  } catch (err) {
+    wb.report(`${file.name} could not be read: ${err instanceof Error ? err.message : String(err)}`);
+    return;
+  } finally {
+    reading.value = false;
+  }
+  // Opening a program replaces the open one, so ask. Anything else fails
+  // without replacing it (a PDF also points at the Manuals page).
+  if (wb.wouldReplace(bytes)) pendingReplace.value = { bytes, name: file.name };
+  else wb.openBytes(bytes, file.name);
+}
+
+function confirmReplace(): void {
+  const p = pendingReplace.value;
+  pendingReplace.value = null;
+  if (p !== null) wb.openBytes(p.bytes, p.name);
+}
+
+function onDocumentDrop(e: DragEvent): void {
+  const file = e.dataTransfer?.files[0];
+  if (file === undefined) return;
+  e.preventDefault();
+  void receive(file);
+}
 
 function onSelect(addr: number, extend: boolean): void {
   if (extend && cursor.value !== null) selection.value = { from: Math.min(cursor.value, addr), to: Math.max(cursor.value, addr) };
@@ -114,6 +152,7 @@ declare global {
 }
 
 onMounted(() => {
+  document.addEventListener('drop', onDocumentDrop);
   // Back from another page with a program still open: show it where it was.
   if (session.value !== null) showOpened();
   window.__fugloyTest = {
@@ -136,63 +175,71 @@ onMounted(() => {
   };
 });
 onBeforeUnmount(() => {
+  document.removeEventListener('drop', onDocumentDrop);
   delete window.__fugloyTest;
 });
 </script>
 
 <template>
-  <div v-if="session !== null" class="flex min-h-0 flex-1 flex-col" data-testid="workbench">
-    <div v-if="wb.error.value !== null" class="fg-problem fg-problem-bar" role="alert">
-      <span class="fg-strong">{{ wb.error.value }}</span>
-      <span v-for="d in wb.errorDetails.value" :key="d" class="fg-muted fg-mono text-xs">{{ d }}</span>
+  <div class="flex min-h-0 flex-1 flex-col">
+    <div v-if="session !== null" class="flex min-h-0 flex-1 flex-col" data-testid="workbench">
+      <OpenProblem bar />
+      <FacingPages>
+        <template #left-name>Listing</template>
+        <template #right-name>Details</template>
+        <template #left>
+          <PageTabs v-model="leftTab" :tabs="LEFT_TABS" label="Left page" id-prefix="left" />
+          <div id="left-panel-listing" v-show="leftTab === 'listing'" role="tabpanel" aria-labelledby="left-tab-listing" class="flex min-h-0 flex-1 flex-col">
+            <ListingView
+              :key="wb.openCount.value"
+              ref="listing"
+              class="min-h-0 flex-1"
+              :rows="rows"
+              :cursor="cursor"
+              :selection="selection"
+              @select="onSelect"
+              @follow="onFollow"
+            />
+          </div>
+          <div id="left-panel-hints" v-show="leftTab === 'hints'" role="tabpanel" aria-labelledby="left-tab-hints" class="fg-panel">
+            <p class="fg-muted">The hint file, as you edit, arrives with editing.</p>
+            <p v-if="session.hintSource" class="fg-muted">Hints loaded from <span class="fg-mono">{{ session.hintSource }}</span>: {{ session.hintFile.hints.length }}.</p>
+          </div>
+        </template>
+        <template #right>
+          <PageTabs v-model="rightTab" :tabs="RIGHT_TABS" label="Right page" id-prefix="right" />
+          <div id="right-panel-symbol" v-show="rightTab === 'symbol'" role="tabpanel" aria-labelledby="right-tab-symbol" class="fg-panel">
+            <p class="fg-muted">Select a name in the listing to see what it is and where it is used.</p>
+          </div>
+          <div id="right-panel-index" v-show="rightTab === 'index'" role="tabpanel" aria-labelledby="right-tab-index" class="fg-panel">
+            <p class="fg-muted">Every label, routine, and table name, each a link into the listing.</p>
+          </div>
+          <div id="right-panel-program" v-show="rightTab === 'program'" role="tabpanel" aria-labelledby="right-tab-program" class="fg-panel" data-testid="program-panel">
+            <template v-if="example !== null">
+              <h2 class="fg-strong text-base font-bold">{{ example.title }}</h2>
+              <p>{{ example.authors }}<template v-if="example.publisher">, {{ example.publisher }}</template><template v-if="example.year">, {{ example.year }}</template>.</p>
+              <p class="fg-muted">
+                {{ example.rights }}: “{{ example.rightsQuote }}”
+                (<a :href="example.rightsUrl" class="fg-inline-link" rel="noopener" target="_blank">trs-80.org</a>).
+              </p>
+            </template>
+            <template v-else>
+              <h2 class="fg-strong fg-mono text-base font-bold">{{ session.name }}</h2>
+              <p v-if="facts?.name" class="fg-muted">Name record: <span class="fg-mono">{{ facts.name }}</span></p>
+            </template>
+          </div>
+        </template>
+      </FacingPages>
+      <StatusLine />
     </div>
-    <FacingPages>
-      <template #left-name>Listing</template>
-      <template #right-name>Details</template>
-      <template #left>
-        <PageTabs v-model="leftTab" :tabs="LEFT_TABS" label="Left page" id-prefix="left" />
-        <div id="left-panel-listing" v-show="leftTab === 'listing'" role="tabpanel" aria-labelledby="left-tab-listing" class="flex min-h-0 flex-1 flex-col">
-          <ListingView
-            :key="wb.openCount.value"
-            ref="listing"
-            class="min-h-0 flex-1"
-            :rows="rows"
-            :cursor="cursor"
-            :selection="selection"
-            @select="onSelect"
-            @follow="onFollow"
-          />
-        </div>
-        <div id="left-panel-hints" v-show="leftTab === 'hints'" role="tabpanel" aria-labelledby="left-tab-hints" class="fg-panel">
-          <p class="fg-muted">The hint file, as you edit, arrives with editing.</p>
-          <p v-if="session.hintSource" class="fg-muted">Hints loaded from <span class="fg-mono">{{ session.hintSource }}</span>: {{ session.hintFile.hints.length }}.</p>
-        </div>
-      </template>
-      <template #right>
-        <PageTabs v-model="rightTab" :tabs="RIGHT_TABS" label="Right page" id-prefix="right" />
-        <div id="right-panel-symbol" v-show="rightTab === 'symbol'" role="tabpanel" aria-labelledby="right-tab-symbol" class="fg-panel">
-          <p class="fg-muted">Select a name in the listing to see what it is and where it is used.</p>
-        </div>
-        <div id="right-panel-index" v-show="rightTab === 'index'" role="tabpanel" aria-labelledby="right-tab-index" class="fg-panel">
-          <p class="fg-muted">Every label, routine, and table name, each a link into the listing.</p>
-        </div>
-        <div id="right-panel-program" v-show="rightTab === 'program'" role="tabpanel" aria-labelledby="right-tab-program" class="fg-panel" data-testid="program-panel">
-          <template v-if="example !== null">
-            <h2 class="fg-strong text-base font-bold">{{ example.title }}</h2>
-            <p>{{ example.authors }}<template v-if="example.publisher">, {{ example.publisher }}</template><template v-if="example.year">, {{ example.year }}</template>.</p>
-            <p class="fg-muted">
-              {{ example.rights }}: “{{ example.rightsQuote }}”
-              (<a :href="example.rightsUrl" class="fg-inline-link" rel="noopener" target="_blank">trs-80.org</a>).
-            </p>
-          </template>
-          <template v-else>
-            <h2 class="fg-strong fg-mono text-base font-bold">{{ session.name }}</h2>
-            <p v-if="facts?.name" class="fg-muted">Name record: <span class="fg-mono">{{ facts.name }}</span></p>
-          </template>
-        </div>
-      </template>
-    </FacingPages>
-    <StatusLine />
+    <FirstScreen v-else :reading="reading" @file="receive" />
+    <ConfirmDialog
+      :open="pendingReplace !== null"
+      title="Replace the open program?"
+      :message="`Open ${pendingReplace?.name ?? ''} in place of ${session?.name ?? 'the open program'}?`"
+      confirm-label="Replace"
+      @confirm="confirmReplace"
+      @cancel="pendingReplace = null"
+    />
   </div>
-  <FirstScreen v-else />
 </template>

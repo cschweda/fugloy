@@ -112,4 +112,53 @@ describe('useWorkbench', () => {
     expect(wb.session.value).toBeNull();
     expect(wb.error.value).toContain('elimin8d.cmd');
   });
+
+  it('opens Eliminator as Model I, the machine its manifest gives', async () => {
+    const wb = createWorkbench({ readExample });
+    await wb.openExample('eliminator');
+    expect(wb.session.value?.name).toBe('elimin8d.cmd');
+    expect(wb.session.value?.selection).toEqual({ machine: 1, dos: 'ldos' });
+  });
+
+  it('an unknown build or a reported problem clears a stale raw offer', async () => {
+    const wb = createWorkbench({ readExample });
+    wb.openBytes(new TextEncoder().encode('%PDF-1.7'), 'trm.pdf');
+    expect(wb.rawCandidate.value).not.toBeNull();
+    await wb.openExample('sea-dragon', 'seadrg05.cmd');
+    expect(wb.error.value).toContain('seadrg05.cmd');
+    expect(wb.rawCandidate.value).toBeNull();
+    expect(wb.suggestManuals.value).toBe(false);
+    wb.openBytes(new TextEncoder().encode('%PDF-1.7'), 'trm.pdf');
+    wb.report('x.cmd could not be read.');
+    expect(wb.error.value).toBe('x.cmd could not be read.');
+    expect(wb.rawCandidate.value).toBeNull();
+    expect(wb.suggestManuals.value).toBe(false);
+  });
+
+  it('ignores a second openExample while one is loading', async () => {
+    const reads: string[] = [];
+    const wb = createWorkbench({
+      readExample: async (path) => {
+        reads.push(path);
+        return readExample(path);
+      },
+    });
+    await Promise.all([wb.openExample('rear-guard'), wb.openExample('eliminator')]);
+    expect(wb.session.value?.name).toBe('reargrd1.cmd');
+    expect(reads).toEqual(['rear-guard/reargrd1.cmd']);
+  });
+
+  it('says a dropped file would replace the open program only when it is a program', async () => {
+    const wb = createWorkbench({ readExample });
+    const cmd = (await readExample('sea-dragon/seadrg06.cmd'))!;
+    expect(wb.wouldReplace(cmd)).toBe(false);
+    await wb.openExample('sea-dragon');
+    expect(wb.wouldReplace(cmd)).toBe(true);
+    expect(wb.wouldReplace(new TextEncoder().encode('%PDF-1.7'))).toBe(false);
+    expect(wb.wouldReplace(new Uint8Array(0))).toBe(false);
+    // A file that is not a program fails without replacing the open one.
+    wb.openBytes(new TextEncoder().encode('%PDF-1.7'), 'trm.pdf');
+    expect(wb.session.value?.name).toBe('seadrg01.cmd');
+    expect(wb.suggestManuals.value).toBe(true);
+  });
 });

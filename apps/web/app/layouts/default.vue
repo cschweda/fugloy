@@ -4,6 +4,22 @@ import MachinePicker from '~/components/MachinePicker.vue';
 const route = useRoute();
 const wb = useWorkbench();
 const onWorkbench = computed(() => route.path === '/' && wb.session.value !== null);
+
+// A file dropped anywhere must never make the browser open it and leave the
+// app. The workbench (pages/index.vue) opens what is dropped on it; elsewhere
+// a drop does nothing.
+const hasFiles = (e: DragEvent): boolean => e.dataTransfer?.types.includes('Files') ?? false;
+function stopFileDrop(e: DragEvent): void {
+  if (hasFiles(e)) e.preventDefault();
+}
+onMounted(() => {
+  document.addEventListener('dragover', stopFileDrop);
+  document.addEventListener('drop', stopFileDrop);
+});
+onBeforeUnmount(() => {
+  document.removeEventListener('dragover', stopFileDrop);
+  document.removeEventListener('drop', stopFileDrop);
+});
 </script>
 
 <template>
