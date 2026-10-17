@@ -11,6 +11,7 @@ import ConfirmDialog from '~/components/ConfirmDialog.vue';
 import OpenProblem from '~/components/OpenProblem.vue';
 import StatusLine from '~/components/StatusLine.vue';
 import IndexTab from '~/components/side/IndexTab.vue';
+import ProgramTab from '~/components/side/ProgramTab.vue';
 import SymbolTab from '~/components/side/SymbolTab.vue';
 import { resolveGoTo } from '~/utils/goto';
 import { isTyping, keyId, modalOpen } from '~/utils/keys';
@@ -121,6 +122,11 @@ function showLabel(addr: number): void {
 function showTable(entry: TableEntry): void {
   wb.symbolFocus.value = { kind: 'table', entry };
   rightTab.value = 'symbol';
+}
+
+/** A proposal's hint lines: Task 12 creates `applyHintLines` and adds them to the hint file. */
+function applyHintLines(_lines: string[]): void {
+  // TODO(Task 12): add the lines to the hint file through applyHintLines.
 }
 
 function onFollow(target: number, info: FollowInfo): void {
@@ -312,18 +318,16 @@ onBeforeUnmount(() => {
             <IndexTab @label="showLabel" @table="showTable" @go="go" />
           </div>
           <div id="right-panel-program" v-show="rightTab === 'program'" role="tabpanel" aria-labelledby="right-tab-program" class="fg-panel" data-testid="program-panel">
-            <template v-if="example !== null">
-              <h2 class="fg-strong text-base font-bold">{{ example.title }}</h2>
-              <p>{{ example.authors }}<template v-if="example.publisher">, {{ example.publisher }}</template><template v-if="example.year">, {{ example.year }}</template>.</p>
-              <p class="fg-muted">
-                {{ example.rights }}: “{{ example.rightsQuote }}”
-                (<a :href="example.rightsUrl" class="fg-inline-link" rel="noopener" target="_blank">trs-80.org</a>).
-              </p>
-            </template>
-            <template v-else>
-              <h2 class="fg-strong fg-mono text-base font-bold">{{ session.name }}</h2>
-              <p v-if="facts?.name" class="fg-muted">Name record: <span class="fg-mono">{{ facts.name }}</span></p>
-            </template>
+            <ProgramTab
+              v-if="facts !== null"
+              :facts="facts"
+              :example="example"
+              :name="session.name"
+              :diagnostics="session.analysis.pass1.diagnostics"
+              :proposals="session.analysis.proposals"
+              @symbol="showTable"
+              @apply-hint-lines="applyHintLines"
+            />
           </div>
         </template>
       </FacingPages>

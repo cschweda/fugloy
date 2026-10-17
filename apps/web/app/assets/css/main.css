@@ -355,3 +355,26 @@ html.dark body {
 .fg-input:focus-visible { outline: 2px solid var(--fg-accent); outline-offset: 1px; }
 .fg-goto { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--fg-surface); border-bottom: 1px solid var(--fg-border); font-size: 13px; }
 .fg-goto-error { color: #ff7b72; }
+
+/* Program tab: the spec sheet */
+.fg-spec { display: flex; flex-direction: column; gap: 4px; }
+.fg-sec { margin-top: 12px; color: var(--fg-muted); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; border-bottom: 1px solid #21262d; padding-bottom: 3px; }
+.fg-spec section:first-child .fg-sec { margin-top: 0; }
+.fg-dl { display: grid; grid-template-columns: 118px 1fr; gap: 3px 10px; margin: 6px 0 0; }
+.fg-dl dt { color: var(--fg-muted); }
+.fg-dl dd { margin: 0; }
+.fg-badge { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 11px; margin-right: 4px; }
+.fg-badge-on { background: #1f3a5f; color: #79c0ff; }
+.fg-badge-off { background: #2d2d2d; color: #9198a1; text-decoration: line-through; }
+.fg-badge-rights { background: #1b3a2a; color: #7ee787; margin-left: 4px; }
+.fg-evidence { margin-top: 4px; font-size: 12px; }
+.fg-proposals li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.fg-map { display: block; width: 100%; height: 16px; margin-top: 6px; border-radius: 3px; background: var(--fg-bg); }
+.fg-map-rom { fill: #30363d; background: #30363d; }
+.fg-map-video { fill: #3fb950; background: #3fb950; }
+.fg-map-free { fill: #161b22; background: #161b22; }
+.fg-map-program { fill: #d2a8ff; background: #d2a8ff; }
+.fg-map-moved { fill: #79c0ff; background: #79c0ff; }
+.fg-map-axis { display: flex; justify-content: space-between; font-size: 10px; color: var(--fg-muted); margin-top: 2px; }
+.fg-map-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; list-style: none; margin: 4px 0 0; padding: 0; font-size: 11px; color: var(--fg-muted); }
+.fg-swatch { display: inline-block; width: 10px; height: 10px; margin-right: 4px; border-radius: 2px; }

@@ -52,6 +52,15 @@ test('one click opens Sea Dragon with its hints, as Model III', async ({ page })
   await expect(status).toContainText('entry $8881');
   await expect(status).toContainText('Model III · TRSDOS 1.3');
   await expect(page.getByTestId('program-panel')).toContainText('public domain 1995');
+  // The Program tab is a spec sheet: machine evidence, loading, and the memory map.
+  const panel = page.getByTestId('program-panel');
+  await expect(panel).toContainText('Writes port $EC (MODEPORT), which only the Model III has.');
+  await expect(panel).toContainText('$5200–$888F');
+  await expect(panel).toContainText('32K');
+  await expect(panel.getByTestId('memory-map')).toBeVisible();
+  // A name under "Talks to" opens in the Symbol tab.
+  await panel.getByRole('button', { name: 'MODEPORT' }).click();
+  await expect(page.getByTestId('symbol-name')).toHaveText('MODEPORT');
 });
 
 test('the machine picker re-renders with the other machine names', async ({ page }) => {
