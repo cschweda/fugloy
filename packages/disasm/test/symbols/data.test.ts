@@ -5,8 +5,10 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildSymbolOutputs } from '../../scripts/write-symbols.js';
+import { selectSymbols } from '../../src/symbols/select.js';
 import { SOURCES, TABLES } from '../../src/symbols/tables.generated.js';
 import { TABLE_IDS } from '../../src/symbols/types.js';
+import type { TableEntry } from '../../src/symbols/types.js';
 
 const dataDir = fileURLToPath(new URL('../../data/symbols/', import.meta.url));
 const modulePath = fileURLToPath(new URL('../../src/symbols/tables.generated.ts', import.meta.url));
@@ -54,6 +56,76 @@ describe('the committed symbol data', () => {
 
   it('names $JP2DOS at 0x402D in the TRSDOS 1.3 table', () => {
     expect(TABLES['dos-trsdos13'].find((e) => e.key === 0x402d)).toMatchObject({ name: '$JP2DOS', kind: 'routine' });
+  });
+});
+
+describe('the hardware tables', () => {
+  const model1 = TABLES['hardware-model1'];
+  const model3 = TABLES['hardware-model3'];
+  const named = (entries: readonly TableEntry[], name: string): TableEntry | undefined => entries.find((e) => e.name === name);
+  const ports = (entries: readonly TableEntry[]): [number, string][] => entries.filter((e) => e.kind === 'port').map((e) => [e.key, e.name]);
+  const memory = (entries: readonly TableEntry[]): [number, string, number][] => entries.filter((e) => e.kind !== 'port').map((e) => [e.key, e.name, e.length]);
+
+  it('names VIDEO at 0x3C00, 1024 bytes, and KEYBOARD at 0x3800 in both tables', () => {
+    for (const table of [model1, model3]) {
+      expect(named(table, 'VIDEO')).toMatchObject({ key: 0x3c00, length: 1024, kind: 'region', coined: true });
+      expect(named(table, 'KEYBOARD')).toMatchObject({ key: 0x3800, kind: 'region', coined: true });
+    }
+  });
+
+  it('gives KEYBOARD the length each manual decodes: 256 bytes in the Model I handbook, 1024 in the Model III manual', () => {
+    expect(named(model1, 'KEYBOARD')?.length).toBe(256);
+    expect(named(model3, 'KEYBOARD')?.length).toBe(1024);
+  });
+
+  it('gives the Model III a port entry for 0xEC and 0xFF, and the Model I none for 0xEC', () => {
+    expect(model3.find((e) => e.kind === 'port' && e.key === 0xec)).toMatchObject({ name: 'MODEPORT' });
+    expect(model3.find((e) => e.kind === 'port' && e.key === 0xff)).toMatchObject({ name: 'CASSETTE' });
+    expect(model1.some((e) => e.kind === 'port' && e.key === 0xec)).toBe(false);
+  });
+
+  it('enters each port of the Model III manual (pp. 15, 21, and 22) once, IN and OUT sharing the entry', () => {
+    expect(ports(model3)).toEqual([
+      [0xe0, 'INTPORT'], [0xe4, 'NMIPORT'], [0xe8, 'RS232_MODEM'], [0xe9, 'RS232_BAUD'], [0xea, 'RS232_CTRL'], [0xeb, 'RS232_DATA'], [0xec, 'MODEPORT'],
+      [0xf0, 'FDC_CMDSTAT'], [0xf1, 'FDC_TRACK'], [0xf2, 'FDC_SECTOR'], [0xf3, 'FDC_DATA'], [0xf4, 'FDC_DRVSEL'], [0xf8, 'PRINTER'], [0xff, 'CASSETTE'],
+    ]);
+    const numbers = ports(model3).map(([port]) => port);
+    expect(new Set(numbers).size).toBe(numbers.length);
+  });
+
+  it('enters the Model III memory map devices of manual p. 14: the printer status pair, keyboard, and video', () => {
+    expect(memory(model3)).toEqual([[0x37e8, 'PRTSTATUS', 2], [0x3800, 'KEYBOARD', 1024], [0x3c00, 'VIDEO', 1024]]);
+  });
+
+  it('enters the Model I memory-mapped devices (Level II manual D-2, Decker 62) and the one port, FF', () => {
+    expect(memory(model1)).toEqual([
+      [0x37de, 'COMSTATUS', 1], [0x37df, 'COMDATA', 1], [0x37e0, 'INTLATCH', 1], [0x37e1, 'FDC_DRVSEL', 1], [0x37e4, 'CAS_SELECT', 1], [0x37e8, 'PRINTER', 1],
+      [0x37ec, 'FDC_CMDSTAT', 1], [0x37ed, 'FDC_TRACK', 1], [0x37ee, 'FDC_SECTOR', 1], [0x37ef, 'FDC_DATA', 1], [0x3800, 'KEYBOARD', 256], [0x3c00, 'VIDEO', 1024],
+    ]);
+    expect(ports(model1)).toEqual([[0xff, 'CASSETTE']]);
+  });
+
+  it('cites m3-trm for every Model III entry, and for the Model I what documents it: the handbook, the Level II manual, or Decker', () => {
+    for (const e of model3) expect(e.cite.some((c) => c.source === 'm3-trm'), e.name).toBe(true);
+    for (const e of model1) expect(e.cite.some((c) => ['m1-trh', 'l2-1979', 'decker'].includes(c.source)), e.name).toBe(true);
+    // What the handbook itself documents: the keyboard and video maps and port FF.
+    for (const name of ['KEYBOARD', 'VIDEO', 'CASSETTE']) expect(named(model1, name)?.cite.some((c) => c.source === 'm1-trh'), name).toBe(true);
+  });
+
+  it('coins every hardware name, since the manuals name signals, not symbols', () => {
+    expect(model1.length).toBeGreaterThan(0);
+    expect(model3.length).toBeGreaterThan(0);
+    for (const e of [...model1, ...model3]) expect(e.coined, e.name).toBe(true);
+  });
+
+  it('names the screen and a port through selectSymbols, for both machines', () => {
+    for (const machine of [1, 3] as const) {
+      const set = selectSymbols({ machine, dos: 'none' });
+      expect(set.data(0x3c40)).toMatchObject({ entry: { name: 'VIDEO' }, offset: 0x40 });
+      expect(set.port(0xff)?.name).toBe('CASSETTE');
+    }
+    expect(selectSymbols({ machine: 3, dos: 'none' }).port(0xec)?.name).toBe('MODEPORT');
+    expect(selectSymbols({ machine: 1, dos: 'none' }).port(0xec)).toBeUndefined();
   });
 });
 

@@ -1,4 +1,145 @@
 {
   "table": "hardware-model3",
-  "entries": []
+  "entries": [
+    {
+      "addr": "37E8",
+      "name": "PRTSTATUS",
+      "kind": "region",
+      "length": 2,
+      "purpose": "printer status read as memory, the same status as port F8",
+      "cite": [{ "source": "m3-trm", "page": "14" }],
+      "coined": true
+    },
+    {
+      "addr": "3800",
+      "name": "KEYBOARD",
+      "kind": "region",
+      "length": 1024,
+      "purpose": "memory-mapped keyboard",
+      "cite": [{ "source": "m3-trm", "page": "14" }],
+      "coined": true,
+      "note": "this manual decodes 3800-3BFF; the Model I handbook decodes 3800-38FF"
+    },
+    {
+      "addr": "3C00",
+      "name": "VIDEO",
+      "kind": "region",
+      "length": 1024,
+      "purpose": "video display memory",
+      "cite": [{ "source": "m3-trm", "page": "14" }],
+      "coined": true
+    },
+    {
+      "port": "E0",
+      "name": "INTPORT",
+      "kind": "port",
+      "purpose": "interrupt status (in), interrupt enable mask (out)",
+      "cite": [{ "source": "m3-trm", "page": "21" }, { "source": "m3-trm", "page": "22" }],
+      "coined": true
+    },
+    {
+      "port": "E4",
+      "name": "NMIPORT",
+      "kind": "port",
+      "purpose": "NMI status (in), disk NMI enable mask (out)",
+      "cite": [{ "source": "m3-trm", "page": "21" }],
+      "coined": true
+    },
+    {
+      "port": "E8",
+      "name": "RS232_MODEM",
+      "kind": "port",
+      "purpose": "modem status (in), UART master reset (out)",
+      "cite": [{ "source": "m3-trm", "page": "15" }],
+      "coined": true
+    },
+    {
+      "port": "E9",
+      "name": "RS232_BAUD",
+      "kind": "port",
+      "purpose": "baud rate register load (out only)",
+      "cite": [{ "source": "m3-trm", "page": "15" }],
+      "coined": true
+    },
+    {
+      "port": "EA",
+      "name": "RS232_CTRL",
+      "kind": "port",
+      "purpose": "UART status (in), UART and modem control (out)",
+      "cite": [{ "source": "m3-trm", "page": "15" }],
+      "coined": true
+    },
+    {
+      "port": "EB",
+      "name": "RS232_DATA",
+      "kind": "port",
+      "purpose": "UART received data (in), UART transmit data (out)",
+      "cite": [{ "source": "m3-trm", "page": "15" }],
+      "coined": true
+    },
+    {
+      "port": "EC",
+      "name": "MODEPORT",
+      "kind": "port",
+      "purpose": "clear clock interrupt (in), video, cassette motor, and I/O bus modes (out)",
+      "cite": [{ "source": "m3-trm", "page": "15" }, { "source": "m3-trm", "page": "21" }],
+      "coined": true
+    },
+    {
+      "port": "F0",
+      "name": "FDC_CMDSTAT",
+      "kind": "port",
+      "purpose": "disk controller status (in), command (out)",
+      "cite": [{ "source": "m3-trm", "page": "15" }],
+      "coined": true
+    },
+    {
+      "port": "F1",
+      "name": "FDC_TRACK",
+      "kind": "port",
+      "purpose": "disk controller track register",
+      "cite": [{ "source": "m3-trm", "page": "15" }],
+      "coined": true
+    },
+    {
+      "port": "F2",
+      "name": "FDC_SECTOR",
+      "kind": "port",
+      "purpose": "disk controller sector register",
+      "cite": [{ "source": "m3-trm", "page": "15" }],
+      "coined": true
+    },
+    {
+      "port": "F3",
+      "name": "FDC_DATA",
+      "kind": "port",
+      "purpose": "disk controller data register",
+      "cite": [{ "source": "m3-trm", "page": "15" }],
+      "coined": true
+    },
+    {
+      "port": "F4",
+      "name": "FDC_DRVSEL",
+      "kind": "port",
+      "purpose": "drive and side select, density, wait states, precompensation (out only)",
+      "cite": [{ "source": "m3-trm", "page": "22" }],
+      "coined": true
+    },
+    {
+      "port": "F8",
+      "name": "PRINTER",
+      "kind": "port",
+      "purpose": "printer status (in), printer data (out)",
+      "cite": [{ "source": "m3-trm", "page": "15" }],
+      "coined": true
+    },
+    {
+      "port": "FF",
+      "name": "CASSETTE",
+      "kind": "port",
+      "purpose": "cassette input (in), cassette output level (out)",
+      "cite": [{ "source": "m3-trm", "page": "21" }, { "source": "m3-trm", "page": "22" }],
+      "coined": true
+    }
+  ]
 }

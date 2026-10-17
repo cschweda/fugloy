@@ -1,4 +1,112 @@
 {
   "table": "hardware-model1",
-  "entries": []
+  "entries": [
+    {
+      "addr": "37DE",
+      "name": "COMSTATUS",
+      "kind": "region",
+      "purpose": "communication interface status",
+      "cite": [{ "source": "l2-1979", "page": "D-2" }, { "source": "decker", "page": "62" }],
+      "coined": true
+    },
+    {
+      "addr": "37DF",
+      "name": "COMDATA",
+      "kind": "region",
+      "purpose": "communication interface data",
+      "cite": [{ "source": "l2-1979", "page": "D-2" }, { "source": "decker", "page": "62" }],
+      "coined": true
+    },
+    {
+      "addr": "37E0",
+      "name": "INTLATCH",
+      "kind": "region",
+      "purpose": "interrupt latch",
+      "cite": [{ "source": "l2-1979", "page": "D-2" }, { "source": "decker", "page": "62" }],
+      "coined": true
+    },
+    {
+      "addr": "37E1",
+      "name": "FDC_DRVSEL",
+      "kind": "region",
+      "purpose": "disk drive select latch",
+      "cite": [{ "source": "l2-1979", "page": "D-2" }, { "source": "decker", "page": "62" }],
+      "coined": true
+    },
+    {
+      "addr": "37E4",
+      "name": "CAS_SELECT",
+      "kind": "region",
+      "purpose": "cassette drive select latch",
+      "cite": [{ "source": "l2-1979", "page": "D-2" }, { "source": "decker", "page": "62" }],
+      "coined": true
+    },
+    {
+      "addr": "37E8",
+      "name": "PRINTER",
+      "kind": "region",
+      "purpose": "line printer: status (read), data (write)",
+      "cite": [{ "source": "l2-1979", "page": "D-2" }, { "source": "decker", "page": "63" }],
+      "coined": true
+    },
+    {
+      "addr": "37EC",
+      "name": "FDC_CMDSTAT",
+      "kind": "region",
+      "purpose": "disk controller status (read), command (write)",
+      "cite": [{ "source": "l2-1979", "page": "D-2" }, { "source": "decker", "page": "62" }],
+      "coined": true
+    },
+    {
+      "addr": "37ED",
+      "name": "FDC_TRACK",
+      "kind": "region",
+      "purpose": "disk controller track register",
+      "cite": [{ "source": "decker", "page": "62" }, { "source": "paay", "page": "24" }],
+      "coined": true
+    },
+    {
+      "addr": "37EE",
+      "name": "FDC_SECTOR",
+      "kind": "region",
+      "purpose": "disk controller sector register",
+      "cite": [{ "source": "decker", "page": "62" }, { "source": "paay", "page": "24" }],
+      "coined": true
+    },
+    {
+      "addr": "37EF",
+      "name": "FDC_DATA",
+      "kind": "region",
+      "purpose": "disk controller data register",
+      "cite": [{ "source": "decker", "page": "62" }, { "source": "paay", "page": "24" }],
+      "coined": true
+    },
+    {
+      "addr": "3800",
+      "name": "KEYBOARD",
+      "kind": "region",
+      "length": 256,
+      "purpose": "memory-mapped keyboard",
+      "cite": [{ "source": "m1-trh", "page": "12" }],
+      "coined": true,
+      "note": "this handbook decodes 3800-38FF; the Model III manual decodes 3800-3BFF"
+    },
+    {
+      "addr": "3C00",
+      "name": "VIDEO",
+      "kind": "region",
+      "length": 1024,
+      "purpose": "video display memory, 16 lines of 64 characters",
+      "cite": [{ "source": "m1-trh", "page": "12" }, { "source": "m1-trh", "page": "33" }],
+      "coined": true
+    },
+    {
+      "port": "FF",
+      "name": "CASSETTE",
+      "kind": "port",
+      "purpose": "cassette input (in), cassette output, motor, and 32/64 column mode (out)",
+      "cite": [{ "source": "m1-trh", "page": "44" }, { "source": "m1-trh", "page": "45" }, { "source": "m1-trh", "page": "50" }],
+      "coined": true
+    }
+  ]
 }

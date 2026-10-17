@@ -30,7 +30,7 @@ describe('fugloy CLI', () => {
     expect(await run([`${fixtures}cmd/non-contiguous.cmd`], io)).toBe(0);
     const text = out.join('');
     expect(text.split('\n')[0]).toBe('; non-contiguous.cmd: load module, 2 blocks, 2 runs, 14 bytes, entry $6000 (transfer address)');
-    expect(text).toContain('        ORG 6000H\n6000  21 00 3C      LD HL,3C00H             ; entry\n');
+    expect(text).toContain('        ORG 6000H\n6000  21 00 3C      LD HL,VIDEO             ; entry\n');
     expect(err).toEqual([]);
   });
 
@@ -104,7 +104,7 @@ describe('pass 1 flags', () => {
     expect(await run([file, '--format', 'zmac'], io)).toBe(0);
     const text = out.join('');
     expect(text.startsWith('; non-contiguous.cmd: Fugløy pass 1')).toBe(true);
-    expect(text).toContain('\tORG\t6000H\n\tLD\tHL,3C00H\n');
+    expect(text).toContain('\tORG\t6000H\n\tLD\tHL,VIDEO\n');
     expect(text.trimEnd().endsWith('\tEND\t6000H')).toBe(true);
   });
 
