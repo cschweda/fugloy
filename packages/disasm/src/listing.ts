@@ -16,6 +16,7 @@ import type { CmdModule } from './cmd.js';
 import type { MemoryImage } from './memory.js';
 import type { RawModule } from './raw.js';
 import type { Analysis } from './pipeline.js';
+import { outsideComments } from './analysis/symbols.js';
 import { describeSelection } from './symbols/select.js';
 import type { SymbolSet } from './symbols/select.js';
 import type { TableEntry } from './symbols/types.js';
@@ -228,9 +229,11 @@ export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {})
     }
   }
   // A user name outside the program (an `at` hint): the one place the listing says what it is.
-  for (const s of symbols.list()) {
-    if (s.source === 'user' && !space.image.isLoaded(s.addr)) out.push(`; name ${s.name} = ${$(s.addr)}${s.comment === undefined ? '' : `: ${s.comment}`}`);
-  }
+  const outside = [
+    ...symbols.list().filter((s) => s.source === 'user' && !space.image.isLoaded(s.addr)).map((s) => ({ addr: s.addr, line: `; name ${s.name} = ${$(s.addr)}${s.comment === undefined ? '' : `: ${s.comment}`}` })),
+    ...outsideComments(annotations, symbols, space.image).map((c) => ({ addr: c.addr, line: `; comment ${$(c.addr)}: ${c.text}` })),
+  ].sort((a, b) => a.addr - b.addr);
+  for (const o of outside) out.push(o.line);
   /** A .BAS line lists as code when it does not parse, or when a hint had any of its body decoded anyway. */
   const lastBodyByte = (line: BasLine): number => line.bodyAddr + (line.body.length > 0 && line.body[line.body.length - 1] === 0 ? line.body.length - 1 : line.body.length) - 1;
   const listsAsCode = (line: BasLine): boolean => {

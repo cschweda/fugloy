@@ -6,6 +6,7 @@
  */
 import type { Diagnostic, Pass1, Xref } from './analysis/descent.js';
 import { inTableOrder } from './analysis/externals.js';
+import { outsideComments } from './analysis/symbols.js';
 import type { Symbol } from './analysis/symbols.js';
 import type { MinedEntry } from './basic/entries.js';
 import type { Relocation } from './analysis/relocate.js';
@@ -58,6 +59,8 @@ export interface Ir {
   proposals: Proposal[];
   /** Regions that execute elsewhere; `regions` and every address but `loaded` are runtime addresses. */
   relocations: Relocation[];
+  /** `at` comments on addresses no name takes; present only when there are some. */
+  outsideComments?: { addr: number; text: string }[];
   hints?: HintsSummary;
 }
 
@@ -65,7 +68,7 @@ export function buildIr(
   mod: Module,
   pass1: Pass1,
   source?: string,
-  analysis?: Pick<Analysis, 'symbols' | 'hints' | 'entries' | 'proposals' | 'space'> & Partial<Pick<Analysis, 'externals' | 'tablesUsed'>>,
+  analysis?: Pick<Analysis, 'symbols' | 'annotations' | 'hints' | 'entries' | 'proposals' | 'space'> & Partial<Pick<Analysis, 'externals' | 'tablesUsed'>>,
 ): Ir {
   const selection = analysis?.externals?.selection;
   const tableNames: IrTableName[] | undefined =
@@ -79,6 +82,7 @@ export function buildIr(
           purpose: e.purpose,
           cite: e.cite,
         }));
+  const outside = analysis === undefined ? [] : outsideComments(analysis.annotations, analysis.symbols, analysis.space.image);
   return {
     fugloyIr: 1,
     ...(source === undefined ? {} : { source }),
@@ -98,6 +102,7 @@ export function buildIr(
     ...(tableNames === undefined ? {} : { tableNames }),
     proposals: analysis?.proposals ?? [],
     relocations: analysis?.space.relocations ?? [],
+    ...(outside.length === 0 ? {} : { outsideComments: outside }),
     ...(analysis?.hints === undefined ? {} : { hints: analysis.hints }),
   };
 }

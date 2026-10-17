@@ -52,3 +52,35 @@ describe('the at directive', () => {
     expect(renderSession(s, 'listing')).not.toContain('START');
   });
 });
+
+describe('the at directive: comments without names, and refusals', () => {
+  it('shows a comment with no name in the header, the zmac source, and the IR', () => {
+    const s = withHintText(raw(), `${HEAD}at $7F01 comment lives\nat $7F00 name SCORE\n`);
+    const listing = renderSession(s, 'listing');
+    expect(listing).toContain('; name SCORE = $7F00\n; comment $7F01: lives\n');
+    const zmac = renderSession(s, 'zmac');
+    expect(zmac).toContain('SCORE\tEQU\t7F00H\n; 7F01H: lives\n');
+    const ir = JSON.parse(renderSession(s, 'ir')) as { outsideComments?: unknown };
+    expect(ir.outsideComments).toEqual([{ addr: 0x7f01, text: 'lives' }]);
+  });
+
+  it('leaves the IR without outsideComments when there are none', () => {
+    const ir = JSON.parse(renderSession(withHintText(raw(), `${HEAD}at $7F00 name SCORE\n`), 'ir')) as Record<string, unknown>;
+    expect('outsideComments' in ir).toBe(false);
+  });
+
+  it('does not count a rejected at hint as applied', () => {
+    const s = withHintText(raw(), `${HEAD}at $7000 name START\nat $7F00 name SCORE\n`);
+    expect(s.analysis.hints?.applied).toBe(1);
+  });
+
+  it('rejects an empty at comment', () => {
+    expect(parseHints(`${HEAD}at $7F00 comment\n`).errors).toEqual([{ line: 2, message: 'comment needs text' }]);
+  });
+
+  it('rejects a generated-label shape and a name a block hint already uses', () => {
+    expect(parseHints(`${HEAD}at $7F00 name L7000\n`).errors[0]!.message).toContain('generated label');
+    const text = `${HEAD}block 0 length $0004 hash 0123456789abcdef\nblock 0:$0000 name SCORE\nat $7F00 name score\n`;
+    expect(parseHints(text).errors).toEqual([{ line: 4, message: 'name "score" is already used at 0:$0000' }]);
+  });
+});

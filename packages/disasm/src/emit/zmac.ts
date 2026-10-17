@@ -17,7 +17,7 @@ import type { ExternalNames } from '../analysis/externals.js';
 import { filePieces } from '../analysis/relocate.js';
 import type { AnalysisSpace } from '../analysis/relocate.js';
 import { Kind } from '../analysis/map.js';
-import { SymbolTable } from '../analysis/symbols.js';
+import { outsideComments, SymbolTable } from '../analysis/symbols.js';
 import { rowStarts } from '../analysis/words.js';
 import { emptyAnnotations } from '../hints/apply.js';
 import type { Annotations } from '../hints/apply.js';
@@ -83,6 +83,7 @@ export function emitZmac(image: MemoryImage, pass1: Pass1, entry: number | null,
     for (const s of symbols.list()) {
       if (s.source === 'user' && !view.isLoaded(s.addr)) out.push(`${s.name}\tEQU\t${hexWord(s.addr)}${s.comment === undefined ? '' : `\t; ${s.comment}`}`);
     }
+    for (const c of outsideComments(annotations, symbols, view)) out.push(`; ${hexWord(c.addr)}: ${c.text}`);
     for (const s of symbols.list()) if (map.kind(s.addr) === Kind.Tail) out.push(`${s.name}\tEQU\t${hexWord(s.addr)}`);
   }
   /** The hint comment at `addr`, then what the tables say about the row, as one comment. */

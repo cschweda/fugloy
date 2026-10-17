@@ -104,6 +104,14 @@ export function operandValue(op: Operand): number | undefined {
   }
 }
 
+/** `at` comments on addresses the program does not load and no user name takes: nothing else would show them. */
+export function outsideComments(annotations: Annotations, symbols: SymbolTable, image: MemoryImage): { addr: number; text: string }[] {
+  return [...annotations.comments]
+    .filter(([addr]) => !image.isLoaded(addr) && !symbols.has(addr))
+    .map(([addr, text]) => ({ addr, text }))
+    .sort((a, b) => a.addr - b.addr);
+}
+
 export function synthesizeSymbols(pass1: Pass1, annotations: Annotations, image: MemoryImage): SymbolTable {
   const table = new SymbolTable();
   const propose = (addr: number, kind: SymbolKind): void => {

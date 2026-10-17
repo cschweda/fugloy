@@ -75,7 +75,7 @@ export function skeletonHints(mod: Module, bytes: Uint8Array): HintFile {
   };
 }
 
-const noHintsApplied = (): Applied => ({ annotations: emptyAnnotations(), matched: [], unmatched: [], warnings: [], errors: [] });
+const noHintsApplied = (): Applied => ({ annotations: emptyAnnotations(), matched: [], unmatched: [], warnings: [], rejected: 0, errors: [] });
 
 interface Parts {
   name: string;
@@ -100,7 +100,7 @@ function build(p: Parts): Session {
         ...(p.hintSource === undefined ? {} : { source: p.hintSource }),
         matched: p.applied.matched.length,
         unmatched: p.applied.unmatched.length,
-        applied: p.hintFile.hints.length - skipped,
+        applied: p.hintFile.hints.length - skipped - p.applied.rejected,
         warnings: p.applied.warnings,
       }
     : undefined;

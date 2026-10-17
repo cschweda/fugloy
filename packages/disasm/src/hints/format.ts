@@ -122,7 +122,9 @@ export function parseHints(text: string): { file: HintFile; errors: HintError[] 
       const base = { block: -1, offset: -1, line, at };
       if (tokens[2] === 'comment') {
         const from = raw.indexOf('comment', raw.indexOf(tokens[1]) + tokens[1].length);
-        hints.push({ ...base, directive: 'comment', text: raw.slice(from + 'comment'.length).trim() });
+        const text = raw.slice(from + 'comment'.length).trim();
+        if (text === '') { fail('comment needs text'); continue; }
+        hints.push({ ...base, directive: 'comment', text });
         continue;
       }
       if (tokens[2] !== 'name') { fail(`unknown directive "${tokens[2]}"`); continue; }
