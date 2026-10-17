@@ -804,7 +804,8 @@
       "kind": "variable",
       "purpose": "start of the 8-byte keyboard control block, its device type byte, normally 1 (read only)",
       "cite": [{ "source": "paay", "page": "25" }, { "source": "decker", "page": "8" }, { "source": "l2-1979", "page": "D-2" }],
-      "coined": true
+      "coined": true,
+      "note": "LDOS 5.1 names the whole 8-byte keyboard control block KIDCB$ (4015H-401CH, ldos51 6-29); this table keeps the ROM's own field names"
     },
     {
       "addr": "4016",
@@ -821,7 +822,8 @@
       "kind": "variable",
       "purpose": "start of the 8-byte video control block, its device type byte, normally 7 (read and write)",
       "cite": [{ "source": "paay", "page": "25" }, { "source": "decker", "page": "8" }, { "source": "l2-1979", "page": "D-2" }],
-      "coined": true
+      "coined": true,
+      "note": "LDOS 5.1 names the whole 8-byte video control block DODCB$ (401DH-4024H, ldos51 6-29); this table keeps the ROM's own field names"
     },
     {
       "addr": "401E",
@@ -847,7 +849,8 @@
       "kind": "variable",
       "purpose": "start of the 8-byte printer control block, its device type byte, normally 6 (write only)",
       "cite": [{ "source": "paay", "page": "25" }, { "source": "decker", "page": "8" }, { "source": "l2-1979", "page": "D-2" }],
-      "coined": true
+      "coined": true,
+      "note": "LDOS 5.1 names the whole 8-byte printer control block PRDCB$ (4025H-402CH, ldos51 6-29); this table keeps the ROM's own field names"
     },
     {
       "addr": "4026",

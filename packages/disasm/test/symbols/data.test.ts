@@ -575,6 +575,403 @@ describe('the Model I ROM table', () => {
   });
 });
 
+describe('the TRSDOS 1.3 table', () => {
+  const dos = TABLES['dos-trsdos13'];
+  const named = (name: string): TableEntry | undefined => dos.find((e) => e.name === name);
+
+  // Printed page 78 lists the 17 fundamental file routines. The list spells one of them differently from that routine's own heading (p. 82, and the
+  // manual's index entry BKSPC, 82), and the heading wins.
+  const LIST_78 = [
+    '$BACKSPACE', '$CLOSE', '$DIVIDE', '$DMULT', '$FILPTR', '$INIT', '$KILL', '$OPEN', '$POSEOF', '$POSN', '$PUTEXT', '$RAMDIR', '$READ', '$REWIND', '$SYNTAX',
+    '$VERF', '$WRITE',
+  ] as const;
+
+  // Every heading of the section "Technical Information" (printed pages 78 to 89) that gives an address in RAM: name, the decimal number the heading prints
+  // before X'hex', and the page the heading is on. The manual prints each address twice, so the table's key must be that decimal number.
+  const HEADINGS: readonly (readonly [string, number, string])[] = [
+    ['$INIT', 17440, '78'], ['$OPEN', 17444, '79'], ['$POSN', 17474, '79'], ['$READ', 17462, '80'],
+    ['$WRITE', 17465, '80'], ['$VERF', 17468, '81'], ['$PUTEXT', 17483, '81'], ['$BKSPC', 17477, '82'],
+    ['$REWIND', 17471, '82'], ['$POSEOF', 17480, '82'], ['$SYNTAX', 17436, '83'], ['$DIVIDE', 17489, '83'],
+    ['$DMULT', 17486, '84'], ['$RAMDIR', 17040, '84'], ['$FILPTR', 17037, '85'], ['$CLOSE', 17448, '85'],
+    ['$KILL', 17452, '86'], ['$JP2DOS', 16429, '86'], ['$ERRDSP', 17417, '87'], ['$DSPDIR', 17433, '88'],
+    ['$COMDOS', 17049, '88'], ['$CMDDOS', 17052, '89'], ['$CMDTXT', 16933, '89'], ['$MEMEND', 17425, '89'],
+  ];
+  // The four headings of the same section that the table does not hold: $DATE and $TIME are ROM routines (below $4000), and $TIMLOC and $DATLOC name
+  // the first and last three bytes of the ROM table's TIMEDATE.
+  const ELSEWHERE: readonly (readonly [string, number, string])[] = [
+    ['$DATE', 12339, '87'], ['$TIME', 12342, '87'], ['$DATLOC', 16922, '87'], ['$TIMLOC', 16919, '87'],
+  ];
+
+  it('has every name on the page 78 list, spelled as its heading spells it: $BKSPC for the list\'s $BACKSPACE, with a note recording the list', () => {
+    expect(LIST_78).toHaveLength(17);
+    expect(LIST_78.filter((name) => name !== '$BACKSPACE' && named(name) === undefined)).toEqual([]);
+    expect(named('$BACKSPACE')).toBeUndefined();
+    expect(named('$BKSPC')).toMatchObject({ key: 0x4445, kind: 'routine', coined: false });
+    expect(named('$BKSPC')?.note).toContain('$BACKSPACE');
+    expect(named('$BKSPC')?.note).toContain('page 78');
+  });
+
+  it('enters each RAM heading of pages 78 to 89 at the decimal address it prints, citing the page the heading is on', () => {
+    expect(HEADINGS).toHaveLength(24);
+    expect(dos).toHaveLength(24);
+    for (const [name, decimal, page] of HEADINGS) {
+      expect(named(name), name).toMatchObject({ key: decimal, coined: false, cite: [{ source: 'trsdos13', page }] });
+    }
+    expect(dos.map((e) => e.name).sort()).toEqual(HEADINGS.map(([name]) => name).sort());
+  });
+
+  it('makes the routines routines, and the two storage locations $CMDTXT and $MEMEND variables, $MEMEND two bytes (low byte first)', () => {
+    for (const e of dos) expect(e.kind, e.name).toBe(['$CMDTXT', '$MEMEND'].includes(e.name) ? 'variable' : 'routine');
+    expect(named('$MEMEND')).toMatchObject({ key: 0x4411, length: 2 });
+    expect(named('$CMDTXT')).toMatchObject({ key: 0x4225 });
+  });
+
+  it('holds RAM addresses only: $DATE and $TIME stay the ROM table\'s names, and $TIMLOC and $DATLOC are notes on its TIMEDATE bytes', () => {
+    const rom = TABLES['rom-model3'];
+    for (const [name, , page] of ELSEWHERE) {
+      expect(named(name), name).toBeUndefined();
+      expect(page).toBe('87');
+    }
+    expect(rom.find((e) => e.key === 12339)).toMatchObject({ name: '$DATE' });
+    expect(rom.find((e) => e.key === 12342)).toMatchObject({ name: '$TIME' });
+    const clock = rom.find((e) => e.name === 'TIMEDATE');
+    expect(clock).toMatchObject({ key: 16919, length: 6 }); // $TIMLOC 16919, and $DATLOC 16922 three bytes further
+    expect(clock?.note).toContain('$TIMLOC');
+    expect(clock?.note).toContain('$DATLOC');
+    expect(clock?.note).toContain('trsdos13 87');
+    expect(ELSEWHERE.map(([, decimal]) => decimal)).toEqual([12339, 12342, 16922, 16919]);
+  });
+
+  it('names the TRSDOS calls through selectSymbols under TRSDOS and not under the other DOS choices', () => {
+    const trsdos = selectSymbols({ machine: 3, dos: 'trsdos' });
+    expect(trsdos.code(17440)?.name).toBe('$INIT');
+    expect(trsdos.code(17436)?.name).toBe('$SYNTAX');
+    expect(trsdos.data(17426)).toMatchObject({ entry: { name: '$MEMEND' }, offset: 1 });
+    expect(selectSymbols({ machine: 3, dos: 'none' }).code(17440)).toBeUndefined();
+  });
+});
+
+describe('the LDOS 5.1 tables', () => {
+  const model1 = TABLES['dos-ldos51-model1'];
+  const model3 = TABLES['dos-ldos51-model3'];
+  const entryNamed = (entries: readonly TableEntry[], name: string): TableEntry | undefined => entries.find((e) => e.name === name);
+
+  // The alphabetical listing on printed page 6-35, read off the page image: label, its Model I address, its Model III address (null where the page prints
+  // N/A). It names every label of the memory maps except two Model III ones (@DBGHK and EXTDBG$), so the maps and the listing check each other.
+  const CROSS_INDEX: readonly (readonly [string, number, number | null])[] = [
+    ['@ABORT', 0x4030, 0x4030], ['@ADTSK', 0x4410, 0x403d], ['@BKSP', 0x4445, 0x4445],
+    ['@CKDRV', 0x44b8, 0x4209], ['@CKEOF', 0x444b, 0x4458], ['@CLOSE', 0x4428, 0x4428],
+    ['@CMD', 0x4400, 0x4296], ['@CMNDI', 0x4405, 0x4299], ['@CTL', 0x0023, 0x0023],
+    ['@DATE', 0x4470, 0x3033], ['@DEBUG', 0x440d, 0x440d], ['@DIV', 0x44c4, 0x4451],
+    ['@DODIR', 0x4463, 0x4419], ['@DOKEY', 0x44be, 0x42b5], ['@DSP', 0x0033, 0x0033],
+    ['@DSPLY', 0x4467, 0x4467], ['@DVRHK', 0x4033, 0x4033], ['@ERROR', 0x4409, 0x4409],
+    ['@EXIT', 0x402d, 0x402d], ['@FEXT', 0x4473, 0x444b], ['@FNAME', 0x44bb, 0x4293],
+    ['@FSPEC', 0x441c, 0x441c], ['@GET', 0x0013, 0x0013], ['@ICNFG', 0x4303, 0x421d],
+    ['@INIT', 0x4420, 0x4420], ['@KBD', 0x002b, 0x002b], ['@KEY', 0x0049, 0x0049],
+    ['@KEYIN', 0x0040, 0x0040], ['@KILL', 0x442c, 0x442c], ['@KITSK', 0x4300, 0x4285],
+    ['@KLTSK', 0x4419, 0x4046], ['@LOAD', 0x4430, 0x4430], ['@LOC', 0x445a, 0x446d],
+    ['@LOF', 0x445d, 0x4470], ['@LOGER', 0x447e, 0x428d], ['@LOGOT', 0x447b, 0x428a],
+    ['@MSG', 0x4479, 0x4402], ['@MULT', 0x44c1, 0x444e], ['@OPEN', 0x4424, 0x4424],
+    ['@PARAM', 0x4476, 0x4454], ['@PAUSE', 0x0060, 0x0060], ['@PEOF', 0x4448, 0x4448],
+    ['@POSN', 0x4442, 0x4442], ['@PRINT', 0x446a, 0x446a], ['@PRT', 0x003b, 0x003b],
+    ['@PUT', 0x001b, 0x001b], ['@RAMDIR', 0x4396, 0x4290], ['@READ', 0x4436, 0x4436],
+    ['@REW', 0x443f, 0x443f], ['@RMTSK', 0x4413, 0x4040], ['@RPTSK', 0x4416, 0x4043],
+    ['@RREAD', 0x4454, 0x445e], ['@RUN', 0x4433, 0x4433], ['@RWRIT', 0x4457, 0x4461],
+    ['@SKIP', 0x4460, 0x4464], ['@TIME', 0x446d, 0x3036], ['@VER', 0x443c, 0x443c],
+    ['@WEOF', 0x444e, 0x445b], ['@WHERE', 0x000b, 0x000b], ['@WRITE', 0x4439, 0x4439],
+    ['CFCB$', 0x4480, 0x4485], ['DATE$', 0x4044, 0x421a], ['DAY$', 0x4047, 0x4417],
+    ['DBGSV$', 0x405d, 0x405d], ['DCT$', 0x4700, 0x4700], ['DCTBYT', 0x479c, 0x479c],
+    ['DFLAG$', 0x441f, 0x4289], ['DIRCYL', 0x4b65, 0x4b64], ['DIRRD', 0x4b10, 0x4b10],
+    ['DIRWR', 0x4b1f, 0x4b1f], ['DIVEA', 0x4b7b, 0x4b7a], ['DODCB$', 0x401d, 0x401d],
+    ['DOSV$', 0x43ba, 0x42ba], ['GETDCT', 0x478f, 0x478f], ['HIGH$', 0x4049, 0x4411],
+    ['INBUF$', 0x4318, 0x4225], ['INTIM$', 0x404b, 0x4473], ['INTMSK$', 0x404c, 0x4474],
+    ['INTVC$', 0x404d, 0x4475], ['JDCB$', 0x430a, 0x4220], ['JFCB$', 0x4358, 0x4265],
+    ['JLDCB$', 0x43c0, 0x42c2], ['JRET$', 0x430c, 0x4222], ['KFLAG$', 0x4423, 0x429f],
+    ['KIDCB$', 0x4015, 0x4015], ['KIJCL$', 0x43be, 0x42be], ['KISV$', 0x43b8, 0x42b8],
+    ['LDRV$', 0x4308, 0x4427], ['MFLAG$', 0x442f, null], ['MULTEA', 0x4b6c, 0x4b6b],
+    ['OSVER$', 0x403e, 0x441f], ['OVRLY$', 0x430e, 0x4414], ['PDRV$', 0x4309, 0x4423],
+    ['PRDCB$', 0x4025, 0x4025], ['PRSV$', 0x43bc, 0x42bc], ['RDSECT', 0x4777, 0x4777],
+    ['RDSSEC', 0x4b45, 0x4b45], ['RSELCT', 0x4759, 0x4759], ['S1DCB$', 0x43d8, 0x42d4],
+    ['S2DCB$', 0x43e0, 0x42da], ['S3DCB$', 0x43e8, 0x42e0], ['S4DCB$', 0x43f0, 0x42e6],
+    ['S5DCB$', 0x43f8, null], ['SBUFF$', 0x4200, 0x4300], ['SEEK', 0x475e, 0x475e],
+    ['SELECT', 0x4754, 0x4754], ['SFCB$', 0x44a0, 0x42a1], ['SFLAG$', 0x430f, 0x442b],
+    ['SIDCB$', 0x43c8, 0x42c8], ['SODCB$', 0x43d0, 0x42ce], ['SVDAT1$', 0x4306, 0x442f],
+    ['SVDAT2$', 0x4307, 0x4457], ['TCB$', 0x4500, 0x4500], ['TIME$', 0x4041, 0x4217],
+    ['TIMER$', 0x4040, 0x4288], ['USTOR$', 0x4dfe, 0x4dfe], ['VERSEC', 0x4772, 0x4772],
+    ['WRPROT', 0x4768, 0x4768], ['WRSECT', 0x4763, 0x4763], ['WRTRK', 0x476d, 0x476d],
+  ];
+  // The labels the page marks with an asterisk, which the page says means the two machines' addresses differ.
+  const STARRED = new Set([
+    '@ADTSK', '@CKDRV', '@CKEOF', '@CMD', '@CMNDI', '@DATE', '@DIV', '@DODIR',
+    '@DOKEY', '@FEXT', '@FNAME', '@ICNFG', '@KITSK', '@KLTSK', '@LOC', '@LOF',
+    '@LOGER', '@LOGOT', '@MSG', '@MULT', '@PARAM', '@RAMDIR', '@RMTSK', '@RPTSK',
+    '@RREAD', '@RWRIT', '@SKIP', '@TIME', '@WEOF', 'CFCB$', 'DATE$', 'DAY$',
+    'DFLAG$', 'DIRCYL', 'DIVEA', 'DOSV$', 'HIGH$', 'INBUF$', 'INTIM$', 'INTMSK$',
+    'INTVC$', 'JDCB$', 'JFCB$', 'JLDCB$', 'JRET$', 'KFLAG$', 'KIJCL$', 'KISV$',
+    'LDRV$', 'MFLAG$', 'MULTEA', 'OSVER$', 'OVRLY$', 'PDRV$', 'PRSV$', 'S1DCB$',
+    'S2DCB$', 'S3DCB$', 'S4DCB$', 'S5DCB$', 'SBUFF$', 'SFCB$', 'SFLAG$', 'SIDCB$',
+    'SODCB$', 'SVDAT1$', 'SVDAT2$', 'TIME$', 'TIMER$',
+  ]);
+  // Labels whose address the ROM table already covers: the ROM table keeps the address, and its entry's note carries the LDOS name.
+  const ROM_KEEPS: Readonly<Record<1 | 3, readonly (readonly [string, string])[]>> = {
+    1: [['KIDCB$', 'KBDCB'], ['DODCB$', 'VDDCB'], ['PRDCB$', 'PRDCB']],
+    3: [['TIME$', 'TIMEDATE'], ['DATE$', 'TIMEDATE'], ['JDCB$', 'ROUTEDST'], ['JRET$', 'ROUTESRC']],
+  };
+
+  it('names @CMD at 4400H on the Model I and at 4296H on the Model III, and @EXIT at 402DH on both', () => {
+    expect(entryNamed(model1, '@CMD')).toMatchObject({ key: 0x4400, kind: 'routine' });
+    expect(entryNamed(model3, '@CMD')).toMatchObject({ key: 0x4296, kind: 'routine' });
+    expect(entryNamed(model1, '@EXIT')).toMatchObject({ key: 0x402d });
+    expect(entryNamed(model3, '@EXIT')).toMatchObject({ key: 0x402d });
+    expect(entryNamed(model1, '@CMD')?.note).toContain('4296H');
+    expect(entryNamed(model3, '@CMD')?.note).toContain('4400H');
+  });
+
+  it('reads the listing on 6-35 consistently: 120 distinct labels, and an asterisk on exactly the labels whose two addresses differ', () => {
+    expect(CROSS_INDEX).toHaveLength(120);
+    expect(new Set(CROSS_INDEX.map(([label]) => label)).size).toBe(120);
+    expect(STARRED.size).toBe(69);
+    for (const [label, model1Address, model3Address] of CROSS_INDEX) expect(STARRED.has(label) ? 'differs' : 'same', label).toBe(model1Address !== model3Address ? 'differs' : 'same');
+  });
+
+  it.each([1, 3] as const)('has each label of the 6-35 listing that is in RAM in the Model %i table at the printed address, and no label that is in ROM or N/A', (machine) => {
+    const table = machine === 1 ? model1 : model3;
+    const set = selectSymbols({ machine, dos: 'ldos' });
+    const keeps = new Map(ROM_KEEPS[machine]);
+    for (const [label, address1, address3] of CROSS_INDEX) {
+      const addr = machine === 1 ? address1 : address3;
+      const e = entryNamed(table, label);
+      if (addr === null || addr < 0x4000) {
+        expect(e, `${label} has no RAM address on the Model ${machine}`).toBeUndefined();
+      } else if (keeps.has(label)) {
+        expect(e, `${label} stays a note on the ROM entry`).toBeUndefined();
+        const rom = set.data(addr)?.entry;
+        expect(rom?.name, label).toBe(keeps.get(label));
+        expect(rom?.note, label).toContain(label);
+      } else {
+        expect(e, label).toMatchObject({ key: addr });
+      }
+    }
+  });
+
+  it.each([1, 3] as const)('has no Model %i entry that the 6-35 listing lacks at that address, except the two Model III labels the listing leaves out', (machine) => {
+    for (const e of machine === 1 ? model1 : model3) {
+      const row = CROSS_INDEX.find(([label]) => label === e.name);
+      if (row === undefined) {
+        expect(machine, e.name).toBe(3);
+        expect(['@DBGHK', 'EXTDBG$'], e.name).toContain(e.name);
+        continue;
+      }
+      expect(e.key, e.name).toBe(machine === 1 ? row[1] : row[2]);
+    }
+    expect(entryNamed(model3, '@DBGHK')).toMatchObject({ key: 0x4405 });
+    expect(entryNamed(model3, 'EXTDBG$')).toMatchObject({ key: 0x4400 });
+  });
+
+  it('holds 107 Model I entries and 104 Model III entries, each in the spelling the Tandy edition prints, uncoined', () => {
+    expect(model1).toHaveLength(107);
+    expect(model3).toHaveLength(104);
+    for (const e of [...model1, ...model3]) expect(e.coined, e.name).toBe(false);
+  });
+
+  it('makes every @ label a routine (LDOS calls them system vectors), every $ label a variable, and the bare driver names routines', () => {
+    for (const e of [...model1, ...model3]) expect(e.kind, e.name).toBe(e.name.endsWith('$') ? 'variable' : 'routine');
+  });
+
+  // Lengths are the ranges the maps print (X'4015'-X'401C') or the size a description states ("64 bytes"); where a map prints only a start address the
+  // length stays 1 and a note says so. The two machines differ: the Model III's job-log and standard DCBs are 6 bytes, the Model I's 8.
+  it('gives each storage label the length its map prints, and the two machines\' differing ones', () => {
+    const LENGTHS: readonly (readonly [string, number | undefined, number | undefined])[] = [
+      ['TIME$', 3, undefined], ['DATE$', 3, undefined], ['DAY$', 2, 2], ['HIGH$', 2, 2], ['DBGSV$', 32, 32], ['SBUFF$', 256, 256], ['INBUF$', 64, 64],
+      ['JFCB$', 32, 1], ['KISV$', 2, 2], ['PRSV$', 2, 2], ['JLDCB$', 8, 6], ['SIDCB$', 8, 6], ['SODCB$', 8, 6], ['S1DCB$', 8, 6], ['S4DCB$', 8, 6],
+      ['S5DCB$', 8, undefined], ['CFCB$', 32, 32], ['SFCB$', 20, 1], ['TCB$', 24, 24], ['DCT$', 80, 80], ['USTOR$', 2, 2], ['INTVC$', 16, 1],
+      ['JDCB$', 2, undefined], ['JRET$', 2, undefined], ['OSVER$', 1, 1],
+    ];
+    for (const [name, length1, length3] of LENGTHS) {
+      expect(entryNamed(model1, name)?.length, `${name} on the Model I`).toBe(length1);
+      expect(entryNamed(model3, name)?.length, `${name} on the Model III`).toBe(length3);
+    }
+    for (const name of ['JFCB$', 'SFCB$', 'INTVC$']) expect(entryNamed(model3, name)?.note, name).toContain('prints only the start address');
+  });
+
+  // The Model III text edition of the manual (named in the ldos51 locator) spells ten labels differently from the printed Tandy edition's pages, which this
+  // table follows (LDRV$ is on 6-29, 6-33, and 6-35); each Model III entry notes the other spelling.
+  it('spells names as the Tandy edition\'s pages print them, and notes the text edition\'s variants on the Model III entries', () => {
+    const VARIANTS: readonly (readonly [string, string])[] = [
+      ['LDRV$', 'LDRIV$'], ['PDRV$', 'PDRIV$'], ['@MULT', 'MULT'], ['@DIV', 'DIVIDE'], ['INTVC$', 'INTVCT$'], ['RSELCT', 'TSTBSY'], ['WRSECT', 'WRSEC'],
+      ['WRPROT', 'WRSYS'], ['WRTRK', 'WRCYL'], ['RDSECT', 'RDSEC'],
+    ];
+    for (const [name, other] of VARIANTS) {
+      expect(entryNamed(model3, name)?.note, name).toContain(other);
+      expect(entryNamed(model1, name), name).toBeDefined();
+      for (const table of [model1, model3]) expect(entryNamed(table, other), other).toBeUndefined();
+    }
+  });
+
+  it('puts @CKDRV at 4209H and @RAMDIR at 4290H on the Model III, as the printed pages do, and notes the text edition lists @CKDRV at 4290H', () => {
+    expect(entryNamed(model3, '@CKDRV')).toMatchObject({ key: 0x4209 });
+    expect(entryNamed(model3, '@CKDRV')?.note).toContain('4290H');
+    expect(entryNamed(model3, '@RAMDIR')).toMatchObject({ key: 0x4290 });
+    // TRSDOS 1.3 also has its $RAMDIR at 4290H (trsdos13 84), so the printed pages and TRSDOS agree.
+    expect(TABLES['dos-trsdos13'].find((e) => e.name === '$RAMDIR')).toMatchObject({ key: 0x4290 });
+  });
+
+  // 6-35 carries five labels that the memory maps do not: INTMSK$ on both machines, and KFLAG$, SVDAT1$, SVDAT2$, and @DOKEY on the Model III (the Model I map
+  // has them; the Model III's gives no entry). Each Model III one takes its purpose from the Model I map's line and cites that page too.
+  it('enters the labels only the listing carries from 6-35, citing the page that describes the label as well', () => {
+    expect(entryNamed(model1, 'INTMSK$')).toMatchObject({ key: 0x404c, cite: [{ source: 'ldos51', page: '6-35' }] });
+    expect(entryNamed(model3, 'INTMSK$')).toMatchObject({ key: 0x4474, cite: [{ source: 'ldos51', page: '6-35' }] });
+    const FROM_MODEL_I_MAP: readonly (readonly [string, number, string])[] = [['KFLAG$', 0x429f, '6-30'], ['SVDAT1$', 0x442f, '6-29'], ['SVDAT2$', 0x4457, '6-29'], ['@DOKEY', 0x42b5, '6-31']];
+    for (const [name, key, page] of FROM_MODEL_I_MAP) {
+      expect(entryNamed(model3, name), name).toMatchObject({ key, cite: [{ source: 'ldos51', page: '6-35' }, { source: 'ldos51', page }] });
+      expect(entryNamed(model3, name)?.note, name).toContain('alphabetical listing');
+      expect(entryNamed(model1, name)?.cite.map((c) => c.page), name).toEqual([page]);
+    }
+  });
+
+  it('cites the memory map page each entry is on: 6-29 to 6-31 for the Model I, 6-32 to 6-34 for the Model III', () => {
+    const onlyInListing = new Set(['INTMSK$', 'KFLAG$', 'SVDAT1$', 'SVDAT2$', '@DOKEY']);
+    const page1 = (a: number): string => (a < 0x430e ? '6-29' : a < 0x4467 ? '6-30' : '6-31');
+    const page3 = (a: number): string => (a < 0x428a ? '6-32' : a < 0x4442 ? '6-33' : '6-34');
+    for (const [table, page] of [[model1, page1], [model3, page3]] as const) {
+      for (const e of table) {
+        expect(e.cite.every((c) => c.source === 'ldos51'), e.name).toBe(true);
+        const mapPage = e.cite[0]!.page;
+        if (table === model3 && onlyInListing.has(e.name)) expect(mapPage, e.name).toBe('6-35');
+        else if (table === model1 && e.name === 'INTMSK$') expect(mapPage, e.name).toBe('6-35');
+        else expect(mapPage, e.name).toBe(page(e.key));
+      }
+    }
+  });
+
+  // The Model III ROM table has no entry at a control block's first byte, so the DOS table names that byte (length 1) and leaves the block's other bytes, where
+  // the ROM keeps its own variables, to the ROM names; the Model I ROM table has KBDCB, VDDCB, and PRDCB there, so on the Model I the names are notes.
+  it('names the first byte of each Model III control block and notes the ROM variables inside it, which keep their ROM names', () => {
+    const BLOCKS: readonly (readonly [string, number, readonly string[]])[] = [
+      ['KIDCB$', 0x4015, ['CAPSLOCK', 'CURBLINK']],
+      ['DODCB$', 0x401d, ['CURADDR', 'CURCHAR']],
+      ['PRDCB$', 0x4025, ['PRTPAGELEN', 'PRTLINECNT', 'PRTWIDTH']],
+    ];
+    const set = selectSymbols({ machine: 3, dos: 'ldos' });
+    for (const [name, key, inside] of BLOCKS) {
+      expect(entryNamed(model3, name), name).toMatchObject({ key, length: 1, kind: 'variable' });
+      for (const rom of inside) {
+        expect(entryNamed(model3, name)?.note, name).toContain(rom);
+        expect(TABLES['rom-model3'].some((e) => e.name === rom), rom).toBe(true);
+      }
+      expect(set.data(key)?.entry.name, name).toBe(name);
+    }
+    expect(set.data(0x4019)?.entry.name).toBe('CAPSLOCK');
+    expect(set.data(0x4028)?.entry.name).toBe('PRTPAGELEN');
+    const modelI = selectSymbols({ machine: 1, dos: 'ldos' });
+    expect(modelI.data(0x4025)?.entry.name).toBe('PRDCB');
+    expect(modelI.data(0x4016)?.entry.name).toBe('KBDRVADDR');
+  });
+
+  it('leaves the Model III clock and JCL words to the ROM names (TIMEDATE, ROUTEDST, ROUTESRC), whose notes carry the LDOS names', () => {
+    const rom = TABLES['rom-model3'];
+    expect(rom.find((e) => e.name === 'TIMEDATE')?.note).toContain('TIME$ at 4217H and DATE$ at 421AH');
+    expect(rom.find((e) => e.name === 'ROUTEDST')?.note).toContain('JDCB$');
+    expect(rom.find((e) => e.name === 'ROUTESRC')?.note).toContain('JRET$');
+  });
+
+  it('names the LDOS calls through selectSymbols: @CMD at 4400H with a Model I, at 4296H with a Model III, and neither under TRSDOS', () => {
+    expect(selectSymbols({ machine: 1, dos: 'ldos' }).code(0x4400)?.name).toBe('@CMD');
+    expect(selectSymbols({ machine: 1, dos: 'ldos' }).code(0x4296)).toBeUndefined();
+    expect(selectSymbols({ machine: 3, dos: 'ldos' }).code(0x4296)?.name).toBe('@CMD');
+    expect(selectSymbols({ machine: 3, dos: 'ldos' }).code(0x4400)).toBeUndefined(); // EXTDBG$ is storage there
+    expect(selectSymbols({ machine: 3, dos: 'ldos' }).code(0x402d)?.name).toBe('@EXIT');
+    expect(selectSymbols({ machine: 3, dos: 'trsdos' }).code(0x4296)).toBeUndefined();
+    expect(selectSymbols({ machine: 3, dos: 'trsdos' }).code(0x402d)?.name).toBe('$JP2DOS');
+    expect(selectSymbols({ machine: 3, dos: 'ldos' }).data(0x4412)).toMatchObject({ entry: { name: 'HIGH$' }, offset: 1 });
+    expect(selectSymbols({ machine: 1, dos: 'ldos' }).data(0x4200)).toMatchObject({ entry: { name: 'SBUFF$' }, offset: 0 });
+  });
+});
+
+describe('the LS-DOS 6 service call table', () => {
+  const svc = TABLES['svc-lsdos6'];
+  const named = (name: string): TableEntry | undefined => svc.find((e) => e.name === name);
+
+  // Every call Soltoff lists, by number: the alphabetical list (printed pages 101 and 102) and the numerical list (103 and 104) agree on all 97, and so does
+  // the book's index. The numbers 23, 36 to 39, 84, 86, 89, 92, 95, and 107 and 108 are reserved and have no name.
+  const SERVICE_CALLS: readonly (readonly [number, string])[] = [
+    [0, '@IPL'], [1, '@KEY'], [2, '@DSP'], [3, '@GET'], [4, '@PUT'], [5, '@CTL'], [6, '@PRT'],
+    [7, '@WHERE'], [8, '@KBD'], [9, '@KEYIN'], [10, '@DSPLY'], [11, '@LOGER'], [12, '@LOGOT'], [13, '@MSG'],
+    [14, '@PRINT'], [15, '@VDCTL'], [16, '@PAUSE'], [17, '@PARAM'], [18, '@DATE'], [19, '@TIME'], [20, '@CHNIO'],
+    [21, '@ABORT'], [22, '@EXIT'], [24, '@CMNDI'], [25, '@CMNDR'], [26, '@ERROR'], [27, '@DEBUG'], [28, '@CKTSK'],
+    [29, '@ADTSK'], [30, '@RMTSK'], [31, '@RPTSK'], [32, '@KLTSK'], [33, '@CKDRV'], [34, '@DODIR'], [35, '@RAMDIR'],
+    [40, '@DCSTAT'], [41, '@SLCT'], [42, '@DCINIT'], [43, '@DCRES'], [44, '@RSTOR'], [45, '@STEPI'], [46, '@SEEK'],
+    [47, '@RSLCT'], [48, '@RDHDR'], [49, '@RDSEC'], [50, '@VRSEC'], [51, '@RDTRK'], [52, '@HDFMT'], [53, '@WRSEC'],
+    [54, '@WRSSC'], [55, '@WRTRK'], [56, '@RENAM'], [57, '@REMOV'], [58, '@INIT'], [59, '@OPEN'], [60, '@CLOSE'],
+    [61, '@BKSP'], [62, '@CKEOF'], [63, '@LOC'], [64, '@LOF'], [65, '@PEOF'], [66, '@POSN'], [67, '@READ'],
+    [68, '@REW'], [69, '@RREAD'], [70, '@RWRIT'], [71, '@SEEKSC'], [72, '@SKIP'], [73, '@VER'], [74, '@WEOF'],
+    [75, '@WRITE'], [76, '@LOAD'], [77, '@RUN'], [78, '@FSPEC'], [79, '@FEXT'], [80, '@FNAME'], [81, '@GTDCT'],
+    [82, '@GTDCB'], [83, '@GTMOD'], [85, '@RDSSC'], [87, '@DIRRD'], [88, '@DIRWR'], [90, '@MUL8'], [91, '@MUL16'],
+    [93, '@DIV8'], [94, '@DIV16'], [96, '@DECHEX'], [97, '@HEXDEC'], [98, '@HEX8'], [99, '@HEX16'], [100, '@HIGH$'],
+    [101, '@FLAGS$'], [102, '@BANK'], [103, '@BREAK'], [104, '@SOUND'], [105, '@CLS'], [106, '@CKBRKC'],
+  ];
+
+  it('has @KEY 1, @DSPLY 10, @ABORT 21, and @EXIT 22', () => {
+    expect(named('@KEY')).toMatchObject({ key: 1, kind: 'svc' });
+    expect(named('@DSPLY')).toMatchObject({ key: 10, kind: 'svc' });
+    expect(named('@ABORT')).toMatchObject({ key: 21, kind: 'svc' });
+    expect(named('@EXIT')).toMatchObject({ key: 22, kind: 'svc' });
+  });
+
+  it('has all 97 calls Soltoff lists, each under his spelling and number, and none for a reserved number', () => {
+    expect(SERVICE_CALLS).toHaveLength(97);
+    expect(svc.map((e) => [e.key, e.name])).toEqual(SERVICE_CALLS);
+    for (const e of svc) {
+      expect(e.coined, e.name).toBe(false);
+      expect(e.length, e.name).toBe(1);
+      expect(e.key, e.name).toBeLessThanOrEqual(127);
+    }
+    for (const reserved of [23, 36, 39, 84, 86, 89, 92, 95, 107, 108]) expect(svc.some((e) => e.key === reserved), `SVC ${reserved}`).toBe(false);
+    expect(named('@FLAGS$')).toMatchObject({ key: 101 });
+    expect(named('@HIGH$')).toMatchObject({ key: 100 });
+  });
+
+  it('cites the alphabetical page (101 or 102) and the numerical page (103 for calls 0 to 52, 104 above) of Soltoff, in that order', () => {
+    for (const e of svc) {
+      const soltoff = e.cite.filter((c) => c.source === 'soltoff').map((c) => c.page);
+      expect(soltoff, e.name).toHaveLength(2);
+      expect(['101', '102'], e.name).toContain(soltoff[0]);
+      expect(soltoff[1], e.name).toBe(e.key <= 52 ? '103' : '104');
+      expect(e.cite[0]?.source, e.name).toBe('soltoff');
+    }
+    // The first alphabetical page ends at @LOGER, the second starts with @LOGOT.
+    const alphabetical = (name: string): string | undefined => named(name)?.cite[0]?.page;
+    expect([alphabetical('@ABORT'), alphabetical('@LOGER'), alphabetical('@LOGOT'), alphabetical('@PUT'), alphabetical('@WRTRK')]).toEqual(['101', '101', '102', '102', '102']);
+    expect(svc.filter((e) => e.cite[0]?.page === '101')).toHaveLength(53);
+    expect(svc.filter((e) => e.cite[0]?.page === '102')).toHaveLength(44);
+  });
+
+  it('confirms every number but two in the Model 4 technical reference: @IPL on page 331, @ABORT to @MSG on 334, @MUL8 to @WRTRK on 335', () => {
+    const without = svc.filter((e) => !e.cite.some((c) => c.source === 'm4-trm')).map((e) => e.name);
+    expect(without).toEqual(['@CLS', '@CKBRKC']); // numbers 105 and 106 were added after that manual
+    const m4 = (name: string): string[] => (named(name)?.cite ?? []).filter((c) => c.source === 'm4-trm').map((c) => c.page);
+    expect([m4('@IPL'), m4('@ABORT'), m4('@MSG'), m4('@MUL8'), m4('@WRTRK'), m4('@KEY'), m4('@PUT')]).toEqual([['331'], ['334'], ['334'], ['335'], ['335'], ['334'], ['335']]);
+    expect(named('@FLAGS$')?.note).toContain('@FLAGS');
+    expect(named('@FLAGS$')?.cite.map((c) => c.page)).toEqual(['101', '104', '334']);
+  });
+
+  it('notes that Soltoff\'s numerical list swaps the descriptions of @CLS (105) and @CKBRKC (106), whose numbers every other place agrees on', () => {
+    expect(named('@CLS')).toMatchObject({ key: 105 });
+    expect(named('@CKBRKC')).toMatchObject({ key: 106 });
+    expect(named('@CLS')?.note).toContain('numerical list');
+    expect(named('@CKBRKC')?.note).toContain('numerical list');
+    expect(named('@CKBRKC')?.note).toContain('SVC-105');
+  });
+
+  it('names the service calls through selectSymbols on a Model 4 only', () => {
+    const four = selectSymbols({ machine: 4, dos: 'none' });
+    expect(four.svc(10)?.name).toBe('@DSPLY');
+    expect(four.svc(1)?.name).toBe('@KEY');
+    expect(four.svc(23)).toBeUndefined();
+    expect(selectSymbols({ machine: 3, dos: 'ldos' }).svc(10)).toBeUndefined();
+  });
+});
+
 describe('buildSymbolOutputs on an edited copy of the data', () => {
   const copies: string[] = [];
   afterAll(() => {

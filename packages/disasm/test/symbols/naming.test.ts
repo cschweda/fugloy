@@ -725,3 +725,63 @@ describe('commentEntries', () => {
     expect(commentEntries(a.pass1.instructions, a.externals, a.symbols)).toEqual([]);
   });
 });
+
+describe('with the committed DOS and service call tables', () => {
+  /** The generated tables for a machine and DOS, as the CLI uses them. */
+  const real = (selection: SymbolSelection): SymbolSet => selectSymbols(selection);
+  const listingWith = (selection: SymbolSelection, bytes: number[]): string[] => listingOf(bytes, { tables: real(selection) });
+
+  it('comments RST 28H after LD A,0AH on a Model 4 as @DSPLY (SVC 10), and leaves the operand numeric', () => {
+    const lines = listingWith(MODEL_IV, [0x00, 0x3e, 0x0a, 0xef, 0xc9]);
+    expect(row(lines, 0x5201)).toEqual({ text: 'LD A,0AH', comment: undefined });
+    expect(row(lines, 0x5203).comment).toMatch(/^@DSPLY \(SVC 10\): \S/);
+    expect(lines.filter((l) => l.startsWith('; table name @DSPLY = SVC 10: '))).toHaveLength(1);
+  });
+
+  it('names a service call by its number: @KEY 1, @ABORT 21, @EXIT 22, and nothing for the reserved 23', () => {
+    const comment = (n: number): string | undefined => row(listingWith(MODEL_IV, [0x00, 0x3e, n, 0xef, 0xc9]), 0x5203).comment;
+    expect(comment(1)).toMatch(/^@KEY \(SVC 1\): /);
+    expect(comment(21)).toMatch(/^@ABORT \(SVC 21\): /);
+    expect(comment(22)).toMatch(/^@EXIT \(SVC 22\): /);
+    expect(comment(23)).toBeUndefined();
+  });
+
+  it('names JP 402DH $JP2DOS under TRSDOS and @EXIT under LDOS, on a Model III, and @EXIT under LDOS on a Model I', () => {
+    const jump = [0x00, 0xc3, 0x2d, 0x40];
+    expect(row(listingWith({ machine: 3, dos: 'trsdos' }, jump), 0x5201).text).toBe('JP $JP2DOS');
+    expect(row(listingWith({ machine: 3, dos: 'ldos' }, jump), 0x5201).text).toBe('JP @EXIT');
+    expect(row(listingWith({ machine: 1, dos: 'ldos' }, jump), 0x5201).text).toBe('JP @EXIT');
+    expect(row(listingWith({ machine: 3, dos: 'none' }, jump), 0x5201).text).toBe('JP 402DH');
+  });
+
+  it('names CALL 4420H $INIT under TRSDOS and @INIT under LDOS on a Model III, and gives each machine its own @CMD address', () => {
+    const call = (addr: number): number[] => [0x00, 0xcd, addr & 0xff, addr >> 8, 0xc9];
+    expect(row(listingWith({ machine: 3, dos: 'trsdos' }, call(0x4420)), 0x5201).text).toBe('CALL $INIT');
+    expect(row(listingWith({ machine: 3, dos: 'ldos' }, call(0x4420)), 0x5201).text).toBe('CALL @INIT');
+    expect(row(listingWith({ machine: 1, dos: 'ldos' }, call(0x4400)), 0x5201).text).toBe('CALL @CMD');
+    expect(row(listingWith({ machine: 3, dos: 'ldos' }, call(0x4296)), 0x5201).text).toBe('CALL @CMD');
+    expect(row(listingWith({ machine: 3, dos: 'ldos' }, call(0x4400)), 0x5201).text).toBe('CALL 4400H'); // EXTDBG$ is storage on the Model III
+    expect(row(listingWith({ machine: 1, dos: 'ldos' }, call(0x4296)), 0x5201).text).toBe('CALL 4296H');
+  });
+
+  it('names storage that ends in a dollar sign as the manuals print it: HIGH$ and LDRV$ (and the Model I TIME$)', () => {
+    expect(row(listingWith({ machine: 1, dos: 'ldos' }, [0x00, 0x2a, 0x49, 0x40, 0x3a, 0x08, 0x43, 0x21, 0x41, 0x40, 0xc9]), 0x5201).text).toBe('LD HL,(HIGH$)');
+    expect(row(listingWith({ machine: 1, dos: 'ldos' }, [0x00, 0x2a, 0x49, 0x40, 0x3a, 0x08, 0x43, 0x21, 0x41, 0x40, 0xc9]), 0x5204).text).toBe('LD A,(LDRV$)');
+    expect(row(listingWith({ machine: 1, dos: 'ldos' }, [0x00, 0x2a, 0x49, 0x40, 0x3a, 0x08, 0x43, 0x21, 0x41, 0x40, 0xc9]), 0x5207).text).toBe('LD HL,TIME$');
+    expect(row(listingWith({ machine: 3, dos: 'ldos' }, [0x00, 0x2a, 0x11, 0x44, 0x3a, 0x27, 0x44, 0xc9]), 0x5201).text).toBe('LD HL,(HIGH$)');
+    expect(row(listingWith({ machine: 3, dos: 'ldos' }, [0x00, 0x2a, 0x11, 0x44, 0x3a, 0x27, 0x44, 0xc9]), 0x5204).text).toBe('LD A,(LDRV$)');
+  });
+
+  it('gives a control block\'s address the ROM\'s name on a Model I and the LDOS name on a Model III: LD DE,4025H', () => {
+    const load = [0x00, 0x11, 0x25, 0x40, 0xc9];
+    expect(row(listingWith({ machine: 1, dos: 'ldos' }, load), 0x5201).text).toBe('LD DE,PRDCB');
+    expect(row(listingWith({ machine: 3, dos: 'ldos' }, load), 0x5201).text).toBe('LD DE,PRDCB$');
+    expect(row(listingWith({ machine: 3, dos: 'trsdos' }, load), 0x5201).text).toBe('LD DE,4025H');
+  });
+
+  it('keeps the ROM names for the ROM-resident addresses LDOS also names: CALL 0049H is $KBWAIT under LDOS, not @KEY', () => {
+    const call = [0x00, 0xcd, 0x49, 0x00, 0xc9];
+    expect(row(listingWith({ machine: 3, dos: 'ldos' }, call), 0x5201).text).toBe('CALL $KBWAIT');
+    expect(row(listingWith({ machine: 1, dos: 'ldos' }, call), 0x5201).text).toBe('CALL $KBWAIT');
+  });
+});

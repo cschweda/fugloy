@@ -1,4 +1,687 @@
 {
   "table": "svc-lsdos6",
-  "entries": []
+  "entries": [
+    {
+      "svc": 0,
+      "name": "@IPL",
+      "kind": "svc",
+      "purpose": "reboot the system",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "331" }]
+    },
+    {
+      "svc": 1,
+      "name": "@KEY",
+      "kind": "svc",
+      "purpose": "wait for a key and return its character",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 2,
+      "name": "@DSP",
+      "kind": "svc",
+      "purpose": "send one character to the video display",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 3,
+      "name": "@GET",
+      "kind": "svc",
+      "purpose": "read one byte from a device or file",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 4,
+      "name": "@PUT",
+      "kind": "svc",
+      "purpose": "write one byte to a device or file",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 5,
+      "name": "@CTL",
+      "kind": "svc",
+      "purpose": "send a control request to a device",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 6,
+      "name": "@PRT",
+      "kind": "svc",
+      "purpose": "send one character to the printer",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 7,
+      "name": "@WHERE",
+      "kind": "svc",
+      "purpose": "find the address the calling code is running at",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 8,
+      "name": "@KBD",
+      "kind": "svc",
+      "purpose": "scan the keyboard and return a key if one is pressed",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 9,
+      "name": "@KEYIN",
+      "kind": "svc",
+      "purpose": "read a line of text from the keyboard",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 10,
+      "name": "@DSPLY",
+      "kind": "svc",
+      "purpose": "display a line of text on the screen",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 11,
+      "name": "@LOGER",
+      "kind": "svc",
+      "purpose": "write a message to the job log",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 12,
+      "name": "@LOGOT",
+      "kind": "svc",
+      "purpose": "display a message and also write it to the job log",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 13,
+      "name": "@MSG",
+      "kind": "svc",
+      "purpose": "send a message line to a device",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 14,
+      "name": "@PRINT",
+      "kind": "svc",
+      "purpose": "print a line of text on the printer",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 15,
+      "name": "@VDCTL",
+      "kind": "svc",
+      "purpose": "perform a video control function such as cursor positioning",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 16,
+      "name": "@PAUSE",
+      "kind": "svc",
+      "purpose": "wait for a given length of time",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 17,
+      "name": "@PARAM",
+      "kind": "svc",
+      "purpose": "parse the parameters of a command line",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 18,
+      "name": "@DATE",
+      "kind": "svc",
+      "purpose": "get the system date as text",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 19,
+      "name": "@TIME",
+      "kind": "svc",
+      "purpose": "get the system time as text",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 20,
+      "name": "@CHNIO",
+      "kind": "svc",
+      "purpose": "pass a character to the next module in a device chain",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 21,
+      "name": "@ABORT",
+      "kind": "svc",
+      "purpose": "end the program abnormally and return to the system",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 22,
+      "name": "@EXIT",
+      "kind": "svc",
+      "purpose": "end the program and return to the system with a return code in HL",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 24,
+      "name": "@CMNDI",
+      "kind": "svc",
+      "purpose": "run a command line and go on to the system command prompt",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 25,
+      "name": "@CMNDR",
+      "kind": "svc",
+      "purpose": "run a command line and come back to the caller",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 26,
+      "name": "@ERROR",
+      "kind": "svc",
+      "purpose": "display the message for an error code",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 27,
+      "name": "@DEBUG",
+      "kind": "svc",
+      "purpose": "enter the DEBUG monitor",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 28,
+      "name": "@CKTSK",
+      "kind": "svc",
+      "purpose": "test whether an interrupt task slot is free",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 29,
+      "name": "@ADTSK",
+      "kind": "svc",
+      "purpose": "add an interrupt-level task",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 30,
+      "name": "@RMTSK",
+      "kind": "svc",
+      "purpose": "remove a task from its slot",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 31,
+      "name": "@RPTSK",
+      "kind": "svc",
+      "purpose": "replace the vector of the task now running",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 32,
+      "name": "@KLTSK",
+      "kind": "svc",
+      "purpose": "remove the task now running",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 33,
+      "name": "@CKDRV",
+      "kind": "svc",
+      "purpose": "check that a disk drive is available, logging it",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 34,
+      "name": "@DODIR",
+      "kind": "svc",
+      "purpose": "display directory data, or put it in a buffer",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 35,
+      "name": "@RAMDIR",
+      "kind": "svc",
+      "purpose": "load directory entries, or the free-space figure, into a RAM buffer",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 40,
+      "name": "@DCSTAT",
+      "kind": "svc",
+      "purpose": "test the status of a disk controller",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 41,
+      "name": "@SLCT",
+      "kind": "svc",
+      "purpose": "select a disk drive",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 42,
+      "name": "@DCINIT",
+      "kind": "svc",
+      "purpose": "initialize a disk controller",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 43,
+      "name": "@DCRES",
+      "kind": "svc",
+      "purpose": "reset a disk controller",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 44,
+      "name": "@RSTOR",
+      "kind": "svc",
+      "purpose": "restore a drive to cylinder 0",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 45,
+      "name": "@STEPI",
+      "kind": "svc",
+      "purpose": "step the head one track inward",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 46,
+      "name": "@SEEK",
+      "kind": "svc",
+      "purpose": "seek to a disk cylinder",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 47,
+      "name": "@RSLCT",
+      "kind": "svc",
+      "purpose": "reselect a busy drive, waiting until it is free",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 48,
+      "name": "@RDHDR",
+      "kind": "svc",
+      "purpose": "read a sector ID field, where the controller supports it",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 49,
+      "name": "@RDSEC",
+      "kind": "svc",
+      "purpose": "read one disk sector",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 50,
+      "name": "@VRSEC",
+      "kind": "svc",
+      "purpose": "check that a disk sector can be read",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 51,
+      "name": "@RDTRK",
+      "kind": "svc",
+      "purpose": "read a whole track, where the controller supports it",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 52,
+      "name": "@HDFMT",
+      "kind": "svc",
+      "purpose": "pass a format-device command to the controller",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "103" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 53,
+      "name": "@WRSEC",
+      "kind": "svc",
+      "purpose": "write one disk sector",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 54,
+      "name": "@WRSSC",
+      "kind": "svc",
+      "purpose": "write a directory sector",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 55,
+      "name": "@WRTRK",
+      "kind": "svc",
+      "purpose": "write a whole track of format data",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 56,
+      "name": "@RENAM",
+      "kind": "svc",
+      "purpose": "rename a file",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 57,
+      "name": "@REMOV",
+      "kind": "svc",
+      "purpose": "remove a file from the disk",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 58,
+      "name": "@INIT",
+      "kind": "svc",
+      "purpose": "open a file, creating it if it is new",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 59,
+      "name": "@OPEN",
+      "kind": "svc",
+      "purpose": "open an existing file",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 60,
+      "name": "@CLOSE",
+      "kind": "svc",
+      "purpose": "close an open file",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 61,
+      "name": "@BKSP",
+      "kind": "svc",
+      "purpose": "back up one record in a file",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 62,
+      "name": "@CKEOF",
+      "kind": "svc",
+      "purpose": "check whether a file is at its end",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 63,
+      "name": "@LOC",
+      "kind": "svc",
+      "purpose": "get a file's current record number",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 64,
+      "name": "@LOF",
+      "kind": "svc",
+      "purpose": "get the number of a file's last record",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 65,
+      "name": "@PEOF",
+      "kind": "svc",
+      "purpose": "position a file at its end",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 66,
+      "name": "@POSN",
+      "kind": "svc",
+      "purpose": "position a file at a given record",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 67,
+      "name": "@READ",
+      "kind": "svc",
+      "purpose": "read a record from a file",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 68,
+      "name": "@REW",
+      "kind": "svc",
+      "purpose": "rewind a file to its first record",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 69,
+      "name": "@RREAD",
+      "kind": "svc",
+      "purpose": "read the last sector again",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 70,
+      "name": "@RWRIT",
+      "kind": "svc",
+      "purpose": "write the last sector again",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 71,
+      "name": "@SEEKSC",
+      "kind": "svc",
+      "purpose": "seek to the cylinder and sector of a file record",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 72,
+      "name": "@SKIP",
+      "kind": "svc",
+      "purpose": "skip over the next record of a file",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 73,
+      "name": "@VER",
+      "kind": "svc",
+      "purpose": "write a record, then read it back to verify it",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 74,
+      "name": "@WEOF",
+      "kind": "svc",
+      "purpose": "update the directory's end-of-file for a file",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 75,
+      "name": "@WRITE",
+      "kind": "svc",
+      "purpose": "write a record to a file",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 76,
+      "name": "@LOAD",
+      "kind": "svc",
+      "purpose": "load a program file into memory",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 77,
+      "name": "@RUN",
+      "kind": "svc",
+      "purpose": "load a program given its file specification and start it",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 78,
+      "name": "@FSPEC",
+      "kind": "svc",
+      "purpose": "parse a file or device specification into a file control block",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 79,
+      "name": "@FEXT",
+      "kind": "svc",
+      "purpose": "supply a default extension for a file specification",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 80,
+      "name": "@FNAME",
+      "kind": "svc",
+      "purpose": "get a file specification from a directory entry code and a drive",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 81,
+      "name": "@GTDCT",
+      "kind": "svc",
+      "purpose": "get the drive code table pointer for a drive",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 82,
+      "name": "@GTDCB",
+      "kind": "svc",
+      "purpose": "get the device control block pointer for a device name",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 83,
+      "name": "@GTMOD",
+      "kind": "svc",
+      "purpose": "get the entry point of a module from its name",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 85,
+      "name": "@RDSSC",
+      "kind": "svc",
+      "purpose": "read a directory sector of a disk",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 87,
+      "name": "@DIRRD",
+      "kind": "svc",
+      "purpose": "read a directory entry record",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 88,
+      "name": "@DIRWR",
+      "kind": "svc",
+      "purpose": "write a directory entry record",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 90,
+      "name": "@MUL8",
+      "kind": "svc",
+      "purpose": "multiply two 8-bit numbers",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 91,
+      "name": "@MUL16",
+      "kind": "svc",
+      "purpose": "multiply a 16-bit number by an 8-bit number, giving 24 bits",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 93,
+      "name": "@DIV8",
+      "kind": "svc",
+      "purpose": "divide an 8-bit number by an 8-bit number",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 94,
+      "name": "@DIV16",
+      "kind": "svc",
+      "purpose": "divide a 16-bit number by an 8-bit number",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 96,
+      "name": "@DECHEX",
+      "kind": "svc",
+      "purpose": "convert decimal text to a binary number",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 97,
+      "name": "@HEXDEC",
+      "kind": "svc",
+      "purpose": "convert a 16-bit number to decimal text",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 98,
+      "name": "@HEX8",
+      "kind": "svc",
+      "purpose": "convert a byte to two hex digits",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 99,
+      "name": "@HEX16",
+      "kind": "svc",
+      "purpose": "convert a 16-bit number to four hex digits",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 100,
+      "name": "@HIGH$",
+      "kind": "svc",
+      "purpose": "get or change the highest and lowest free memory addresses",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 101,
+      "name": "@FLAGS$",
+      "kind": "svc",
+      "purpose": "get a pointer to the system flag table",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "334" }],
+      "note": "the Model 4 technical reference spells it @FLAGS (m4-trm 334)"
+    },
+    {
+      "svc": 102,
+      "name": "@BANK",
+      "kind": "svc",
+      "purpose": "switch RAM banks",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 103,
+      "name": "@BREAK",
+      "kind": "svc",
+      "purpose": "set the BREAK key vector",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "334" }]
+    },
+    {
+      "svc": 104,
+      "name": "@SOUND",
+      "kind": "svc",
+      "purpose": "make a tone with the sound hardware",
+      "cite": [{ "source": "soltoff", "page": "102" }, { "source": "soltoff", "page": "104" }, { "source": "m4-trm", "page": "335" }]
+    },
+    {
+      "svc": 105,
+      "name": "@CLS",
+      "kind": "svc",
+      "purpose": "clear the video screen",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }],
+      "note": "Soltoff's numerical list (104) gives @CLS and @CKBRKC each other's description; the alphabetical list (101), the function-group list (108), and the entry on page 112 agree with the description used here"
+    },
+    {
+      "svc": 106,
+      "name": "@CKBRKC",
+      "kind": "svc",
+      "purpose": "check for a keyboard BREAK",
+      "cite": [{ "source": "soltoff", "page": "101" }, { "source": "soltoff", "page": "104" }],
+      "note": "Soltoff's numerical list (104) gives @CKBRKC and @CLS each other's description, and the text on pages 120 and 148 calls it SVC-105; the alphabetical list (101), the function-group list (107), and the entry on page 111 give 106"
+    }
+  ]
 }

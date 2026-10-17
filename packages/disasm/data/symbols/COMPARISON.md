@@ -141,15 +141,15 @@ Every address in either table. `shared` means both tables give it the same name 
 | `$400C` | shared | `BREAKVEC` (vector) | `BREAKVEC` (vector) |  |
 | `$400F` | model1-only | `DEBUGVEC` (vector) | - |  |
 | `$4012` | model1-only | `INTVEC` (vector) | - |  |
-| `$4015` | model1-only | `KBDCB` (variable) | - |  |
+| `$4015` | model1-only | `KBDCB` (variable) | - | Model I: LDOS 5.1 names the whole 8-byte keyboard control block KIDCB$ (4015H-401CH, ldos51 6-29); this table keeps the ROM's own field names |
 | `$4016` | model1-only | `KBDRVADDR` (variable) | - |  |
 | `$4019` | model3-only | - | `CAPSLOCK` (variable) |  |
 | `$401C` | model3-only | - | `CURBLINK` (variable) |  |
-| `$401D` | model1-only | `VDDCB` (variable) | - |  |
+| `$401D` | model1-only | `VDDCB` (variable) | - | Model I: LDOS 5.1 names the whole 8-byte video control block DODCB$ (401DH-4024H, ldos51 6-29); this table keeps the ROM's own field names |
 | `$401E` | model1-only | `VDDRVADDR` (variable) | - |  |
 | `$4020` | shared | `CURADDR` (variable) | `CURADDR` (variable) |  |
 | `$4023` | model3-only | - | `CURCHAR` (variable) |  |
-| `$4025` | model1-only | `PRDCB` (variable) | - |  |
+| `$4025` | model1-only | `PRDCB` (variable) | - | Model I: LDOS 5.1 names the whole 8-byte printer control block PRDCB$ (4025H-402CH, ldos51 6-29); this table keeps the ROM's own field names |
 | `$4026` | model1-only | `PRDRVADDR` (variable) | - |  |
 | `$4028` | shared | `PRTPAGELEN` (variable) | `PRTPAGELEN` (variable) | Model I: start-up sets 67 on both machines; the Model III counts the page length plus one, so a 66-line form wants 66 here (decker 9) |
 | `$4029` | shared | `PRTLINECNT` (variable) | `PRTLINECNT` (variable) | Model I: the Model III holds this count plus one (decker 9) |
@@ -179,6 +179,6 @@ Every address in either table. `shared` means both tables give it the same name 
 | `$41FA` | model3-only | - | `RSWAIT` (variable) |  |
 | `$4211` | model3-only | - | `CASBAUD` (variable) |  |
 | `$4214` | model3-only | - | `SCROLLPROT` (variable) |  |
-| `$4217` | model3-only | - | `TIMEDATE` (variable) |  |
-| `$4220` | model3-only | - | `ROUTEDST` (variable) |  |
-| `$4222` | model3-only | - | `ROUTESRC` (variable) |  |
+| `$4217` | model3-only | - | `TIMEDATE` (variable) | Model III: TRSDOS 1.3 names the first three bytes $TIMLOC and the last three $DATLOC (trsdos13 87); LDOS 5.1 names them TIME$ at 4217H and DATE$ at 421AH (ldos51 6-32) |
+| `$4220` | model3-only | - | `ROUTEDST` (variable) | Model III: LDOS 5.1 gives this word the name JDCB$, storage for a DCB address while JCL runs (ldos51 6-32); this table keeps the ROM's name |
+| `$4222` | model3-only | - | `ROUTESRC` (variable) | Model III: LDOS 5.1 gives this word the name JRET$, storage for a return address while JCL runs (ldos51 6-32); this table keeps the ROM's name |

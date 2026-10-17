@@ -16,10 +16,301 @@
       "cite": [{ "source": "ldos51", "page": "6-29" }]
     },
     {
+      "addr": "4033",
+      "name": "@DVRHK",
+      "kind": "routine",
+      "purpose": "device-driver hook the ROM reaches for byte-level device I/O",
+      "cite": [{ "source": "ldos51", "page": "6-29" }]
+    },
+    {
+      "addr": "403E",
+      "name": "OSVER$",
+      "kind": "variable",
+      "purpose": "version number of the operating system",
+      "cite": [{ "source": "ldos51", "page": "6-29" }]
+    },
+    {
+      "addr": "4040",
+      "name": "TIMER$",
+      "kind": "variable",
+      "purpose": "heartbeat that ticks every 25 ms",
+      "cite": [{ "source": "ldos51", "page": "6-29" }]
+    },
+    {
+      "addr": "4041",
+      "name": "TIME$",
+      "kind": "variable",
+      "length": 3,
+      "purpose": "time of day",
+      "cite": [{ "source": "ldos51", "page": "6-29" }]
+    },
+    {
+      "addr": "4044",
+      "name": "DATE$",
+      "kind": "variable",
+      "length": 3,
+      "purpose": "current month and year",
+      "cite": [{ "source": "ldos51", "page": "6-29" }]
+    },
+    {
+      "addr": "4047",
+      "name": "DAY$",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "current day",
+      "cite": [{ "source": "ldos51", "page": "6-29" }]
+    },
+    {
+      "addr": "4049",
+      "name": "HIGH$",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "highest RAM address not in use",
+      "cite": [{ "source": "ldos51", "page": "6-29" }]
+    },
+    {
+      "addr": "404B",
+      "name": "INTIM$",
+      "kind": "variable",
+      "purpose": "copy of the interrupt latch at 37E0H",
+      "cite": [{ "source": "ldos51", "page": "6-29" }]
+    },
+    {
+      "addr": "404C",
+      "name": "INTMSK$",
+      "kind": "variable",
+      "purpose": "interrupt mask storage next to INTIM$; the manual lists it by name and address only",
+      "cite": [{ "source": "ldos51", "page": "6-35" }],
+      "note": "listed only in the alphabetical listing (6-35); neither memory map carries it"
+    },
+    {
+      "addr": "404D",
+      "name": "INTVC$",
+      "kind": "variable",
+      "length": 16,
+      "purpose": "eight vectors, one for each bit of the interrupt latch",
+      "cite": [{ "source": "ldos51", "page": "6-29" }]
+    },
+    {
+      "addr": "405D",
+      "name": "DBGSV$",
+      "kind": "variable",
+      "length": 32,
+      "purpose": "DEBUG and system storage, not for programs",
+      "cite": [{ "source": "ldos51", "page": "6-29" }]
+    },
+    {
+      "addr": "4200",
+      "name": "SBUFF$",
+      "kind": "variable",
+      "length": 256,
+      "purpose": "buffer of 256 bytes the system uses for disk transfers",
+      "cite": [{ "source": "ldos51", "page": "6-29" }]
+    },
+    {
+      "addr": "4300",
+      "name": "@KITSK",
+      "kind": "routine",
+      "purpose": "task-processing entry used while the keyboard is scanned",
+      "cite": [{ "source": "ldos51", "page": "6-29" }]
+    },
+    {
+      "addr": "4303",
+      "name": "@ICNFG",
+      "kind": "routine",
+      "purpose": "initialize the system configuration",
+      "cite": [{ "source": "ldos51", "page": "6-29" }]
+    },
+    {
+      "addr": "4306",
+      "name": "SVDAT1$",
+      "kind": "variable",
+      "purpose": "year and day, packed",
+      "cite": [{ "source": "ldos51", "page": "6-29" }]
+    },
+    {
+      "addr": "4307",
+      "name": "SVDAT2$",
+      "kind": "variable",
+      "purpose": "month, packed",
+      "cite": [{ "source": "ldos51", "page": "6-29" }]
+    },
+    {
+      "addr": "4308",
+      "name": "LDRV$",
+      "kind": "variable",
+      "purpose": "logical number, 0 to 7, of the drive in use",
+      "cite": [{ "source": "ldos51", "page": "6-29" }]
+    },
+    {
+      "addr": "4309",
+      "name": "PDRV$",
+      "kind": "variable",
+      "purpose": "physical address of the drive in use: 1, 2, 4, or 8",
+      "cite": [{ "source": "ldos51", "page": "6-29" }]
+    },
+    {
+      "addr": "430A",
+      "name": "JDCB$",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "DCB address saved while JCL runs",
+      "cite": [{ "source": "ldos51", "page": "6-29" }]
+    },
+    {
+      "addr": "430C",
+      "name": "JRET$",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "return address saved while JCL runs",
+      "cite": [{ "source": "ldos51", "page": "6-29" }]
+    },
+    {
+      "addr": "430E",
+      "name": "OVRLY$",
+      "kind": "variable",
+      "purpose": "system overlay now resident",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "430F",
+      "name": "SFLAG$",
+      "kind": "variable",
+      "purpose": "system flag bits",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "4318",
+      "name": "INBUF$",
+      "kind": "variable",
+      "length": 64,
+      "purpose": "64-byte buffer for the user's command line",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "4358",
+      "name": "JFCB$",
+      "kind": "variable",
+      "length": 32,
+      "purpose": "file control block the DO processor uses for JCL",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "4396",
+      "name": "@RAMDIR",
+      "kind": "routine",
+      "purpose": "load directory records, or the free-space figure, into a RAM buffer",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "43B8",
+      "name": "KISV$",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "saved vector of the KI (keyboard) device",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "43BA",
+      "name": "DOSV$",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "saved vector of the DO (video) device",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "43BC",
+      "name": "PRSV$",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "saved vector of the PR (printer) device",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "43BE",
+      "name": "KIJCL$",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "saved vector of the KIJCL device",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "43C0",
+      "name": "JLDCB$",
+      "kind": "variable",
+      "length": 8,
+      "purpose": "device control block of the job log",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "43C8",
+      "name": "SIDCB$",
+      "kind": "variable",
+      "length": 8,
+      "purpose": "device control block of standard input",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "43D0",
+      "name": "SODCB$",
+      "kind": "variable",
+      "length": 8,
+      "purpose": "device control block of standard output",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "43D8",
+      "name": "S1DCB$",
+      "kind": "variable",
+      "length": 8,
+      "purpose": "spare device control block",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "43E0",
+      "name": "S2DCB$",
+      "kind": "variable",
+      "length": 8,
+      "purpose": "spare device control block",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "43E8",
+      "name": "S3DCB$",
+      "kind": "variable",
+      "length": 8,
+      "purpose": "spare device control block",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "43F0",
+      "name": "S4DCB$",
+      "kind": "variable",
+      "length": 8,
+      "purpose": "spare device control block",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "43F8",
+      "name": "S5DCB$",
+      "kind": "variable",
+      "length": 8,
+      "purpose": "spare device control block",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
       "addr": "4400",
       "name": "@CMD",
       "kind": "routine",
-      "purpose": "enter the LDOS command interpreter",
+      "purpose": "prompt for the next command",
+      "cite": [{ "source": "ldos51", "page": "6-30" }],
+      "note": "the Model III map has @CMD at 4296H (6-35)"
+    },
+    {
+      "addr": "4405",
+      "name": "@CMNDI",
+      "kind": "routine",
+      "purpose": "jump into the command interpreter",
       "cite": [{ "source": "ldos51", "page": "6-30" }]
     },
     {
@@ -27,6 +318,69 @@
       "name": "@ERROR",
       "kind": "routine",
       "purpose": "display the message for a DOS error code",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "440D",
+      "name": "@DEBUG",
+      "kind": "routine",
+      "purpose": "start the DEBUG monitor",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "4410",
+      "name": "@ADTSK",
+      "kind": "routine",
+      "purpose": "install a task to run at interrupt level",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "4413",
+      "name": "@RMTSK",
+      "kind": "routine",
+      "purpose": "uninstall an interrupt-level task",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "4416",
+      "name": "@RPTSK",
+      "kind": "routine",
+      "purpose": "give the task now running a different vector",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "4419",
+      "name": "@KLTSK",
+      "kind": "routine",
+      "purpose": "drop the task that is running",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "441C",
+      "name": "@FSPEC",
+      "kind": "routine",
+      "purpose": "parse a file or device specification",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "441F",
+      "name": "DFLAG$",
+      "kind": "variable",
+      "purpose": "system device flag",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "4420",
+      "name": "@INIT",
+      "kind": "routine",
+      "purpose": "open a file or device, creating the file if it is new",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "4423",
+      "name": "KFLAG$",
+      "kind": "variable",
+      "purpose": "system keyboard flag",
       "cite": [{ "source": "ldos51", "page": "6-30" }]
     },
     {
@@ -44,6 +398,34 @@
       "cite": [{ "source": "ldos51", "page": "6-30" }]
     },
     {
+      "addr": "442C",
+      "name": "@KILL",
+      "kind": "routine",
+      "purpose": "delete a file or device",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "442F",
+      "name": "MFLAG$",
+      "kind": "variable",
+      "purpose": "flag that marks the machine as a Model I",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "4430",
+      "name": "@LOAD",
+      "kind": "routine",
+      "purpose": "load a program file into memory",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "4433",
+      "name": "@RUN",
+      "kind": "routine",
+      "purpose": "load a program file and start it",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
       "addr": "4436",
       "name": "@READ",
       "kind": "routine",
@@ -58,10 +440,344 @@
       "cite": [{ "source": "ldos51", "page": "6-30" }]
     },
     {
+      "addr": "443C",
+      "name": "@VER",
+      "kind": "routine",
+      "purpose": "write a record, then read it back to verify it",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "443F",
+      "name": "@REW",
+      "kind": "routine",
+      "purpose": "rewind a file to its first record",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "4442",
+      "name": "@POSN",
+      "kind": "routine",
+      "purpose": "move a file to a chosen logical record",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "4445",
+      "name": "@BKSP",
+      "kind": "routine",
+      "purpose": "back up one logical record",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "4448",
+      "name": "@PEOF",
+      "kind": "routine",
+      "purpose": "position a file at its end",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "444B",
+      "name": "@CKEOF",
+      "kind": "routine",
+      "purpose": "check whether the file is at its end",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "444E",
+      "name": "@WEOF",
+      "kind": "routine",
+      "purpose": "write an end-of-file mark",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "4454",
+      "name": "@RREAD",
+      "kind": "routine",
+      "purpose": "read the current sector again",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "4457",
+      "name": "@RWRIT",
+      "kind": "routine",
+      "purpose": "write the current sector again",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "445A",
+      "name": "@LOC",
+      "kind": "routine",
+      "purpose": "work out the current logical record number",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "445D",
+      "name": "@LOF",
+      "kind": "routine",
+      "purpose": "work out the logical record number of the end of the file",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "4460",
+      "name": "@SKIP",
+      "kind": "routine",
+      "purpose": "skip over the next record",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
+      "addr": "4463",
+      "name": "@DODIR",
+      "kind": "routine",
+      "purpose": "display a directory, or put it in a buffer",
+      "cite": [{ "source": "ldos51", "page": "6-30" }]
+    },
+    {
       "addr": "4467",
       "name": "@DSPLY",
       "kind": "routine",
       "purpose": "display a line of text on the screen",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "446A",
+      "name": "@PRINT",
+      "kind": "routine",
+      "purpose": "print a line of text on the printer",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "446D",
+      "name": "@TIME",
+      "kind": "routine",
+      "purpose": "get the time of day as text, XX:XX:XX",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "4470",
+      "name": "@DATE",
+      "kind": "routine",
+      "purpose": "get today's date as text, xx/xx/xx",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "4473",
+      "name": "@FEXT",
+      "kind": "routine",
+      "purpose": "apply a default extension to a file specification",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "4476",
+      "name": "@PARAM",
+      "kind": "routine",
+      "purpose": "parse the optional parameters after a command",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "4479",
+      "name": "@MSG",
+      "kind": "routine",
+      "purpose": "route a message line to its output device",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "447B",
+      "name": "@LOGOT",
+      "kind": "routine",
+      "purpose": "display a message and also write it to the job log",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "447E",
+      "name": "@LOGER",
+      "kind": "routine",
+      "purpose": "write a message to the job log",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "4480",
+      "name": "CFCB$",
+      "kind": "variable",
+      "length": 32,
+      "purpose": "file control block for commands",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "44A0",
+      "name": "SFCB$",
+      "kind": "variable",
+      "length": 20,
+      "purpose": "file control block for loading system overlays",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "44B8",
+      "name": "@CKDRV",
+      "kind": "routine",
+      "purpose": "check that a disk drive is available",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "44BB",
+      "name": "@FNAME",
+      "kind": "routine",
+      "purpose": "fetch a file's name and extension from its directory entry",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "44BE",
+      "name": "@DOKEY",
+      "kind": "routine",
+      "purpose": "vector for keyboard input from JCL while DO is running",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "44C1",
+      "name": "@MULT",
+      "kind": "routine",
+      "purpose": "multiply HL by A",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "44C4",
+      "name": "@DIV",
+      "kind": "routine",
+      "purpose": "divide HL by A",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "4500",
+      "name": "TCB$",
+      "kind": "variable",
+      "length": 24,
+      "purpose": "interrupt task table",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "4700",
+      "name": "DCT$",
+      "kind": "variable",
+      "length": 80,
+      "purpose": "area reserved for the drive code table",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "4754",
+      "name": "SELECT",
+      "kind": "routine",
+      "purpose": "select a different drive",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "4759",
+      "name": "RSELCT",
+      "kind": "routine",
+      "purpose": "test whether the requested drive is busy",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "475E",
+      "name": "SEEK",
+      "kind": "routine",
+      "purpose": "seek to a cylinder",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "4763",
+      "name": "WRSECT",
+      "kind": "routine",
+      "purpose": "write a sector",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "4768",
+      "name": "WRPROT",
+      "kind": "routine",
+      "purpose": "write a system sector",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "476D",
+      "name": "WRTRK",
+      "kind": "routine",
+      "purpose": "write a cylinder",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "4772",
+      "name": "VERSEC",
+      "kind": "routine",
+      "purpose": "verify a sector",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "4777",
+      "name": "RDSECT",
+      "kind": "routine",
+      "purpose": "read a sector",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "478F",
+      "name": "GETDCT",
+      "kind": "routine",
+      "purpose": "get the address of a drive code table entry",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "479C",
+      "name": "DCTBYT",
+      "kind": "routine",
+      "purpose": "get one field of a drive code table entry",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "4B10",
+      "name": "DIRRD",
+      "kind": "routine",
+      "purpose": "read a directory record",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "4B1F",
+      "name": "DIRWR",
+      "kind": "routine",
+      "purpose": "write a directory record",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "4B45",
+      "name": "RDSSEC",
+      "kind": "routine",
+      "purpose": "read a system sector",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "4B65",
+      "name": "DIRCYL",
+      "kind": "routine",
+      "purpose": "get the directory cylinder number",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "4B6C",
+      "name": "MULTEA",
+      "kind": "routine",
+      "purpose": "multiply E by A",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "4B7B",
+      "name": "DIVEA",
+      "kind": "routine",
+      "purpose": "divide E by A",
+      "cite": [{ "source": "ldos51", "page": "6-31" }]
+    },
+    {
+      "addr": "4DFE",
+      "name": "USTOR$",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "pointer to an 8-byte storage area for user programs",
       "cite": [{ "source": "ldos51", "page": "6-31" }]
     }
   ]

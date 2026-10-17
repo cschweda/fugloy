@@ -154,3 +154,37 @@ describe('a program that uses every kind of reference, under in-memory tables', 
     expect(source).toContain('\t.PHASE\t6000H\n\tCALL\t$KBWAIT\t; wait for a key\n\tRET\n\tDW\tVIDEO,VIDEO+0140H\n\t.DEPHASE\n');
   });
 });
+
+describe('every name in the committed tables', () => {
+  // The DOS tables bring names zmac has not seen from the ROM and hardware tables: LDOS's end in a dollar sign (HIGH$, TIME$, S1DCB$), and its drivers are bare
+  // words (SEEK, SELECT). One program per selection uses every name the way a listing would, and the pinned zmac must assemble it to the image that went in.
+  const selections: SymbolSelection[] = [
+    { machine: 1, dos: 'ldos' },
+    { machine: 1, dos: 'none' },
+    { machine: 3, dos: 'trsdos' },
+    { machine: 3, dos: 'ldos' },
+    { machine: 3, dos: 'none' },
+  ];
+  for (const selection of selections) {
+    test(`assembles a program that uses each name of machine ${selection.machine} with ${selection.dos}`, () => {
+      const set = selectSymbols(selection);
+      const code: number[] = [];
+      for (const e of set.entries()) {
+        // a routine or vector is called, a port is written, and anything else has its address loaded
+        if (e.kind === 'port') code.push(0xd3, e.key);
+        else if (e.kind === 'routine' || e.kind === 'vector') code.push(0xcd, e.key & 0xff, e.key >> 8);
+        else code.push(0x21, e.key & 0xff, e.key >> 8);
+      }
+      code.push(0xc9);
+      const source = roundTrip(Uint8Array.from(code), set);
+      for (const e of set.entries()) expect(source.split('\n').some((l) => l.startsWith(`${e.name}\tEQU\t`)), e.name).toBe(true);
+    });
+  }
+
+  test('writes the dollar-sign names as operands and defines them: LD HL,(HIGH$) and LD A,(LDRV$) under LDOS on a Model I', () => {
+    const source = roundTrip(Uint8Array.from([0x2a, 0x49, 0x40, 0x3a, 0x08, 0x43, 0x21, 0x41, 0x40, 0xcd, 0x67, 0x44, 0xc3, 0x2d, 0x40]), selectSymbols({ machine: 1, dos: 'ldos' }));
+    for (const text of ['\tLD\tHL,(HIGH$)\n', '\tLD\tA,(LDRV$)\n', '\tLD\tHL,TIME$\n', '\tCALL\t@DSPLY\t', '\tJP\t@EXIT\t', 'HIGH$\tEQU\t4049H', 'LDRV$\tEQU\t4308H', 'TIME$\tEQU\t4041H']) {
+      expect(source).toContain(text);
+    }
+  });
+});

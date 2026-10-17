@@ -9,6 +9,70 @@
       "cite": [{ "source": "trsdos13", "page": "86" }]
     },
     {
+      "addr": "4225",
+      "name": "$CMDTXT",
+      "kind": "variable",
+      "purpose": "start of the buffer holding the last command line typed at TRSDOS READY",
+      "cite": [{ "source": "trsdos13", "page": "89" }]
+    },
+    {
+      "addr": "428D",
+      "name": "$FILPTR",
+      "kind": "routine",
+      "purpose": "get the drive and logical file number of an open file",
+      "cite": [{ "source": "trsdos13", "page": "85" }]
+    },
+    {
+      "addr": "4290",
+      "name": "$RAMDIR",
+      "kind": "routine",
+      "purpose": "copy directory entries, or the free-space figure, into a RAM buffer",
+      "cite": [{ "source": "trsdos13", "page": "84" }]
+    },
+    {
+      "addr": "4299",
+      "name": "$COMDOS",
+      "kind": "routine",
+      "purpose": "run a TRSDOS command line, then return to TRSDOS READY",
+      "cite": [{ "source": "trsdos13", "page": "88" }]
+    },
+    {
+      "addr": "429C",
+      "name": "$CMDDOS",
+      "kind": "routine",
+      "purpose": "run a TRSDOS command line and return to the caller",
+      "cite": [{ "source": "trsdos13", "page": "89" }]
+    },
+    {
+      "addr": "4409",
+      "name": "$ERRDSP",
+      "kind": "routine",
+      "purpose": "display the TRSDOS error message for the code in A",
+      "cite": [{ "source": "trsdos13", "page": "87" }]
+    },
+    {
+      "addr": "4411",
+      "name": "$MEMEND",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "highest memory address available, low byte first; normally the end of RAM",
+      "cite": [{ "source": "trsdos13", "page": "89" }]
+    },
+    {
+      "addr": "4419",
+      "name": "$DSPDIR",
+      "kind": "routine",
+      "purpose": "display the directory of the non-protected files on one drive",
+      "cite": [{ "source": "trsdos13", "page": "88" }]
+    },
+    {
+      "addr": "441C",
+      "name": "$SYNTAX",
+      "kind": "routine",
+      "purpose": "check a file specification and copy it into a DCB",
+      "cite": [{ "source": "trsdos13", "page": "83" }]
+    },
+    {
       "addr": "4420",
       "name": "$INIT",
       "kind": "routine",
@@ -30,6 +94,13 @@
       "cite": [{ "source": "trsdos13", "page": "85" }]
     },
     {
+      "addr": "442C",
+      "name": "$KILL",
+      "kind": "routine",
+      "purpose": "delete a file and release its disk space",
+      "cite": [{ "source": "trsdos13", "page": "86" }]
+    },
+    {
       "addr": "4436",
       "name": "$READ",
       "kind": "routine",
@@ -42,6 +113,63 @@
       "kind": "routine",
       "purpose": "write a record to an open file",
       "cite": [{ "source": "trsdos13", "page": "80" }]
+    },
+    {
+      "addr": "443C",
+      "name": "$VERF",
+      "kind": "routine",
+      "purpose": "write a record, then read it back and compare",
+      "cite": [{ "source": "trsdos13", "page": "81" }]
+    },
+    {
+      "addr": "443F",
+      "name": "$REWIND",
+      "kind": "routine",
+      "purpose": "point a file back at its first record",
+      "cite": [{ "source": "trsdos13", "page": "82" }]
+    },
+    {
+      "addr": "4442",
+      "name": "$POSN",
+      "kind": "routine",
+      "purpose": "position a file at a given logical record",
+      "cite": [{ "source": "trsdos13", "page": "79" }]
+    },
+    {
+      "addr": "4445",
+      "name": "$BKSPC",
+      "kind": "routine",
+      "purpose": "back up one record in a file",
+      "cite": [{ "source": "trsdos13", "page": "82" }],
+      "note": "the list of routines on page 78 spells this $BACKSPACE; its heading on page 82 and the index entry BKSPC (82) spell it $BKSPC"
+    },
+    {
+      "addr": "4448",
+      "name": "$POSEOF",
+      "kind": "routine",
+      "purpose": "point a file at its last record, to extend it",
+      "cite": [{ "source": "trsdos13", "page": "82" }]
+    },
+    {
+      "addr": "444B",
+      "name": "$PUTEXT",
+      "kind": "routine",
+      "purpose": "add an extension to a filename that has none",
+      "cite": [{ "source": "trsdos13", "page": "81" }]
+    },
+    {
+      "addr": "444E",
+      "name": "$DMULT",
+      "kind": "routine",
+      "purpose": "multiply a 16-bit value by an 8-bit multiplier: 24-bit product in H, L, and A",
+      "cite": [{ "source": "trsdos13", "page": "84" }]
+    },
+    {
+      "addr": "4451",
+      "name": "$DIVIDE",
+      "kind": "routine",
+      "purpose": "divide a 16-bit value by an 8-bit divisor: quotient in HL, remainder in A",
+      "cite": [{ "source": "trsdos13", "page": "83" }]
     }
   ]
 }
