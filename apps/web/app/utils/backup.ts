@@ -2,6 +2,7 @@
 // file and each program's machine and DOS), to carry between machines. Never
 // manuals, ROMs or programs. The logic lives here so the top bar menu and the
 // Manuals page share it.
+import { parseHints } from '@fugloy/disasm';
 import type { Prefs, Store } from './store';
 
 export interface BackupProgram {
@@ -57,15 +58,31 @@ export function parseBackup(json: string): Backup {
   return b as Backup;
 }
 
+export interface RestoreResult {
+  added: number;
+  replaced: number;
+  skipped: number;
+  /** Programs whose hint text does not parse: not restored (hints or settings), with the first reason. */
+  rejected: { name: string; reason: string }[];
+}
+
 /**
  * Merges a backup into the store. Work the store lacks is added; work it has that differs
  * is replaced only if `confirm` (given the program's name) says yes; identical work is skipped.
- * A program counts once: declined, else replaced, else added, else skipped.
+ * A program counts once: rejected, else declined, else replaced, else added, else skipped.
+ * Hint text that does not parse is never stored: it is listed in `rejected` and the rest restores.
  */
-export async function restoreBackup(store: Store, json: string, confirm: (name: string) => Promise<boolean>): Promise<{ added: number; replaced: number; skipped: number }> {
+export async function restoreBackup(store: Store, json: string, confirm: (name: string) => Promise<boolean>): Promise<RestoreResult> {
   const backup = parseBackup(json);
-  const result = { added: 0, replaced: 0, skipped: 0 };
+  const result: RestoreResult = { added: 0, replaced: 0, skipped: 0, rejected: [] };
   for (const p of backup.programs) {
+    if (p.hints !== undefined) {
+      const bad = parseHints(p.hints).errors[0];
+      if (bad !== undefined) {
+        result.rejected.push({ name: p.name, reason: `line ${bad.line}: ${bad.message}` });
+        continue;
+      }
+    }
     const haveHints = await store.getHints(p.hash);
     const havePrefs = await store.getPrefs(p.hash);
     const name = haveHints?.name ?? p.name;

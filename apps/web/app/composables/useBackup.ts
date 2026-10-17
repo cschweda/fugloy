@@ -38,8 +38,11 @@ export function useBackup() {
     const s = await store();
     if (s === null) return;
     try {
+      // An edit still waiting out its delay is stored first, so the restore compares against it.
+      await persistence.flush();
       const r = await restoreBackup(s, await file.text(), (name) => new Promise((resolve) => (question.value = { name, answer: resolve })));
-      message.value = `Restored: ${r.added} added, ${r.replaced} replaced, ${r.skipped} left as they were.`;
+      const rejected = r.rejected.map((x) => `${x.name} (${x.reason})`).join('; ');
+      message.value = `Restored: ${r.added} added, ${r.replaced} replaced, ${r.skipped} left as they were.${rejected === '' ? '' : ` Not restored, because the hints do not parse: ${rejected}.`}`;
       await persistence.refresh();
     } catch (err) {
       message.value = err instanceof BackupError ? err.message : `The backup could not be restored: ${err instanceof Error ? err.message : String(err)}`;

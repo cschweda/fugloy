@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createEditing } from '../app/composables/useEditing';
 import { createPersistence, SAVE_DELAY_MS } from '../app/composables/usePersistence';
 import { createWorkbench } from '../app/composables/useWorkbench';
+import { writeHints } from '@fugloy/disasm';
+import { restoreBackup } from '../app/utils/backup';
 import { openStore } from '../app/utils/store';
 import type { Store } from '../app/utils/store';
 
@@ -222,5 +224,61 @@ describe('an edit before the saved work has been read', () => {
     p.resolveConflict('keep');
     expect(p.conflict.value).toBeNull();
     await until(async () => (await real.getHints(hash))!.text.includes('EARLY'));
+  });
+});
+
+describe('saved hints that no longer apply', () => {
+  const junk = (hash: string): string => `fugloy-hints 1\nprogram sha256 ${hash}\nthis line is junk\n`;
+
+  /** seadrg03 opened over stored hints that do not parse. */
+  async function blocked() {
+    const a = await rig();
+    await a.wb.openExample('sea-dragon', 'seadrg03.cmd');
+    const hash = a.wb.session.value!.hash;
+    await sleep(100);
+    const bad = junk(hash);
+    await opened!.putHints(hash, { name: 'mine.hints', text: bad });
+    await a.wb.openExample('sea-dragon', 'seadrg02.cmd');
+    await a.wb.openExample('sea-dragon', 'seadrg03.cmd');
+    await until(() => a.p.blocked.value !== null);
+    return { ...a, hash, bad };
+  }
+
+  it('opening the program keeps them, says why, and saves nothing', async () => {
+    const { wb, p, hash, bad } = await blocked();
+    await sleep(SAVE_DELAY_MS + 150);
+    expect((await opened!.getHints(hash))!.text).toBe(bad);
+    expect(wb.error.value).toContain('Your saved hints for seadrg03.cmd no longer apply: the hint file does not parse');
+    expect(wb.error.value).toContain('They are kept, not replaced.');
+    expect(p.status.value).toBe('not saved (saved hints kept)');
+    expect(p.blockedAsk.value).toBe(false);
+  });
+
+  it('a restored backup whose hints cannot apply to the open program keeps them', async () => {
+    const a = await rig();
+    await a.wb.openExample('sea-dragon', 'seadrg03.cmd');
+    const s = a.wb.session.value!;
+    await sleep(100);
+    const bad = `${writeHints(s.hintFile)}block 1:$0000 relocate $8100 $0100\n`;
+    const json = JSON.stringify({ fugloyBackup: 1, exportedAt: '', programs: [{ hash: s.hash, name: 'mine.hints', hints: bad }] });
+    expect((await restoreBackup(opened!, json, async () => true)).added).toBe(1);
+    await a.p.refresh();
+    await sleep(SAVE_DELAY_MS + 150);
+    expect((await opened!.getHints(s.hash))!.text).toBe(bad);
+    expect(a.wb.error.value).toContain('the hint file cannot apply');
+    expect(a.p.blocked.value?.text).toBe(bad);
+  });
+
+  it('the first edit asks before replacing them, and nothing saves until Replace', async () => {
+    const { ed, p, hash, bad } = await blocked();
+    expect(ed.apply({ op: 'name', addr: 0x8000, name: 'MINE' })).toBeNull();
+    await until(() => p.blockedAsk.value);
+    await sleep(SAVE_DELAY_MS + 150);
+    expect((await opened!.getHints(hash))!.text).toBe(bad);
+    p.replaceBlocked();
+    expect(p.blocked.value).toBeNull();
+    expect(p.blockedAsk.value).toBe(false);
+    await until(async () => (await opened!.getHints(hash))!.text.includes('MINE'));
+    await until(() => p.status.value === 'saved');
   });
 });

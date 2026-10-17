@@ -6,7 +6,7 @@
 // With no storage the workbench works as before and says so. DOM-free.
 import { computed, ref, shallowRef, watch } from 'vue';
 import type { ComputedRef, Ref, ShallowRef } from 'vue';
-import { parseHints, withHintText, withSelection, writeHints } from '@fugloy/disasm';
+import { OpenError, parseHints, withHintText, withSelection, writeHints } from '@fugloy/disasm';
 import type { Session, SymbolSelection } from '@fugloy/disasm';
 import { bestCarryOver } from '../utils/carry-over';
 import type { CarryCandidate } from '../utils/carry-over';
@@ -21,7 +21,8 @@ import type { ExampleReader, Workbench } from './useWorkbench';
 export const SAVE_DELAY_MS = 500;
 
 /** 'no changes yet': the hints are as the program opened (an example's committed ones), so nothing needs saving. */
-export type SaveState = 'saved' | 'unsaved' | 'no hints yet' | 'no changes yet' | 'not saved (storage unavailable)';
+/** 'not saved (saved hints kept)': the program's saved hints no longer apply, so nothing saves over them until the user says so. */
+export type SaveState = 'saved' | 'unsaved' | 'no hints yet' | 'no changes yet' | 'not saved (storage unavailable)' | 'not saved (saved hints kept)';
 
 export interface Persistence {
   /** The status line's save state. */
@@ -38,6 +39,12 @@ export interface Persistence {
   resolveConflict(choice: 'load' | 'keep'): void;
   /** Why the saved work could not be loaded, while the conflict stays open (then only Keep is possible). */
   conflictError: Ref<string | null>;
+  /** The open program's saved hints, when they no longer apply: kept in storage, and nothing saves over them. */
+  blocked: ShallowRef<{ name: string; text: string; reason: string } | null>;
+  /** The user edited while `blocked`: ask whether to replace the saved hints (`replaceBlocked`) before anything saves. */
+  blockedAsk: Ref<boolean>;
+  /** The answer to `blockedAsk`: the user's hints replace the saved ones that no longer apply. */
+  replaceBlocked(): void;
   /** Applies the offered file as one undoable step. */
   acceptCarry(): void;
   dismissCarry(): void;
@@ -72,6 +79,8 @@ export function createPersistence(wb: Workbench, deps: PersistenceDeps = {}): Pe
   const conflictError = ref<string | null>(null);
   const conflict = shallowRef<{ name: string; text: string } | null>(null);
   const hintErrors = ref<readonly string[]>([]);
+  const blocked = shallowRef<{ name: string; text: string; reason: string } | null>(null);
+  const blockedAsk = ref(false);
   /** The hint text the open program opened with (committed or skeleton): changes from it are the user's. */
   const baseline = ref<string | null>(null);
   let committedHints: Promise<{ hash: string; name: string; text: string }[]> | null = null;
@@ -139,6 +148,11 @@ export function createPersistence(wb: Workbench, deps: PersistenceDeps = {}): Pe
     const s = wb.session.value;
     if (s === null || !restored.value || conflict.value !== null) return;
     const text = hintText(s);
+    if (blocked.value !== null) {
+      // Saved hints that no longer apply are never replaced without a yes: a change from what opened asks.
+      blockedAsk.value = text !== baseline.value;
+      return;
+    }
     // Nothing stored: only a change from what the program opened with is worth saving.
     if (savedText.value === null ? text === baseline.value : text === savedText.value) {
       if (timer !== null && pending !== null && pending.hash === s.hash) {
@@ -193,12 +207,14 @@ export function createPersistence(wb: Workbench, deps: PersistenceDeps = {}): Pe
         if (saved.text !== hintText(next)) {
           try {
             next = withHintText(next, saved.text, saved.name);
-          } catch {
-            // Saved hints that no longer apply: keep what opened, and do not overwrite them until the user edits.
             savedText.value = saved.text;
+          } catch (err) {
+            // Saved hints that no longer apply: keep what opened, say so, and save nothing over them until the user says yes.
+            const reason = err instanceof OpenError && err.details.length > 0 ? `${err.message} (${err.details[0]})` : err instanceof Error ? err.message : String(err);
+            blocked.value = { name: saved.name, text: saved.text, reason };
+            wb.report(`Your saved hints for ${s.name} no longer apply: ${reason}. They are kept, not replaced.`);
           }
-        }
-        if (savedText.value === null) savedText.value = saved.text;
+        } else savedText.value = saved.text;
       } else if (s.hintFile.hints.length === 0) {
         const stored = await st.allHints();
         const have = new Set(stored.map((h) => h.hash));
@@ -232,6 +248,8 @@ export function createPersistence(wb: Workbench, deps: PersistenceDeps = {}): Pe
     hintErrors.value = [];
     conflict.value = null;
     conflictError.value = null;
+    blocked.value = null;
+    blockedAsk.value = false;
     savedText.value = null;
     restored.value = false;
     const s = wb.session.value;
@@ -269,6 +287,7 @@ export function createPersistence(wb: Workbench, deps: PersistenceDeps = {}): Pe
     const s = wb.session.value;
     if (store.value === null || failed.value) return 'not saved (storage unavailable)';
     if (s === null) return 'no hints yet';
+    if (blocked.value !== null) return 'not saved (saved hints kept)';
     if (savedText.value === null && hintText(s) === baseline.value) return s.hintFile.hints.length === 0 ? 'no hints yet' : 'no changes yet';
     if (conflict.value !== null || waiting.value || savedText.value !== hintText(s)) return 'unsaved';
     return 'saved';
@@ -281,6 +300,15 @@ export function createPersistence(wb: Workbench, deps: PersistenceDeps = {}): Pe
     hintErrors,
     conflict,
     conflictError,
+    blocked,
+    blockedAsk,
+    replaceBlocked() {
+      if (blocked.value === null) return;
+      blocked.value = null;
+      blockedAsk.value = false;
+      // Nothing is stored that applies, so the next save writes the open hints over the old ones.
+      check();
+    },
     resolveConflict(choice) {
       const c = conflict.value;
       if (c === null) return;
@@ -318,8 +346,27 @@ export function createPersistence(wb: Workbench, deps: PersistenceDeps = {}): Pe
       generation++;
       restored.value = false;
       savedText.value = null;
+      blocked.value = null;
+      blockedAsk.value = false;
       await restore(s, generation);
     },
+  };
+}
+
+/**
+ * Writes pending saves when the user may be leaving: on `pagehide`, and when the page is hidden
+ * (a tab switch, or a phone switching apps, after which the page may be discarded with no pagehide).
+ * Returns the function that removes the listeners.
+ */
+export function flushOnLeave(win: Pick<Window, 'addEventListener' | 'removeEventListener'>, doc: Pick<Document, 'addEventListener' | 'removeEventListener' | 'visibilityState'>, flush: () => void): () => void {
+  const onHidden = (): void => {
+    if (doc.visibilityState === 'hidden') flush();
+  };
+  win.addEventListener('pagehide', flush);
+  doc.addEventListener('visibilitychange', onHidden);
+  return () => {
+    win.removeEventListener('pagehide', flush);
+    doc.removeEventListener('visibilitychange', onHidden);
   };
 }
 

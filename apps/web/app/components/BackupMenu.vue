@@ -37,6 +37,7 @@ function onPick(e: Event): void {
     title="Replace this program's saved work?"
     :message="`The backup has different hints for ${b.question.value?.name ?? ''}. Replace the hints saved in this browser with the ones in the backup?`"
     confirm-label="Replace"
+    focus-cancel
     @confirm="b.answer(true)"
     @cancel="b.answer(false)"
   />

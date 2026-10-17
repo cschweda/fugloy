@@ -40,7 +40,7 @@ describe('backup', () => {
     const before = await a.allHints();
     const b = await fresh();
     const r = await restoreBackup(b, json, async () => true);
-    expect(r).toEqual({ added: 2, replaced: 0, skipped: 0 });
+    expect(r).toEqual({ added: 2, replaced: 0, skipped: 0, rejected: [] });
     expect(await b.allHints()).toEqual(before);
     expect(await b.getPrefs('h1')).toEqual({ machine: 1, dos: 'ldos' });
     expect(await b.getPrefs('h2')).toBeUndefined();
@@ -53,10 +53,10 @@ describe('backup', () => {
     const asked: string[] = [];
     const no = await restoreBackup(a, json, async (name) => (asked.push(name), false));
     expect(asked).toEqual(['one.hints']);
-    expect(no).toEqual({ added: 0, replaced: 0, skipped: 1 });
+    expect(no).toEqual({ added: 0, replaced: 0, skipped: 1, rejected: [] });
     expect((await a.getHints('h1'))!.text).toContain('comment mine');
     const yes = await restoreBackup(a, json, async () => true);
-    expect(yes).toEqual({ added: 0, replaced: 1, skipped: 0 });
+    expect(yes).toEqual({ added: 0, replaced: 1, skipped: 0, rejected: [] });
     expect((await a.getHints('h1'))!.text).toBe(HINTS);
   });
 
@@ -68,7 +68,7 @@ describe('backup', () => {
     expect(programs.map((p: { hash: string }) => p.hash).sort()).toEqual(['h1', 'p9']);
     expect(programs.find((p: { hash: string }) => p.hash === 'p9').hints).toBeUndefined();
     const b = await fresh();
-    expect(await restoreBackup(b, json, async () => true)).toEqual({ added: 2, replaced: 0, skipped: 0 });
+    expect(await restoreBackup(b, json, async () => true)).toEqual({ added: 2, replaced: 0, skipped: 0, rejected: [] });
     expect(await b.getPrefs('p9')).toEqual({ machine: 1, dos: 'ldos' });
     expect(await b.getHints('p9')).toBeUndefined();
   });
@@ -84,5 +84,22 @@ describe('backup', () => {
     await expect(restoreBackup(a, 'nope', async () => true)).rejects.toBeInstanceOf(BackupError);
     await expect(restoreBackup(a, '{"fugloyBackup":2,"programs":[]}', async () => true)).rejects.toBeInstanceOf(BackupError);
     await expect(restoreBackup(a, '{"fugloyBackup":1,"programs":[{"hash":1}]}', async () => true)).rejects.toBeInstanceOf(BackupError);
+  });
+
+  it('reports hint text that does not parse, does not store it, and restores the rest', async () => {
+    const json = JSON.stringify({
+      fugloyBackup: 1,
+      exportedAt: '',
+      programs: [
+        { hash: 'bad', name: 'junk.hints', hints: 'fugloy-hints 1\nthis line is junk\n', prefs: { machine: 1, dos: 'ldos' } },
+        { hash: 'h1', name: 'one.hints', hints: HINTS },
+      ],
+    });
+    const r = await restoreBackup(a, json, async () => true);
+    expect(r.added).toBe(1);
+    expect(r.rejected).toEqual([{ name: 'junk.hints', reason: 'line 2: unexpected line' }]);
+    expect(await a.getHints('bad')).toBeUndefined();
+    expect(await a.getPrefs('bad')).toBeUndefined();
+    expect((await a.getHints('h1'))!.text).toBe(HINTS);
   });
 });

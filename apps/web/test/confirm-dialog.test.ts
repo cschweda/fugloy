@@ -43,4 +43,19 @@ describe('ConfirmDialog', () => {
     expect(w.emitted('cancel')).toHaveLength(1);
     w.unmount();
   });
+
+  it('focuses the confirm button by default, and the cancel button with focusCancel', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const plain = mount(ConfirmDialog, { props: { open: false, title: 'T', message: 'M', confirmLabel: 'Load', cancelLabel: 'Keep' }, attachTo: host });
+    await plain.setProps({ open: true } as never);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.activeElement?.textContent).toBe('Load');
+    plain.unmount();
+    const safe = mount(ConfirmDialog, { props: { open: false, title: 'T', message: 'M', confirmLabel: 'Replace', cancelLabel: 'Cancel', focusCancel: true }, attachTo: host });
+    await safe.setProps({ open: true } as never);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.activeElement?.textContent).toBe('Cancel');
+    safe.unmount();
+  });
 });
