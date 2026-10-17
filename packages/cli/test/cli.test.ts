@@ -543,6 +543,17 @@ describe('--machine and --dos', () => {
     }
   });
 
+  it('notes the PEEK of a keyboard poll in an IF condition, the PEEK in a PRINT, and the PEEK in a FOR bound', async () => {
+    const { lines } = await listBasic([
+      { number: 10, text: 'IF PEEK(14400)=128 THEN 10' },
+      { number: 20, text: 'PRINT PEEK(14401)' },
+      { number: 30, text: 'FOR I=PEEK(15360) TO 10' },
+    ]);
+    expect(lines[lines.indexOf('10 IF PEEK(14400)=128 THEN 10') + 1]).toMatch(KEYBOARD_NOTE);
+    expect(lines[lines.indexOf('20 PRINT PEEK(14401)') + 1]).toMatch(/^; {3}14401 = \$3841 .+ \(KEYBOARD\+65\)$/);
+    expect(lines[lines.indexOf('30 FOR I=PEEK(15360) TO 10') + 1]).toMatch(VIDEO_NOTE);
+  });
+
   it('notes nothing in a BASIC listing under --machine 4, which names service calls only, nor with --sweep', async () => {
     const program: BasicLineSpec[] = [{ number: 10, text: 'POKE 15360,65' }, { number: 20, text: 'X=PEEK(14400)' }];
     expect(noteLines((await listBasic(program, '--machine', '4')).lines)).toEqual([]);

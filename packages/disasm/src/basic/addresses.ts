@@ -3,11 +3,11 @@
  * (design spec §5.4): the argument of `PEEK(n)`, the address of `POKE n,v`, and
  * the value of `DEFUSRn=n`, where n is a number or a minus sign and a number.
  * Level II takes an address above 32767 written negative (`-1` is 65535), so a
- * negative literal stands for 65536 less its size. The parser keeps the
- * expressions of assignments, POKEs, and DEFUSRs, so a PEEK is found anywhere
- * inside those; it keeps only the keyword of the other statements, so a PEEK in
- * a PRINT or an IF condition is not seen. Pure: the listing looks the addresses
- * up in the tables.
+ * negative literal stands for 65536 less its size. The parser keeps every
+ * expression a statement reads (an IF condition, a PRINT item, a FOR bound, an
+ * ON selector, a DEF FN body, a subscript, as well as the sides of an
+ * assignment, a POKE, and a DEFUSR), so a PEEK is found wherever it stands.
+ * Pure: the listing looks the addresses up in the tables.
  */
 import type { Expr, Statement } from './parser.js';
 
@@ -16,6 +16,11 @@ export interface BasAddress {
   addr: number;
   /** `data` for a PEEK or POKE, which reach memory; `code` for a DEFUSR, which names a routine to call. */
   use: 'data' | 'code';
+}
+
+/** Marks a switch over a union as exhaustive: the compiler stops here when a case is missing. */
+function unreachable(x: never): never {
+  throw new Error(`unhandled BASIC syntax: ${JSON.stringify(x)}`);
 }
 
 /** The address a number, or a minus sign and a number, stands for; undefined for anything else or a value BASIC would refuse. */
@@ -49,6 +54,8 @@ function peeks(e: Expr, add: (addr: number) => void): void {
       else for (const a of e.args) peeks(a, add);
       return;
     }
+    default:
+      return unreachable(e);
   }
 }
 
@@ -84,7 +91,10 @@ export function basReferences(line: { readonly statements: readonly Statement[] 
         break;
       }
       case 'other':
+        for (const e of s.exprs) dataPeeks(e);
         break;
+      default:
+        return unreachable(s);
     }
   }
   return [...found.values()];

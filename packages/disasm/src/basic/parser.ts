@@ -3,9 +3,12 @@
  * accepts it and every statement matches its keyword's argument shape over
  * one expression grammar. The statements come back for the entry miner, which
  * reads assignments, POKEs, and DEFUSR; an IF contributes its branches'
- * statements in order after its own entry. Disk BASIC statements are accepted
- * alongside Level II's, since programs saved under DOS use them. Types are not
- * checked, and a string may run to the end of the line, as Level II allows.
+ * statements in order after its own entry. Every other statement comes back as
+ * its keyword and the expressions it reads (a condition, a bound, a print item,
+ * a selector, a subscript, a body), so the address notes of basic/addresses.ts
+ * can find a PEEK anywhere. Disk BASIC statements are accepted alongside Level
+ * II's, since programs saved under DOS use them. Types are not checked, and a
+ * string may run to the end of the line, as Level II allows.
  */
 import { lexLine } from './lexer.js';
 import type { Token } from './lexer.js';
@@ -23,7 +26,8 @@ export type Statement =
   | { kind: 'assign'; name: string; subscripts: Expr[]; expr: Expr }
   | { kind: 'poke'; addr: Expr; value: Expr }
   | { kind: 'defusr'; n: number; expr: Expr }
-  | { kind: 'other'; keyword: string };
+  /** Any other statement: its keyword, and the outermost expressions it reads, in the order it reads them (an argument of a function is part of its call). */
+  | { kind: 'other'; keyword: string; exprs: Expr[] };
 
 export interface ParsedLine {
   ok: boolean;
@@ -97,6 +101,10 @@ class Failure {
 class Parser {
   readonly out: Statement[] = [];
   private pos = 0;
+  /** How many `expr()` calls are open: only the outermost one's result is something the statement reads. */
+  private depth = 0;
+  /** The outermost expressions of the statement being read, in order. A statement keeps its own array, so a branch's statements do not add to their IF's. */
+  private reads: Expr[] = [];
 
   constructor(
     private readonly tokens: Token[],
@@ -162,6 +170,7 @@ class Parser {
   }
 
   private statement(): void {
+    this.reads = [];
     const t = this.peek()!;
     if (t.t === 'id') {
       this.assign();
@@ -240,7 +249,8 @@ class Parser {
         }
         break;
       case 'if':
-        this.out.push({ kind: 'other', keyword });
+        // Pushed before its branches so they follow it; the condition fills `exprs` as it is read.
+        this.out.push({ kind: 'other', keyword, exprs: this.reads });
         this.ifRest();
         return;
       case 'def':
@@ -259,7 +269,7 @@ class Parser {
         this.disk(keyword);
         break;
     }
-    this.out.push({ kind: 'other', keyword });
+    this.out.push({ kind: 'other', keyword, exprs: this.reads });
   }
 
   private assign(): void {
@@ -415,7 +425,7 @@ class Parser {
       }
       this.eatKw('=');
       this.expr();
-      this.out.push({ kind: 'other', keyword: 'DEF' });
+      this.out.push({ kind: 'other', keyword: 'DEF', exprs: this.reads });
       return;
     }
     if (this.atKw('USR')) {
@@ -476,11 +486,13 @@ class Parser {
   }
 
   private expr(): Expr {
+    this.depth++;
     let left = this.and();
     while (this.atKw('OR')) {
       this.pos++;
       left = { kind: 'binary', op: 'OR', left, right: this.and() };
     }
+    if (--this.depth === 0) this.reads.push(left);
     return left;
   }
 

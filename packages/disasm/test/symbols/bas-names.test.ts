@@ -12,9 +12,11 @@ import { renderBasListing, renderPass1Listing } from '../../src/listing.js';
 import { analyze } from '../../src/pipeline.js';
 import { selectSymbols } from '../../src/symbols/select.js';
 import type { SymbolSelection, SymbolSet } from '../../src/symbols/select.js';
+import type { RomComparison } from '../../src/symbols/types.js';
 import { tokenizeLine, writeBasic } from '../writers/basic-tokenizer.js';
 import type { BasicLineSpec } from '../writers/basic-tokenizer.js';
 import { entry, tablesOf } from './helpers.js';
+import type { Tables } from './helpers.js';
 
 const parsed = (text: string) => parseLine(tokenizeLine(text));
 const addresses = (text: string): number[] => basAddresses(parsed(text));
@@ -52,6 +54,31 @@ describe('basAddresses', () => {
     expect(addresses('X=FNA(PEEK(14400))')).toEqual([14400]);
     expect(addresses('POKE 15360,PEEK(14400)')).toEqual([15360, 14400]);
     expect(addresses('DEFUSR=PEEK(16526)')).toEqual([16526]);
+  });
+
+  it('finds a PEEK in an IF condition, a PRINT item, a FOR bound, an ON selector, and a DEF FN body', () => {
+    expect(addresses('IF PEEK(14400)=128 THEN 255')).toEqual([14400]);
+    expect(addresses('PRINT PEEK(16526)')).toEqual([16526]);
+    expect(addresses('FOR I=PEEK(16548) TO 10')).toEqual([16548]);
+    expect(addresses('FOR I=1 TO PEEK(16548) STEP PEEK(16549)')).toEqual([16548, 16549]);
+    expect(addresses('ON PEEK(14400) GOTO 100,200')).toEqual([14400]);
+    expect(addresses('ON PEEK(14400) GOSUB 100,200')).toEqual([14400]);
+    expect(addresses('DEF FNA(X)=PEEK(14400)+X')).toEqual([14400]);
+  });
+
+  it('finds a PEEK in every other place an expression can stand', () => {
+    expect(addresses('PRINT@PEEK(14400),"X"')).toEqual([14400]);
+    expect(addresses('PRINT TAB(PEEK(14400));"X"')).toEqual([14400]);
+    expect(addresses('LPRINT PEEK(14400)')).toEqual([14400]);
+    expect(addresses('OUT 255,PEEK(14400)')).toEqual([14400]);
+    expect(addresses('CLEAR PEEK(16526)')).toEqual([16526]);
+    expect(addresses('READ A(PEEK(14400))')).toEqual([14400]);
+    expect(addresses('IF X THEN 100 ELSE PRINT PEEK(14400)')).toEqual([14400]);
+  });
+
+  it('reads the PEEKs, POKEs, and DEFUSRs of one line in the order it reads them', () => {
+    expect(addresses('IF PEEK(14400)=128 THEN POKE 16526,0 ELSE PRINT PEEK(16527)')).toEqual([14400, 16526, 16527]);
+    expect(addresses('PRINT PEEK(16526);:POKE 16527,PEEK(16526):DEFUSR=PEEK(16528)')).toEqual([16526, 16527, 16528]);
   });
 
   it('takes the PEEKs inside a POKE address that is itself no constant', () => {
@@ -112,9 +139,13 @@ const video = entry('hardware-model1', 'region', 0x3c00, 'VIDEO', { length: 1024
 const zone = entry('hardware-model1', 'region', 0x7000, 'ZONE', { length: 16, coined: true, purpose: 'a data zone' });
 const inside = entry('hardware-model1', 'region', 0x5200, 'INSIDE', { length: 16, coined: true, purpose: 'a zone the program sits in' });
 
-/** Every ROM address is the same on both machines, so nothing here depends on the comparison. */
-const tables = (...over: Parameters<typeof tablesOf>): SymbolSet => selectSymbols(MODEL_I, tablesOf(...over), {});
+/** The ROM addresses above are the same on both machines, so their notes carry no machine tag. */
+const SHARED: RomComparison = { '408E': 'shared', '0049': 'shared', '7000': 'shared' };
+const tables = (lists: Partial<Tables>, comparison: RomComparison = SHARED): SymbolSet => selectSymbols(MODEL_I, tablesOf(lists), comparison);
 const TABLES = tables({ 'rom-model1': [usrvec, kbwait, zoneStart], 'hardware-model1': [keyboard, video, zone, inside] });
+
+/** The note lines of a listing. */
+const notes = (lines: string[]): string[] => lines.filter((l) => /^; {3}\d/.test(l));
 
 /** Level II's usual start of program, $42E9. */
 const BASE = 0x42e9;
@@ -194,13 +225,39 @@ describe('the plain BASIC listing with tables', () => {
     ]);
   });
 
+  it('notes a PEEK in an IF condition, a PRINT item, a FOR bound, an ON selector, and a DEF FN body', () => {
+    const lines = listing(
+      [
+        { number: 10, text: 'IF PEEK(14400)=128 THEN 255' },
+        { number: 20, text: 'PRINT PEEK(16526)' },
+        { number: 30, text: 'FOR I=PEEK(15360) TO 10' },
+        { number: 40, text: 'ON PEEK(14401) GOTO 100,200' },
+        { number: 50, text: 'DEF FNA(X)=PEEK(16527)+X' },
+      ],
+      TABLES,
+    );
+    expect(lines.slice(1)).toEqual([
+      '10 IF PEEK(14400)=128 THEN 255',
+      ';   14400 = $3840 memory-mapped keyboard (KEYBOARD+64)',
+      '20 PRINT PEEK(16526)',
+      ';   16526 = $408E USR vector (USRVEC)',
+      '30 FOR I=PEEK(15360) TO 10',
+      ';   15360 = $3C00 video display memory (VIDEO)',
+      '40 ON PEEK(14401) GOTO 100,200',
+      ';   14401 = $3841 memory-mapped keyboard (KEYBOARD+65)',
+      '50 DEF FNA(X)=PEEK(16527)+X',
+      ';   16527 = $408F USR vector (USRVEC+1)',
+      '',
+    ]);
+  });
+
   it('adds one note per distinct address, in the order the line reads them', () => {
     const lines = listing([{ number: 10, text: 'POKE 16527,PEEK(16526):POKE 16527,PEEK(16527)' }], TABLES);
     expect(lines.slice(2)).toEqual([';   16527 = $408F USR vector (USRVEC+1)', ';   16526 = $408E USR vector (USRVEC)', '']);
   });
 
   it('notes an address written negative by the address it stands for', () => {
-    const top = tables({ 'rom-model1': [entry('rom-model1', 'variable', 0xffff, 'TOPBYTE', { purpose: 'the top byte of memory' })] });
+    const top = tables({ 'rom-model1': [entry('rom-model1', 'variable', 0xffff, 'TOPBYTE', { purpose: 'the top byte of memory' })] }, { FFFF: 'shared' });
     const lines = listing([{ number: 10, text: 'POKE -1,0' }], top);
     expect(lines.slice(1)).toEqual(['10 POKE -1,0', ';   65535 = $FFFF the top byte of memory (TOPBYTE)', '']);
   });
@@ -231,7 +288,6 @@ describe('the pass 1 listing of a .BAS with hidden code', () => {
     { number: 40, text: 'POKE 20000,1' },
   ];
   const prog = loadBas(writeBasic(specs, BASE));
-  const notes = (lines: string[]): string[] => lines.filter((l) => /^; {3}\d/.test(l));
 
   it('shows the same note lines as the plain listing, each after its BASIC line', () => {
     const plain = renderBasListing(prog, { tables: TABLES }).split('\n');
@@ -261,6 +317,33 @@ describe('the pass 1 listing of a .BAS with hidden code', () => {
     expect(analysis.externals.dropped).toEqual([video]);
     const plain = renderBasListing(prog, { tables: TABLES }).split('\n');
     expect(notes(renderPass1Listing(analysis).split('\n'))).toEqual(notes(plain));
+  });
+
+  it('notes a PEEK in an IF condition, a PRINT item, a FOR bound, an ON selector, and a DEF FN body, as the plain listing does', () => {
+    const own = loadBas(
+      writeBasic(
+        [
+          { number: 10, text: 'IF PEEK(14400)=128 THEN 255' },
+          { number: 20, raw: [0xc3, 0x00, 0x00, 0xc9, 0x00, 0x3e] },
+          { number: 30, text: 'PRINT PEEK(16526)' },
+          { number: 40, text: 'FOR I=PEEK(15360) TO 10' },
+          { number: 50, text: 'ON PEEK(14401) GOTO 100,200' },
+          { number: 60, text: 'DEF FNA(X)=PEEK(16527)+X' },
+        ],
+        BASE,
+      ),
+    );
+    const lines = renderPass1Listing(analyze(own, { tables: TABLES })).split('\n');
+    expect(notes(lines)).toEqual([
+      ';   14400 = $3840 memory-mapped keyboard (KEYBOARD+64)',
+      ';   16526 = $408E USR vector (USRVEC)',
+      ';   15360 = $3C00 video display memory (VIDEO)',
+      ';   14401 = $3841 memory-mapped keyboard (KEYBOARD+65)',
+      ';   16527 = $408F USR vector (USRVEC+1)',
+    ]);
+    expect(notes(renderBasListing(own, { tables: TABLES }).split('\n'))).toEqual(notes(lines));
+    const at = lines.indexOf('10 IF PEEK(14400)=128 THEN 255');
+    expect(lines[at + 1]).toBe(';   14400 = $3840 memory-mapped keyboard (KEYBOARD+64)');
   });
 
   it('notes nothing inside the program itself, as the plain listing does not', () => {

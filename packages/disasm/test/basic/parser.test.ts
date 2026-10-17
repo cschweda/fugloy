@@ -59,7 +59,7 @@ describe('parseLine', () => {
     for (const text of ['IF A PRINT', 'IF A>0 PRINT@105,"X";', 'IF A,100', 'IF P(Q)=0 RETURN ELSE PRINT 1', 'IF A X=1:GOTO 10 ELSE 20', 'IF A THEN 10', 'IF A,THEN 10', 'IF A GOTO 10'])
       expect(parse(text).reason, text).toBeUndefined();
     expect(parse('IF A POKE 1,2').statements).toEqual<Statement[]>([
-      { kind: 'other', keyword: 'IF' },
+      { kind: 'other', keyword: 'IF', exprs: [v('A')] },
       { kind: 'poke', addr: num(1), value: num(2) },
     ]);
   });
@@ -132,9 +132,9 @@ describe('parseLine', () => {
     ]);
     expect(parse('DEFUSR1=24576').statements).toEqual([{ kind: 'defusr', n: 1, expr: num(24576) }]);
     expect(parse('DEFUSR=&H7000').statements).toEqual([{ kind: 'defusr', n: 0, expr: num(0x7000) }]);
-    expect(parse('FOR I=1 TO 10').statements).toEqual([{ kind: 'other', keyword: 'FOR' }]);
+    expect(parse('FOR I=1 TO 10').statements).toEqual([{ kind: 'other', keyword: 'FOR', exprs: [num(1), num(10)] }]);
     expect(parse('IF A THEN POKE 1,2 ELSE X=3').statements).toEqual<Statement[]>([
-      { kind: 'other', keyword: 'IF' },
+      { kind: 'other', keyword: 'IF', exprs: [v('A')] },
       { kind: 'poke', addr: num(1), value: num(2) },
       { kind: 'assign', name: 'X', subscripts: [], expr: num(3) },
     ]);
@@ -147,5 +147,69 @@ describe('parseLine', () => {
     });
     expect(line250.statements[2]).toEqual({ kind: 'assign', name: 'Q1', subscripts: [], expr: call('INT', bin('/', v('Q0'), num(256))) });
     expect(line250.statements[3]).toEqual({ kind: 'assign', name: 'Q0', subscripts: [], expr: bin('-', v('Q0'), bin('*', v('Q1'), num(256))) });
+  });
+
+  describe('the expressions every other statement reads', () => {
+    // An `other` statement keeps its keyword and the expressions it reads (a condition, a bound, an item, a selector, a subscript, a body):
+    // the outermost ones only, in the order it reads them, so a PEEK inside one can be found (basic/addresses.ts).
+    const peek = (n: number): Expr => call('PEEK', num(n));
+    const others = (text: string): [string, Expr[]][] =>
+      parse(text).statements.flatMap((s): [string, Expr[]][] => (s.kind === 'other' ? [[s.keyword, s.exprs]] : []));
+
+    it('keeps an IF condition, a FOR start, end, and step, an ON selector, and a DEF FN body', () => {
+      expect(others('IF PEEK(14400)=128 THEN 255')).toEqual([['IF', [bin('=', peek(14400), num(128))]]]);
+      expect(others('FOR I=PEEK(16548) TO 10 STEP S')).toEqual([['FOR', [peek(16548), num(10), v('S')]]]);
+      expect(others('ON PEEK(14400) GOTO 100,200')).toEqual([['ON', [peek(14400)]]]);
+      expect(others('ON X GOSUB 100')).toEqual([['ON', [v('X')]]]);
+      expect(others('DEF FNA(X)=PEEK(14400)+X')).toEqual([['DEF', [bin('+', peek(14400), v('X'))]]]);
+    });
+
+    it('keeps every item of a PRINT: values, positions, TAB, USING, and a file number', () => {
+      expect(others('PRINT "A";PEEK(1),B')).toEqual([['PRINT', [{ kind: 'str', value: 'A' }, peek(1), v('B')]]]);
+      expect(others('PRINT@PEEK(1),"X"')).toEqual([['PRINT', [peek(1), { kind: 'str', value: 'X' }]]]);
+      expect(others('PRINT TAB(PEEK(1));A')).toEqual([['PRINT', [peek(1), v('A')]]]);
+      expect(others('PRINT #1,A')).toEqual([['PRINT', [num(1), v('A')]]]);
+      expect(others('LPRINT PEEK(1)')).toEqual([['LPRINT', [peek(1)]]]);
+    });
+
+    it('keeps the arguments of the statements that take expressions, and the subscripts of their variables', () => {
+      expect(others('OUT 255,PEEK(1)')).toEqual([['OUT', [num(255), peek(1)]]]);
+      expect(others('SET(PEEK(1),2)')).toEqual([['SET', [peek(1), num(2)]]]);
+      expect(others('CLEAR PEEK(1)')).toEqual([['CLEAR', [peek(1)]]]);
+      expect(others('ERROR PEEK(1)')).toEqual([['ERROR', [peek(1)]]]);
+      expect(others('READ A(PEEK(1)),B')).toEqual([['READ', [peek(1)]]]);
+      expect(others('INPUT "X";A(PEEK(1))')).toEqual([['INPUT', [peek(1)]]]);
+      expect(others('OPEN "R",1,"FILE/DAT",32')).toEqual([['OPEN', [{ kind: 'str', value: 'R' }, num(1), { kind: 'str', value: 'FILE/DAT' }, num(32)]]]);
+    });
+
+    it('keeps nothing for a statement that reads no expression', () => {
+      expect(others('CLS:END')).toEqual([['CLS', []], ['END', []]]);
+      expect(others('ON ERROR GOTO 0')).toEqual([['ON', []]]);
+      expect(others('GOTO 100')).toEqual([['GOTO', []]]);
+      expect(others('REM PEEK(1)')).toEqual([['REM', []]]);
+      expect(others('DATA 1,2')).toEqual([['DATA', []]]);
+    });
+
+    it('keeps only the outermost expressions: an argument of a function is part of its call', () => {
+      expect(others('PRINT INT(PEEK(1)/2)')[0]![1]).toEqual([call('INT', bin('/', peek(1), num(2)))]);
+      expect(others('PRINT A(PEEK(1))')[0]![1]).toEqual([v('A', [peek(1)])]);
+    });
+
+    it('gives each statement its own: the condition to the IF, the branches theirs', () => {
+      expect(others('IF A THEN PRINT B ELSE PRINT C')).toEqual([['IF', [v('A')]], ['PRINT', [v('B')]], ['PRINT', [v('C')]]]);
+      expect(others('IF A THEN IF B THEN PRINT C ELSE PRINT D ELSE FOR I=1 TO E')).toEqual([
+        ['IF', [v('A')]],
+        ['IF', [v('B')]],
+        ['PRINT', [v('C')]],
+        ['PRINT', [v('D')]],
+        ['FOR', [num(1), v('E')]],
+      ]);
+    });
+
+    it('leaves what a line is, and why it is not, as it was', () => {
+      expect(parse('IF PEEK(14400)=128 THEN 255').ok).toBe(true);
+      expect(parse('IF').reason).toBe('expected expression at +1');
+      expect(parse('FOR I=PEEK(1) TO').reason).toBe('expected expression at +10');
+    });
   });
 });
