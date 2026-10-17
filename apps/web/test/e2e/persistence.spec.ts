@@ -113,3 +113,45 @@ test('Back up downloads the work, and Restore asks before replacing a program', 
   await expect(page.getByTestId('backup-message')).toContainText('1 replaced');
   expect(await hintText(page)).not.toContain('name INIT');
 });
+
+test('restored hints that cannot apply are kept; the first edit asks, focused on Download, and Esc does not answer', async ({ page }) => {
+  await openSea(page);
+  const bad = `${seaHints}block 0:$0100 relocate $5300 $0010\n`;
+  const backup = { fugloyBackup: 1, exportedAt: '', programs: [{ hash: HASH, name: 'mine.hints', hints: bad }] };
+  await page.getByTestId('backup-summary').click();
+  await page.getByTestId('backup-file').setInputFiles({ name: 'b.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
+  await expect(page.getByTestId('backup-message')).toContainText('1 added');
+  await expect(page.getByTestId('open-error')).toContainText('Your saved hints for seadrg01.cmd no longer apply: the hint file cannot apply');
+  await expect(page.getByTestId('open-error')).toContainText('They are kept, not replaced.');
+  await expect(saveState(page)).toHaveText('not saved (saved hints kept)');
+
+  await rename(page, 'INIT');
+  const dialog = page.getByTestId('blocked-hints-dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('mine.hints');
+  await expect(dialog.getByRole('button', { name: 'Download the saved hints' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeVisible();
+  const [download] = await Promise.all([page.waitForEvent('download'), dialog.getByRole('button', { name: 'Download the saved hints' }).click()]);
+  expect(download.suggestedFilename()).toBe('mine.hints');
+  expect(readFileSync((await download.path())!, 'utf8')).toBe(bad);
+  await expect(dialog).toContainText('Downloaded mine.hints.');
+  await dialog.getByRole('button', { name: 'Replace them' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(saveState(page)).toHaveText('saved');
+  expect(await hintText(page)).toContain('name INIT');
+});
+
+test('the restore question about replacing saved work focuses Cancel, not Replace', async ({ page }) => {
+  await openSea(page);
+  await rename(page, 'INIT');
+  await expect(saveState(page)).toHaveText('saved');
+  const backup = { fugloyBackup: 1, exportedAt: '', programs: [{ hash: HASH, name: 'seadrg01.hints', hints: seaHints }] };
+  await page.getByTestId('backup-summary').click();
+  await page.getByTestId('backup-file').setInputFiles({ name: 'b.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
+  const dialog = page.getByTestId('backup-confirm');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByTestId('backup-message')).toContainText('1 left as they were');
+});

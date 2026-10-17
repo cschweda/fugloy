@@ -375,7 +375,9 @@ All four share the top bar.
 ### SEO (from the plan and CLAUDE.md, unchanged)
 
 On every page: a title and description; a canonical URL on
-`https://app.fugloy.dev`; Open Graph and Twitter card (`summary_large_image`)
+`https://app.fugloy.dev` (with a trailing slash past the home page, as in
+`/about/`, where Netlify serves each generated directory; `og:url` and
+`sitemap.xml` use the same URLs); Open Graph and Twitter card (`summary_large_image`)
 tags whose image is `docs/images/og-image.png` (1200×630) at an absolute URL,
 with alt text; favicons from the card's ø tile (source
 `docs/images/og-image.svg`). Site-wide: `robots.txt`, `sitemap.xml`, and

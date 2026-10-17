@@ -1,10 +1,12 @@
 // SEO of the generated site: every page has its own title, description, canonical URL on
-// app.fugloy.dev, an absolute Open Graph image with alt text, and a Twitter summary card;
+// app.fugloy.dev (with the trailing slash of the directory each page is generated as, so Netlify
+// serves it without a redirect), an absolute Open Graph image with alt text, and a Twitter summary card;
 // the home page has JSON-LD; sitemap.xml lists the four pages and robots.txt names it.
 // Reads .output/public, so it runs after `pnpm --filter @fugloy/web generate` (`pnpm run test:seo`
 // does both); it is skipped, with a warning, when the site has not been generated, unless
-// FUGLOY_REQUIRE_SEO=1 (set by `test:seo`, for CI) makes that a failure.
-import { existsSync, readFileSync } from 'node:fs';
+// FUGLOY_REQUIRE_SEO=1 (set by `test:seo`, for CI) makes that a failure. With that flag the site
+// was just generated as Netlify builds it, so it also checks that the browser checks' hook is not in it.
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -17,12 +19,16 @@ if (!built) console.warn('seo.test: .output/public is missing; run `pnpm --filte
 const ORIGIN = 'https://app.fugloy.dev';
 const PAGES = [
   { path: '/', file: 'index.html', title: 'Fugløy — TRS-80 disassembler workbench' },
-  { path: '/technical-details', file: 'technical-details/index.html', title: 'Technical details · Fugløy' },
-  { path: '/manuals', file: 'manuals/index.html', title: 'Manuals · Fugløy' },
-  { path: '/about', file: 'about/index.html', title: 'About · Fugløy' },
+  { path: '/technical-details/', file: 'technical-details/index.html', title: 'Technical details · Fugløy' },
+  { path: '/manuals/', file: 'manuals/index.html', title: 'Manuals · Fugløy' },
+  { path: '/about/', file: 'about/index.html', title: 'About · Fugløy' },
 ];
 
 const read = (f: string): string => readFileSync(join(out, f), 'utf8');
+/** Every file under a directory, relative paths. */
+const walk = (dir: string, at = ''): string[] =>
+  readdirSync(join(dir, at), { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(dir, join(at, e.name)) : [join(at, e.name)]));
+
 /** The content of the first <meta> whose `key` attribute (name or property) is `value`. */
 function meta(html: string, key: 'name' | 'property', value: string): string | undefined {
   for (const tag of html.match(/<meta\b[^>]*>/g) ?? []) {
@@ -56,7 +62,7 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
       });
 
       it('has a canonical link and og:url on app.fugloy.dev', () => {
-        const url = ORIGIN + (p.path === '/' ? '/' : p.path);
+        const url = ORIGIN + p.path;
         expect(html()).toContain(`<link rel="canonical" href="${url}"`);
         expect(meta(html(), 'property', 'og:url')).toBe(url);
         expect(meta(html(), 'property', 'og:type')).toBe('website');
@@ -96,6 +102,22 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
     for (const p of PAGES.slice(1)) expect(read(p.file)).not.toContain('application/ld+json');
   });
 
+  it('self-hosts JetBrains Mono (400 and 700, Latin) with no font CDN on the workbench, and credits its licence', () => {
+    // Each face's woff2, resolved from the stylesheet that names it, is a file of this site.
+    const faces = walk(out)
+      .filter((f) => f.endsWith('.css'))
+      .flatMap((f) => (readFileSync(join(out, f), 'utf8').match(/@font-face\s*{[^}]*}/g) ?? []).filter((x) => x.includes('JetBrains Mono')).map((face) => ({ f, face })));
+    expect(faces.map((x) => /font-weight:\s*(\d+)/.exec(x.face)?.[1]).sort()).toEqual(['400', '700']);
+    for (const { f, face } of faces) {
+      const src = /url\(([^)]*\.woff2)\)/.exec(face)?.[1];
+      expect(src).toBeDefined();
+      expect(src).not.toMatch(/^(https?:)?\/\//);
+      expect(existsSync(src!.startsWith('/') ? join(out, src!) : join(out, dirname(f), src!))).toBe(true);
+    }
+    for (const p of PAGES.filter((x) => x.path !== '/technical-details/')) expect(read(p.file)).not.toMatch(/fonts\.(googleapis|gstatic)\.com/);
+    expect(read('about/index.html')).toMatch(/JetBrains Mono[\s\S]*SIL Open Font License 1\.1/);
+  });
+
   it('ships the social card and favicons', () => {
     for (const f of ['og-image.png', 'favicon.svg', 'favicon.ico', 'apple-touch-icon.png']) expect(existsSync(join(out, f))).toBe(true);
     const png = readFileSync(join(out, 'og-image.png'));
@@ -106,11 +128,19 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
   it('lists the four pages in sitemap.xml, and robots.txt allows all and names it', () => {
     const sitemap = read('sitemap.xml');
     const locs = [...sitemap.matchAll(/<loc>([^<]*)<\/loc>/g)].map((m) => m[1]);
-    expect(locs).toEqual([`${ORIGIN}/`, `${ORIGIN}/technical-details`, `${ORIGIN}/manuals`, `${ORIGIN}/about`]);
+    expect(locs).toEqual(PAGES.map((p) => ORIGIN + p.path));
     const robots = read('robots.txt');
     expect(robots).toMatch(/^User-agent: \*$/m);
     expect(robots).toMatch(/^Allow: \/$/m);
     expect(robots).not.toMatch(/^Disallow: ./m);
     expect(robots).toContain(`Sitemap: ${ORIGIN}/sitemap.xml`);
+  });
+});
+
+describe.skipIf(!built || process.env.FUGLOY_REQUIRE_SEO !== '1')('the site as Netlify builds it', () => {
+  it('does not contain the browser checks\' window.__fugloyTest hook', () => {
+    const files = walk(out).filter((f) => /\.(m?js|html)$/.test(f));
+    expect(files.length).toBeGreaterThan(5);
+    expect(files.filter((f) => readFileSync(join(out, f), 'utf8').includes('__fugloyTest'))).toEqual([]);
   });
 });

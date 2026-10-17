@@ -13,7 +13,8 @@ export default defineConfig({
   use: { baseURL: 'http://localhost:4173', viewport: { width: 1440, height: 900 } },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } }],
   webServer: {
-    command: 'pnpm run generate && tsx scripts/serve-static.ts',
+    // NUXT_PUBLIC_E2E=1 compiles in window.__fugloyTest, which the specs drive; the site's own build leaves it out.
+    command: 'NUXT_PUBLIC_E2E=1 pnpm run generate && tsx scripts/serve-static.ts',
     url: 'http://localhost:4173',
     reuseExistingServer: true,
     timeout: 180_000,

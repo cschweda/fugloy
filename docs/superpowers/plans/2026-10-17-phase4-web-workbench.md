@@ -549,7 +549,7 @@
 **Interfaces:**
 - `usePageSeo({ title: string; description: string; path: string })` sets:
   - `<title>` (`<title> · Fugløy`, except the home page `Fugløy — TRS-80 disassembler workbench`) and the meta description;
-  - canonical `https://app.fugloy.dev<path>`;
+  - canonical `https://app.fugloy.dev<path>`, with a trailing slash on every page but the home page (`/about/`), since each page is generated as a directory that Netlify serves there (final review, 2026-10-17; `og:url` and `sitemap.xml` match);
   - `og:title`, `og:description`, `og:url`, `og:type=website`, `og:image=https://app.fugloy.dev/og-image.png`, `og:image:width=1200`, `og:image:height=630`, `og:image:alt`;
   - `twitter:card=summary_large_image` with the same image and alt.
 - Home page JSON-LD:

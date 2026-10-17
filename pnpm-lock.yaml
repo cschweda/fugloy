@@ -23,6 +23,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@fontsource/jetbrains-mono':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@fugloy/disasm':
         specifier: workspace:*
         version: link:../../packages/disasm
@@ -51,9 +54,6 @@ importers:
       '@axe-core/playwright':
         specifier: ^4.14.0
         version: 4.14.0(playwright-core@1.64.1)
-      '@fontsource/jetbrains-mono':
-        specifier: ^5.3.0
-        version: 5.3.0
       '@fugloy/cli':
         specifier: workspace:*
         version: link:../../packages/cli

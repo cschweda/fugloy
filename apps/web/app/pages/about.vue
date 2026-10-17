@@ -78,6 +78,11 @@ const byline = (s: Source): string => (s.author === s.publisher ? s.author : `${
         <a href="https://mozilla.github.io/pdf.js/" rel="noopener noreferrer" target="_blank">PDF.js</a> by Mozilla, which shows your manuals, under the Apache License 2.0.
         It is served from this site, with its <a href="/pdfjs/LICENSE">licence</a>.
       </li>
+      <li data-testid="credit-font">
+        <a href="https://www.jetbrains.com/lp/mono/" rel="noopener noreferrer" target="_blank">JetBrains Mono</a>, the typeface of the listing, by JetBrains, under the
+        <a href="https://openfontlicense.org/" rel="noopener noreferrer" target="_blank">SIL Open Font License 1.1</a>.
+        It is served from this site, from the <a href="https://fontsource.org/fonts/jetbrains-mono" rel="noopener noreferrer" target="_blank">Fontsource</a> package.
+      </li>
     </ul>
 
     <h2 id="source">Source</h2>

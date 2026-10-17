@@ -4,6 +4,8 @@
 // companion tabs on the right, and the status line under them.
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { addressKey, withHintFile, withSelection } from '@fugloy/disasm';
+import { download } from '~/utils/exports';
+import { MODEL3_DEFAULT } from '~/composables/useWorkbench';
 import type { Row, TableEntry } from '@fugloy/disasm';
 import ListingView from '~/components/listing/ListingView.vue';
 import InlineEdit from '~/components/listing/InlineEdit.vue';
@@ -324,14 +326,22 @@ useWorkbenchKeys({
   inListing: (target) => target instanceof Element && target.closest('.fg-listing') !== null,
 });
 
-const MODEL3 = { machine: 3, dos: 'trsdos' } as const;
+// The saved hints that no longer apply, after the user's first edit: download them, or replace them.
+const blockedDownloaded = ref(false);
+watch(persistence.blockedAsk, () => (blockedDownloaded.value = false));
+function downloadBlocked(): void {
+  const b = persistence.blocked.value;
+  if (b === null) return;
+  download({ filename: b.name, mime: 'text/plain', bytes: new TextEncoder().encode(b.text), warnings: [] });
+  blockedDownloaded.value = true;
+}
 
 /** Re-renders the open program with new rows, for the browser checks: tables toggled, or label names added above the cursor. */
 function rerender(kind: 'tables' | 'names'): void {
   const s = session.value;
   if (s === null) return;
   if (kind === 'tables') {
-    session.value = withSelection(s, s.selection === undefined ? MODEL3 : undefined);
+    session.value = withSelection(s, s.selection === undefined ? MODEL3_DEFAULT : undefined);
     return;
   }
   // Name every 20th unnamed data or code row above the cursor's row (by position, not address).
@@ -371,6 +381,12 @@ onMounted(() => {
   editor.isMac.value = /Mac|iPhone|iPad/.test(navigator.platform);
   // Back from another page with a program still open: show it where it was.
   if (session.value !== null) showOpened();
+  // The browser checks' hook exists only in a build made with NUXT_PUBLIC_E2E=1 (Playwright's web server):
+  // the define is false otherwise, and the minifier drops this block from the site.
+  if (__FUGLOY_E2E__) installTestHook();
+});
+
+function installTestHook(): void {
   window.__fugloyTest = {
     rowCount: () => rows.value.length,
     scrollToAddr: scrollTo,
@@ -380,7 +396,7 @@ onMounted(() => {
     rerender,
     load: (bytes, name, hints, base) =>
       wb.openBytes(Uint8Array.from(bytes), name, {
-        selection: MODEL3,
+        selection: MODEL3_DEFAULT,
         ...(hints === undefined ? {} : { hintText: hints, hintSource: name.replace(/\.[^.]+$/, '.hints') }),
         ...(base === undefined ? {} : { base }),
       }),
@@ -389,10 +405,10 @@ onMounted(() => {
       return image === undefined ? [] : image.runs().flatMap((r) => Array.from(image.bytes.subarray(r.start, r.end + 1)));
     },
   };
-});
+}
 onBeforeUnmount(() => {
   document.removeEventListener('drop', onDocumentDrop);
-  delete window.__fugloyTest;
+  if (__FUGLOY_E2E__) delete window.__fugloyTest;
 });
 </script>
 
@@ -498,6 +514,18 @@ onBeforeUnmount(() => {
       no-escape
       @confirm="persistence.resolveConflict('load')"
       @cancel="persistence.resolveConflict('keep')"
+    />
+    <ConfirmDialog
+      testid="blocked-hints-dialog"
+      :open="persistence.blockedAsk.value"
+      title="Replace the saved hints that no longer apply?"
+      :message="`${blockedDownloaded ? `Downloaded ${persistence.blocked.value?.name ?? ''}. ` : ''}The hints saved for ${session?.name ?? 'this program'} (${persistence.blocked.value?.name ?? ''}) no longer apply: ${persistence.blocked.value?.reason ?? ''}. Saving your change replaces them.`"
+      confirm-label="Replace them"
+      cancel-label="Download the saved hints"
+      no-escape
+      focus-cancel
+      @confirm="persistence.replaceBlocked()"
+      @cancel="downloadBlocked"
     />
     <CarryOverDialog :candidate="persistence.carry.value" :program="session?.name ?? ''" @accept="persistence.acceptCarry()" @dismiss="persistence.dismissCarry()" />
     <ConfirmDialog

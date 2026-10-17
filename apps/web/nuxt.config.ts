@@ -12,7 +12,8 @@ const pdfjsAssets = ['wasm', 'standard_fonts', 'cmaps', 'iccs'].map((d) => ({ di
 export default defineNuxtConfig({
   compatibilityDate: '2026-10-01',
   modules: ['@nuxt/ui'],
-  css: ['~/assets/css/main.css'],
+  // JetBrains Mono (the listing's face, SIL OFL 1.1) is self-hosted from @fontsource: Latin only, 400 and 700. No font CDN.
+  css: ['@fontsource/jetbrains-mono/latin-400.css', '@fontsource/jetbrains-mono/latin-700.css', '~/assets/css/main.css'],
   ssr: true,
   // The crawler must not follow the About page's link to /pdfjs/LICENSE: the file is copied in after prerendering.
   nitro: { preset: 'static', publicAssets: pdfjsAssets, prerender: { ignore: ['/pdfjs/'] } },
@@ -31,6 +32,9 @@ export default defineNuxtConfig({
   devtools: { enabled: false },
   typescript: { strict: true },
   alias: fugloyAliases,
+  // The Playwright checks' window.__fugloyTest hook (pages/index.vue) is compiled in only when
+  // NUXT_PUBLIC_E2E=1, which only playwright.config's web server sets; the site never ships it.
+  vite: { define: { __FUGLOY_E2E__: JSON.stringify(process.env.NUXT_PUBLIC_E2E === '1') } },
   app: {
     head: {
       htmlAttrs: { lang: 'en' },

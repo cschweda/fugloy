@@ -7,13 +7,15 @@ export const CARD_ALT = 'Fugløy: a Z80 disassembler for the TRS-80. Disassemble
 export interface PageSeo {
   title: string;
   description: string;
-  /** The page's path, `/` for the home page. */
+  /** The page's path, `/` for the home page; the canonical URL adds the trailing slash. */
   path: string;
 }
 
 export function usePageSeo({ title, description, path }: PageSeo): void {
   const full = path === '/' ? HOME_TITLE : `${title} · Fugløy`;
-  const url = `${SITE_ORIGIN}${path}`;
+  // Each page is generated as a directory (about/index.html), which Netlify serves at /about/ and redirects
+  // /about to, so the canonical URL keeps the trailing slash; sitemap.xml lists the same URLs.
+  const url = `${SITE_ORIGIN}${path.endsWith('/') ? path : `${path}/`}`;
   const image = `${SITE_ORIGIN}/og-image.png`;
   useHead({ title: full, link: [{ rel: 'canonical', href: url }] });
   useSeoMeta({

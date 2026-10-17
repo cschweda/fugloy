@@ -210,6 +210,31 @@ Releases are tagged `vX.Y.Z` on `main`.
   and an unknown token says what to type.
 - In the workbench, Eliminator opens as Model I: `elimin8d` calls `$01D3`,
   which only the Model I ROM has, though its README says it runs on both.
+- The workbench, after its final review:
+  - Saved hints that no longer apply to their program are kept, never
+    overwritten: opening the program says why ("Your saved hints for … no
+    longer apply: …. They are kept, not replaced."), the status line reads
+    "not saved (saved hints kept)", and the first edit asks, with Download
+    the saved hints and Replace them, before anything saves over them. Esc
+    does not answer it.
+  - Restore lists backup entries whose hints do not parse and skips them,
+    restoring the rest, and writes any edit still waiting to save before it
+    compares.
+  - Pending saves are also written when the page is hidden (a tab or app
+    switch), not only on `pagehide`.
+  - Questions whose yes replaces saved work (Restore's Replace, the kept
+    hints' Replace them) put the first focus on the safe button.
+  - A file over 64K that is not a program (a disk image) is no longer offered
+    as a raw binary, and the raw load address is refused when the file would
+    run past `$FFFF` from it, with the highest address it fits at.
+  - JetBrains Mono, the listing's face, is self-hosted from Fontsource
+    (Latin, 400 and 700) and credited on the About page; before, the CSS
+    named it but nothing loaded it.
+  - Canonical, `og:url`, and `sitemap.xml` URLs end in a slash past the home
+    page (`https://app.fugloy.dev/about/`), where Netlify serves each page.
+  - The browser checks' `window.__fugloyTest` hook is compiled in only when
+    `NUXT_PUBLIC_E2E=1` (Playwright's web server); the site's build leaves it
+    out, and `test:seo` checks that.
 
 ### Fixed
 
