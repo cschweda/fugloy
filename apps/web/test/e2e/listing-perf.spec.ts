@@ -21,7 +21,7 @@ declare global {
       scrollToAddr: (addr: number) => void;
       setCursor: (addr: number | null) => void;
       rerender: (kind: 'tables' | 'names') => void;
-      load: (bytes: number[], name: string, hints?: string) => void;
+      load: (bytes: number[], name: string, hints?: string, base?: number) => void;
     };
   }
 }
@@ -109,10 +109,26 @@ for (const c of CASES) {
       const listing = page.locator('.fg-listing');
       await listing.hover();
 
-      // Fling: bursts of large wheel deltas down the whole listing and back up.
+      // Fling: bursts of large wheel deltas down the whole listing to the bottom, then back to the top.
+      const geometry = (): Promise<{ top: number; max: number }> =>
+        page.evaluate(() => {
+          const el = document.querySelector<HTMLElement>('.fg-listing')!;
+          return { top: el.scrollTop, max: el.scrollHeight - el.clientHeight };
+        });
+      await page.evaluate(() => {
+        document.querySelector<HTMLElement>('.fg-listing')!.scrollTop = 0;
+      });
+      const { max } = await geometry();
+      const steps = Math.ceil(max / 2400) + 5;
+      let bottom = 0;
+      let backToTop = -1;
       const fling = await measure(page, async () => {
-        for (let i = 0; i < 80; i++) await page.mouse.wheel(0, 2400);
-        for (let i = 0; i < 80; i++) await page.mouse.wheel(0, -2400);
+        for (let i = 0; i < steps; i++) await page.mouse.wheel(0, 2400);
+        await expect.poll(async () => (await geometry()).top, { timeout: 10_000 }).toBeGreaterThanOrEqual(max - 1);
+        bottom = (await geometry()).top;
+        for (let i = 0; i < steps; i++) await page.mouse.wheel(0, -2400);
+        await expect.poll(async () => (await geometry()).top, { timeout: 10_000 }).toBe(0);
+        backToTop = (await geometry()).top;
       });
       // Scrollbar drag: jump the scroll position across the listing, a frame apart.
       const drag = await measure(page, async () => {
@@ -187,7 +203,7 @@ for (const c of CASES) {
 
       const report = [
         `${c.name}: ${count} rows${throttle > 1 ? ` (CPU throttled ${throttle}x)` : ''}`,
-        `fling (160 wheel steps of 2400px): ${fling.frames.length} frames, frame p50 ${ms(p(fling.frames, 0.5))}, p95 ${ms(p(fling.frames, 0.95))}, max ${ms(Math.max(...fling.frames))}; long tasks: ${fling.longTasks.length}${fling.longTasks.length ? ` (max ${ms(Math.max(...fling.longTasks))})` : ''}`,
+        `fling (${steps} wheel steps of 2400px down to scrollTop ${bottom} of ${max}, ${steps} back to ${backToTop}): ${fling.frames.length} frames, frame p50 ${ms(p(fling.frames, 0.5))}, p95 ${ms(p(fling.frames, 0.95))}, max ${ms(Math.max(...fling.frames))}; long tasks: ${fling.longTasks.length}${fling.longTasks.length ? ` (max ${ms(Math.max(...fling.longTasks))})` : ''}`,
         `drag (101 jumps, a frame apart): frame p50 ${ms(p(drag.frames, 0.5))}, p95 ${ms(p(drag.frames, 0.95))}, max ${ms(Math.max(...drag.frames))}; long tasks: ${drag.longTasks.length}${drag.longTasks.length ? ` (max ${ms(Math.max(...drag.longTasks))})` : ''}`,
         `scrollToAddr (${jumps.length} jumps, call to next frame): median ${ms(p(jumps.map((j) => j.ms), 0.5))}, max ${ms(Math.max(...jumps.map((j) => j.ms)))}`,
         ...rerenders.map((r) => `re-render (${r.kind}): ${r.before} -> ${r.after} rows in ${ms(r.ms)}, cursor row moved ${r.delta}px, on screen: ${r.inView}`),
@@ -195,6 +211,8 @@ for (const c of CASES) {
       console.log(report);
       test.info().annotations.push({ type: 'perf', description: report });
 
+      expect(bottom).toBeGreaterThanOrEqual(max - 1);
+      expect(backToTop).toBe(0);
       expect(fling.longTasks.filter((d) => d > 50)).toEqual([]);
       expect(drag.longTasks.filter((d) => d > 50)).toEqual([]);
       for (const j of jumps) {
@@ -208,3 +226,92 @@ for (const c of CASES) {
     });
   });
 }
+
+// The ListingView contracts the perf numbers rest on, on a real example (no samples needed).
+test.describe('ListingView anchoring (seadrg01)', () => {
+  test('a cursor on a labelled address stays put across re-renders', async ({ page }) => {
+    await page.goto('/?demo=seadrg01&at=49B1');
+    await page.waitForFunction(() => window.__fugloyDemo !== undefined);
+    // $49B1 is L49B1, a jump target: a label row sits above its instruction row.
+    await expect(page.locator('.fg-row-label[data-addr="18865"]')).toBeVisible();
+    for (const kind of ['names', 'tables', 'tables'] as const) {
+      const r = await page.evaluate(async (kind) => {
+        const demo = window.__fugloyDemo!;
+        const raf = (): Promise<void> => new Promise((res) => requestAnimationFrame(() => res()));
+        const el = document.querySelector<HTMLElement>('.fg-listing')!;
+        demo.setCursor(0x49b1);
+        await raf();
+        const cursor = (): HTMLElement | null => el.querySelector<HTMLElement>('.fg-row-cursor');
+        const before = cursor()!.getBoundingClientRect().top;
+        const rows = demo.rowCount();
+        demo.rerender(kind);
+        await raf();
+        const row = cursor()!;
+        return { kind, rowsChanged: demo.rowCount() !== rows, addr: row.dataset.addr, kindOfRow: row.className, delta: row.getBoundingClientRect().top - before };
+      }, kind);
+      expect(r.rowsChanged, `${kind} changed the rows`).toBe(true);
+      expect(r.addr).toBe(String(0x49b1));
+      expect(r.kindOfRow).toContain('fg-row-code');
+      expect(r.delta, `cursor moved after ${kind}`).toBe(0);
+    }
+  });
+
+  test('the top row stays put across re-renders when the cursor is off screen, label row or not', async ({ page }) => {
+    await page.goto('/?demo=seadrg01&at=49B1');
+    await page.waitForFunction(() => window.__fugloyDemo !== undefined);
+    for (const labelOnTop of [true, false]) {
+      const r = await page.evaluate(async (labelOnTop) => {
+        const demo = window.__fugloyDemo!;
+        const raf = (): Promise<void> => new Promise((res) => requestAnimationFrame(() => res()));
+        const el = document.querySelector<HTMLElement>('.fg-listing')!;
+        demo.setCursor(null);
+        // Put the L49B1 label row, or the instruction row under it, exactly at the top.
+        const label = el.querySelector<HTMLElement>('.fg-row-label[data-addr="18865"]')!;
+        const index = Math.round((label.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop) / 20);
+        el.scrollTop = (index + (labelOnTop ? 0 : 1)) * 20;
+        await raf();
+        const topRow = (): HTMLElement => [...el.querySelectorAll<HTMLElement>('.fg-row')].find((row) => Math.abs(row.getBoundingClientRect().top - el.getBoundingClientRect().top) < 1)!;
+        const before = topRow().className;
+        demo.rerender('tables');
+        await raf();
+        const after = topRow();
+        return { before, after: after.className, addr: after.dataset.addr };
+      }, labelOnTop);
+      expect(r.addr).toBe(String(0x49b1));
+      expect(r.after).toBe(r.before);
+    }
+  });
+
+  test('scrollToAddr in the same tick as new rows lands on the new rows', async ({ page }) => {
+    await page.goto('/?demo=seadrg01&at=49B1');
+    await page.waitForFunction(() => window.__fugloyDemo !== undefined);
+    const results = await page.evaluate(async () => {
+      const demo = window.__fugloyDemo!;
+      const el = document.querySelector<HTMLElement>('.fg-listing')!;
+      const raf = (): Promise<void> => new Promise<void>((res) => requestAnimationFrame(() => res()));
+      const inView = (target: number): boolean => {
+        const box = el.getBoundingClientRect();
+        return [...el.querySelectorAll<HTMLElement>('.fg-row[data-addr]')].some((row) => {
+          const a = Number(row.dataset.addr);
+          const b = row.getBoundingClientRect();
+          return a <= target && a > target - 4 && b.top >= box.top && b.bottom <= box.bottom;
+        });
+      };
+      const out: Record<string, boolean> = {};
+      // No await between the rows change and the call. Same program, new rows:
+      demo.rerender('tables');
+      demo.scrollToAddr(0x7a00);
+      await raf();
+      out.tables = inView(0x7a00);
+      // Far more rows than before (5,380 -> about 15,000): the old rows hold no
+      // row this far down, and the old spacer is too short to scroll to it.
+      const bytes = Array.from({ length: 0xc000 }, (_, i) => (i * 7) & 0xff);
+      demo.load(bytes, 'raw', undefined, 0x4000);
+      demo.scrollToAddr(0xf000);
+      await raf();
+      out.grown = inView(0xf000);
+      return out;
+    });
+    expect(results).toEqual({ tables: true, grown: true });
+  });
+});

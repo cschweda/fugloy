@@ -282,7 +282,7 @@
 - Consumes: `Row`, `Span`, `rowIndex` (Task 3).
 - Produces:
   - `ListingView` props: `{ rows: readonly Row[]; cursor: number | null; selection: { from: number; to: number } | null }`. Emits `select(addr, extend: boolean)`, `follow(target: number)`, `context(addr, x, y)`. Exposes `scrollToAddr(addr: number): void`.
-  - Fixed row height, monospace grid columns: address 6ch, bytes 13ch, then the text and comment.
+  - Fixed row height, monospace grid columns: address 6ch, bytes 14ch (the text starts at column 20, as in `formatListingLine`; 13ch was an error, corrected in Task 8 review), then the text and comment.
   - `spanClass(kind: SpanKind): string` maps each kind to a theme class.
 
 - [ ] **Step 1: Write the failing test.** `spanClass` gives a distinct class for each of the nine `SpanKind`s, and `label`/`table` spans are rendered as focusable links.

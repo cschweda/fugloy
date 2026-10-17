@@ -82,8 +82,8 @@ async function open(): Promise<void> {
 }
 
 /** Open bytes (and hint text) the page was handed: a fixed example, or the perf check's own input. */
-function load(bytes: Uint8Array, name: string, hints?: string): void {
-  let s = openProgram(bytes, { name, selection: MODEL3 });
+function load(bytes: Uint8Array, name: string, hints?: string, base?: number): void {
+  let s = openProgram(bytes, { name, selection: MODEL3, ...(base === undefined ? {} : { base }) });
   if (hints !== undefined) s = withHintText(s, hints, name.replace(/\.[^.]+$/, '.hints'));
   cursor.value = null;
   selection.value = null;
@@ -98,13 +98,15 @@ function rerender(kind: 'tables' | 'names'): void {
     show(withSelection(s, s.selection === undefined ? MODEL3 : undefined));
     return;
   }
-  // Name every 40th unnamed data or code row's address before the cursor: label rows appear above it.
+  // Name every 20th unnamed data or code row above the cursor's row (by position, not address): label rows appear above it.
   const named = new Set(s.analysis.symbols.list().map((sym) => sym.addr));
   const hints = [...s.hintFile.hints];
+  const cursorAt = cursor.value === null ? -1 : rows.value.findIndex((row) => 'addr' in row && row.addr === cursor.value);
   let n = 0;
+  let seen = 0;
   rows.value.forEach((row, i) => {
-    if ((row.kind !== 'code' && row.kind !== 'data') || i % 40 !== 0 || named.has(row.addr)) return;
-    if (cursor.value !== null && row.addr >= cursor.value) return;
+    if ((row.kind !== 'code' && row.kind !== 'data') || named.has(row.addr)) return;
+    if ((cursorAt >= 0 && i >= cursorAt) || seen++ % 20 !== 0) return;
     const key = addressKey(s, row.addr);
     if (key === null) return;
     hints.push({ directive: 'name', name: `DEMO_${++n}`, block: key.block, offset: key.offset, line: 0 });
@@ -137,7 +139,7 @@ declare global {
       scrollToAddr: (addr: number) => void;
       setCursor: (addr: number | null) => void;
       rerender: (kind: 'tables' | 'names') => void;
-      load: (bytes: number[], name: string, hints?: string) => void;
+      load: (bytes: number[], name: string, hints?: string, base?: number) => void;
     };
   }
 }
@@ -152,6 +154,8 @@ onMounted(async () => {
   // Open at ?at=<hex>, or at the first instruction, past the header.
   const at = typeof route.query.at === 'string' ? Number.parseInt(route.query.at, 16) : firstCodeAddr(rows.value);
   if (at !== undefined && !Number.isNaN(at)) {
+    // Waits for ListingView to mount (the v-if just turned on), not for its rows: a
+    // mounted ListingView takes scrollToAddr in the same tick as new rows.
     await nextTick();
     cursor.value = at;
     listing.value?.scrollToAddr(at);
@@ -163,7 +167,7 @@ onMounted(async () => {
       cursor.value = addr;
     },
     rerender,
-    load: (bytes, name, hints) => load(Uint8Array.from(bytes), name, hints),
+    load: (bytes, name, hints, base) => load(Uint8Array.from(bytes), name, hints, base),
   };
 });
 </script>

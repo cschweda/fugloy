@@ -2,7 +2,7 @@
 // The listing, virtualized by hand: every row is ROW_HEIGHT tall, so the rows on
 // screen follow from scrollTop alone, and only those (plus an overscan) are in
 // the DOM. Clicks, follows, and context menus are handled here for all rows.
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import type { Row } from '@fugloy/disasm';
 import ListingRow from './ListingRow.vue';
 import { ROW_HEIGHT, rowAddr } from '../../utils/row-classes';
@@ -29,12 +29,11 @@ const scroller = ref<HTMLElement | null>(null);
 const top = ref(0);
 const viewRows = ref(40);
 
-// Not reactive state of its own: rebuilt with the rows, and the previous one kept for re-anchoring.
-let lookup = rowLookup(props.rows);
+const lookup = computed(() => rowLookup(props.rows));
 /** The cursor's row: the instruction or data row holding the address, not the label row above it. */
 function cursorRow(addr: number | null): number | null {
   if (addr === null) return null;
-  let i = lookup(addr);
+  let i = lookup.value(addr);
   while (i !== null && props.rows[i]?.kind === 'label' && i + 1 < props.rows.length && rowAddr(props.rows[i + 1]!) === addr) i++;
   return i;
 }
@@ -67,9 +66,33 @@ function setScrollTop(px: number): void {
   top.value = Math.floor(el.scrollTop / ROW_HEIGHT);
 }
 
-/** Bring the row holding `addr` (or the nearest row below it) on screen, a third of the way down, unless it is already in full view. */
+/**
+ * The address a scrollToAddr call asked for, not yet scrolled to. The scroll runs
+ * after the next flush, so a call made in the same tick as new rows (whose props
+ * have not reached this component yet) lands on the new rows, in place of the
+ * re-render anchor.
+ */
+let pending: number | null = null;
+
+function flushPending(): void {
+  const addr = pending;
+  pending = null;
+  if (addr !== null) scrollNow(addr);
+}
+
+/**
+ * Bring the row holding `addr` on screen, a third of the way down, unless it is
+ * already in full view. When no row holds it, the row at the greatest address
+ * below it (which may sit anywhere in the listing, after relocated pieces).
+ * Scrolls after pending updates are flushed, before the next frame.
+ */
 function scrollToAddr(addr: number): void {
-  const index = lookup(addr);
+  pending = addr;
+  void nextTick(flushPending);
+}
+
+function scrollNow(addr: number): void {
+  const index = lookup.value(addr);
   const el = scroller.value;
   if (index === null || el === null) return;
   const y = index * ROW_HEIGHT;
@@ -78,25 +101,29 @@ function scrollToAddr(addr: number): void {
 }
 
 // New rows (a hint added, a symbol table changed): keep the cursor row where it was
-// on screen, or, when it is off screen, the top row's address.
-let anchor: { addr: number; offset: number } | null = null;
+// on screen, or, when it is off screen, the top row. An anchor names its row by
+// address and by whether it was the label row there or the row after it.
+let anchor: { addr: number; label: boolean; offset: number } | null = null;
+/** The row an anchor names in the current rows: the label row at its address, or the row holding the address. */
+const anchorRow = (a: { addr: number; label: boolean }): number | null => (a.label ? lookup.value(a.addr) : cursorRow(a.addr));
+const ANCHORS = new Set<Row['kind']>(['label', 'code', 'data', 'basic']);
 watch(
   () => props.rows,
-  (rows, old) => {
+  (_rows, old) => {
     const el = scroller.value;
-    lookup = rowLookup(rows);
     anchor = null;
     if (el === null) return;
     const oldCursor = cursorIndex.value;
     const visible = (i: number): boolean => i * ROW_HEIGHT >= el.scrollTop && (i + 1) * ROW_HEIGHT <= el.scrollTop + el.clientHeight;
     if (props.cursor !== null && oldCursor !== null && visible(oldCursor)) {
-      anchor = { addr: props.cursor, offset: oldCursor * ROW_HEIGHT - el.scrollTop };
+      anchor = { addr: props.cursor, label: false, offset: oldCursor * ROW_HEIGHT - el.scrollTop };
       return;
     }
     for (let i = Math.floor(el.scrollTop / ROW_HEIGHT); i < old.length; i++) {
-      const addr = rowAddr(old[i]!);
-      if (addr !== undefined && old[i]!.kind !== 'note') {
-        anchor = { addr, offset: i * ROW_HEIGHT - el.scrollTop };
+      const row = old[i]!;
+      const addr = rowAddr(row);
+      if (addr !== undefined && ANCHORS.has(row.kind)) {
+        anchor = { addr, label: row.kind === 'label', offset: i * ROW_HEIGHT - el.scrollTop };
         return;
       }
     }
@@ -109,8 +136,12 @@ watch(
     cursorIndex.value = cursorRow(props.cursor);
     const a = anchor;
     anchor = null;
+    if (pending !== null) {
+      flushPending();
+      return;
+    }
     if (a === null) return;
-    const index = lookup(a.addr);
+    const index = anchorRow(a);
     if (index !== null) setScrollTop(index * ROW_HEIGHT - a.offset);
   },
   { flush: 'post' },

@@ -68,11 +68,12 @@ html.dark body {
 .fg-link.router-link-exact-active { color: var(--fg-text-strong); }
 
 /* The listing (ListingView, ListingRow). Rows are a fixed 20px (ROW_HEIGHT in
-   utils/row-classes.ts); columns: address 6ch, bytes 13ch, text, comment. The
-   text column is at least 25ch so comments start at column 44, as the CLI's do. */
+   utils/row-classes.ts); columns: address 6ch, bytes 14ch, text, comment. The
+   text starts at column 20 and is at least 24ch, so comments start at column 44,
+   as in the CLI's formatListingLine. */
 :root {
-  --fg-addr: #8b949e;
-  --fg-bytes: #7d8590;
+  --fg-addr: #a3abb5;
+  --fg-bytes: #9198a1; /* 4.97:1 on --fg-cursor, 5.51:1 on --fg-selected */
   --fg-string: #ffa657;
   --fg-cursor: #1f2a3a;
   --fg-selected: #172231;
@@ -91,7 +92,7 @@ html.dark body {
 .fg-listing-window { position: absolute; top: 0; left: 0; min-width: 100%; will-change: transform; }
 .fg-row {
   display: grid;
-  grid-template-columns: 6ch 13ch minmax(25ch, max-content) max-content;
+  grid-template-columns: 6ch 14ch minmax(24ch, max-content) max-content;
   height: 20px;
   line-height: 20px;
   padding: 0 12px;
