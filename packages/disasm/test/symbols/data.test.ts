@@ -40,7 +40,7 @@ describe('the committed symbol data', () => {
       expect(s.archiveId, s.id).toBe(m?.[1]);
     }
     expect(SOURCES.find((s) => s.id === 'ldos51')).toMatchObject({ year: '1982', circa: true, textUrl: 'http://www.tim-mann.org/trs80/doc/ld51man3.txt' });
-    expect(SOURCES.find((s) => s.id === 'soltoff')).toMatchObject({ redistributable: true, url: 'http://www.tim-mann.org/trs80/doc/Guide.txt' });
+    expect(SOURCES.find((s) => s.id === 'soltoff')).toMatchObject({ redistributable: true, permissionUrl: 'http://www.tim-mann.org/misosys.html', url: 'http://www.tim-mann.org/trs80/doc/Guide.txt' });
     expect(SOURCES.find((s) => s.id === 'm4-trm')).toMatchObject({ catalog: '26-2110' });
   });
 

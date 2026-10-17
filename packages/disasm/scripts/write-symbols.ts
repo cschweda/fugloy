@@ -30,6 +30,7 @@ const sourceLine = (s: Source): string => {
     ...(s.catalog === undefined ? [] : [`catalog: ${q(s.catalog)}`]),
     ...(s.url === undefined ? [] : [`url: ${q(s.url)}`]),
     ...(s.textUrl === undefined ? [] : [`textUrl: ${q(s.textUrl)}`]),
+    ...(s.permissionUrl === undefined ? [] : [`permissionUrl: ${q(s.permissionUrl)}`]),
     ...(s.archiveId === undefined ? [] : [`archiveId: ${q(s.archiveId)}`]),
     ...(s.redistributable === undefined ? [] : [`redistributable: ${String(s.redistributable)}`]),
   ];

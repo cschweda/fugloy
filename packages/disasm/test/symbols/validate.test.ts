@@ -375,11 +375,17 @@ describe('validateTables', () => {
       expect(check({ sources: [{ ...source('a'), url: 'ftp://x' }] }).errors).toEqual(['sources.json entry 0 "a": url must start with http:// or https://']);
     });
 
+    it('requires a permissionUrl wherever redistributable is true, and checks it is http(s)', () => {
+      expect(check({ sources: [{ ...source('a'), redistributable: true }] }).errors).toEqual(['sources.json entry 0 "a": redistributable needs a permissionUrl']);
+      expect(check({ sources: [{ ...source('a'), redistributable: true, permissionUrl: 'mailto:x' }] }).errors).toEqual(['sources.json entry 0 "a": permissionUrl must start with http:// or https://']);
+      expect(check({ sources: [{ ...source('a'), permissionUrl: 'https://example.org/ok' }] }).errors).toEqual([]);
+    });
+
     it('parses archiveId from an archive.org details url, and gives other sources none', () => {
       const r = check({
         sources: [
           { ...source('a'), url: 'https://archive.org/details/Some_Manual_1980' },
-          { ...source('b'), url: 'http://www.tim-mann.org/trs80/doc/Guide.txt', textUrl: 'http://www.tim-mann.org/trs80/doc/Guide.txt', redistributable: true },
+          { ...source('b'), url: 'http://www.tim-mann.org/trs80/doc/Guide.txt', permissionUrl: 'http://www.tim-mann.org/misosys.html', redistributable: true },
         ],
       });
       expect(r.errors).toEqual([]);

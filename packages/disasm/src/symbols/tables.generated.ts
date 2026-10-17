@@ -11,7 +11,7 @@ export const SOURCES: readonly Source[] = [
   { id: 'm3-trm', author: 'Tandy Corporation', title: 'TRS-80 Model III Technical Reference Manual', publisher: 'Radio Shack', year: '1981', url: 'https://archive.org/details/Model_III_Technical_Reference_Manual_1981_Tandy', archiveId: 'Model_III_Technical_Reference_Manual_1981_Tandy' },
   { id: 'trsdos13', author: 'Radio Shack', title: "TRS-80 Model III Disk System Owner's Manual", publisher: 'Radio Shack', year: '1980', url: 'https://archive.org/details/TRS-80_Model_III_Disk_System_Owners_Manual', archiveId: 'TRS-80_Model_III_Disk_System_Owners_Manual' },
   { id: 'ldos51', author: 'Logical Systems, Inc.', title: 'LDOS 5.1 for the Model I and III', publisher: 'Radio Shack', year: '1982', circa: true, edition: 'Tandy edition', url: 'https://archive.org/details/LDOS_v5.1_for_Model_I_and_III_19xx_Tandy', textUrl: 'http://www.tim-mann.org/trs80/doc/ld51man3.txt', archiveId: 'LDOS_v5.1_for_Model_I_and_III_19xx_Tandy' },
-  { id: 'soltoff', author: 'Roy Soltoff', title: "The Programmer's Guide to LDOS/TRSDOS Version 6", publisher: 'MISOSYS', year: '1983–84', url: 'http://www.tim-mann.org/trs80/doc/Guide.txt', textUrl: 'http://www.tim-mann.org/trs80/doc/Guide.txt', redistributable: true },
+  { id: 'soltoff', author: 'Roy Soltoff', title: "The Programmer's Guide to LDOS/TRSDOS Version 6", publisher: 'MISOSYS', year: '1983–84', url: 'http://www.tim-mann.org/trs80/doc/Guide.txt', permissionUrl: 'http://www.tim-mann.org/misosys.html', redistributable: true },
   { id: 'm4-trm', author: 'Tandy Corporation', title: 'TRS-80 Model 4 Technical Reference Manual', publisher: 'Radio Shack', year: '1983', catalog: '26-2110' },
 ];
 

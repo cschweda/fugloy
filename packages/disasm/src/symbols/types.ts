@@ -62,6 +62,8 @@ export interface Source {
   textUrl?: string;
   /** The archive.org identifier, parsed from `url` when it is an archive.org details page. */
   archiveId?: string;
+  /** Where the holder grants permission to redistribute; required when `redistributable` is true. */
+  permissionUrl?: string;
   /** True where the work's text is free to redistribute. */
   redistributable?: boolean;
 }

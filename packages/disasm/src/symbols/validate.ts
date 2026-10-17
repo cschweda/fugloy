@@ -34,7 +34,7 @@ const ALLOWED_KINDS: Readonly<Record<TableId, readonly EntryKind[]>> = {
 
 const ENTRY_FIELDS = new Set(['addr', 'port', 'svc', 'name', 'kind', 'purpose', 'cite', 'length', 'coined', 'note']);
 const KEY_FIELDS = ['addr', 'port', 'svc'] as const;
-const SOURCE_FIELDS = new Set(['id', 'author', 'title', 'publisher', 'year', 'circa', 'edition', 'catalog', 'url', 'textUrl', 'redistributable']);
+const SOURCE_FIELDS = new Set(['id', 'author', 'title', 'publisher', 'year', 'circa', 'edition', 'catalog', 'url', 'textUrl', 'permissionUrl', 'redistributable']);
 
 /** A name a source prints may start with `$` or `@` and end in one `$` (LS-DOS and LDOS print `@FLAGS$`, `@HIGH$`, `TIME$`); a name we coin may do neither. */
 const SOURCE_NAME = /^[$@]?[A-Z][A-Z0-9_]*\$?$/;
@@ -232,8 +232,10 @@ function readSources(raw: unknown, errors: string[]): { sources: Source[]; known
     const catalog = optional('catalog');
     const url = link('url');
     const textUrl = link('textUrl');
+    const permissionUrl = link('permissionUrl');
     const circa = flag('circa');
     const redistributable = flag('redistributable');
+    if (redistributable === true && permissionUrl === undefined && item.permissionUrl === undefined) fail('redistributable needs a permissionUrl');
     if (url === undefined && catalog === undefined && item.url === undefined) fail('needs a url or a catalog number');
     const archiveId = url === undefined ? undefined : /^https?:\/\/archive\.org\/details\/([^/?#\s]+)$/.exec(url)?.[1];
     if (!usable || id === undefined || author === undefined || title === undefined || publisher === undefined || year === undefined) return;
@@ -244,6 +246,7 @@ function readSources(raw: unknown, errors: string[]): { sources: Source[]; known
       ...(catalog === undefined ? {} : { catalog }),
       ...(url === undefined ? {} : { url }),
       ...(textUrl === undefined ? {} : { textUrl }),
+      ...(permissionUrl === undefined ? {} : { permissionUrl }),
       ...(archiveId === undefined ? {} : { archiveId }),
       ...(redistributable === undefined ? {} : { redistributable }),
     });
