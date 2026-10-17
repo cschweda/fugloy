@@ -26,4 +26,21 @@ describe('ConfirmDialog', () => {
     }
     w.unmount();
   });
+
+  it('with noEscape, a close that did not come from a button emits nothing and the dialog comes back', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const w = mount(ConfirmDialog, { props: { open: false, title: 'T', message: 'M', confirmLabel: 'Yes', noEscape: true }, attachTo: host });
+    await w.setProps({ open: true });
+    const d = w.get('dialog').element as HTMLDialogElement;
+    expect(d.open).toBe(true);
+    d.close();
+    d.dispatchEvent(new Event('close'));
+    expect(w.emitted('cancel')).toBeUndefined();
+    expect(w.emitted('confirm')).toBeUndefined();
+    expect(d.open).toBe(true);
+    await w.get('button').trigger('click');
+    expect(w.emitted('cancel')).toHaveLength(1);
+    w.unmount();
+  });
 });

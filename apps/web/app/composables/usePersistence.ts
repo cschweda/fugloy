@@ -36,6 +36,8 @@ export interface Persistence {
   conflict: ShallowRef<{ name: string; text: string } | null>;
   /** Load: the saved work replaces the open hints (one undoable step, so the change can be undone back). Keep: the change replaces the saved work. */
   resolveConflict(choice: 'load' | 'keep'): void;
+  /** Why the saved work could not be loaded, while the conflict stays open (then only Keep is possible). */
+  conflictError: Ref<string | null>;
   /** Applies the offered file as one undoable step. */
   acceptCarry(): void;
   dismissCarry(): void;
@@ -67,6 +69,7 @@ export function createPersistence(wb: Workbench, deps: PersistenceDeps = {}): Pe
   const store = shallowRef<Store | null | undefined>(undefined);
   const carry = shallowRef<CarryCandidate | null>(null);
   /** Stored hints the user has not seen, found after they had already edited: saving waits for their choice. */
+  const conflictError = ref<string | null>(null);
   const conflict = shallowRef<{ name: string; text: string } | null>(null);
   const hintErrors = ref<readonly string[]>([]);
   /** The hint text the open program opened with (committed or skeleton): changes from it are the user's. */
@@ -228,6 +231,7 @@ export function createPersistence(wb: Workbench, deps: PersistenceDeps = {}): Pe
     carry.value = null;
     hintErrors.value = [];
     conflict.value = null;
+    conflictError.value = null;
     savedText.value = null;
     restored.value = false;
     const s = wb.session.value;
@@ -276,15 +280,21 @@ export function createPersistence(wb: Workbench, deps: PersistenceDeps = {}): Pe
     carry,
     hintErrors,
     conflict,
+    conflictError,
     resolveConflict(choice) {
       const c = conflict.value;
-      conflict.value = null;
       if (c === null) return;
       if (choice === 'load') {
         const refused = loadHints(c.text, c.name);
-        if (refused !== null) wb.report(`${c.name} could not be loaded: ${refused}`);
-        else savedText.value = c.text;
+        if (refused !== null) {
+          // Never fall through to saving over work that could not be shown.
+          conflictError.value = `${c.name} could not be loaded: ${refused}`;
+          return;
+        }
+        savedText.value = c.text;
       }
+      conflict.value = null;
+      conflictError.value = null;
       // Keep: the stored copy is replaced by the next save, which check() schedules now.
       check();
     },

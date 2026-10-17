@@ -439,7 +439,8 @@ onBeforeUnmount(() => {
       testid="saved-work-dialog"
       :open="persistence.conflict.value !== null"
       title="This program has saved work from before"
-      message="Load it (your last change is undone), or keep your change and replace the saved work?"
+      :message="persistence.conflictError.value ?? 'Load it (your last change is undone), or keep your change and replace the saved work?'"
+      :hide-confirm="persistence.conflictError.value !== null"
       confirm-label="Load the saved work"
       cancel-label="Keep my change and replace it"
       no-escape

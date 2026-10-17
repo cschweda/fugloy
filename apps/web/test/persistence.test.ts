@@ -157,7 +157,6 @@ describe('an edit before the saved work has been read', () => {
     const store: Store = { ...real, getHints: async (h) => (await gate, real.getHints(h)) };
     return { real, store, release };
   };
-  const SAVED = 'fugloy-hints 1\n';
 
   async function setup() {
     const first = await rig();
@@ -188,7 +187,6 @@ describe('an edit before the saved work has been read', () => {
     expect((await real.getHints(hash))!.text).toContain('KEPT');
     ed.undo();
     expect(wb.session.value!.analysis.symbols.list().some((s) => s.name === 'EARLY')).toBe(true);
-    void SAVED;
   });
 
   it('Keep replaces the saved work with the early change', async () => {
@@ -207,5 +205,22 @@ describe('an edit before the saved work has been read', () => {
     release();
     await until(() => wb.session.value!.analysis.symbols.list().some((s) => s.name === 'KEPT'));
     expect(wb.session.value!.selection?.machine).toBe(1);
+  });
+
+  it('when the saved work cannot be loaded the conflict stays open, with the reason, and nothing is saved', async () => {
+    const { real, p, ed, release, hash } = await setup();
+    ed.apply({ op: 'name', addr: 0x4b9e, name: 'EARLY' });
+    release();
+    await until(() => p.conflict.value !== null);
+    // Make the stored text unloadable.
+    p.conflict.value = { name: 'bad.hints', text: 'not a hint file\n' };
+    p.resolveConflict('load');
+    expect(p.conflict.value).not.toBeNull();
+    expect(p.conflictError.value).toContain('bad.hints could not be loaded');
+    await sleep(SAVE_DELAY_MS + 150);
+    expect((await real.getHints(hash))!.text).toContain('KEPT');
+    p.resolveConflict('keep');
+    expect(p.conflict.value).toBeNull();
+    await until(async () => (await real.getHints(hash))!.text.includes('EARLY'));
   });
 });
