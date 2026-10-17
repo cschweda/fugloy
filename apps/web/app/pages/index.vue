@@ -17,6 +17,9 @@ import StatusLine from '~/components/StatusLine.vue';
 import IndexTab from '~/components/side/IndexTab.vue';
 import ProgramTab from '~/components/side/ProgramTab.vue';
 import SymbolTab from '~/components/side/SymbolTab.vue';
+import ManualTab from '~/components/side/ManualTab.vue';
+import type { ManualRequest } from '~/components/side/ManualTab.vue';
+import { useManuals } from '~/composables/useManuals';
 import { asHintText } from '~/utils/hint-drop';
 import { resolveGoTo } from '~/utils/goto';
 import { followOf, stepCursor } from '~/utils/edit-targets';
@@ -32,7 +35,7 @@ const wb = useWorkbench();
 const { session, rows, cursor, selection, example, facts } = wb;
 
 type LeftTab = 'listing' | 'hints' | 'source';
-type RightTab = 'symbol' | 'index' | 'program' | 'run';
+type RightTab = 'symbol' | 'index' | 'program' | 'manual' | 'run';
 const LEFT_TABS: PageTab<LeftTab>[] = [
   { id: 'listing', label: 'Listing' },
   { id: 'hints', label: 'Hints' },
@@ -42,6 +45,7 @@ const RIGHT_TABS: PageTab<RightTab>[] = [
   { id: 'symbol', label: 'Symbol' },
   { id: 'index', label: 'Index' },
   { id: 'program', label: 'Program' },
+  { id: 'manual', label: 'Manual' },
   { id: 'run', label: 'Run ▶', later: true },
 ];
 const leftTab = ref<LeftTab>('listing');
@@ -49,6 +53,22 @@ const rightTab = ref<RightTab>('program');
 const persistence = usePersistence();
 const nav = useNavigation(scrollTo);
 const listing = ref<InstanceType<typeof ListingView> | null>(null);
+const pages = ref<InstanceType<typeof FacingPages> | null>(null);
+
+// The Manual tab: your own copy of a cited manual, opened from a citation.
+const manuals = useManuals();
+const manualRequest = ref<ManualRequest | null>(null);
+function openManual(r: ManualRequest): void {
+  manualRequest.value = r;
+  rightTab.value = 'manual';
+}
+/** Back from the manual: the listing, where you were. */
+function backToListing(): void {
+  rightTab.value = 'symbol';
+  leftTab.value = 'listing';
+  pages.value?.show('left');
+  void nextTick(() => listing.value?.focus());
+}
 
 function firstCodeAddr(list: readonly Row[]): number | null {
   for (const r of list) if (r.kind === 'code' || r.kind === 'basic') return r.addr;
@@ -321,6 +341,7 @@ declare global {
 
 onMounted(() => {
   document.addEventListener('drop', onDocumentDrop);
+  void manuals.refresh();
   editor.isMac.value = /Mac|iPhone|iPad/.test(navigator.platform);
   // Back from another page with a program still open: show it where it was.
   if (session.value !== null) showOpened();
@@ -353,7 +374,7 @@ onBeforeUnmount(() => {
   <div class="flex min-h-0 flex-1 flex-col">
     <div v-if="session !== null" class="flex min-h-0 flex-1 flex-col" data-testid="workbench">
       <OpenProblem bar />
-      <FacingPages>
+      <FacingPages ref="pages">
         <template #left-name>Listing</template>
         <template #right-name>Details</template>
         <template #left>
@@ -399,7 +420,7 @@ onBeforeUnmount(() => {
         <template #right>
           <PageTabs v-model="rightTab" :tabs="RIGHT_TABS" label="Right page" id-prefix="right" />
           <div id="right-panel-symbol" v-show="rightTab === 'symbol'" role="tabpanel" aria-labelledby="right-tab-symbol" class="fg-panel">
-            <SymbolTab @go="go" />
+            <SymbolTab @go="go" @open-manual="openManual" />
           </div>
           <div id="right-panel-index" v-show="rightTab === 'index'" role="tabpanel" aria-labelledby="right-tab-index" class="fg-panel">
             <IndexTab @label="showLabel" @table="showTable" @go="go" />
@@ -415,6 +436,9 @@ onBeforeUnmount(() => {
               @symbol="showTable"
               @apply-hint-lines="editor.applyHintLines"
             />
+          </div>
+          <div id="right-panel-manual" v-show="rightTab === 'manual'" role="tabpanel" aria-labelledby="right-tab-manual" class="fg-panel" data-testid="manual-panel">
+            <ManualTab :request="manualRequest" @back="backToListing" />
           </div>
         </template>
       </FacingPages>

@@ -29,3 +29,10 @@
   [headers.values]
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
+
+# pdf.js's worker (loaded only when a manual is opened) is an .mjs module
+# worker; with nosniff it must be served as JavaScript.
+[[headers]]
+  for = "/_nuxt/*.mjs"
+  [headers.values]
+    Content-Type = "text/javascript; charset=utf-8"

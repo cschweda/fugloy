@@ -5,14 +5,22 @@
 // Every address is a link into the listing (go).
 import { computed } from 'vue';
 import { hex4 } from '@fugloy/z80';
-import type { TableEntry } from '@fugloy/disasm';
+import type { Cite, TableEntry } from '@fugloy/disasm';
 import Citation from './Citation.vue';
+import type { ManualRequest } from './ManualTab.vue';
+import { useManuals } from '../../composables/useManuals';
+import { highlightTerms } from '../../utils/manuals';
 import { keyLabel } from '../../utils/symbol-info';
 import { callersOf, usesOf } from '../../utils/xrefs';
 import type { Use } from '../../utils/xrefs';
 
 const wb = useWorkbench();
-const emit = defineEmits<{ go: [addr: number] }>();
+const emit = defineEmits<{ go: [addr: number]; 'open-manual': [request: ManualRequest] }>();
+const manuals = useManuals();
+
+function openManual(e: TableEntry, cite: Cite): void {
+  emit('open-manual', { cite, name: e.name, terms: highlightTerms(e) });
+}
 
 const KIND_NAME = { sub: 'routine', code: 'code label', data: 'data label', table: 'table' } as const;
 const TABLE_KIND_NAME = { routine: 'routine', vector: 'vector', variable: 'variable', region: 'region', port: 'I/O port', svc: 'service call' } as const;
@@ -88,7 +96,13 @@ const $ = (n: number): string => `$${hex4(n)}`;
       <p v-if="table.e.coined" class="fg-muted">The sources do not name this one; Fugløy coined the name.</p>
       <section>
         <h3 class="fg-strong font-bold">Cited in</h3>
-        <ul class="fg-uses"><Citation v-for="c in table.e.cite" :key="`${c.source}:${c.page}`" :cite="c" /></ul>
+        <ul class="fg-uses"><Citation
+            v-for="c in table.e.cite"
+            :key="`${c.source}:${c.page}`"
+            :cite="c"
+            :openable="manuals.have(c.source)"
+            @open-manual="openManual(table.e, $event)"
+          /></ul>
       </section>
       <section data-testid="uses-table">
         <h3 class="fg-strong font-bold">Used by the program ({{ table.uses.length }})</h3>

@@ -13,5 +13,5 @@
       "@fugloy/disasm": ["../../packages/disasm/src/index.ts"]
     }
   },
-  "include": ["test/**/*.ts", "scripts/**/*.ts", "vitest.config.ts", "aliases.ts", "playwright.config.ts"]
+  "include": ["test/**/*.ts", "app/types/**/*.d.ts", "scripts/**/*.ts", "vitest.config.ts", "aliases.ts", "playwright.config.ts"]
 }

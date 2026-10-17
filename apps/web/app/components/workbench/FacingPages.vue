@@ -43,6 +43,9 @@ function onKey(e: KeyboardEvent): void {
   else return;
   e.preventDefault();
 }
+
+/** On a narrow screen, shows one page (on a wide one both show anyway). */
+defineExpose({ show: (which: 'left' | 'right') => (shown.value = which) });
 </script>
 
 <template>

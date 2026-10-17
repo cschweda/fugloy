@@ -10,6 +10,8 @@ const port = Number(process.env.PORT ?? 4173);
 const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript',
+  '.mjs': 'text/javascript',
+  '.wasm': 'application/wasm',
   '.css': 'text/css',
   '.json': 'application/json',
   '.svg': 'image/svg+xml',

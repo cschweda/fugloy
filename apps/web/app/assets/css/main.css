@@ -459,3 +459,33 @@ html.dark body {
   background: var(--fg-bg); border: 1px solid var(--fg-border); border-radius: 6px;
 }
 .fg-status-save { font-weight: 600; }
+
+/* Manuals (Task 16): the Manuals page, a citation without its manual, and the Manual tab. */
+.fg-manuals { display: flex; flex-direction: column; gap: 16px; padding: 24px; max-width: 1100px; width: 100%; margin: 0 auto; font-size: 14px; line-height: 1.55; }
+.fg-manuals-drop { min-height: 140px; padding: 20px; }
+.fg-manual-which { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--fg-accent); border-radius: 8px; background: var(--fg-surface); }
+.fg-manual-which select { max-width: 100%; }
+.fg-manual-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 12px; }
+.fg-manual { display: flex; gap: 14px; padding: 12px; border: 1px solid var(--fg-border); border-radius: 8px; background: var(--fg-surface); min-width: 0; }
+.fg-manual-wanted { border-color: var(--fg-accent); box-shadow: 0 0 0 1px var(--fg-accent); }
+.fg-manual h2 { overflow-wrap: anywhere; }
+.fg-cover { flex: none; width: 112px; display: flex; flex-direction: column; gap: 4px; margin: 0; font-size: 11px; line-height: 1.3; }
+.fg-cover-img { width: 112px; height: auto; max-height: 160px; object-fit: contain; object-position: top; border: 1px solid var(--fg-border); border-radius: 3px; background: #0b0e13; }
+.fg-cover-card {
+  display: flex; align-items: center; justify-content: center; width: 112px; height: 145px; padding: 8px;
+  border: 1px solid var(--fg-border); border-radius: 3px; background: #1f2630; color: var(--fg-text-strong);
+  font-size: 11px; font-weight: 700; text-align: center; overflow-wrap: anywhere; overflow: hidden;
+}
+.fg-manual-offset { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.fg-manual-offset .fg-input { width: 5em; }
+.fg-manuals-backup { display: flex; flex-direction: column; gap: 6px; padding-top: 12px; border-top: 1px solid var(--fg-border); }
+
+.fg-cite-missing { display: flex; align-items: flex-start; gap: 10px; margin: 4px 0 8px; }
+.fg-cover-thumb { flex: none; width: 56px; margin: 0; font-size: 9px; line-height: 1.2; }
+.fg-cover-thumb img { width: 56px; height: auto; max-height: 80px; object-fit: contain; object-position: top; border: 1px solid var(--fg-border); border-radius: 2px; }
+
+.fg-manual-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.fg-manual-bar .fg-button { padding: 3px 9px; }
+.fg-manual-view { overflow: auto; min-height: 0; flex: 1; border: 1px solid var(--fg-border); border-radius: 4px; background: #0b0e13; }
+.fg-manual-canvas { display: block; margin: 0 auto; background: #fff; }
+@media (max-width: 640px) { .fg-manuals { padding: 16px; } .fg-manual { gap: 10px; } }

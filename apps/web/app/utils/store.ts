@@ -1,6 +1,6 @@
 // The browser's own storage for the user's work: one IndexedDB database,
 // `fugloy`, holding hint files and per-program machine and DOS settings, keyed
-// by the program's SHA-256 (and, from Task 16, the user's manuals). Nothing
+// by the program's SHA-256, and the user's manuals, keyed by source id. Nothing
 // here leaves the machine. When IndexedDB is missing or refuses (a private
 // window), openStore() gives null and the workbench carries on without saving.
 import type { SymbolSelection } from '@fugloy/disasm';
@@ -19,6 +19,20 @@ export interface Prefs {
   dos: Dos;
 }
 
+/** A manual the user added, keyed by its source id. Never leaves the browser, never in a backup. */
+export interface StoredManual {
+  blob: Blob;
+  /** The PDF's SHA-256, lowercase hex. */
+  sha256: string;
+  /** The file name it was added as. */
+  name: string;
+  /** For a PDF that is not a known scan: the PDF page that holds printed page 1. */
+  offset?: number;
+  /** The PDF's page count, when known (it decides whether an unlisted PDF may use the scan table). */
+  pdfPages?: number;
+  addedAt: number;
+}
+
 export interface Store {
   getHints(hash: string): Promise<SavedHints | undefined>;
   putHints(hash: string, value: { name: string; text: string }): Promise<void>;
@@ -28,7 +42,12 @@ export interface Store {
   putPrefs(hash: string, prefs: Prefs): Promise<void>;
   /** Forgets one program: its hints and its settings. */
   deleteProgram(hash: string): Promise<void>;
-  /** The open database, for the manuals store (Task 16). */
+  getManual(id: string): Promise<StoredManual | undefined>;
+  putManual(id: string, value: StoredManual): Promise<void>;
+  deleteManual(id: string): Promise<void>;
+  /** The source ids of the stored manuals. */
+  manualIds(): Promise<string[]>;
+  /** The open database. */
   readonly db: IDBDatabase;
 }
 
@@ -75,6 +94,18 @@ function make(db: IDBDatabase): Store {
       tx.objectStore('prefs').put({ machine: prefs.machine, dos: prefs.dos } satisfies Prefs, hash);
       await done(tx);
     },
+    getManual: (id) => wrap<StoredManual | undefined>(db.transaction('manuals').objectStore('manuals').get(id)),
+    async putManual(id, value) {
+      const tx = db.transaction('manuals', 'readwrite');
+      tx.objectStore('manuals').put(value, id);
+      await done(tx);
+    },
+    async deleteManual(id) {
+      const tx = db.transaction('manuals', 'readwrite');
+      tx.objectStore('manuals').delete(id);
+      await done(tx);
+    },
+    manualIds: async () => (await wrap(db.transaction('manuals').objectStore('manuals').getAllKeys())).map(String),
     async deleteProgram(hash) {
       const tx = db.transaction(['hints', 'prefs'], 'readwrite');
       tx.objectStore('hints').delete(hash);
