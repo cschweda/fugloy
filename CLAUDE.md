@@ -6,31 +6,31 @@ holds the conventions that are not in the plan and the rules for working here.
 
 ## What we are building right now
 
-v1, phases 1–4 of the plan, in order, interleaved with the emulator and MCP
-server as the Roadmap below says. Do not start the emulator (`packages/emu`)
-until the disassembler's second pass is stable, nor the MCP server
-(`packages/mcp`) until emu phase 0 boots to `READY`; the recompiler and bundler
-stay in Part 2 until phase 3 is complete and the plan's kill criteria have
-been reviewed. If a task seems to need machinery from a later step, stop and
-say so.
+v1, phases 1–4 of the plan, in order. The Roadmap below puts the disassembler's
+phases 3 and 4 first and the emulator's phase 2 onward and the MCP server
+after v1: do not build `packages/emu` past phase 1, nor the MCP server
+(`packages/mcp`), before v1 ships. The recompiler and bundler stay in Part 2
+until the plan's kill criteria have been reviewed. If a task seems to need
+machinery from a later step, stop and say so.
 
-Current phase: **disasm phase 3 in progress** — symbol tables: cited JSON in
-`packages/disasm/data/symbols/`, compiled by `pnpm symbols`. Design:
+Current phase: **disasm phase 3 done** — symbol tables: eight cited JSON tables
+(608 entries) in `packages/disasm/data/symbols/`, compiled by `pnpm symbols`,
+chosen with `--machine` and `--dos`. Design:
 `docs/superpowers/specs/2026-10-16-phase3-symbol-tables-design.md`; plan:
-`docs/superpowers/plans/2026-10-16-phase3-symbol-tables.md`. Next, per the
-Roadmap: phase 4 (the web workbench); emu phase 2 and the MCP server resume
-after v1. Emu phase 1 is done: the Z80 core in `packages/emu` passes ZEXDOC and
-ZEXALL, all 67 groups each (`pnpm zex:install`, then `FUGLOY_ZEX=1`), and its
-T-states match `@fugloy/z80` for every opcode. Disassembler phase 2 shipped as
-v0.2.0, phase 1 as v0.1.0.
+`docs/superpowers/plans/2026-10-16-phase3-symbol-tables.md`. Not yet released
+(see `[Unreleased]` in `CHANGELOG.md`). Next, per the Roadmap: phase 4 (the web
+workbench); emu phase 2 and the MCP server resume after v1. Emu phase 1 is done:
+the Z80 core in `packages/emu` passes ZEXDOC and ZEXALL, all 67 groups each
+(`pnpm zex:install`, then `FUGLOY_ZEX=1`), and its T-states match `@fugloy/z80`
+for every opcode. Disassembler phase 2 shipped as v0.2.0, phase 1 as v0.1.0.
 
 ## Stack and layout
 
 - pnpm monorepo. Node 22 LTS. TypeScript strict, ESM only.
 - `packages/z80` — opcode table generated from the x/y/z/p/q decomposition, plus
   per-instruction length, operands, cycle count, control-flow effect. No I/O.
-- `packages/disasm` — loaders (.CMD, .BAS, raw), memory image, passes, IR,
-  emitters. No DOM, no Node APIs; must run in a browser.
+- `packages/disasm` — loaders (.CMD, .BAS, raw), memory image, passes, symbol
+  tables, IR, emitters. No DOM, no Node APIs; must run in a browser.
 - `packages/cli` — Node wrapper over disasm. The only package that touches `fs`.
 - `apps/web` — Nuxt 4 + Nuxt UI, static generation, no server routes (phase 4).
   The emu spec calls this folder `apps/workbench`; settle the name before
@@ -62,8 +62,9 @@ v0.2.0, phase 1 as v0.1.0.
    hidden-code detection, heuristics, rebasing, relocation. Sub-projects A
    (Pass 1 and the round-trip proof), B (labels and the hint file), C (hidden
    code, heuristics, rebasing, relocation).
-2. **disasm — phase 3, then phase 4** (decided 2026-10-16): symbol tables, then
-   the web workbench; emu phases 2+ and the MCP server resume after v1.
+2. **disasm — phase 3 (done), then phase 4** (decided 2026-10-16): symbol
+   tables, built, then the web workbench; emu phases 2+ and the MCP server
+   resume after v1.
 3. **emu — phases 0–7** (`docs/fugloy-emu-spec.md` §11). 0: import
    `cschweda/trs80-emulator`, strip DOM, boot to `READY` in Node. 1: Z80 core
    passes ZEXALL. 2: Model III devices and `.CMD`/`.BAS`/`.CAS` loaders.
@@ -99,9 +100,9 @@ with alt text), favicons from the card's ø tile, `robots.txt`,
 - Hint-file format is line-oriented text keyed by `block <index>:<offset>` as the
   plan specifies; do not switch to JSON without updating the plan first.
 - Symbol tables are data files (`packages/disasm/data/symbols/*.json`), one per
-  table, each entry with a `source` citation, compiled by `pnpm symbols` into
-  `src/symbols/tables.generated.ts`, which is never hand-edited. No symbols in
-  code.
+  table, each entry with a `cite` (a `sources.json` id and a page), compiled by
+  `pnpm symbols` into `src/symbols/tables.generated.ts`, which is never
+  hand-edited. No symbols in code.
 - Detect file format from content, never from extension.
 - No external runtime dependencies in `z80` or `disasm`. Dev dependencies are
   fine.

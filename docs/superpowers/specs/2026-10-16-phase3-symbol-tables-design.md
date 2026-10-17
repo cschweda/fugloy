@@ -6,14 +6,19 @@ the plan at the user's request. Every decision below that the plan does not
 make is the author's call and is marked **(call)**; §11 lists them for review.
 Phase 4, the web workbench, follows and reads the same data for its side panel.
 
+Built 2026-10-16 and 2026-10-17. On 2026-10-17 the text was corrected to match
+the code: where the first draft said otherwise (page numbers, lookup names,
+header wording, which names are coined), it now says what was built.
+
 ## 1. Goal
 
 A listing names the ROM, hardware, and DOS addresses a program uses, and every
 name traces to a page of a published source.
 
-- `CALL 0049H` lists as `CALL $KBWAIT` with the trailing comment "wait for a key"
-  on a Model III; `JP 402DH` as `JP $JP2DOS` (TRSDOS 1.3) or `JP @EXIT` (LDOS);
-  `LD HL,3C00H` as `LD HL,VIDEO`; `OUT (0ECH),A` as `OUT (MODEPORT),A`.
+- `CALL 0049H` lists as `CALL $KBWAIT` with the trailing comment "wait for a key
+  and return it in A" on a Model III; `JP 402DH` as `JP $JP2DOS` (TRSDOS 1.3)
+  or `JP @EXIT` (LDOS); `LD HL,3C00H` as `LD HL,VIDEO`; `OUT (0ECH),A` as
+  `OUT (MODEPORT),A`.
 - The zmac output defines each name it uses with `EQU`, so the round trip still
   rebuilds the identical image.
 - A machine selector picks the tables: Model I, Model III, or Model 4 (service
@@ -24,9 +29,13 @@ name traces to a page of a published source.
 
 **Done when:** asylum16 (with `fixtures/hints/asylum16.hints`, `--machine 1`)
 lists its display, keyboard, cassette, and BASIC calls by name; Volcano Hunter
-lists its ROM, hardware, and DOS references by name; both still round-trip
-through zmac; every table entry carries a citation; and the plan's Landscape
-table is verified or corrected before any public README repeats it.
+lists its hardware references by name (it calls no ROM or DOS routine at all;
+its references are `MODEPORT`, `CASSETTE`, and `KEYBOARD`, and
+`fixtures/hints/volcano.hints` relocates the game to its runtime address,
+`$42E9`, so the listing shows its code and not data decoded as code); both
+still round-trip through zmac; every table entry carries a citation; and the
+plan's Landscape table is verified or corrected before any public README
+repeats it.
 
 ## 2. Non-goals
 
@@ -50,16 +59,22 @@ appear in committed data. Pages are cited as each source prints them.
 
 | Id | Work | Used for | Pages |
 | --- | --- | --- | --- |
-| `m3-basic` | Tandy, *TRS-80 Model III Operation and BASIC Language Reference Manual* (2nd ed., 1980) | Model III ROM calls and their `$` names; RAM addresses | ch. 12, `12/2`–`12/25` (summary table `12/24`, RAM `12/25`) |
+| `m3-basic` | Tandy, *TRS-80 Model III Operation and BASIC Language Reference Manual* (2nd ed., 1980) | Model III ROM calls and their `$` names; RAM addresses | ch. 12, `12/2`–`12/26` (summary table `12/24`, RAM addresses `12/25`–`12/26`) |
 | `paay` | Edwin R. Paay, *Level II ROM Reference Manual* (MICRO-80 Products, 1980) | Model I ROM map and reserved RAM | 2–22, 23–30, tables 31–65 |
 | `decker` | Jack Decker, *TRS-80 ROM Routines Documented* (The Alternate Source, 1983) | Second source, Model I/III/4, by address | e.g. 12–14, 53, 64 |
-| `l2-1979` | Radio Shack, *Level II BASIC Reference Manual* (1979) | USR linkage, Model I memory map | 8/9, appendix |
-| `m1-trh` | Radio Shack 26-2103, *TRS-80 Micro Computer Technical Reference Handbook* (2nd ed., 1982) | Model I memory map, video, memory-mapped devices | 12, 34, 86 |
-| `m3-trm` | Tandy, *TRS-80 Model III Technical Reference Manual* (1981) | Model III memory map and ports | 14, 15, 21–24 |
-| `trsdos13` | Tandy, *TRS-80 Model III Disk System Owner's Manual* (TRSDOS, ©1980) | TRSDOS 1.3 system routines, `$` names | 74–86 |
+| `l2-1979` | Radio Shack, *Level II BASIC Reference Manual* (1979) | USR linkage, Model I memory map, device addresses | `8-8`, `8-9`, `D-1`, `D-2` |
+| `m1-trh` | Radio Shack 26-2103, *TRS-80 Micro Computer Technical Reference Handbook* (2nd ed., 1982) | Model I memory map, video RAM, the cassette port | 12, 33, 44–45, 50 |
+| `m3-trm` | Tandy, *TRS-80 Model III Technical Reference Manual* (1981) | Model III memory map and ports | 14, 15, 21–22 |
+| `trsdos13` | Tandy, *TRS-80 Model III Disk System Owner's Manual* (TRSDOS, ©1980) | TRSDOS 1.3 system routines, `$` names | 74–89 |
 | `ldos51` | *LDOS 5.1* manual (Tandy edition) | LDOS memory maps, `@` names, Model I/III differences | 6-29 to 6-35 |
-| `soltoff` | Roy Soltoff, *The Programmer's Guide to LDOS/TRSDOS Version 6* (MISOSYS, 1983/84; free to redistribute) | LS-DOS 6 service calls | 99, 101–103 |
-| `m4-trm` | Tandy 26-2110, *TRS-80 Model 4 Technical Reference Manual* (1983) | Second source for service calls | 227, 334 |
+| `soltoff` | Roy Soltoff, *The Programmer's Guide to LDOS/TRSDOS Version 6* (MISOSYS, 1983/84; free to redistribute) | LS-DOS 6 service calls | 99, 101–104 |
+| `m4-trm` | Tandy 26-2110, *TRS-80 Model 4 Technical Reference Manual* (1983) | Second source for service calls | 227, 331–335 |
+
+The Model I's memory-mapped device registers (`$37DE`–`$37EF`) cite `l2-1979`
+D-2 and `decker` 63–64, with `paay` 24 as a second cite for `$37ED`–`$37EF`;
+`m1-trh` documents the keyboard, video RAM, and port `$FF`. (The first draft
+listed `m1-trh` pages 12, 34, and 86; page 34 was wrong, and page 86 is a
+circuit example, not a device table.)
 
 `kiwisincebirth/TRS-80-ROMS` at `736bcba` is a cross-check only: it has no
 license and derives from an unlicensed disassembly **(call)**.
@@ -67,6 +82,16 @@ license and derives from an unlicensed disassembly **(call)**.
 OCR misreads slashed zeros. Every address is confirmed before it is committed:
 against the decimal/hex pair the source prints (Tandy and TRSDOS print both),
 against the page image, or against a second source.
+
+Page conventions found while entering the data. In the OCR of Decker's and
+Paay's books, a `Page N` line (Decker) or a bare `N` (Paay) is a footer that
+closes page N, not a header that opens it. The Model III BASIC manual is cited
+chapter and page, `12/N`, as the archive.org edition prints them; another scan
+of it prints running numbers 58 higher (`12/24` is `82` there). `l2-1979` cites
+use the hyphens its footers print (`8-9`, `D-2`), though its index writes
+slashes. TRSDOS 1.3 pages are the printed ones; its scan pages run 9 higher.
+Soltoff's and the Model 4 manual's lists are cited by the page number their
+contents give.
 
 ## 4. Decisions
 
@@ -96,7 +121,7 @@ table's name **(call)** (LDOS's Model I map also names `@KBD` `$002B` and `@KEY`
   "addr": "0049",
   "name": "$KBWAIT",
   "kind": "routine",
-  "purpose": "Wait for a key; return it in A",
+  "purpose": "wait for a key and return it in A",
   "cite": [{ "source": "m3-basic", "page": "12/12" }],
   "note": "optional: a disagreement between sources, or a Model I/III difference"
 }
@@ -120,13 +145,16 @@ Sources name the same address differently (`$KBWAIT`, `@KEY`, `_KEY` for
    a Model I source (`paay`, `decker`) describes the same routine at the same
    address; it cites both.
 2. **DOS:** the DOS manual's own spelling: `$JP2DOS` in `dos-trsdos13`,
-   `@EXIT` in the LDOS tables, `@DSPLY` for service call 10.
+   `@EXIT` in the LDOS tables, `@DSPLY` for service call 10. A name a source
+   prints may also end in one `$` (LDOS and LS-DOS print `TIME$` and
+   `@FLAGS$`); a coined name may not.
 3. **Everything else** (hardware, ROM routines no source names): a coined name,
    marked `coined`, in capitals, digits, and underscores, starting with a
-   letter, at most 12 characters, and never starting with `$` or `@`, which
-   stay reserved for names a source prints. Hardware manuals name signals
-   (`RTCIN*`), not symbols, so hardware names are coined and their addresses
-   cited.
+   letter, at most 12 characters, and never starting with `$` or `@` or ending
+   in `$`, which stay reserved for names a source prints. Hardware manuals name
+   signals (`RTCIN*`), not symbols, so hardware names are coined and their
+   addresses cited, with one exception: `$PRSTAT`, the Model III's printer
+   status at `$37E8`, is a name Tandy prints (`12/24`).
 
 zmac accepts every one of these spellings and keeps `$KBWAIT`, `KBWAIT`, and
 `@DSPLY` distinct, but folds case (`kbwait` and `KBWAIT` collide), so every
@@ -153,15 +181,18 @@ it:
 
 | Use | Takes names from | Rendering |
 | --- | --- | --- |
-| `JP`/`CALL`/`JR`/`DJNZ` target, declared jump-table entry | `routine`, `vector` | `CALL $KBWAIT`, plus the purpose as a trailing comment |
-| `(nn)` memory operand | `variable`, `vector`, `region` | `LD A,(CURPOS)`; inside a span, `(CURPOS+1)` |
-| `LD BC/DE/HL/IX/IY,nn` immediate, plain `DW` | `variable`, `vector`, `region` | `LD HL,VIDEO+0140H` |
+| `JP`/`CALL`/`JR`/`DJNZ` target, declared jump-table entry | `routine`, `vector` | `CALL $KBWAIT`, plus the purpose as a trailing comment; a jump table's `DW` row carries the names (`DW $KBWAIT,$VDCHAR`) and no comment, the legend carrying the purposes |
+| `(nn)` memory operand | `variable`, `vector`, `region` | `LD A,(CURADDR)`; inside a span, `(CURADDR+0001H)` |
+| `LD BC/DE/HL/IX/IY,nn` immediate, plain `DW` | `variable`, `vector`, `region` | `LD HL,VIDEO+0140H`; a `DW` row typed `words` by a hint names the same way, without a comment |
 | `IN A,(n)` / `OUT (n),A` | `port` | `OUT (MODEPORT),A` |
-| `RST n` | `routine` at that address | operand stays numeric; the name and purpose go in the comment |
-| `RST 28H` after `LD A,n` (Model 4) | `svc` | operand stays numeric; comment `@DSPLY (SVC 10)` |
+| `RST n` | `routine` at that address | operand stays numeric; the comment is `NAME: purpose` |
+| `RST 28H` after `LD A,n` (Model 4) | `svc` | operand stays numeric; comment `@DSPLY (SVC 10): purpose` |
 
 A routine name never applies to an immediate, so `LD BC,0033H` used as a count
-stays a number. Offsets print in the listing's number format.
+stays a number. Offsets print in the listing's number format. The machine tag
+of §4.6 ends the comment on a named transfer and on an `RST`, and a `.BAS` note
+line (§5.4); a service-call comment carries none, since a service call is no ROM
+name.
 
 If a table name collides, ignoring case, with a user or synthesized name in the
 same program, the table name is dropped for that address, which stays numeric,
@@ -174,9 +205,12 @@ The two ROM tables are entered independently. A generated report,
 `data/symbols/COMPARISON.md`, lists every address in either table as shared
 (same name and kind), different, or one-sided. A test fails when an address is
 in both tables with a different name or kind and neither entry has a `note`.
-In a listing, a name whose address differs between the machines carries a tag
-in its comment, `[Model III]` or `[Model I]`, so the reader knows which
-machine the listing assumed.
+In a listing, a ROM name carries a tag in its comment, `[Model III]` or
+`[Model I]`, unless the comparison classes its address as shared. The tag
+means this name came from this machine's table and is not confirmed shared:
+the other table either names a different routine there or has no entry for the
+address. So a one-sided address is tagged too, not only a `different` one, and
+the reader knows which machine the listing assumed.
 
 ### 4.7 Packaging **(call)**
 
@@ -190,10 +224,12 @@ fails on a difference, in the step that already does so for fixtures. No JSON
 imports, so no change to the TypeScript, Node, or bundler settings.
 
 Validation, in the generator and in a test: schema; hex and port ranges; every
-`cite` names a known source and a page; names valid for zmac, not reserved
-(the hint parser's `RESERVED`), not shaped like a synthesized label (`L5210`,
-`SUB_5340`, …), and unique ignoring case within every machine-and-DOS
-combination; `$`/`@` only on uncoined names; regions in a table do not overlap.
+`cite` names a known source and a page, and no purpose, note, or page has a
+line break; names valid for zmac, not reserved (the hint parser's `RESERVED`),
+not shaped like a synthesized label (`L5210`, `SUB_5340`, …), and unique
+ignoring case within every machine-and-DOS combination; a `$` or `@` prefix and
+a trailing `$` only on uncoined names; one entry per port number and per
+service call number; regions in a table do not overlap.
 
 ## 5. Components
 
@@ -202,10 +238,14 @@ combination; `$`/`@` only on uncoined names; regions in a table do not overlap.
 - `tables.generated.ts`: the data.
 - `select.ts`: `selectSymbols({ machine, dos }): SymbolSet`, merging the tables
   for a selection (ROM, hardware, DOS, or SVCs), with lookups
-  `codeAt(addr)`, `dataAt(addr)` (returns entry and offset), `port(n)`,
-  `svc(n)`, and `differsOnOtherMachine(entry)`.
+  `code(addr)`, `data(addr)` (returns entry and offset), `port(n)`, `svc(n)`,
+  and `machineTag(entry)`; also `defaultDos`, `tablesFor`, `describeSelection`,
+  and `SelectionError`.
 - Exported from `@fugloy/disasm` with the sources registry, so phase 4's side
-  panel can show an entry's purpose and citations.
+  panel can show an entry's purpose and citations. The root names are
+  `SYMBOL_TABLES` and `SYMBOL_SOURCES`; the generated module's own `TABLES` and
+  `SOURCES` are renamed at the package edge because `@fugloy/z80` already
+  exports an unrelated `TABLES`.
 
 ### 5.2 Pass 2 (`src/analysis/symbols.ts`, `src/emit/operands.ts`)
 
@@ -221,25 +261,44 @@ addresses never reach the table lookup.
 ### 5.3 Emitters
 
 - **Listing:** names in operands; the purpose and the machine tag joined into
-  the existing comment column; header lines `; symbols: Model III ROM,
-  hardware, TRSDOS 1.3 (--machine, --dos)` and `N external targets, M named`;
-  a legend of the table names used, each with its address, purpose, and
-  citation.
-- **zmac:** one `NAME EQU nnnnH ; purpose` line per table name used, in the
-  header with the existing `EQU`s; call-site purpose comments.
+  the existing comment column. The header gains `; symbols: Model III ROM,
+  hardware, TRSDOS 1.3` on the line after the `; pass 1:` line, and that line's
+  `N external targets` becomes `N external targets (M named)`, where M counts
+  the targets a routine or vector entry names (a service-call comment does not
+  count). Then one legend line per table name used, `; table name $KBWAIT =
+  $0049: wait for a key and return it in A (m3-basic 12/12)` (a port reads
+  `= port $EC`, a service call `= SVC 10`), and for a name dropped for a
+  collision, `; table name VIDEO not used: the program has its own video`.
+- **zmac:** one `NAME EQU nnnnH ; purpose` line per memory or port name used,
+  ahead of the program's own `EQU`s; call-site purpose comments. A service call
+  gets no `EQU`.
 - **IR:** `machine` and `dos` at the top, and `tableNames`: each table name
-  used, with its address (or port or call number), kind, table, purpose, and
-  citations. Additive, so `fugloyIr` stays `1` **(call)**.
+  used, including `RST` and service-call entries, as `{ key, name, kind, table,
+  purpose, cite }`, where `key` is the address, port number, or call number.
+  The three fields appear only when tables were supplied (the CLI always
+  supplies them). Additive, so `fugloyIr` stays `1` **(call)**.
 - **`--sweep`** stays unnamed, as it is today.
 
 ### 5.4 `.BAS` listings
 
 A line whose `PEEK`, `POKE`, or `DEFUSR` argument is a constant address in the
 selected tables is followed by a note line naming it, for example
-`;   16526 = $408E USR vector (USRVEC)`. A note line, not a trailing comment,
-because `;` is BASIC's PRINT separator and would read as program text. The
-phase-2C parser supplies the constants, so no column offsets are needed.
-`entries.ts` keeps its `TXTTAB` and `USR_VECTOR` constants, which drive
+`;   16526 = $408E … (USRVEC) [Model I]`: the address in decimal and in hex, the
+purpose (elided here), the name in parentheses, and the machine tag of §4.6
+where it applies. Inside a span the name carries a decimal offset
+(`KEYBOARD+64`). A note line, not a trailing comment, because `;` is BASIC's
+PRINT separator and would read as program text. The phase-2C parser supplies
+the constants, so no column offsets are needed, and it keeps every statement's
+expressions, so a `PEEK` is found in an `IF` condition, a `PRINT` item, a `FOR`
+bound, an `ON` selector, and a `DEF FN` body as well as in an assignment. Only
+a literal address counts (or a minus sign and a literal, for an address above
+32767): `POKE A,0` and `POKE 16526+1,0` get no note, and neither does `USR`,
+whose argument is a value, not an address.
+
+A `PEEK` or `POKE` looks an address up as data, then as code; a `DEFUSR` the
+other way round. An address inside the loaded image gets no note, as in §4.5. A
+line gets one note per distinct address, in the order its statements first use
+them. `entries.ts` keeps its `TXTTAB` and `USR_VECTOR` constants, which drive
 analysis rather than naming **(call)**.
 
 ### 5.5 CLI
@@ -257,19 +316,31 @@ operands at render time → listing, zmac (`EQU`s), IR.
 ## 7. Data scope for this phase
 
 - `rom-model3`: the 28 calls of Tandy's summary (`12/24`), its RAM addresses
-  (`12/25`), the RST vectors, and further entries from `decker`, to about 100.
+  (`12/25`–`12/26`), the RST vectors, and further entries from `decker`, to about
+  100. Built: 121 entries (27 of the 28 summary rows; the 28th, `$PRSTAT`, is in
+  `hardware-model3`).
 - `rom-model1`: about 100 from Paay's map (2–22) and reserved RAM (23–30).
-- Hardware: each machine's memory map regions and ports from its manual.
-- DOS: TRSDOS 1.3's documented routines (74–86); LDOS 5.1's maps (6-29 to 6-35).
-- `svc-lsdos6`: every call on Soltoff's 101–103.
+  Built: 125 entries. The comparison, as built: 73 addresses shared, 4
+  different, 48 Model I only, 44 Model III only.
+- Hardware: each machine's memory map regions and ports from its manual. Built:
+  13 entries for the Model I, 17 for the Model III.
+- DOS: TRSDOS 1.3's documented routines and storage addresses (74–89), 24
+  entries; LDOS 5.1's maps (6-29 to 6-35), 107 entries for the Model I and 104
+  for the Model III.
+- `svc-lsdos6`: every call on Soltoff's 101–104, 97 entries.
 - First priority in every table: each external address asylum16 and Volcano
-  Hunter reach. asylum16 with its hints reaches `$0000`; the RSTs at `$0008`,
-  `$0010`, `$0020`, `$0030`, and `$0038`; `$002B`, `$0033`, `$0112`, `$01F8`,
-  `$0212`, `$0235`, `$0264`, `$0287`, `$0296`, `$093E`, and `$1A19`; and four
-  addresses above its image (`$8AC3`, `$A6C3`, `$AACD`, `$CD7A`) that no table
-  will name. Volcano Hunter's pass 1 decodes 26% of the program,
-  reaches no ROM call yet, and writes port `$EC`; reaching its calls may need
-  a hint file, `fixtures/hints/volcano.hints`, written in this phase.
+  Hunter reach. asylum16 with its hints reaches 17 ROM addresses: `$0000`; the
+  RSTs at `$0008`, `$0010`, `$0020`, `$0030`, and `$0038`; `$002B`, `$0033`,
+  `$0112`, `$01F8`, `$0212`, `$0235`, `$0264`, `$0287`, `$0296`, `$093E`, and
+  `$1A19`; and four addresses above its image (`$8AC3`, `$A6C3`, `$AACD`,
+  `$CD7A`) that no table will name. Sixteen of the 17 ROM addresses are named;
+  `$0112` is banner text in the ROM (Decker p. 80), not a routine, no source
+  names it, and it stays numeric. Volcano Hunter's pass 1 decodes 26% of the
+  program, reaches no ROM call, and writes port `$EC`. It turned out to call no
+  ROM or DOS routine at all: with `fixtures/hints/volcano.hints`, which
+  relocates the game to its runtime address, `$42E9`, pass 1 decodes 34%, and
+  the listing also names port `$FF` (`CASSETTE`) and the keyboard (`KEYBOARD`),
+  but still no call.
 
 ## 8. Error handling
 
@@ -294,8 +365,10 @@ operands at render time → listing, zmac (`EQU`s), IR.
 - **Round trip:** every zmac test still rebuilds the identical image, now with
   `EQU`s; a synthetic fixture (the 27-byte routine from the social card:
   `CALL 0049H`, `JP 402DH`) round-trips under each machine and DOS.
-- **Real programs** (skip when absent): asylum16 with its hints names the
-  addresses of §7; Volcano Hunter names its references; both round-trip.
+- **Real programs** (skip when absent): asylum16 with its hints names 16 of the
+  17 ROM addresses of §7 (`$0112`, banner text, stays numeric); Volcano Hunter,
+  with its hint file, names its hardware references and calls no ROM or DOS
+  routine; both round-trip.
 - **`.BAS`:** a synthetic program with `POKE 16526,…` and `PEEK(14400)` gets
   the comments.
 - Tests that pin numbers today (`CALL 0033H`, `LD HL,3C00H`) change on
@@ -312,15 +385,17 @@ operands at render time → listing, zmac (`EQU`s), IR.
   changes them; the comparison tag marks the addresses where it matters.
 - **Data entry volume.** Bounded by §7; asylum16's and Volcano Hunter's
   addresses first.
-- **IR consumers** see a new `source` value. The IR has none outside this repo.
+- **IR consumers** see three new top-level fields (`machine`, `dos`,
+  `tableNames`), only when tables were supplied. The IR has no consumers
+  outside this repo.
 
 ## 11. Calls made without the user
 
 1. Default `--machine 3`; DOS defaults `trsdos` (Model III) and `ldos` (Model I);
    a `--dos` option exists because the sources disagree.
 2. Naming rule (§4.3): Tandy `$` names for ROM on both machines when the routine
-   matches; each DOS manual's own spelling; coined names for hardware and
-   unnamed routines, never with `$` or `@`.
+   matches; each DOS manual's own spelling; coined names for hardware (except
+   `$PRSTAT`, which Tandy prints) and unnamed routines, never with `$` or `@`.
 3. JSON tables plus a generated, CI-checked TypeScript module, not JSON imports.
 4. Table names apply only outside the loaded image; on a collision the address
    stays numeric.
@@ -328,7 +403,9 @@ operands at render time → listing, zmac (`EQU`s), IR.
    `RST` and service calls as comments.
 6. `kiwisincebirth/TRS-80-ROMS` as a cross-check only.
 7. The IR stays version 1.
-8. Volcano Hunter may get a hint file so its ROM and DOS calls are reached.
+8. Volcano Hunter may get a hint file so its ROM and DOS calls are reached. It
+   got one, which relocates the game; no ROM or DOS call turned up, because the
+   game makes none.
 
 ## 12. Sequencing
 

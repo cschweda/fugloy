@@ -45,6 +45,79 @@ Releases are tagged `vX.Y.Z` on `main`.
   in the explainer's palette, its text outlined so it looks the same
   everywhere (Inter and JetBrains Mono, both SIL OFL 1.1), and its listing is
   Fugløy's own output.
+- Symbol tables, phase 3: listings, zmac source, and the IR name the ROM,
+  hardware, and DOS addresses a program uses outside its own image, and every
+  name cites a page of a published work. The tables are eight hand-edited JSON
+  files in `packages/disasm/data/symbols/`, 608 entries from ten works, each
+  with a purpose and a citation (the source, and the page as it prints it):
+  - `rom-model1` 125 entries (Paay's *Level II ROM Reference Manual*, Decker's
+    *TRS-80 ROM Routines Documented*, Radio Shack's *Level II BASIC Reference
+    Manual*) and `rom-model3` 121 (Tandy's *Model III Operation and BASIC
+    Language Reference Manual*, chapter 12, and Decker), entered separately and
+    compared: `COMPARISON.md` lists 73 addresses as shared, 4 as different, 48
+    as Model I only, and 44 as Model III only, and a test fails when a
+    difference has no note.
+  - `hardware-model1` 13 and `hardware-model3` 17, ports included (Radio
+    Shack's Model I technical handbook, the Level II manual, Decker, and Paay;
+    the Model III *Technical Reference Manual*).
+  - `dos-trsdos13` 24 (the TRSDOS 1.3 owner's manual), `dos-ldos51-model1` 107
+    and `dos-ldos51-model3` 104 (the LDOS 5.1 manual), and `svc-lsdos6`, 97
+    service calls (Soltoff's *Programmer's Guide to LDOS/TRSDOS Version 6* and
+    the Model 4 *Technical Reference Manual*).
+  - `pnpm symbols` validates the files (schema, hex ranges, citations, names
+    zmac accepts and unique ignoring case, no overlapping regions) and writes
+    the generated `src/symbols/tables.generated.ts` and `COMPARISON.md`; CI runs
+    it and fails on a difference.
+- `--machine 1|3|4` (default 3) and `--dos trsdos|ldos|none` (default `trsdos`
+  on a Model III, `ldos` on a Model I) choose the tables; `--machine 4` names
+  LS-DOS 6 service calls only. A pair with no tables (`--dos trsdos` on a
+  Model I, `--dos trsdos` or `ldos` on a Model 4) and an unknown value are usage
+  errors (exit 2) that say what to use. `@fugloy/disasm` exports
+  `selectSymbols`, `defaultDos`, `tablesFor`, `describeSelection`, `SymbolSet`,
+  `SelectionError`, `SYMBOL_TABLES`, and `SYMBOL_SOURCES`, and `analyze` takes
+  the resulting `SymbolSet` as `tables`.
+- What the names reach, only outside the loaded image: `CALL`, `JP`, `JR`, and
+  `DJNZ` targets and declared jump tables take routine and vector names, with
+  the routine's purpose as a comment (`CALL $KBWAIT ; wait for a key and return
+  it in A`); `(nn)` operands, `LD rr,nn` immediates, and typed `DW` rows take
+  variable, vector, and region names (`LD HL,VIDEO+0140H`); `IN` and `OUT` take
+  port names; an `RST` comment reads `NAME: purpose`, and on `--machine 4` an
+  `RST 28H` after `LD A,n` reads `@DSPLY (SVC 10): …`. A routine name never
+  replaces a number used as a value, and a table name that equals one of the
+  program's own, ignoring case, is dropped and reported. The listing header
+  gains `; symbols: Model III ROM, hardware, TRSDOS 1.3`, `N external targets
+  (M named)`, and a legend line for each name used (address, purpose,
+  citation); the zmac source defines each name with an `EQU`, so every round
+  trip still rebuilds the identical image; the IR gains `machine`, `dos`, and
+  `tableNames` (`fugloyIr` stays 1). A comment ends in `[Model I]` or
+  `[Model III]` when the other machine's ROM table does not confirm the name,
+  because it names a different routine there or has no entry. The default
+  listing changes with this (`CALL 0033H` is now `CALL $VDCHAR`); `--sweep`
+  still prints numbers, and `--color` paints a `$` or `@` name as one token.
+- `.BAS` notes: a tokenized BASIC line that `PEEK`s, `POKE`s, or `DEFUSR`s a
+  constant address the tables name is followed by a note line, not a trailing
+  comment, since `;` is BASIC's `PRINT` separator: `;   14400 = $3840
+  memory-mapped keyboard (KEYBOARD+64)`. The parser now keeps every statement's
+  expressions, so a `PEEK` is found in an `IF` condition, a `PRINT` item, a
+  `FOR` bound, an `ON` selector, and a `DEF FN` body as well as in an
+  assignment; `USR`'s argument is a value and gets no note. The Model I tables
+  also name 16526/16527 (the USR vector) and 16548/16549 (the program-start
+  pointer), tagged `[Model I]`.
+- Real programs: asylum16, listed with `fixtures/hints/asylum16.hints` under
+  `--machine 1`, has 16 of the 17 ROM addresses it reaches named. The 17th,
+  `$0112`, is banner text in the ROM, not a routine, and no table names it,
+  nor the four addresses above the game's image. Volcano Hunter calls no ROM or
+  DOS routine at all; its listing names its hardware (`MODEPORT`, `CASSETTE`,
+  `KEYBOARD`), and the new `fixtures/hints/volcano.hints` relocates its game to
+  the runtime address its loader copies it to, `$42E9`, which lifts decoded
+  code from 26% to 34% and removes 37 notes. Both still round-trip, now with
+  their names defined.
+- The project plan's Landscape table of other tools was checked against their
+  documentation on 2026-10-17, with the sources dated under the table. It was
+  wrong or incomplete for trs80gp (its Record → Bus Use writes a disassembly
+  from a run) and TRSTools (its viewer disassembles `.CMD` files), it left out
+  DASM80 and DSMBLR III, which read `.CMD` files, and `zdis` could not be
+  identified.
 
 ### Fixed
 

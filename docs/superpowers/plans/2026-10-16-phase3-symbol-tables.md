@@ -10,6 +10,20 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-16-phase3-symbol-tables-design.md`. The sources it cites are in the gitignored `docs/reference/` (see its `web-sources/README.txt`).
 
+## As built (2026-10-17)
+
+This plan is the execution record, so the tasks below stay as written. Where the code differs from what they say:
+
+- **Root exports (Tasks 2 to 4).** `@fugloy/disasm` exports the tables as `SYMBOL_TABLES` and `SYMBOL_SOURCES`, because `@fugloy/z80` already exports an unrelated `TABLES`. Wherever a task says `TABLES` or `SOURCES` from the package root, read the `SYMBOL_` names; the generated module keeps `TABLES` and `SOURCES`.
+- **Tagged `RST` comments (Task 4's Interfaces and Step 1).** An `RST` comment is `NAME: purpose`, then `[Model I]` or `[Model III]` whenever the comparison does not class the address as shared, as on a named transfer. A service-call comment carries no tag. `.BAS` note lines carry it too (Task 10).
+- **Rows Task 4 leaves out.** A declared jump table's `DW` row and a `words`-typed data row are named (`DW $KBWAIT,$VDCHAR`), without a comment; the new module `src/analysis/words.ts` decides which bytes pair into words. The IR's `tableNames` includes the `RST` and service-call entries.
+- **Task 6's pages.** The Model I tables cite `m1-trh` pages 12, 33, 44–45, and 50, not 12, 34, and 86 (page 86 is a circuit example). The device registers at `$37DE`–`$37EF` cite `l2-1979` D-2 and `decker` 63–64, with `paay` 24 as a second cite for `$37ED`–`$37EF`. A `Page N` line in Decker's OCR closes page N.
+- **Tasks 7 and 8.** `$PRSTAT` (`$37E8`) is Tandy's name and sits in `hardware-model3`, so `rom-model3` holds 27 of the 28 summary rows. There is no entry at `$0112` (banner text, Decker p. 80). `l2-1979` cites are `8-8`, `8-9`, `D-1`, and `D-2`, not "8/9".
+- **Task 9's pages and names.** `trsdos13` pages 74–89 (not 74–86), `soltoff` 99 and 101–104 (not 101–103), `m4-trm` 227 and 331–335 (not 334 alone). A name a source prints may end in one `$` (`@FLAGS$`), and a table has one entry per port number and per service call number.
+- **Task 10.** The parser keeps every statement's expressions, so a `PEEK` is noted in an `IF`, `PRINT`, `FOR`, `ON`, or `DEF FN`, not only in an assignment.
+- **Task 11.** asylum16 names 16 of the 17 ROM addresses it reaches. Volcano Hunter calls no ROM or DOS routine, so its hint file only relocates the game; the two `entry` hints first written at `$4000` and `$4003`, bytes nothing executes, were dropped.
+- **Task 12.** The Landscape table gained rows for DASM80 and DSMBLR III, found while checking the others.
+
 ## Global Constraints
 
 - `packages/disasm` stays free of Node and DOM APIs; only `scripts/` and tests touch `fs`.

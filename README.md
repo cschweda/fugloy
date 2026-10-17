@@ -23,8 +23,8 @@ Fugløy takes a program for the TRS-80 Model I or Model III, a `.CMD` load
 module or a tokenized BASIC program saved to disk, and turns it into:
 
 - a **listing** that separates code from data, names every jump, call, and
-  data reference, and shows machine code hidden in BASIC at the address it
-  really occupies;
+  data reference, names the ROM, hardware, and DOS addresses a program uses,
+  and shows machine code hidden in BASIC at the address it really occupies;
 - **zmac assembler source** that assembles back into exactly the same bytes;
 - a **JSON description** of the program (regions, basic blocks,
   cross-references, symbols) for other tools to build on.
@@ -41,8 +41,12 @@ Named after the island in *Voyage of the Valkyrie*; spelled `fugloy` in code.
 
 **Emulators** run the program on a simulated TRS-80, and their debuggers let
 you watch it execute, instruction by instruction. That is the best way to see
-what a program does, but it leaves you with a live view of memory rather than
-a labeled listing you can edit, keep, and rebuild.
+what a program does, and it covers the code that a particular run reaches. The
+debugger's view is live memory, not a listing you can edit, keep, and rebuild.
+trs80gp can also record a run as a disassembly (Record → Bus Use); its manual
+says the result should be a good one once the program has been put through its
+paces, and that a program that relocates itself needs a relocated copy loaded
+first.
 
 **General-purpose disassemblers** start from a raw memory dump. You tell them
 where the code begins and they decode forward from there, so text, tables,
@@ -56,6 +60,11 @@ are built for any Z80 system, and the TRS-80's habits are left to you:
   code inside BASIC lines so that one load brought in both;
 - many games load high in memory and copy themselves elsewhere before they
   run, so the code you want is never where the file put it.
+
+**TRS-80 disassemblers** read `.CMD` files directly. MISOSYS's DSMBLR (1983)
+ran on the TRS-80 itself, and DASM80 and Z80Disasm are command-line programs
+for Windows; each takes "screening" files that mark address ranges as data.
+None of the three documents reading tokenized BASIC.
 
 Nothing in that workflow checks that the listing, assembled again, gives back
 the bytes it came from.
@@ -81,6 +90,12 @@ the bytes it came from.
   inside zmac's `.PHASE`, so the source still rebuilds the file. Asylum's 123
   loader records become 123 such hints, generated from the game itself, and
   61% of the game then decodes at its running address.
+- **It names the machine's own addresses.** ROM routines, hardware registers
+  and ports, and DOS vectors and service calls come out by name, from eight
+  tables of 608 entries, each entry citing a page of a published source. The
+  Model I and Model III ROM maps are entered separately and compared, and a
+  name the other machine's map does not confirm says which machine it came
+  from. `--machine` and `--dos` choose the tables.
 - **It proves its output.** The tests assemble Fugløy's source with a pinned
   zmac and compare every byte: every Z80 encoding, every synthetic fixture,
   83 real programs, and the Model I Level II ROM.
@@ -88,9 +103,9 @@ the bytes it came from.
   in a plain-text hint file keyed by content, so one file fits a relocated
   build of the same program, and a BASIC program after `--rebase`.
 
-The roadmap adds a headless emulator and an MCP server next, so that what a
-program does at run time can confirm and extend what the static analysis
-finds.
+The roadmap adds a web workbench next, then a headless emulator and an MCP
+server, so that what a program does at run time can confirm and extend what
+the static analysis finds.
 
 ## User stories
 
@@ -100,6 +115,10 @@ What people come to Fugløy for, and how each one is done today.
   code as labeled assembly, so that I can see how it really worked.
   *Today:* `pnpm fugloy game.cmd` lists it, with the jumps, calls, and data
   references inside the program named.
+- **As a reader of a listing,** I want ROM and DOS calls named, so that
+  `CALL 0033H` reads as showing a character. *Today:* it lists as
+  `CALL $VDCHAR`, with what the routine does beside it, for the machine and DOS
+  you pick with `--machine` and `--dos`.
 - **As someone studying a BASIC game,** I want the machine code hidden in its
   lines shown at the addresses it occupies, so that I can follow what the
   BASIC hands off to. *Today:* `pnpm fugloy game.bas` parses every line,
@@ -136,9 +155,6 @@ Planned, per the roadmap:
 - **As someone checking what really runs,** I want to run the program and see
   which bytes execute, so that the listing can be confirmed against the real
   thing. *Planned:* the headless emulator in `packages/emu`.
-- **As a reader of a listing,** I want ROM and DOS calls named, so that
-  `CALL 0033H` reads as showing a character. *Planned:* phase 3's symbol
-  tables.
 - **As someone without a terminal,** I want to explore and annotate a listing
   in the browser. *Planned:* phase 4's web workbench.
 
@@ -151,30 +167,33 @@ tokenized BASIC found by parse validity and placed at its true addresses,
 strings, jump-table and loader-stub proposals, rebasing, relocated regions
 analyzed where they run, colored listings, and the public-domain *Sea Dragon*
 to try it on. Phase 1, the core decoder and loaders, shipped as
-[v0.1.0](https://github.com/cschweda/fugloy/releases/tag/v0.1.0). The emulator's phase 0 is done: the core of
+[v0.1.0](https://github.com/cschweda/fugloy/releases/tag/v0.1.0). Phase 3, the
+symbol tables, is built and not yet released (see `[Unreleased]` in
+[CHANGELOG.md](CHANGELOG.md)): ROM, hardware, and DOS addresses come out by
+name, each name cited to a page of a published source, with `--machine` and
+`--dos` choosing the tables. The emulator's phase 0 is done: the core of
 [trs80-emulator](https://github.com/cschweda/trs80-emulator) lives in
 `packages/emu`, free of the DOM, and boots the Model III ROM to `READY` in
 Node; its phase 1 hardened the Z80 core, which now passes the ZEXDOC and
-ZEXALL instruction exercisers. Next is its phase 2, the Model III devices and
-program loaders; phase 3's ROM and
-DOS symbol tables are not yet scheduled (see the roadmap in [CLAUDE.md](CLAUDE.md)). After v1, phase 5
-adds an assembler with an IDE in the workbench: write Z80 code, assemble it,
-and run it on an emulated Model I or Model III. Every change is
+ZEXALL instruction exercisers. Next is phase 4, the web workbench; the
+emulator's phase 2, the Model III devices and program loaders, and the MCP
+server resume after v1 (see the roadmap in [CLAUDE.md](CLAUDE.md)). After v1,
+phase 5 adds an assembler with an IDE in the workbench: write Z80 code,
+assemble it, and run it on an emulated Model I or Model III. Every change is
 recorded in [CHANGELOG.md](CHANGELOG.md); releases are tagged `vX.Y.Z` on
 `main`.
 
 | Package | What it holds |
 | --- | --- |
 | `packages/z80` | Z80 opcode tables generated from the x/y/z/p/q decomposition (unprefixed, `CB`, `ED`, `DD`/`FD`, `DDCB`/`FDCB`) with length, operands, cycle counts, and control-flow effect; a decoder; an exhaustion test against an independently typed reference. No I/O. |
-| `packages/disasm` | 64K memory image with a load bitmap and block log, `.CMD` and `.BAS` loaders, content-based format detection, raw loader, a Level II BASIC parser and entry-point miner, pass 1 recursive descent, labels, the hint file, string and proposal heuristics, rebasing, relocation, zmac emitter, JSON IR, linear sweep, plain-text listings. No Node or DOM APIs, so it runs in a browser. |
-| `packages/cli` | `fugloy <file> [--base <hex> \| --rebase <hex>] [--entry <hex>]... [--hints <path> \| --write-hints <path>] [--format listing\|zmac\|ir] [--sweep] [--color] [-o <path>]`, the only package that touches the file system. |
+| `packages/disasm` | 64K memory image with a load bitmap and block log, `.CMD` and `.BAS` loaders, content-based format detection, raw loader, a Level II BASIC parser and entry-point miner, pass 1 recursive descent, labels, the hint file, string and proposal heuristics, rebasing, relocation, the cited symbol tables (`data/symbols`, compiled by `pnpm symbols`), zmac emitter, JSON IR, linear sweep, plain-text listings. No Node or DOM APIs, so it runs in a browser. |
+| `packages/cli` | `fugloy <file> [--base <hex> \| --rebase <hex>] [--entry <hex>]... [--hints <path> \| --write-hints <path>] [--machine 1\|3\|4] [--dos trsdos\|ldos\|none] [--format listing\|zmac\|ir] [--sweep] [--color] [-o <path>]`, the only package that touches the file system. |
 | `packages/emu` | The headless, deterministic TRS-80 Model III emulator core from trs80-emulator: Z80 CPU, memory map, I/O, keyboard, cassette, disk controller, save states. No DOM; boots the ROM to `READY` in Node. Design in [docs/fugloy-emu-spec.md](docs/fugloy-emu-spec.md). |
 | `packages/mcp` | A stub for the MCP server that will let an AI assistant drive the emulator; design in [docs/fugloy-mcp-spec.md](docs/fugloy-mcp-spec.md). |
 | `fixtures/synthetic` | Generated fixtures, one `.CMD` or `.BAS` per loader rule and analysis case plus their hint files, written by the test suite's own `.CMD` writer and BASIC tokenizer. |
-| `fixtures/hints` | Hint files for real programs; `asylum16.hints` carries Asylum's generated relocate lines. |
+| `fixtures/hints` | Hint files for real programs; `asylum16.hints` carries Asylum's generated relocate lines, and `volcano.hints` relocates Volcano Hunter's game to its runtime address. |
 
-Later phases add per-machine ROM and DOS symbol tables and a static web
-workbench (`apps/web`, Nuxt 4, deployed to Netlify).
+Phase 4 adds a static web workbench (`apps/web`, Nuxt 4, deployed to Netlify).
 
 ## Requirements
 
@@ -191,6 +210,7 @@ pnpm test          # vitest, all packages
 pnpm typecheck     # tsc project references plus the test sources
 pnpm build         # emits packages/*/dist
 pnpm fixtures      # regenerates fixtures/synthetic from the writers
+pnpm symbols       # validates data/symbols/*.json, regenerates the tables module and COMPARISON.md
 pnpm zmac:install  # builds the pinned zmac into tools/ for the round-trip tests
 
 pnpm fugloy path/to/program.cmd          # load module: pass 1 listing (descent from the entry)
@@ -199,6 +219,7 @@ pnpm fugloy program.bas --rebase 7000    # the same program as if saved from $70
 pnpm fugloy path/to/code.bin --base 5200 # raw binary at a base address (hex)
 
 pnpm fugloy game.cmd --entry 7000 --entry 7A40   # extra entry points for pass 1
+pnpm fugloy game.cmd --machine 1                 # Model I names (the default is 3); --dos trsdos|ldos|none picks the DOS's
 pnpm fugloy game.cmd --format zmac -o game.z     # assembler source that reassembles to the same image
 pnpm fugloy game.cmd --format ir                 # JSON: regions, blocks, xrefs, symbols, proposals, relocations
 pnpm fugloy game.cmd --sweep                     # the phase-1 linear sweep instead of pass 1
@@ -218,12 +239,14 @@ fixtures (`pnpm fugloy fixtures/synthetic/bas/hidden-code.bas`):
 
 ```
 ; hidden-code.bas: tokenized BASIC, 3 lines, saved from $7000 to $701A, FF header, 1 unparsed
-; pass 1: roots $700D; 3 of 28 bytes decoded as code (11%); 22 typed as data; 1 external target; 0 notes
+; pass 1: roots $700D; 3 of 28 bytes decoded as code (11%); 22 typed as data; 1 external target (1 named); 0 notes
+; symbols: Model III ROM, hardware, TRSDOS 1.3
+; table name $RESET = $0000: restart the whole system from the Cass? prompt, as at power-on (m3-basic 12/15)
 ; code lines: 1; entries mined: 0
 
 10 GOTO 30
 ; line 20: machine code, 6 bytes at $700D
-700D  C3 00 00      JP 0000H                ; entry
+700D  C3 00 00      JP $RESET               ; entry; restart the whole system from the Cass? prompt, as at power-on
 7010  C9 00 3E      DB 0C9H,00H,3EH
 30 END
 ```
@@ -264,7 +287,8 @@ game ships with Fugløy in [`examples/sea-dragon/`](examples/sea-dragon/)):
 
 ```
 ; seadrg01.cmd: load module, 56 blocks, 1 run, 13968 bytes, entry $8881 (transfer address)
-; pass 1: roots $8881; 15 of 13968 bytes decoded as code (0%); 52 typed as data; 1 external target; 0 notes
+; pass 1: roots $8881; 15 of 13968 bytes decoded as code (0%); 52 typed as data; 1 external target (0 named); 0 notes
+; symbols: Model III ROM, hardware, TRSDOS 1.3
 ; proposed move: LDIR at $888B copies $5200-$8880 to $497F-$7FFF; declare with:
 ;   block 0:$0000 relocate $497F $3681
 ;   block 0:$0000 entry
@@ -326,6 +350,84 @@ lines are in a hint file. A code line whose bytes happen to read as BASIC
 (`XOR A / RET` is `LPRINT INKEY$`) stays BASIC; declare it with a `code` hint,
 and a jump that lands inside such a line says which line and which hint.
 
+### Symbols
+
+A listing names the ROM, hardware, and DOS addresses a program uses outside
+its own image. These rows of *Eliminator* (`pnpm fugloy
+examples/eliminator/elimin8d.cmd`) read as numbers before phase 3, and still do
+under `--sweep`:
+
+```
+8D74  3A 40 38      LD A,(3840H)
+8DB2  CD 49 00      CALL 0049H
+9826  D3 FF         OUT (0FFH),A
+ADAC  CD 60 00      CALL 0060H
+AEBC  CD 20 44      CALL 4420H
+```
+
+Now they read as names, and the listing's header says which tables it used and,
+in a legend, what each name is (excerpt):
+
+```
+; symbols: Model III ROM, hardware, TRSDOS 1.3
+; table name $KBWAIT = $0049: wait for a key and return it in A (m3-basic 12/12)
+; table name $INIT = $4420: open a file, creating it if it does not exist (trsdos13 78)
+…
+8D74  3A 40 38      LD A,(KEYBOARD+0040H)
+8DB2  CD 49 00      CALL $KBWAIT            ; wait for a key and return it in A
+9826  D3 FF         OUT (CASSETTE),A
+ADAC  CD 60 00      CALL $DELAY             ; pause for a time set by BC
+AEBC  CD 20 44      CALL $INIT              ; open a file, creating it if it does not exist
+```
+
+- `--machine 1|3|4` picks the machine. The default is 3, since the emulator and
+  the only ROM names a manufacturer published, Tandy's, are Model III's.
+  `--machine 4` names LS-DOS 6 service calls only: `LD A,10` before `RST 28H`
+  is commented `@DSPLY (SVC 10)`.
+- `--dos trsdos|ldos|none` picks the DOS whose names to use. The manuals name
+  one address differently (`$INIT` in Tandy's TRSDOS 1.3, `@INIT` in LDOS, both
+  for `$4420`), so the DOS is chosen, not merged. The default is `trsdos` on a
+  Model III and `ldos` on a Model I; `none` suits cassette programs.
+  `--dos trsdos` with `--machine 1`, `--dos trsdos` or `ldos` with
+  `--machine 4`, and a value that is not listed are errors that say what to use
+  instead (exit 2).
+- Names apply only outside the loaded image; inside it the program's own labels
+  win. A table name that equals one of the program's own, ignoring case, is
+  dropped for that listing and the header says so. A routine name never stands
+  for a number used as a value, so `LD BC,0033H` stays a count.
+- `[Model I]` or `[Model III]` at the end of a comment on a ROM name says the
+  name came from that machine's table and the other machine's table does not
+  confirm it: it names a different routine at that address, or has no entry
+  there. A ROM name with no tag is one the two tables give alike. `CALL 0055H`
+  lists as `CALL $RSTX ; send a character to the RS-232-C port [Model III]` by
+  default and stays `CALL 0055H` under `--machine 1`, whose table has nothing
+  at `$0055`.
+- The zmac source defines each name it uses with `EQU`, so the round trip still
+  rebuilds the identical image. The IR gains `machine`, `dos`, and
+  `tableNames`.
+- A tokenized BASIC line that `PEEK`s, `POKE`s, or `DEFUSR`s a constant address
+  the tables name is followed by a note line, not a comment, because `;` is
+  BASIC's `PRINT` separator:
+
+  ```
+  20 IF PEEK(14400)=128 THEN PRINT "SPACE"
+  ;   14400 = $3840 memory-mapped keyboard (KEYBOARD+64)
+  ```
+
+Every name cites a page. The tables are eight JSON files in
+`packages/disasm/data/symbols/`, 608 entries from ten published works, each
+with a purpose and a `cite`: a source and the page as that source prints it.
+Names are Tandy's where Tandy published one (`$KBWAIT`), a DOS manual's own
+spelling for DOS routines (`$INIT`, `@INIT`), and otherwise coined (`VIDEO`,
+`CASSETTE`), which the data marks. `pnpm symbols` validates the files and
+writes the module the code uses, and
+[COMPARISON.md](packages/disasm/data/symbols/COMPARISON.md), which lists every
+address in the two ROM maps as shared, different, or in one only. The tables
+are not complete and keep growing: asylum16, listed with `--machine 1` and its
+hint file, has 16 of the 17 ROM addresses it reaches named, and the 17th,
+`$0112`, is banner text, not a routine. Volcano Hunter calls no ROM or DOS
+routine, so what its listing names is its hardware.
+
 ## Documentation
 
 - [docs/Fugloy-Project-Plan.md](docs/Fugloy-Project-Plan.md): the design,
@@ -337,6 +439,8 @@ and a jump that lands inside such a line says which line and which hint.
   server.
 - [docs/label-format.md](docs/label-format.md): the label and coverage file
   shared by the emulator, the MCP server, and the disassembler.
+- [packages/disasm/data/symbols/COMPARISON.md](packages/disasm/data/symbols/COMPARISON.md):
+  the Model I and Model III ROM maps side by side, generated from the tables.
 - [CLAUDE.md](CLAUDE.md): working conventions and the roadmap.
 
 ## Getting ROMs and programs
@@ -394,8 +498,8 @@ Opcode tables are generated, never hand-edited. The image is a flat
 
 Source and issues: [github.com/cschweda/fugloy](https://github.com/cschweda/fugloy).
 CI builds the pinned zmac and requires it, then runs typecheck, the tests,
-the build, and a check that the committed synthetic fixtures still match
-their writers, on every push and pull request.
+the build, and a check that the committed synthetic fixtures and the generated
+symbol tables still match their sources, on every push and pull request.
 
 ## License
 
