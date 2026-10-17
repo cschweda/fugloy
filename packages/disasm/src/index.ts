@@ -76,3 +76,6 @@ export { SOURCES as SYMBOL_SOURCES, TABLES as SYMBOL_TABLES } from './symbols/ta
 export type { Cite, Dos, EntryKind, Machine, RomClass, RomComparison, Source, TableEntry, TableId } from './symbols/types.js';
 export { addressKey, openProgram, OpenError, renderSession, skeletonHints, withHintFile, withHintText, withSelection } from './session.js';
 export type { OpenOptions, Session } from './session.js';
+export { CmdWriter, writeCmd } from './write/cmd.js';
+export { writeBasicCas, writeSystemCas } from './write/cas.js';
+export { exportName } from './write/name.js';
