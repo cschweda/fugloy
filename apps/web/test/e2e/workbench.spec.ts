@@ -46,6 +46,15 @@ test('one click opens Sea Dragon with its hints, as Model III', async ({ page })
   // The cursor opens on the entry, in view, and the ~70 header comment lines are folded behind one toggle row.
   await expect(page.locator('.fg-row-cursor')).toHaveAttribute('data-addr', String(0x8881));
   await expect(page.locator('.fg-row-cursor')).toBeInViewport();
+  // Off-screen targets land about a third of the way down, even the last rows of the listing.
+  const third = await page.evaluate(() => {
+    const l = document.querySelector('.fg-listing')!.getBoundingClientRect();
+    const c = document.querySelector('.fg-row-cursor')!.getBoundingClientRect();
+    return (c.top - l.top) / l.height;
+  });
+  expect(third).toBeGreaterThan(0.2);
+  expect(third).toBeLessThan(0.45);
+  await expect(page.getByTestId('spec-talks')).toContainText('MODEPORT · port $EC');
   const toggle = page.getByTestId('header-toggle');
   await page.locator('.fg-listing').evaluate((el) => (el.scrollTop = 0));
   await expect(toggle).toHaveText(/^▸ \d+ header lines$/);

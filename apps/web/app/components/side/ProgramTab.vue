@@ -118,7 +118,7 @@ const evidence = computed(() => splitEvidence(props.facts.machine.evidence));
             <template v-for="(e, i) in g.entries" :key="`${e.table}:${e.key}`">
               <span v-if="i > 0" class="fg-muted"> · </span>
               <button type="button" class="fg-inline-link fg-mono" :title="e.purpose" @click="emit('symbol', e)">{{ e.name }}</button>
-              <span class="fg-muted fg-mono"> {{ keyLabel(e) }}</span>
+              <span class="fg-muted fg-mono">{{ ` · ${keyLabel(e)}` }}</span>
             </template>
           </dd>
         </template>

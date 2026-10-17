@@ -46,7 +46,9 @@ const cursorIndex = shallowRef<number | null>(cursorRow(props.cursor));
 const first = computed(() => Math.max(0, top.value - OVERSCAN));
 const last = computed(() => Math.min(props.rows.length, top.value + viewRows.value + OVERSCAN));
 const shown = computed(() => props.rows.slice(first.value, last.value));
-const totalHeight = computed(() => `${props.rows.length * ROW_HEIGHT}px`);
+/** Empty room under the last row (two thirds of the view), so the last rows can scroll to a third of the way down like any other. */
+const tail = ref(0);
+const totalHeight = computed(() => `${props.rows.length * ROW_HEIGHT + tail.value}px`);
 const offset = computed(() => `translateY(${first.value * ROW_HEIGHT}px)`);
 
 const isSelected = (row: Row): boolean => {
@@ -205,6 +207,7 @@ onMounted(() => {
   const el = scroller.value!;
   const measure = (): void => {
     viewRows.value = Math.ceil(el.clientHeight / ROW_HEIGHT) + 1;
+    tail.value = Math.floor((el.clientHeight * 2) / 3);
   };
   measure();
   resize = new ResizeObserver(measure);
