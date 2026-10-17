@@ -8,31 +8,22 @@
 import { basename } from 'node:path';
 import { parseArgs } from 'node:util';
 import {
-  analysisSpace,
-  analyze,
-  applyHints,
-  basIdentityNormalizer,
-  blockIdentities,
-  buildIr,
   defaultDos,
-  detectFormat,
-  emitZmac,
-  emptyAnnotations,
-  loadBas,
-  loadCmd,
-  loadRaw,
+  OpenError,
+  openProgram,
   parseHints,
-  programHash,
   rebaseBas,
   renderBasListing,
   renderCmdListing,
-  renderPass1Listing,
   renderRawListing,
+  renderSession,
   SelectionError,
   selectSymbols,
+  skeletonHints,
+  withHintFile,
   writeHints,
 } from '@fugloy/disasm';
-import type { Dos, Hint, HintFile, HintsSummary, Machine, Module, SymbolSet } from '@fugloy/disasm';
+import type { Dos, Hint, Machine, Session, SymbolSelection } from '@fugloy/disasm';
 import { colorListing } from './color.js';
 
 export const VERSION = '0.2.0';
@@ -104,13 +95,14 @@ const DOSES: readonly Dos[] = ['trsdos', 'ldos', 'none'];
  * that no tables exist for is the usage error to print, never a listing named
  * from the wrong tables. Which pairs have tables is `selectSymbols`' to say.
  */
-function chooseTables(machineText: string | undefined, dosText: string | undefined): { tables: SymbolSet } | { error: string } {
+function chooseTables(machineText: string | undefined, dosText: string | undefined): { selection: SymbolSelection } | { error: string } {
   const machine = machineText === undefined ? 3 : MACHINES.find((m) => String(m) === machineText);
   if (machine === undefined) return { error: '--machine must be 1, 3, or 4' };
   const dos = dosText === undefined ? defaultDos(machine) : DOSES.find((d) => d === dosText);
   if (dos === undefined) return { error: '--dos must be trsdos, ldos, or none' };
   try {
-    return { tables: selectSymbols({ machine, dos }) };
+    selectSymbols({ machine, dos });
+    return { selection: { machine, dos } };
   } catch (e) {
     if (!(e instanceof SelectionError)) throw e;
     // The error's own wording is for callers of the library; a command line is told what to type instead.
@@ -214,7 +206,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
     io.stderr(`fugloy: ${chosen.error}\n`);
     return 2;
   }
-  const { tables } = chosen;
+  const { selection } = chosen;
 
   let bytes: Uint8Array;
   try {
@@ -225,20 +217,17 @@ export async function run(argv: string[], io: Io): Promise<number> {
   }
   const source = basename(path);
 
-  let mod: Module;
-  if (base !== undefined) {
-    mod = loadRaw(bytes, base);
-  } else {
-    const kind = detectFormat(bytes);
-    if (kind === 'bas') mod = loadBas(bytes);
-    else if (kind === 'cmd') mod = loadCmd(bytes);
-    else {
-      io.stderr(`fugloy: ${path} is not a .CMD load module or a tokenized BASIC program; use --base <hex> to list it as a raw binary\n`);
-      return 2;
-    }
+  const openOpts = { name: source, selection, entries, ...(base === undefined ? {} : { base }) };
+  let session: Session;
+  try {
+    session = openProgram(bytes, openOpts);
+  } catch (e) {
+    if (!(e instanceof OpenError) || e.kind !== 'format') throw e;
+    io.stderr(`fugloy: ${path} is not a .CMD load module or a tokenized BASIC program; use --base <hex> to list it as a raw binary\n`);
+    return 2;
   }
-  let rebasedFrom: number | undefined;
   if (rebase !== undefined) {
+    const mod = session.module;
     if (mod.format !== 'bas') {
       io.stderr(`fugloy: --rebase applies to a tokenized BASIC program, and ${path} is ${mod.format === 'cmd' ? 'a .CMD load module' : 'loaded raw'}\n`);
       return 2;
@@ -249,11 +238,9 @@ export async function run(argv: string[], io: Io): Promise<number> {
       io.stderr(`fugloy: --rebase ${values.rebase}: ${(e as Error).message}\n`);
       return 2;
     }
-    rebasedFrom = mod.base;
-    mod = loadBas(bytes);
+    session = openProgram(bytes, { ...openOpts, rebasedFrom: mod.base });
   }
-  // A .BAS block's identity reads its line pointers as offsets, so hints survive a rebase.
-  const normalize = mod.format === 'bas' ? basIdentityNormalizer(mod) : undefined;
+  const mod = session.module;
   const writeTo = values['write-hints'];
   if (writeTo !== undefined) {
     for (const e of entries) {
@@ -271,14 +258,8 @@ export async function run(argv: string[], io: Io): Promise<number> {
       const i = runs.findIndex((r) => e >= r.start && e <= r.end);
       return { block: i, offset: e - runs[i]!.start, directive: 'entry', line: 0 };
     });
-    const file: HintFile = {
-      version: 1,
-      program: programHash(bytes),
-      blocks: blockIdentities(mod.image, normalize).map((b) => ({ index: b.index, length: b.length, hash: b.hash, start: b.start })),
-      hints: hintsOut,
-    };
     try {
-      await io.writeFile(writeTo, writeHints(file));
+      await io.writeFile(writeTo, writeHints({ ...skeletonHints(mod, bytes), hints: hintsOut }));
     } catch (e) {
       io.stderr(`fugloy: cannot write ${writeTo}: ${(e as Error).message}\n`);
       return 1;
@@ -286,8 +267,6 @@ export async function run(argv: string[], io: Io): Promise<number> {
     return 0;
   }
 
-  let annotations = emptyAnnotations();
-  let hints: HintsSummary | undefined;
   if (values.hints !== undefined) {
     let hintText: string;
     try {
@@ -301,19 +280,18 @@ export async function run(argv: string[], io: Io): Promise<number> {
       for (const err of parsed.errors) io.stderr(`fugloy: ${values.hints}:${err.line}: ${err.message}\n`);
       return 2;
     }
-    const applied = applyHints(parsed.file, mod.image, programHash(bytes), normalize);
-    if (applied.errors.length > 0) {
-      for (const err of applied.errors) io.stderr(`fugloy: ${values.hints}: ${err}\n`);
+    try {
+      session = withHintFile(session, parsed.file, basename(values.hints));
+    } catch (e) {
+      if (!(e instanceof OpenError) || e.kind !== 'hints') throw e;
+      for (const err of e.details) io.stderr(`fugloy: ${values.hints}: ${err}\n`);
       return 2;
     }
-    annotations = applied.annotations;
-    const skipped = applied.unmatched.reduce((n, u) => n + u.hints, 0);
-    hints = { source: basename(values.hints), matched: applied.matched.length, unmatched: applied.unmatched.length, applied: parsed.file.hints.length - skipped, warnings: applied.warnings };
-    if (format !== 'listing') for (const w of applied.warnings) io.stderr(`fugloy: warning: ${w}\n`);
+    if (format !== 'listing') for (const w of session.applied.warnings) io.stderr(`fugloy: warning: ${w}\n`);
   }
 
   // An entry may name a runtime address that a relocate hint created, but not the file address it moved away from.
-  const { space: runtime } = analysisSpace(mod.image, annotations.relocations);
+  const runtime = session.analysis.space;
   for (const e of entries) {
     if (!runtime.image.isLoaded(e)) {
       const moved = runtime.toRun(e);
@@ -330,14 +308,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
   if (values.sweep === true && format === 'listing') {
     text = mod.format === 'cmd' ? renderCmdListing(mod, { source }) : mod.format === 'raw' ? renderRawListing(mod, { source }) : renderBasListing(mod, { source });
   } else {
-    const analysis = analyze(mod, { entries, annotations, tables, ...(hints === undefined ? {} : { hints }), ...(rebasedFrom === undefined ? {} : { rebasedFrom }) });
-    // A .BAS with neither hidden code nor a planted entry lists as plain BASIC unless pass 1 was asked for.
-    const plainBasic =
-      mod.format === 'bas' && entries.length === 0 && hints === undefined && rebasedFrom === undefined && analysis.entries.length === 0 && mod.lines.every((l) => l.parsed);
-    if (format === 'listing' && plainBasic && mod.format === 'bas') text = renderBasListing(mod, { source, tables });
-    else if (format === 'zmac') text = emitZmac(mod.image, analysis.pass1, analysis.transfer, { source, symbols: analysis.symbols, annotations: analysis.annotations, space: analysis.space, externals: analysis.externals, tablesUsed: analysis.tablesUsed });
-    else if (format === 'ir') text = `${JSON.stringify(buildIr(mod, analysis.pass1, source, analysis), null, 2)}\n`;
-    else text = renderPass1Listing(analysis, { source });
+    text = renderSession(session, format);
   }
 
   if (values.output !== undefined) {

@@ -70,3 +70,5 @@ export type { SymbolSelection } from './symbols/select.js';
 // Renamed at the package edge: @fugloy/z80 already exports an unrelated TABLES (its opcode tables), and the workbench imports both.
 export { SOURCES as SYMBOL_SOURCES, TABLES as SYMBOL_TABLES } from './symbols/tables.generated.js';
 export type { Cite, Dos, EntryKind, Machine, RomClass, RomComparison, Source, TableEntry, TableId } from './symbols/types.js';
+export { addressKey, openProgram, OpenError, renderSession, skeletonHints, withHintFile, withHintText, withSelection } from './session.js';
+export type { OpenOptions, Session } from './session.js';
