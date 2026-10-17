@@ -69,6 +69,16 @@ describe('resolveGoTo', () => {
     expect(resolveGoTo(a, 'l497f')).toEqual({ ok: true, addr: 0x497f });
   });
 
+  it('reads bare hex with a letter in it as an address, after the labels', async () => {
+    const { wb } = await setup();
+    const a = wb.session.value!.analysis;
+    expect(resolveGoTo(a, '4B9E')).toEqual({ ok: true, addr: 0x4b9e });
+    expect(resolveGoTo(a, 'c000')).toEqual({ ok: true, addr: 0xc000 });
+    // All digits stay decimal, as parseNumber reads them.
+    expect(resolveGoTo(a, '4000')).toEqual({ ok: true, addr: 4000 });
+    expect(resolveGoTo(a, '1FFFF')).toMatchObject({ ok: false, reason: '1FFFF is past $FFFF.' });
+  });
+
   it('says why it cannot go', async () => {
     const { wb } = await setup();
     const a = wb.session.value!.analysis;
