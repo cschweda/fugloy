@@ -31,6 +31,8 @@ export interface Annotations {
   tables: TableHint[];
   names: Map<number, string>;
   comments: Map<number, string>;
+  /** Block comments printed above an address, one entry per `note` line, in file order. */
+  notes: Map<number, string[]>;
   /** Regions that execute elsewhere; every other address here is already a runtime address. */
   relocations: Relocation[];
 }
@@ -46,7 +48,7 @@ export interface Applied {
   errors: string[];
 }
 
-export const emptyAnnotations = (): Annotations => ({ entries: [], overrides: [], tables: [], names: new Map(), comments: new Map(), relocations: [] });
+export const emptyAnnotations = (): Annotations => ({ entries: [], overrides: [], tables: [], names: new Map(), comments: new Map(), notes: new Map(), relocations: [] });
 
 const hex4 = (n: number): string => n.toString(16).toUpperCase().padStart(4, '0');
 const TERMINATORS = new Set([0x00, 0x0d, 0x03]);
@@ -160,6 +162,9 @@ export function applyHints(file: HintFile, image: MemoryImage, programHash?: str
         break;
       case 'comment':
         annotations.comments.set(addr, hint.text);
+        break;
+      case 'note':
+        annotations.notes.set(addr, [...(annotations.notes.get(addr) ?? []), hint.text]);
         break;
     }
   }

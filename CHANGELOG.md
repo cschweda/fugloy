@@ -10,6 +10,10 @@ Releases are tagged `vX.Y.Z` on `main`.
 
 ### Added
 
+- The `note <text>` hint directive (`block <i>:<offset> note …`): a block
+  comment printed as `; text` lines above an address in the listing and the zmac
+  source, and carried in the JSON IR as `notes`. An empty `note` is a blank `;`
+  line; several notes at one address print in file order. `at … note` is refused.
 - `@fugloy/emu`, emu phase 0: the core of `cschweda/trs80-emulator` (v1.6.0)
   — Z80 CPU, Model III memory map and I/O, keyboard matrix, cassette, WD1793
   disk controller, disk images, printer, `.CAS`/`.CMD` formats, save states —

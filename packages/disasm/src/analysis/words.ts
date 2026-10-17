@@ -24,7 +24,7 @@ export interface DataWord {
 }
 
 /**
- * Where an emitter starts a new row: at a symbol, a hint comment, an
+ * Where an emitter starts a new row: at a symbol, a hint comment or note, an
  * instruction, or the start of a typed region. A run of one kind of data is cut
  * there, so words pair up again from each of these addresses.
  */
@@ -34,7 +34,7 @@ export function rowStarts(
   instructions: ReadonlyMap<number, Instruction>,
 ): (addr: number) => boolean {
   const regionStarts = new Set(annotations.overrides.map((o) => o.addr & 0xffff));
-  return (addr) => (symbols?.has(addr) ?? false) || annotations.comments.has(addr) || instructions.has(addr) || regionStarts.has(addr);
+  return (addr) => (symbols?.has(addr) ?? false) || annotations.comments.has(addr) || annotations.notes.has(addr) || instructions.has(addr) || regionStarts.has(addr);
 }
 
 /** What `dataWords` reads: the file image the emitters walk, and Pass 1's map of what each byte is. */

@@ -98,6 +98,8 @@ export function emitZmac(image: MemoryImage, pass1: Pass1, entry: number | null,
     let addr = from;
     while (addr <= to) {
       const symbol = symbols?.get(addr);
+      const lines = annotations.notes.get(addr);
+      if (lines !== undefined) out.push('', ...lines.map((line) => (line === '' ? ';' : `; ${line}`)));
       if (symbol !== undefined && map.kind(addr) !== Kind.Tail) out.push(`${symbol.name}:`);
       const ins = instructions.get(addr);
       if (ins !== undefined && addr + ins.length - 1 <= to) {
