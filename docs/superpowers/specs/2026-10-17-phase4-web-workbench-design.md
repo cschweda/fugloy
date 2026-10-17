@@ -141,8 +141,9 @@ C: listing only).
       `.CMD` name record if it has one.
     - **Machine:** runs on Model I, Model III, or both, with the evidence in
       plain words. For example: "Writes port `$EC` (MODEPORT), which only the
-      Model III has. Its one ROM call, `$0060` $DELAY, exists on both, but
-      the code differs between the two ROMs." Built from phase 3's data: the
+      Model III has. Its one ROM call, `$0060` $DELAY, is the same on both."
+      (The mockup claimed `$0060` differs. The comparison classes it shared,
+      and the sheet says only what the data says.) Built from phase 3's data: the
       ROM comparison (shared / different / Model I only / Model III only)
       and the per-machine hardware tables. "Unknown" is a valid answer.
     - **Loading:** format and record count, name record, load range and
@@ -326,8 +327,12 @@ site hosts none of their text or page images. Instead they work like ROMs:
   It is verified by hand the way phase 3's citations were, including the
   front matter and any roman-numbered pages. For any other PDF you set the
   mapping once ("which PDF page is printed page 1?"), stored with the file.
-- **Without the manual**, a citation shows its title and page, the cover, and
-  "Add this manual". Nothing is broken.
+- **Without the manual**, a citation shows its title and page, the cover, an
+  **"Open page N on archive.org"** link to that page of the scan (from the
+  same printed-page table, using archive.org's `/page/n<leaf>` reader
+  address, checked when the table is built), and "Add this manual". Nothing
+  is broken. The user's view: your own PDF is the fast path, opened inside
+  Fugløy with no network. The archive.org page is the fallback.
 - **Hosted, anchored text** for sources we may redistribute (Soltoff's
   *Programmer's Guide to LDOS/TRSDOS 6* is free to redistribute) is a later
   idea, not phase 4.
