@@ -189,4 +189,12 @@ describe('stepRegs', () => {
   it('LD SP,nn and INC SP are not tracked and harm nothing', () => {
     expect(run([0x06, 0x01, 0x31, 0x00, 0x40, 0x33]).B).toBe(1);
   });
+
+  it('an undocumented DDCB form (RLC (IX+0),B) makes everything unknown', () => {
+    expect(run([0x06, 0x05, 0xdd, 0xcb, 0x00, 0x00]).B).toBeNull();
+  });
+
+  it('an undocumented NEG duplicate (ED 54) makes A unknown', () => {
+    expect(run([0x3e, 0x05, 0xed, 0x54]).A).toBeNull();
+  });
 });
