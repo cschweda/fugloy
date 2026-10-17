@@ -6,9 +6,9 @@ Every address in either table. `shared` means both tables give it the same name 
 
 | Class | Addresses |
 | --- | ---: |
-| shared | 61 |
+| shared | 73 |
 | different | 4 |
-| model1-only | 60 |
+| model1-only | 48 |
 | model3-only | 44 |
 
 | Address | Class | Model I | Model III | Note |
@@ -37,10 +37,10 @@ Every address in either table. `shared` means both tables give it the same name 
 | `$0066` | shared | `NMIENTRY` (routine) | `NMIENTRY` (routine) | Model I: the Model III handler tests port E4H for a disk interrupt instead (decker 54) |
 | `$0069` | model3-only | - | `$INITIO` (routine) |  |
 | `$006C` | model3-only | - | `$ROUTE` (routine) |  |
-| `$012D` | model1-only | `ERR_L3` (routine) | - |  |
+| `$012D` | shared | `ERR_L3` (routine) | `ERR_L3` (routine) |  |
 | `$0132` | model1-only | `BASICPOINT` (routine) | - |  |
-| `$0135` | model1-only | `BASICSET` (routine) | - |  |
-| `$0138` | model1-only | `BASICRESET` (routine) | - |  |
+| `$0135` | shared | `BASICSET` (routine) | `BASICSET` (routine) |  |
+| `$0138` | shared | `BASICRESET` (routine) | `BASICRESET` (routine) |  |
 | `$0150` | shared | `PIXELOP` (routine) | `PIXELOP` (routine) |  |
 | `$01C9` | shared | `$VDCLS` (routine) | `$VDCLS` (routine) |  |
 | `$01D3` | model1-only | `BASICRANDOM` (routine) | - |  |
@@ -88,32 +88,32 @@ Every address in either table. `shared` means both tables give it the same name 
 | `$05D1` | model1-only | `PRTTEST` (routine) | - | Model I: the Model III keeps this routine at 044BH (decker 16) |
 | `$05D9` | shared | `LINEINPUT` (routine) | `LINEINPUT` (routine) |  |
 | `$06CC` | model1-only | `READYREENTRY` (routine) | - | Model I: on the Model III 06CCH is part of the LIST command and no longer returns to BASIC (decker 54, 82) |
-| `$07B2` | model1-only | `ERR_OV` (routine) | - |  |
+| `$07B2` | shared | `ERR_OV` (routine) | `ERR_OV` (routine) |  |
 | `$093E` | shared | `MUL10SNG` (routine) | `MUL10SNG` (routine) |  |
 | `$0A7F` | shared | `CINT` (routine) | `CINT` (routine) |  |
 | `$0A9A` | shared | `HLTOACC` (routine) | `HLTOACC` (routine) |  |
 | `$0AF4` | shared | `CHKSTRING` (routine) | `CHKSTRING` (routine) |  |
-| `$0AF6` | model1-only | `ERR_TM` (routine) | - |  |
+| `$0AF6` | shared | `ERR_TM` (routine) | `ERR_TM` (routine) |  |
 | `$0E6C` | shared | `ASCTONUM` (routine) | `ASCTONUM` (routine) |  |
 | `$0FAF` | shared | `OUTHLDEC` (routine) | `OUTHLDEC` (routine) |  |
-| `$1997` | model1-only | `ERR_SN` (routine) | - |  |
+| `$1997` | shared | `ERR_SN` (routine) | `ERR_SN` (routine) |  |
 | `$19A2` | shared | `BASICERROR` (routine) | `BASICERROR` (routine) |  |
 | `$19AE` | shared | `READYALT` (routine) | `READYALT` (routine) |  |
 | `$1A19` | shared | `$READY` (routine) | `$READY` (routine) |  |
-| `$1AF8` | model1-only | `FIXLINEPTRS` (routine) | - |  |
-| `$1B2C` | model1-only | `FINDLINE` (routine) | - |  |
+| `$1AF8` | shared | `FIXLINEPTRS` (routine) | `FIXLINEPTRS` (routine) |  |
+| `$1B2C` | shared | `FINDLINE` (routine) | `FINDLINE` (routine) |  |
 | `$1BB3` | shared | `INPROMPT` (routine) | `INPROMPT` (routine) |  |
-| `$1E4A` | model1-only | `ERR_FC` (routine) | - |  |
-| `$1E5A` | model1-only | `ASCTODE` (routine) | - |  |
+| `$1E4A` | shared | `ERR_FC` (routine) | `ERR_FC` (routine) |  |
+| `$1E5A` | shared | `ASCTODE` (routine) | `ASCTODE` (routine) |  |
 | `$20F9` | shared | `NEWLINE` (routine) | `NEWLINE` (routine) |  |
 | `$20FE` | shared | `OUTCR` (routine) | `OUTCR` (routine) |  |
 | `$213F` | shared | `TABTO` (routine) | `TABTO` (routine) |  |
 | `$2169` | shared | `DEVRESETCAS` (routine) | `DEVRESETCAS` (routine) |  |
 | `$21C9` | shared | `INPUTSTMT` (routine) | `INPUTSTMT` (routine) |  |
 | `$2337` | shared | `EVALEXPR` (routine) | `EVALEXPR` (routine) |  |
-| `$260D` | model1-only | `FINDVAR` (routine) | - |  |
+| `$260D` | shared | `FINDVAR` (routine) | `FINDVAR` (routine) |  |
 | `$28A7` | shared | `OUTSTR` (routine) | `OUTSTR` (routine) |  |
-| `$2B05` | model1-only | `ACCTODE` (routine) | - |  |
+| `$2B05` | shared | `ACCTODE` (routine) | `ACCTODE` (routine) |  |
 | `$2B75` | shared | `OUTSTRZ` (routine) | `OUTSTRZ` (routine) |  |
 | `$2BF5` | shared | `BASICCSAVE` (routine) | `BASICCSAVE` (routine) |  |
 | `$2C1F` | shared | `BASICCLOAD` (routine) | `BASICCLOAD` (routine) |  |

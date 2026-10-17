@@ -182,6 +182,30 @@
       "cite": [{ "source": "m3-basic", "page": "12/16" }]
     },
     {
+      "addr": "012D",
+      "name": "ERR_L3",
+      "kind": "routine",
+      "purpose": "raise the L3 ERROR; the Disk BASIC command vectors, TIME$ aside, jump here until a disk BASIC takes over",
+      "cite": [{ "source": "decker", "page": "61" }, { "source": "decker", "page": "72" }],
+      "coined": true
+    },
+    {
+      "addr": "0135",
+      "name": "BASICSET",
+      "kind": "routine",
+      "purpose": "entry of the SET statement in BASIC's keyword table",
+      "cite": [{ "source": "decker", "page": "121" }],
+      "coined": true
+    },
+    {
+      "addr": "0138",
+      "name": "BASICRESET",
+      "kind": "routine",
+      "purpose": "entry of the RESET statement in BASIC's keyword table",
+      "cite": [{ "source": "decker", "page": "121" }],
+      "coined": true
+    },
+    {
       "addr": "0150",
       "name": "PIXELOP",
       "kind": "routine",
@@ -412,6 +436,14 @@
       "coined": true
     },
     {
+      "addr": "07B2",
+      "name": "ERR_OV",
+      "kind": "routine",
+      "purpose": "jump here to give an OV ERROR (overflow)",
+      "cite": [{ "source": "decker", "page": "61" }],
+      "coined": true
+    },
+    {
       "addr": "093E",
       "name": "MUL10SNG",
       "kind": "routine",
@@ -444,6 +476,14 @@
       "coined": true
     },
     {
+      "addr": "0AF6",
+      "name": "ERR_TM",
+      "kind": "routine",
+      "purpose": "jump here to give a TM ERROR (type mismatch)",
+      "cite": [{ "source": "decker", "page": "61" }],
+      "coined": true
+    },
+    {
       "addr": "0E6C",
       "name": "ASCTONUM",
       "kind": "routine",
@@ -457,6 +497,14 @@
       "kind": "routine",
       "purpose": "print the positive integer in HL in decimal on the current output device",
       "cite": [{ "source": "decker", "page": "34" }],
+      "coined": true
+    },
+    {
+      "addr": "1997",
+      "name": "ERR_SN",
+      "kind": "routine",
+      "purpose": "jump here to give an SN ERROR (syntax error)",
+      "cite": [{ "source": "decker", "page": "61" }],
       "coined": true
     },
     {
@@ -483,11 +531,43 @@
       "cite": [{ "source": "m3-basic", "page": "12/15" }]
     },
     {
+      "addr": "1AF8",
+      "name": "FIXLINEPTRS",
+      "kind": "routine",
+      "purpose": "reset each line's forward pointer in the BASIC program to point at the next line (uses AF, DE, HL)",
+      "cite": [{ "source": "decker", "page": "56" }],
+      "coined": true
+    },
+    {
+      "addr": "1B2C",
+      "name": "FINDLINE",
+      "kind": "routine",
+      "purpose": "find line number DE in the program: carry if found; BC at that line (or the next larger), HL just after",
+      "cite": [{ "source": "decker", "page": "56" }],
+      "coined": true
+    },
+    {
       "addr": "1BB3",
       "name": "INPROMPT",
       "kind": "routine",
       "purpose": "show a question mark and a space, then read a line as KBINBUF does",
       "cite": [{ "source": "decker", "page": "14" }],
+      "coined": true
+    },
+    {
+      "addr": "1E4A",
+      "name": "ERR_FC",
+      "kind": "routine",
+      "purpose": "jump here to give an FC ERROR (illegal function call)",
+      "cite": [{ "source": "decker", "page": "61" }],
+      "coined": true
+    },
+    {
+      "addr": "1E5A",
+      "name": "ASCTODE",
+      "kind": "routine",
+      "purpose": "read a positive integer (a line number, say) from the text at HL into DE; HL ends at the first non-digit",
+      "cite": [{ "source": "decker", "page": "35" }],
       "coined": true
     },
     {
@@ -539,11 +619,27 @@
       "coined": true
     },
     {
+      "addr": "260D",
+      "name": "FINDVAR",
+      "kind": "routine",
+      "purpose": "locate the BASIC variable named at HL, creating it if absent; DE returns its address, as VARPTR gives it",
+      "cite": [{ "source": "decker", "page": "36" }],
+      "coined": true
+    },
+    {
       "addr": "28A7",
       "name": "OUTSTR",
       "kind": "routine",
       "purpose": "send the string at HL, ended by a zero or a quote, to the current output device (PRINT)",
       "cite": [{ "source": "decker", "page": "11" }],
+      "coined": true
+    },
+    {
+      "addr": "2B05",
+      "name": "ACCTODE",
+      "kind": "routine",
+      "purpose": "turn the accumulator into an integer, also left in DE; Z is set if the value is from 0 to 255",
+      "cite": [{ "source": "decker", "page": "31" }],
       "coined": true
     },
     {

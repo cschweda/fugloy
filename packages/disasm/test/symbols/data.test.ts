@@ -240,6 +240,40 @@ describe('the Model III ROM table', () => {
     expect(at(0x0112)).toBeUndefined();
   });
 
+  // Twelve routines the Model I table also names. Their code is byte for byte the same in the Model I and Model III ROM images, from the entry to
+  // the end of the routine, and Decker documents each for both machines (his book applies to both unless it says "Model I only" or "Model III only"):
+  // the error table on p. 61 (and the L3 vectors on p. 72), the line-pointer and line-search routines on p. 56, his keyword entry table on p. 121,
+  // and chapter two's number and variable routines on pp. 31, 35, and 36. Each takes the Model I table's name and kind, so the comparison classes it shared.
+  it('enters the twelve routines the two ROMs share and Decker documents for both machines, each with the name and kind the Model I table gives it', () => {
+    const SHARED: readonly (readonly [number, string, readonly string[]])[] = [
+      [0x012d, 'ERR_L3', ['61', '72']], [0x0135, 'BASICSET', ['121']], [0x0138, 'BASICRESET', ['121']], [0x07b2, 'ERR_OV', ['61']],
+      [0x0af6, 'ERR_TM', ['61']], [0x1997, 'ERR_SN', ['61']], [0x1af8, 'FIXLINEPTRS', ['56']], [0x1b2c, 'FINDLINE', ['56']],
+      [0x1e4a, 'ERR_FC', ['61']], [0x1e5a, 'ASCTODE', ['35']], [0x260d, 'FINDVAR', ['36']], [0x2b05, 'ACCTODE', ['31']],
+    ];
+    for (const [key, name, decker] of SHARED) {
+      expect(at(key), name).toMatchObject({ name, kind: 'routine', coined: true });
+      expect(pages(at(key), 'decker'), name).toEqual(decker);
+      expect(TABLES['rom-model1'].find((e) => e.key === key), name).toMatchObject({ name, kind: 'routine' });
+      expect(ROM_COMPARISON[key.toString(16).toUpperCase().padStart(4, '0')], name).toBe('shared');
+    }
+  });
+
+  // Decker documents neither address: his keyword table (p. 121) gives POINT no entry and lists SYSTEM at 02B2H, and the ROMs differ inside the
+  // SYSTEM routine, at 02E2H-02E4H (his p. 82). The Model I table has both from Paay, so they stay Model I only.
+  it('leaves POINT at 0132 and the SYSTEM routine at 02B5 to the Model I table: no Model III source documents them there, and the SYSTEM code differs', () => {
+    expect(at(0x0132)).toBeUndefined();
+    expect(at(0x02b5)).toBeUndefined();
+    expect(ROM_COMPARISON['0132']).toBe('model1-only');
+    expect(ROM_COMPARISON['02B5']).toBe('model1-only');
+  });
+
+  it('tags a Model III name with [Model III] only where its address is not shared: CASSELECT is tagged, ERR_FC is not', () => {
+    const set = selectSymbols({ machine: 3, dos: 'none' });
+    expect(set.code(0x1e4a)?.name).toBe('ERR_FC');
+    expect(set.machineTag(at(0x1e4a)!)).toBeUndefined();
+    expect(set.machineTag(at(0x0212)!)).toBe('[Model III]');
+  });
+
   it('keeps ROM entries below $4000 as routines and RAM entries from $4000 as variables or vectors', () => {
     for (const e of rom) {
       if (e.key < 0x4000) expect(e.kind, e.name).toBe('routine');
@@ -296,11 +330,13 @@ describe('the Model I ROM table', () => {
   const hex4 = (key: number): string => key.toString(16).toUpperCase().padStart(4, '0');
 
   // Where a Model I source documents the same routine or variable at the same address as the Model III table, the Model I entry takes that name and
-  // kind, so the comparison classes the address shared (spec 4.3 and 4.6). Each of these addresses is documented by Paay or Decker for the Model I.
+  // kind, so the comparison classes the address shared (spec 4.3 and 4.6). Each of these addresses is documented by Paay or Decker for the Model I,
+  // and the Model III table names it too (twelve of them entered from Decker's pages after a review; the Model III's are listed in its own block).
   const SHARED_ROM = [
     0x0000, 0x0008, 0x000b, 0x000d, 0x0010, 0x0013, 0x0018, 0x001b, 0x0020, 0x0028, 0x002b, 0x0030, 0x0033, 0x0038, 0x003b, 0x0040, 0x0049, 0x0060, 0x0066,
-    0x0150, 0x01c9, 0x01f8, 0x0235, 0x0264, 0x0287, 0x0296, 0x0314, 0x032a, 0x033a, 0x0348, 0x0358, 0x0361, 0x0384, 0x038b, 0x0394, 0x039c, 0x05d9,
-    0x093e, 0x0a7f, 0x0a9a, 0x0af4, 0x0e6c, 0x0faf, 0x19a2, 0x19ae, 0x1a19, 0x1bb3, 0x20f9, 0x20fe, 0x213f, 0x2169, 0x21c9, 0x2337, 0x28a7, 0x2b75, 0x2bf5, 0x2c1f,
+    0x012d, 0x0135, 0x0138, 0x0150, 0x01c9, 0x01f8, 0x0235, 0x0264, 0x0287, 0x0296, 0x0314, 0x032a, 0x033a, 0x0348, 0x0358, 0x0361, 0x0384, 0x038b, 0x0394,
+    0x039c, 0x05d9, 0x07b2, 0x093e, 0x0a7f, 0x0a9a, 0x0af4, 0x0af6, 0x0e6c, 0x0faf, 0x1997, 0x19a2, 0x19ae, 0x1a19, 0x1af8, 0x1b2c, 0x1bb3, 0x1e4a, 0x1e5a,
+    0x20f9, 0x20fe, 0x213f, 0x2169, 0x21c9, 0x2337, 0x260d, 0x28a7, 0x2b05, 0x2b75, 0x2bf5, 0x2c1f,
   ] as const;
   const SHARED_RAM = [0x400c, 0x4020, 0x4028, 0x4029] as const;
   // Addresses both tables enter for different things: the Model I routine differs from the Model III one, so the entries carry a note saying how. At 0212 the Model III
