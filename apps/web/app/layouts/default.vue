@@ -36,6 +36,9 @@ onBeforeUnmount(() => {
           <button type="button" class="fg-link" data-testid="close-program" aria-label="Close the program and go back to the first screen" @click="wb.close()">Close</button>
         </template>
       </template>
+      <template #export>
+        <ExportMenu v-if="onWorkbench" />
+      </template>
       <template #pickers>
         <MachinePicker v-if="onWorkbench" />
       </template>
