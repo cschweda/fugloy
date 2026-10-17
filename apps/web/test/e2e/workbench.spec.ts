@@ -43,9 +43,17 @@ test('one click opens Sea Dragon with its hints, as Model III', async ({ page })
   await expect(page.getByTestId('program-panel')).toBeVisible();
   await expect(page.getByTestId('machine-picker')).toHaveValue('3');
   await expect(page.getByTestId('dos-picker')).toHaveValue('trsdos');
-  // The cursor opens on the first instruction, L497F.
-  await expect(page.locator('.fg-row-label', { hasText: 'L497F:' })).toBeVisible();
-  await expect(page.locator('.fg-row-cursor')).toHaveAttribute('data-addr', String(0x497f));
+  // The cursor opens on the entry, in view, and the ~70 header comment lines are folded behind one toggle row.
+  await expect(page.locator('.fg-row-cursor')).toHaveAttribute('data-addr', String(0x8881));
+  await expect(page.locator('.fg-row-cursor')).toBeInViewport();
+  const toggle = page.getByTestId('header-toggle');
+  await page.locator('.fg-listing').evaluate((el) => (el.scrollTop = 0));
+  await expect(toggle).toHaveText(/^▸ \d+ header lines$/);
+  await expect(page.locator('.fg-row-header')).toHaveCount(0);
+  await expect(toggle).toBeVisible();
+  await toggle.click();
+  await expect(page.locator('.fg-row-header').first()).toBeVisible();
+  await expect(page.getByTestId('header-toggle')).toHaveText(/^▾ hide \d+ header lines$/);
   const status = page.getByTestId('status-line');
   await expect(status).toContainText('13,968 bytes · 56 blocks');
   await expect(status).toContainText('45% code');
@@ -165,7 +173,7 @@ test('a PDF dropped on the open workbench suggests Manuals and keeps the program
   await expect(page.getByTestId('open-error').getByRole('link', { name: 'Manuals' })).toBeVisible();
   await expect(page.getByTestId('confirm-dialog')).toBeHidden();
   await expect(page.getByTestId('file-name')).toHaveText('seadrg01.cmd');
-  await expect(page.locator('.fg-row-label', { hasText: 'L497F:' })).toBeVisible();
+  await expect(page.locator('.fg-row-cursor')).toBeVisible();
 });
 
 test('a program dropped on the open workbench asks before it replaces the open one', async ({ page }) => {

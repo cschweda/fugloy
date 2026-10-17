@@ -23,7 +23,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="fg-shell flex min-h-screen flex-col">
+  <div class="fg-shell flex flex-col" :class="onWorkbench ? 'h-screen' : 'min-h-screen'">
     <TopBar>
       <template #file>
         <template v-if="onWorkbench">

@@ -83,6 +83,23 @@ describe('machine fit from synthetic programs', () => {
   });
 });
 
+describe('evidence is grouped per table entry', () => {
+  const ev = programFacts(sea.analysis).machine.evidence;
+
+  it('gives each hardware entry one line, with its range and every verb', () => {
+    const video = ev.filter((e) => e.name === 'VIDEO');
+    expect(video).toHaveLength(1);
+    expect(video[0]!.text).toMatch(/^Writes and refers to VIDEO \(\$3C00–\$3FFF\), which both machines have\.$/);
+    expect(new Set(ev.map((e) => `${e.kind}:${e.key}`)).size).toBe(ev.length);
+  });
+
+  it('orders machine-specific first, then differs, then shared', () => {
+    const rank = (e: (typeof ev)[number]): number => (e.machine !== 'both' ? 0 : e.differs ? 1 : 2);
+    expect(ev.map(rank)).toEqual([...ev.map(rank)].sort((a, b) => a - b));
+    expect(ev[0]!.text).toBe('Writes port $EC (MODEPORT), which only the Model III has.');
+  });
+});
+
 describe('evidence details', () => {
   it('joins the verbs of a program that reads and writes a port', () => {
     // IN A,($E8) ; OUT ($E8),A ; RET
@@ -94,13 +111,14 @@ describe('evidence details', () => {
   it('LD A,($37E0) is a Model I program', () => {
     const f = raw([0x3a, 0xe0, 0x37, 0xc9]);
     expect(f.machine.fit).toBe('model1');
-    expect(f.machine.evidence[0]!.text).toMatch(/^Reads \$37E0 .*which only the Model I has\.$/);
+    expect(f.machine.evidence[0]!.text).toMatch(/^Reads .+ \(\$37E0.*\), which only the Model I has\.$/);
   });
 
   it('a ROM address whose code differs is both-machine evidence that says so', () => {
     const f = raw([0xcd, 0x50, 0x00, 0xc9]); // CALL 0050H, class 'different'
     expect(f.machine.fit).toBe('both');
     expect(f.machine.evidence[0]!.text).toContain('different code');
+    expect(f.machine.evidence[0]!.differs).toBe(true);
   });
 
   it('without a symbol selection nothing is named but the fit still resolves', () => {

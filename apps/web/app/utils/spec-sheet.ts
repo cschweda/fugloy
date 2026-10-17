@@ -1,6 +1,6 @@
 /** What the Program tab's spec sheet prints, as plain functions: the memory map's segments and the wording of the loading facts. */
 import { hex4 } from '@fugloy/z80';
-import type { ProgramFacts } from '@fugloy/disasm';
+import type { MachineEvidence, MoverProposal, ProgramFacts, TableProposal } from '@fugloy/disasm';
 
 export type SegmentKind = 'rom' | 'video' | 'free' | 'program' | 'moved';
 
@@ -50,3 +50,23 @@ export const ENTRY_HOW: Readonly<Record<ProgramFacts['entryHow'], string>> = {
   mined: 'found in the code',
   none: '',
 };
+
+/**
+ * The Machine section's lines: what only one machine has, and what differs between
+ * the ROMs, in full; everything shared folds into one summary (`facts` keeps the order).
+ */
+export function splitEvidence(evidence: readonly MachineEvidence[]): { lines: MachineEvidence[]; shared: MachineEvidence[]; summary: string } {
+  const lines = evidence.filter((e) => e.machine !== 'both' || e.differs === true);
+  const shared = evidence.filter((e) => e.machine === 'both' && e.differs !== true);
+  const names = shared.map((e) => (e.name === '' ? addr$(e.key) : e.name));
+  const summary = shared.length === 0 ? '' : `Also uses ${shared.length} ${shared.length === 1 ? 'thing' : 'things'} both machines have: ${names.join(', ')}`;
+  return { lines, shared, summary };
+}
+
+export const proposalText = (p: TableProposal | MoverProposal): string =>
+  p.kind === 'table'
+    ? `${addr$(p.addr)}: ${p.count} words that all point into code look like a table.`
+    : `LDIR at ${addr$(p.ldir)} copies ${addr$(p.src)}–${addr$(p.src + p.length - 1)} to ${addr$(p.dst)}–${addr$(p.dst + p.length - 1)}.`;
+
+/** The hint lines Apply adds. */
+export const proposalLines = (p: TableProposal | MoverProposal): string[] => (p.kind === 'table' ? [p.hint] : [...p.hints]);

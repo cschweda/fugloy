@@ -4,11 +4,12 @@
 // the history comes from the bundled example's README. Presentational: the
 // parent passes the facts in and handles `symbol` (open a table entry in the
 // Symbol tab) and `apply-hint-lines` (add a proposal's hint lines).
+import { computed } from 'vue';
 import type { Diagnostic, MoverProposal, ProgramFacts, TableEntry, TableProposal } from '@fugloy/disasm';
 import type { Example } from '../../data/examples';
 import MemoryMap from './MemoryMap.vue';
 import { keyLabel } from '../../utils/symbol-info';
-import { addr$, bytes$, ENTRY_HOW, FORMAT_NAME, range$ } from '../../utils/spec-sheet';
+import { addr$, bytes$, ENTRY_HOW, FORMAT_NAME, proposalLines, proposalText, range$, splitEvidence } from '../../utils/spec-sheet';
 
 const props = defineProps<{
   facts: ProgramFacts;
@@ -35,11 +36,7 @@ const talks = (): { label: string; none: string; entries: readonly TableEntry[] 
   { label: 'DOS calls', none: 'none found', entries: props.facts.dosCalls },
 ];
 
-const proposalText = (p: TableProposal | MoverProposal): string =>
-  p.kind === 'table'
-    ? `${addr$(p.addr)}: ${p.count} words that all point into code look like a table.`
-    : `LDIR at ${addr$(p.ldir)} copies ${addr$(p.src)}–${addr$(p.src + p.length - 1)} to ${addr$(p.dst)}–${addr$(p.dst + p.length - 1)}.`;
-const proposalLines = (p: TableProposal | MoverProposal): string[] => (p.kind === 'table' ? [p.hint] : [...p.hints]);
+const evidence = computed(() => splitEvidence(props.facts.machine.evidence));
 </script>
 
 <template>
@@ -65,15 +62,21 @@ const proposalLines = (p: TableProposal | MoverProposal): string[] => (p.kind ==
     <section data-testid="spec-machine">
       <h3 class="fg-sec">Machine</h3>
       <p>
-        <span class="fg-badge" :class="FIT[facts.machine.fit].three ? 'fg-badge-on' : 'fg-badge-off'">Model III</span>
-        <span class="fg-badge" :class="FIT[facts.machine.fit].one ? 'fg-badge-on' : 'fg-badge-off'">Model I</span>
+        <span class="fg-badge" :class="facts.machine.fit === 'conflict' ? 'fg-badge-conflict' : FIT[facts.machine.fit].three ? 'fg-badge-on' : 'fg-badge-off'">Model III</span>
+        <span class="fg-badge" :class="facts.machine.fit === 'conflict' ? 'fg-badge-conflict' : FIT[facts.machine.fit].one ? 'fg-badge-on' : 'fg-badge-off'">Model I</span>
         <span v-if="facts.machine.fit === 'unknown'" class="fg-muted">Nothing in it needs one machine or the other.</span>
         <span v-else-if="facts.machine.fit === 'both'" class="fg-muted">Everything it touches is on both machines.</span>
         <span v-else-if="facts.machine.fit === 'conflict'" class="fg-muted">It uses things only one machine has and things only the other has.</span>
       </p>
-      <ul class="fg-uses fg-evidence">
-        <li v-for="e in facts.machine.evidence" :key="`${e.kind}:${e.key}`" class="fg-muted">{{ e.text }}</li>
+      <ul v-if="evidence.lines.length > 0" class="fg-uses fg-evidence" data-testid="evidence">
+        <li v-for="e in evidence.lines" :key="`${e.kind}:${e.key}`" class="fg-muted">{{ e.text }}</li>
       </ul>
+      <details v-if="evidence.shared.length > 0" class="fg-evidence fg-muted" data-testid="evidence-shared">
+        <summary>{{ evidence.summary }}</summary>
+        <ul class="fg-uses">
+          <li v-for="e in evidence.shared" :key="`${e.kind}:${e.key}`">{{ e.text }}</li>
+        </ul>
+      </details>
     </section>
 
     <section data-testid="spec-loading">

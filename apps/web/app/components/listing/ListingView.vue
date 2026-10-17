@@ -14,12 +14,15 @@ const props = defineProps<{
   /** The cursor's address. */
   cursor: number | null;
   selection: { from: number; to: number } | null;
+  /** The first row is the header's show/hide toggle. */
+  headerToggle?: boolean;
 }>();
 
 const emit = defineEmits<{
   select: [addr: number, extend: boolean];
   follow: [target: number, info: FollowInfo];
   context: [addr: number, x: number, y: number];
+  'toggle-header': [];
 }>();
 
 /** Rows rendered above and below the visible ones, so a fast scroll does not show blank space before the next frame. */
@@ -105,6 +108,8 @@ function scrollNow(addr: number): void {
 // on screen, or, when it is off screen, the top row. An anchor names its row by
 // address and by whether it was the label row there or the row after it.
 let anchor: { addr: number; label: boolean; offset: number } | null = null;
+/** The header toggle is the top row: expanding or folding the header leaves it there. */
+let anchorTop = false;
 /** The row an anchor names in the current rows: the label row at its address, or the row holding the address. */
 const anchorRow = (a: { addr: number; label: boolean }): number | null => (a.label ? lookup.value(a.addr) : cursorRow(a.addr));
 const ANCHORS = new Set<Row['kind']>(['label', 'code', 'data', 'basic']);
@@ -113,7 +118,12 @@ watch(
   (_rows, old) => {
     const el = scroller.value;
     anchor = null;
+    anchorTop = false;
     if (el === null) return;
+    if (props.headerToggle === true && el.scrollTop < ROW_HEIGHT) {
+      anchorTop = true;
+      return;
+    }
     const oldCursor = cursorIndex.value;
     const visible = (i: number): boolean => i * ROW_HEIGHT >= el.scrollTop && (i + 1) * ROW_HEIGHT <= el.scrollTop + el.clientHeight;
     if (props.cursor !== null && oldCursor !== null && visible(oldCursor)) {
@@ -141,6 +151,11 @@ watch(
       flushPending();
       return;
     }
+    if (anchorTop) {
+      anchorTop = false;
+      setScrollTop(0);
+      return;
+    }
     if (a === null) return;
     const index = anchorRow(a);
     if (index !== null) setScrollTop(index * ROW_HEIGHT - a.offset);
@@ -159,6 +174,10 @@ function rowElement(target: EventTarget | null): HTMLElement | null {
 }
 
 function onClick(e: MouseEvent): void {
+  if (e.target instanceof Element && e.target.closest('button.fg-header-toggle') !== null) {
+    emit('toggle-header');
+    return;
+  }
   const link = e.target instanceof Element ? e.target.closest<HTMLElement>('a.fg-follow') : null;
   if (link !== null) {
     e.preventDefault();
@@ -220,6 +239,7 @@ defineExpose({ scrollToAddr, focus });
           :row="row"
           :cursor="cursorIndex === first + i"
           :selected="isSelected(row)"
+          :toggle="headerToggle === true && first + i === 0"
         />
       </div>
     </div>

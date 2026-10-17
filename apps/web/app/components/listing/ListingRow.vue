@@ -7,7 +7,7 @@ import { hexWord } from '@fugloy/z80';
 import { hexAddr, hexBytes, isFollowable, spanClass } from '../../utils/row-classes';
 import { spanUseKind } from '../../utils/xrefs';
 
-defineProps<{ row: Row; cursor: boolean; selected: boolean }>();
+defineProps<{ row: Row; cursor: boolean; selected: boolean; /** The row is the header's show/hide toggle (a note row; ListingView handles the click). */ toggle?: boolean }>();
 </script>
 
 <template>
@@ -38,6 +38,7 @@ defineProps<{ row: Row; cursor: boolean; selected: boolean }>();
       <span class="fg-col-text"><span class="fg-tok-directive">ORG</span> <span class="fg-tok-number">{{ hexWord(row.addr) }}</span></span>
     </template>
     <span v-else-if="row.kind === 'basic'" class="fg-col-full"><span class="fg-tok-number">{{ row.line }}</span><template v-if="row.text !== ''"> {{ row.text }}</template></span>
+    <button v-else-if="toggle && row.kind === 'note'" type="button" class="fg-col-full fg-header-toggle fg-tok-comment" data-testid="header-toggle">{{ row.text }}</button>
     <span v-else-if="row.kind === 'header' || row.kind === 'note'" class="fg-col-full fg-tok-comment">{{ row.text }}</span>
   </div>
 </template>

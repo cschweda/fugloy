@@ -20,10 +20,12 @@ export type MachineFit = 'model1' | 'model3' | 'both' | 'unknown' | 'conflict';
 
 export interface MachineEvidence {
   machine: 1 | 3 | 'both';
-  /** The port number or address. */
+  /** The port number, ROM address, or the first address of the hardware entry. One piece of evidence per table entry. */
   key: number;
   kind: 'port' | 'rom' | 'memory';
   name: string;
+  /** Both machines have it, but the code at it differs between the two ROMs. */
+  differs?: true;
   /** A plain sentence, such as `Writes port $EC (MODEPORT), which only the Model III has.` */
   text: string;
 }
@@ -58,20 +60,23 @@ function joinVerbs(verbs: ReadonlySet<string>): string {
   return list.length < 3 ? list.join(' and ') : `${list.slice(0, -1).join(', ')}, and ${list.at(-1)}`;
 }
 
+/** Machine-specific evidence first, then what differs between the ROMs, then what is shared. */
+const rank = (e: { machine: 1 | 3 | 'both'; differs?: true }): number => (e.machine !== 'both' ? 0 : e.differs === true ? 1 : 2);
+
 /** Every reference to something outside the program, looked up in both machines' tables. */
 function evidenceOf(a: Analysis): MachineEvidence[] {
   const m1: SymbolSet = selectSymbols({ machine: 1, dos: 'none' });
   const m3: SymbolSet = selectSymbols({ machine: 3, dos: 'none' });
   const loaded = (addr: number): boolean => a.space.image.isLoaded(addr);
   const found = new Map<string, Omit<MachineEvidence, 'text'> & { verbs: Set<string>; say: (v: string) => string }>();
-  const note = (kind: MachineEvidence['kind'], machine: 1 | 3 | 'both', key: number, name: string, verb: string, text: (v: string) => string): void => {
+  const note = (kind: MachineEvidence['kind'], machine: 1 | 3 | 'both', key: number, name: string, verb: string, text: (v: string) => string, differs = false): void => {
     const id = `${kind}:${key}`;
     const have = found.get(id);
     if (have !== undefined) {
       have.verbs.add(verb);
       return;
     }
-    found.set(id, { machine, key, kind, name, say: text, verbs: new Set([verb]) });
+    found.set(id, { machine, key, kind, name, ...(differs ? { differs: true as const } : {}), say: text, verbs: new Set([verb]) });
   };
   const rom = (addr: number, verb: string): void => {
     if (loaded(addr)) return;
@@ -82,7 +87,7 @@ function evidenceOf(a: Analysis): MachineEvidence[] {
     if (cls === 'model1-only') note('rom', 1, addr, name, verb, (v) => `${v} ${label}, which only the Model I ROM has.`);
     else if (cls === 'model3-only') note('rom', 3, addr, name, verb, (v) => `${v} ${label}, which only the Model III ROM has.`);
     else if (cls === 'shared') note('rom', 'both', addr, name, verb, (v) => `${v} ${label}, which is the same on both machines.`);
-    else note('rom', 'both', addr, name, verb, (v) => `${v} ${label}, which exists on both machines but with different code.`);
+    else note('rom', 'both', addr, name, verb, (v) => `${v} ${label}, which exists on both machines but with different code.`, true);
   };
   const instructions: Iterable<Instruction> = a.pass1.instructions.values();
   for (const ins of instructions) {
@@ -110,15 +115,17 @@ function evidenceOf(a: Analysis): MachineEvidence[] {
         const h1 = d1 !== undefined && d1.entry.table.startsWith('hardware');
         const h3 = d3 !== undefined && d3.entry.table.startsWith('hardware');
         if (!h1 && !h3) continue;
-        const name = (h3 ? d3! : d1!).entry.name;
+        const entry = (h3 ? d3! : d1!).entry;
+        const name = entry.name;
+        const span = entry.length > 1 ? `${$(entry.key)}–${$(entry.key + entry.length - 1)}` : $(entry.key);
         const machine = h1 && h3 ? 'both' : h1 ? 1 : 3;
         const verb = ins.mnemonic === 'LD' && i === 0 ? 'Writes' : dataReference(ins) === value && op.kind === 'imm16' ? 'Refers to' : 'Reads';
-        note('memory', machine, value, name, verb, (v) => `${v} ${$(value)} (${name}), which ${machine === 'both' ? 'both machines have' : `only the Model ${machine === 1 ? 'I' : 'III'} has`}.`);
+        note('memory', machine, entry.key, name, verb, (v) => `${v} ${name} (${span}), which ${machine === 'both' ? 'both machines have' : `only the Model ${machine === 1 ? 'I' : 'III'} has`}.`);
       }
     }
   }
   return [...found.values()]
-    .sort((x, y) => x.kind.localeCompare(y.kind) || x.key - y.key)
+    .sort((x, y) => rank(x) - rank(y) || x.kind.localeCompare(y.kind) || x.key - y.key)
     .map(({ verbs, say, ...e }) => ({ ...e, text: say(joinVerbs(verbs)) }));
 }
 

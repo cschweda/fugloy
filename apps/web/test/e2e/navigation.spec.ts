@@ -6,7 +6,7 @@ const open = async (page: Page): Promise<void> => {
   await page.goto('/');
   await page.waitForFunction(() => window.__fugloyTest !== undefined, undefined, { timeout: 30_000 });
   await page.getByTestId('open-sea-dragon').click();
-  await expect(page.locator('.fg-row-cursor')).toHaveAttribute('data-addr', String(0x497f));
+  await expect(page.locator('.fg-row-cursor')).toHaveAttribute('data-addr', String(0x8881));
 };
 
 test('G goes to an address and Alt+Left comes back, Alt+Right returns', async ({ page }) => {
@@ -18,7 +18,7 @@ test('G goes to an address and Alt+Left comes back, Alt+Right returns', async ({
   await expect(page.getByTestId('goto-box')).toBeHidden();
   await expect(page.locator('.fg-row-cursor')).toHaveAttribute('data-addr', String(0x4b9e));
   await page.keyboard.press('Alt+ArrowLeft');
-  await expect(page.locator('.fg-row-cursor')).toHaveAttribute('data-addr', String(0x497f));
+  await expect(page.locator('.fg-row-cursor')).toHaveAttribute('data-addr', String(0x8881));
   await page.keyboard.press('Alt+ArrowRight');
   await expect(page.locator('.fg-row-cursor')).toHaveAttribute('data-addr', String(0x4b9e));
 });
@@ -67,12 +67,14 @@ test('workbench keys wait while a dialog is open', async ({ page }) => {
 test('clicking a name in the listing opens it in the Symbol tab with its uses', async ({ page }) => {
   await open(page);
   // The port name on the IN/OUT at $499F.
+  await page.evaluate((a) => window.__fugloyTest!.scrollToAddr(a), 0x499f);
   await page.locator(`.fg-row[data-addr="${0x499f}"] a.fg-follow`).first().click();
   await expect(page.getByRole('tab', { name: 'Symbol' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByTestId('symbol-name')).toBeVisible();
   await expect(page.getByTestId('uses-table')).toContainText('$499F');
   // The cursor did not move for a table name.
-  await expect(page.locator('.fg-row-cursor')).toHaveAttribute('data-addr', String(0x497f));
+  await page.evaluate((a) => window.__fugloyTest!.scrollToAddr(a), 0x8881);
+  await expect(page.locator('.fg-row-cursor')).toHaveAttribute('data-addr', String(0x8881));
 });
 
 test('the Index lists routines and filters them; a routine opens in the Symbol tab and moves the cursor', async ({ page }) => {

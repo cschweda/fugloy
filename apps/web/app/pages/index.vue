@@ -2,7 +2,7 @@
 // The workbench. With no program open, the first screen (drop zone and the
 // four games); with one, two facing pages: the listing on the left, the
 // companion tabs on the right, and the status line under them.
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { addressKey, withHintFile, withSelection } from '@fugloy/disasm';
 import type { Row, TableEntry } from '@fugloy/disasm';
 import ListingView from '~/components/listing/ListingView.vue';
@@ -56,11 +56,29 @@ function scrollTo(addr: number): void {
   void nextTick(() => listing.value?.scrollToAddr(addr));
 }
 
-/** A program just opened: put the cursor on its first instruction, past the header. */
+// The header comment lines (block list, legend, proposals) are mostly on the
+// Program tab now: past a few, the listing folds them behind one toggle row.
+const HEADER_FOLD_MIN = 4;
+const headerOpen = ref(false);
+const headerLines = computed(() => {
+  let n = 0;
+  while (n < rows.value.length && rows.value[n]!.kind === 'header') n++;
+  return n;
+});
+const foldable = computed(() => headerLines.value >= HEADER_FOLD_MIN);
+const shownRows = computed<readonly Row[]>(() => {
+  if (!foldable.value) return rows.value;
+  const n = headerLines.value;
+  const text = headerOpen.value ? `▾ hide ${n} header lines` : `▸ ${n} header lines`;
+  return [{ kind: 'note', text }, ...(headerOpen.value ? rows.value : rows.value.slice(n))];
+});
+
+/** A program just opened: put the cursor on its entry (else its first instruction), past the header. */
 function showOpened(): void {
   if (session.value === null) return;
   leftTab.value = 'listing';
-  const at = cursor.value ?? firstCodeAddr(rows.value);
+  headerOpen.value = false;
+  const at = cursor.value ?? facts.value?.entry ?? firstCodeAddr(rows.value);
   if (at === null) return;
   cursor.value = at;
   scrollTo(at);
@@ -297,11 +315,13 @@ onBeforeUnmount(() => {
               :key="wb.openCount.value"
               ref="listing"
               class="min-h-0 flex-1"
-              :rows="rows"
+              :rows="shownRows"
+              :header-toggle="foldable"
               :cursor="cursor"
               :selection="selection"
               @select="onSelect"
               @follow="onFollow"
+              @toggle-header="headerOpen = !headerOpen"
             />
           </div>
           <div id="left-panel-hints" v-show="leftTab === 'hints'" role="tabpanel" aria-labelledby="left-tab-hints" class="fg-panel">
