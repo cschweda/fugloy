@@ -4,6 +4,15 @@
 // @media / @supports / @container / @layer are scoped; @keyframes, @font-face and other
 // at-rules are copied as they are.
 
+// Known limits (enough for the one stylesheet this hosts, not a general CSS scoper):
+//  - `html`, `body` and `:root` all become the scope element, so a rule that sets a property only
+//    meaningful on the real page (`scroll-behavior`, `overflow` on body) lands on the wrapper: the host
+//    must handle those itself (the technical details page sets scroll-behavior; the explainer uses
+//    `overflow-x: clip`, because `hidden` would make the wrapper a scroll container and break sticky).
+//  - `html body`, `body > x` and other selectors that put `html`/`body` after the first compound are
+//    prefixed, not rewritten, so they would match nothing.
+//  - @keyframes and @font-face names stay global, and @import / @namespace are copied untouched.
+//  - Nested CSS (a rule inside a rule) is not understood; custom properties inherit from the wrapper only.
 const WHOLE_PAGE = /^(?::root|html|body)(?![\w-])/;
 const NESTING = /^@(?:media|supports|container|layer|document)\b/;
 

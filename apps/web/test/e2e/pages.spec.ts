@@ -63,3 +63,22 @@ test('axe finds nothing on the workbench with Sea Dragon open', async ({ page })
   await page.waitForTimeout(800);
   expect(await violations(page)).toEqual([]);
 });
+
+test('the explainer keeps its section rail pinned while the page scrolls, and anchors scroll smoothly', async ({ page }) => {
+  await page.goto('/technical-details');
+  const rail = page.locator('.fg-inside .rail');
+  await expect(rail).toBeVisible();
+  const top = async (): Promise<number> => (await rail.boundingBox())!.y;
+  await page.evaluate(() => window.scrollTo(0, 4000));
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(3000);
+  expect(Math.abs(await top())).toBeLessThan(2);
+  await page.evaluate(() => window.scrollTo(0, 9000));
+  await page.waitForTimeout(300);
+  expect(Math.abs(await top())).toBeLessThan(2);
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollBehavior)).toBe('smooth');
+  // Leaving the page gives the site its own scrolling back.
+  await page.getByRole('link', { name: 'About' }).first().click();
+  await expect(page.getByTestId('about')).toBeVisible();
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollBehavior)).toBe('auto');
+});

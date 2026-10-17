@@ -44,7 +44,7 @@ const evidence = computed(() => splitEvidence(props.facts.machine.evidence));
     <section v-if="example !== null || facts.name !== undefined || name !== undefined" data-testid="spec-history">
       <h2 class="fg-sec">History</h2>
       <template v-if="example !== null">
-        <h2 class="fg-strong text-base font-bold">{{ example.title }}</h2>
+        <h3 class="fg-strong text-base font-bold">{{ example.title }}</h3>
         <p class="fg-muted">
           {{ [example.authors, example.publisher, example.year].filter((x) => x !== undefined).join(' · ') }}
           <span class="fg-badge fg-badge-rights">{{ example.rights }}</span>
@@ -54,7 +54,7 @@ const evidence = computed(() => splitEvidence(props.facts.machine.evidence));
         </p>
       </template>
       <template v-else>
-        <h2 class="fg-strong fg-mono text-base font-bold">{{ name }}</h2>
+        <h3 class="fg-strong fg-mono text-base font-bold">{{ name }}</h3>
         <p v-if="facts.name !== undefined" class="fg-muted">Name record: <span class="fg-mono">{{ facts.name }}</span></p>
       </template>
     </section>

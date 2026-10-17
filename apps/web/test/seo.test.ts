@@ -2,7 +2,8 @@
 // app.fugloy.dev, an absolute Open Graph image with alt text, and a Twitter summary card;
 // the home page has JSON-LD; sitemap.xml lists the four pages and robots.txt names it.
 // Reads .output/public, so it runs after `pnpm --filter @fugloy/web generate` (`pnpm run test:seo`
-// does both); it is skipped, loudly, when the site has not been generated.
+// does both); it is skipped, with a warning, when the site has not been generated, unless
+// FUGLOY_REQUIRE_SEO=1 (set by `test:seo`, for CI) makes that a failure.
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 
 const out = join(dirname(fileURLToPath(import.meta.url)), '..', '.output', 'public');
 const built = existsSync(join(out, 'index.html'));
+if (!built && process.env.FUGLOY_REQUIRE_SEO === '1') throw new Error('FUGLOY_REQUIRE_SEO=1 but .output/public is missing; run `pnpm --filter @fugloy/web generate` first.');
 if (!built) console.warn('seo.test: .output/public is missing; run `pnpm --filter @fugloy/web generate` first. Skipping.');
 
 const ORIGIN = 'https://app.fugloy.dev';

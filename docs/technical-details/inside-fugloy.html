@@ -36,7 +36,7 @@
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation: none !important; transition: none !important; } }
-body { background: var(--night); color: var(--phosphor); font-family: var(--f-body); font-size: var(--s0); line-height: 1.6; margin: 0; overflow-x: hidden; }
+body { background: var(--night); color: var(--phosphor); font-family: var(--f-body); font-size: var(--s0); line-height: 1.6; margin: 0; overflow-x: clip; }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--night); }
 a { color: var(--code); text-decoration: underline; text-underline-offset: 3px; }
 :focus-visible { outline: 3px solid var(--signal); outline-offset: 3px; border-radius: 6px; }
@@ -1289,7 +1289,7 @@ seg('namesView', (v) => {
     { addr: 'AEBC', bytes: 'CD 20 44', mn: 'CALL', ops: '4420H' },
   ]);
   $('#namesNote').textContent = named
-    ? 'The keyboard is a block of memory at $3800, the cassette is port $FF, and $0049, $0060, and $4420 are a ROM routine and two TRSDOS routines. The comment is the table entry\'s own words.'
+    ? 'The keyboard is a block of memory at $3800, the cassette is port $FF, $0049 and $0060 are ROM routines, and $4420 is a TRSDOS routine. The comment is the table entry\'s own words.'
     : 'What the program says, and what pass 1 printed before there were tables. The --sweep listing still reads like this.';
 });
 
