@@ -299,12 +299,13 @@ describe('the Model I ROM table', () => {
   // kind, so the comparison classes the address shared (spec 4.3 and 4.6). Each of these addresses is documented by Paay or Decker for the Model I.
   const SHARED_ROM = [
     0x0000, 0x0008, 0x000b, 0x000d, 0x0010, 0x0013, 0x0018, 0x001b, 0x0020, 0x0028, 0x002b, 0x0030, 0x0033, 0x0038, 0x003b, 0x0040, 0x0049, 0x0060, 0x0066,
-    0x0150, 0x01c9, 0x01f8, 0x0212, 0x0235, 0x0264, 0x0287, 0x0296, 0x0314, 0x032a, 0x033a, 0x0348, 0x0358, 0x0361, 0x0384, 0x038b, 0x0394, 0x039c, 0x05d9,
+    0x0150, 0x01c9, 0x01f8, 0x0235, 0x0264, 0x0287, 0x0296, 0x0314, 0x032a, 0x033a, 0x0348, 0x0358, 0x0361, 0x0384, 0x038b, 0x0394, 0x039c, 0x05d9,
     0x093e, 0x0a7f, 0x0a9a, 0x0af4, 0x0e6c, 0x0faf, 0x19a2, 0x19ae, 0x1a19, 0x1bb3, 0x20f9, 0x20fe, 0x213f, 0x2169, 0x21c9, 0x2337, 0x28a7, 0x2b75, 0x2bf5, 0x2c1f,
   ] as const;
   const SHARED_RAM = [0x400c, 0x4020, 0x4028, 0x4029] as const;
-  // Addresses both tables enter for different things: the Model I routine differs from the Model III one, so each Model I entry has a note saying how.
-  const DIFFERENT = [0x0050, 0x01d9, 0x03c2] as const;
+  // Addresses both tables enter for different things: the Model I routine differs from the Model III one, so the entries carry a note saying how. At 0212 the Model III
+  // has only XOR A; RET (Decker p. 17: the routine "is not present in the Model III"), so the Model I's drive-select routine gets its own name.
+  const DIFFERENT = [0x0050, 0x01d9, 0x0212, 0x03c2] as const;
 
   it('has at least 60 entries', () => {
     expect(rom.length).toBeGreaterThanOrEqual(60);
@@ -344,7 +345,7 @@ describe('the Model I ROM table', () => {
     }
   });
 
-  it('classes as different, each with a note, the three addresses where the two ROMs hold different routines', () => {
+  it('classes as different, each with a note, the four addresses where the two ROMs hold different routines', () => {
     const different = Object.entries(ROM_COMPARISON).filter(([, cls]) => cls === 'different').map(([addr]) => addr);
     expect(different).toEqual(DIFFERENT.map(hex4));
     for (const key of DIFFERENT) expect(at(key)?.note, hex4(key)).toBeTruthy();
@@ -354,6 +355,10 @@ describe('the Model I ROM table', () => {
     expect(at(0x01d9)?.note).toContain('$PRSCN');
     expect(at(0x03c2)).toMatchObject({ name: 'IODISPATCH', kind: 'routine' });
     expect(at(0x03c2)?.note).toContain('PRDRIVER');
+    // 0212 selects the cassette drive and starts the motor on the Model I; the Model III table keeps its own name for the XOR A; RET stub.
+    expect(at(0x0212)).toMatchObject({ name: 'CASDRVSEL', kind: 'routine', coined: true });
+    expect(at(0x0212)?.note).toContain('XOR A');
+    expect(atModel3(0x0212)).toMatchObject({ name: 'CASSELECT', kind: 'routine' });
   });
 
   it('lists $DELAY at 0060 as shared, with a note on the timing difference from Decker p. 53', () => {
@@ -385,6 +390,8 @@ describe('the Model I ROM table', () => {
     expect(at(0x058d)).toMatchObject({ name: 'PRDRIVER', kind: 'routine' });
     expect(at(0x05d1)).toMatchObject({ name: 'PRTTEST', kind: 'routine' });
     expect(at(0x03e3)?.note).toContain('3024');
+    // Decker prints "3024H - Model III ROM Keyboard driver address" on p. 14, just after the footer of p. 13 where his Model I 03E3H line sits.
+    expect(at(0x03e3)?.note).toContain('(decker 14)');
     expect(at(0x0458)?.note).toContain('0473');
     expect(at(0x058d)?.note).toContain('03C2');
     expect(at(0x05d1)?.note).toContain('044B');
@@ -479,6 +486,22 @@ describe('the Model I ROM table', () => {
     expect(rom.some((e) => e.cite.some((c) => c.source === 'kiwisincebirth'))).toBe(false);
   });
 
+  it('cites Decker p. 121, his table of BASIC keyword entry points, for SET at 0135 and RESET at 0138, as well as Paay', () => {
+    for (const key of [0x0135, 0x0138]) {
+      expect(pages(at(key), 'paay'), hex4(key)).toEqual(['5']);
+      expect(pages(at(key), 'decker'), hex4(key)).toEqual(['121']);
+    }
+  });
+
+  it('notes on the SYSTEM routine at 02B5 that BASIC enters the command at 02B2 and that the Model III reverses two instructions at 02E2, so it stays Model I only', () => {
+    // Decker p. 121 lists SYSTEM at 02B2H, which calls the DOS link at 41E2H and falls into 02B5H; p. 82 says the Model III has INC HL and JR NZ,02D1H
+    // in the opposite order at 02E2H-02E4H, inside this routine, so the two ROMs do not hold the same code from 02B5H.
+    expect(at(0x02b5)).toMatchObject({ name: 'BASICSYSTEM', kind: 'routine' });
+    expect(at(0x02b5)?.note).toContain('02B2H');
+    expect(at(0x02b5)?.note).toContain('02E2H');
+    expect(ROM_COMPARISON['02B5']).toBe('model1-only');
+  });
+
   it('cites the Level II manual p. 8-9 for the USR linkage: CALL 0A7FH to take the argument, JP 0A9AH to return a value', () => {
     expect(pages(at(0x0a7f), 'l2-1979')).toEqual(['8-9']);
     expect(pages(at(0x0a9a), 'l2-1979')).toEqual(['8-9']);
@@ -490,6 +513,9 @@ describe('the Model I ROM table', () => {
     expect(pages(at(0x0060), 'decker')).toEqual(['53']);
     // Decker's "Page 65" footer is missing from its OCR; the 403DH entry sits between the "Page 64" and "Page 66" footers, on printed page 65.
     expect(pages(at(0x403d), 'decker')).toContain('65');
+    // Decker's Model I bit list continues on p. 12, which is also where he says the Model III keeps its port ECH bits at 4210H.
+    expect(pages(at(0x403d), 'decker')).toEqual(['11', '12', '65']);
+    expect(at(0x403d)?.note).toContain('(decker 12)');
   });
 
   it('names the Model I ROM, RST vectors, and RAM it documents through selectSymbols, under both Model I DOS choices', () => {

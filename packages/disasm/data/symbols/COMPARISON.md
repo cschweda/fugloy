@@ -6,8 +6,8 @@ Every address in either table. `shared` means both tables give it the same name 
 
 | Class | Addresses |
 | --- | ---: |
-| shared | 62 |
-| different | 3 |
+| shared | 61 |
+| different | 4 |
 | model1-only | 60 |
 | model3-only | 44 |
 
@@ -47,7 +47,7 @@ Every address in either table. `shared` means both tables give it the same name 
 | `$01D9` | different | `CASBITOUT` (routine) | `$PRSCN` (routine) | Model I: on the Model III this address is $PRSCN, the print-screen routine (decker 16, 80) |
 | `$01F8` | shared | `$CSOFF` (routine) | `$CSOFF` (routine) |  |
 | `$01FE` | model1-only | `CASDEFDRIVE` (routine) | - |  |
-| `$0212` | shared | `CASSELECT` (routine) | `CASSELECT` (routine) | Model I: the Model III keeps this address only as XOR A; RET, so Model I software that calls it still runs (decker 17); Model III: on the Model I this address selects the cassette drive named by A and starts its motor |
+| `$0212` | different | `CASDRVSEL` (routine) | `CASSELECT` (routine) | Model I: the Model III keeps this address only as XOR A; RET, so Model I software that calls it still runs (decker 17); Model III: on the Model I this address selects the cassette drive named by A and starts its motor |
 | `$0214` | model3-only | - | `PRTCRRAW` (routine) |  |
 | `$0215` | model1-only | `CASMOTORON` (routine) | - |  |
 | `$021B` | model3-only | - | `$VDLINE` (routine) |  |
@@ -64,7 +64,7 @@ Every address in either table. `shared` means both tables give it the same name 
 | `$0296` | shared | `$CSHIN` (routine) | `$CSHIN` (routine) | Model I: unlike the Model III routine at this address, this one does not turn the cassette on (decker 17) |
 | `$0298` | model3-only | - | `$CLKON` (routine) |  |
 | `$02A1` | model3-only | - | `$CLKOFF` (routine) |  |
-| `$02B5` | model1-only | `BASICSYSTEM` (routine) | - |  |
+| `$02B5` | model1-only | `BASICSYSTEM` (routine) | - | Model I: BASIC enters the command at 02B2H (decker 121), which calls the DOS link at 41E2H (decker 74) and falls into this address; the Model III code differs inside it, at 02E2H-02E4H, where INC HL and JR NZ,02D1H come in the opposite order (decker 82) |
 | `$0314` | shared | `CSINWORD` (routine) | `CSINWORD` (routine) |  |
 | `$032A` | shared | `OUTCHAR` (routine) | `OUTCHAR` (routine) |  |
 | `$033A` | shared | `VDCHARCOL` (routine) | `VDCHARCOL` (routine) |  |
@@ -76,7 +76,7 @@ Every address in either table. `shared` means both tables give it the same name 
 | `$0394` | shared | `PRTCR` (routine) | `PRTCR` (routine) |  |
 | `$039C` | shared | `PRTCHARPOS` (routine) | `PRTCHARPOS` (routine) |  |
 | `$03C2` | different | `IODISPATCH` (routine) | `PRDRIVER` (routine) | Model I: the Model III has its printer driver, PRDRIVER, at this address; its I/O driver entry routine is at 0674H (decker 82) |
-| `$03E3` | model1-only | `KBDRIVER` (routine) | - | Model I: the Model III keeps its keyboard driver at 3024H (decker 13) |
+| `$03E3` | model1-only | `KBDRIVER` (routine) | - | Model I: the Model III keeps its keyboard driver at 3024H (decker 14) |
 | `$0440` | model3-only | - | `PRTWAIT` (routine) |  |
 | `$044B` | model3-only | - | `PRTTEST` (routine) |  |
 | `$0458` | model1-only | `VDDRIVER` (routine) | - | Model I: the Model III keeps its video driver at 0473H (decker 15) |
@@ -155,7 +155,7 @@ Every address in either table. `shared` means both tables give it the same name 
 | `$4029` | shared | `PRTLINECNT` (variable) | `PRTLINECNT` (variable) | Model I: the Model III holds this count plus one (decker 9) |
 | `$402B` | model3-only | - | `PRTWIDTH` (variable) |  |
 | `$4036` | model1-only | `KBROWS` (variable) | - |  |
-| `$403D` | model1-only | `PORTFFBITS` (variable) | - | Model I: Paay calls this the print size flag, 0 for 64 characters and F8H for 32; Decker gives it as the bits last sent to port FFH (decker 11); the Model III keeps its port ECH bits at 4210H |
+| `$403D` | model1-only | `PORTFFBITS` (variable) | - | Model I: Paay calls this the print size flag, 0 for 64 characters and F8H for 32; Decker gives it as the bits last sent to port FFH (decker 11); the Model III keeps its port ECH bits at 4210H (decker 12) |
 | `$408E` | model1-only | `USRVEC` (variable) | - |  |
 | `$4093` | model1-only | `INPORT` (vector) | - |  |
 | `$4096` | model1-only | `OUTPORT` (vector) | - |  |

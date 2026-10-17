@@ -180,7 +180,7 @@
       "name": "BASICSET",
       "kind": "routine",
       "purpose": "BASIC SET entry point",
-      "cite": [{ "source": "paay", "page": "5" }],
+      "cite": [{ "source": "paay", "page": "5" }, { "source": "decker", "page": "121" }],
       "coined": true
     },
     {
@@ -188,7 +188,7 @@
       "name": "BASICRESET",
       "kind": "routine",
       "purpose": "BASIC RESET entry point",
-      "cite": [{ "source": "paay", "page": "5" }],
+      "cite": [{ "source": "paay", "page": "5" }, { "source": "decker", "page": "121" }],
       "coined": true
     },
     {
@@ -240,7 +240,7 @@
     },
     {
       "addr": "0212",
-      "name": "CASSELECT",
+      "name": "CASDRVSEL",
       "kind": "routine",
       "purpose": "select the cassette drive named by A (0 first, 1 second) and turn its motor on",
       "cite": [{ "source": "paay", "page": "6" }, { "source": "decker", "page": "17" }],
@@ -334,7 +334,8 @@
       "kind": "routine",
       "purpose": "main routine of the BASIC SYSTEM command, which loads a machine-language tape",
       "cite": [{ "source": "paay", "page": "7" }],
-      "coined": true
+      "coined": true,
+      "note": "BASIC enters the command at 02B2H (decker 121), which calls the DOS link at 41E2H (decker 74) and falls into this address; the Model III code differs inside it, at 02E2H-02E4H, where INC HL and JR NZ,02D1H come in the opposite order (decker 82)"
     },
     {
       "addr": "0314",
@@ -433,7 +434,7 @@
       "purpose": "the Model I keyboard driver that the keyboard control block points to: scans the keys, returns ASCII in A",
       "cite": [{ "source": "paay", "page": "8" }, { "source": "decker", "page": "13" }],
       "coined": true,
-      "note": "the Model III keeps its keyboard driver at 3024H (decker 13)"
+      "note": "the Model III keeps its keyboard driver at 3024H (decker 14)"
     },
     {
       "addr": "0458",
@@ -889,9 +890,9 @@
       "name": "PORTFFBITS",
       "kind": "variable",
       "purpose": "bits last written to port FFH: bit 3 is 32-character video, bit 2 the cassette relay, bits 1-0 the audio",
-      "cite": [{ "source": "paay", "page": "26" }, { "source": "decker", "page": "11" }, { "source": "decker", "page": "65" }],
+      "cite": [{ "source": "paay", "page": "26" }, { "source": "decker", "page": "11" }, { "source": "decker", "page": "12" }, { "source": "decker", "page": "65" }],
       "coined": true,
-      "note": "Paay calls this the print size flag, 0 for 64 characters and F8H for 32; Decker gives it as the bits last sent to port FFH (decker 11); the Model III keeps its port ECH bits at 4210H"
+      "note": "Paay calls this the print size flag, 0 for 64 characters and F8H for 32; Decker gives it as the bits last sent to port FFH (decker 11); the Model III keeps its port ECH bits at 4210H (decker 12)"
     },
     {
       "addr": "408E",
