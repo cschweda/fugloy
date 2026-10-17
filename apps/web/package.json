@@ -4,12 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "postinstall": "nuxt prepare",
     "prepare-examples": "tsx scripts/prepare-examples.ts",
     "predev": "pnpm run prepare-examples",
     "dev": "nuxt dev",
     "pregenerate": "pnpm run prepare-examples",
     "generate": "nuxt generate",
-    "typecheck": "nuxt prepare && nuxt typecheck",
+    "typecheck": "nuxt prepare && nuxt typecheck && tsc -p tsconfig.test.json",
     "pretest": "nuxt prepare && pnpm run prepare-examples",
     "test": "vitest run"
   },

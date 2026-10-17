@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "noEmit": true,
+    "types": ["node"],
+    "paths": {
+      "@fugloy/z80": ["../../packages/z80/src/index.ts"],
+      "@fugloy/disasm": ["../../packages/disasm/src/index.ts"]
+    }
+  },
+  "include": ["test/**/*.ts", "scripts/**/*.ts", "vitest.config.ts", "aliases.ts"]
+}

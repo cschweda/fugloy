@@ -21,6 +21,23 @@
   --fg-comment: #8b949e;
 }
 
+/* Nuxt UI 4 variables, so UButton, UInput, UTabs and modals use the mockup palette. */
+.dark {
+  --ui-bg: var(--fg-bg);
+  --ui-bg-muted: var(--fg-surface);
+  --ui-bg-elevated: var(--fg-surface);
+  --ui-bg-accented: #21262d;
+  --ui-border: var(--fg-border);
+  --ui-border-muted: var(--fg-border);
+  --ui-border-accented: #484f58;
+  --ui-text: var(--fg-text);
+  --ui-text-muted: var(--fg-muted);
+  --ui-text-dimmed: #6e7681;
+  --ui-text-toned: var(--fg-text);
+  --ui-text-highlighted: var(--fg-text-strong);
+  --ui-primary: var(--fg-accent);
+}
+
 html, body, #__nuxt { height: 100%; }
 
 html.dark body {
@@ -35,3 +52,17 @@ html.dark body {
 .fg-label { color: var(--fg-label); }
 .fg-table { color: var(--fg-table); text-decoration: underline dotted; }
 .fg-comment { color: var(--fg-comment); font-style: italic; }
+
+/* Chrome classes (no inline styles). */
+.fg-shell { background: var(--fg-bg); color: var(--fg-text); }
+.fg-bar { background: var(--fg-surface); border-bottom: 1px solid var(--fg-border); }
+.fg-strong { color: var(--fg-text-strong); }
+.fg-muted { color: var(--fg-muted); }
+.fg-accent { color: var(--fg-accent); }
+.fg-link { color: var(--fg-muted); border-radius: 2px; }
+.fg-link:hover { color: var(--fg-text-strong); text-decoration: underline; }
+.fg-link:focus-visible, .fg-wordmark:focus-visible {
+  outline: 2px solid var(--fg-accent);
+  outline-offset: 2px;
+}
+.fg-link.router-link-exact-active { color: var(--fg-text-strong); }

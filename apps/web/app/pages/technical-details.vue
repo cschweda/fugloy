@@ -1,6 +1,6 @@
 <template>
   <section class="p-6">
-    <h1 class="text-xl font-bold" style="color: var(--fg-text-strong)">Technical details</h1>
-    <p class="mt-2" style="color: var(--fg-muted)">How Fugløy was built.</p>
+    <h1 class="fg-strong text-xl font-bold">Technical details</h1>
+    <p class="fg-muted mt-2">How Fugløy was built.</p>
   </section>
 </template>
