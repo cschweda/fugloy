@@ -5,8 +5,9 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildSymbolOutputs } from '../../scripts/write-symbols.js';
+import { compareRoms } from '../../src/symbols/compare.js';
 import { selectSymbols } from '../../src/symbols/select.js';
-import { SOURCES, TABLES } from '../../src/symbols/tables.generated.js';
+import { ROM_COMPARISON, SOURCES, TABLES } from '../../src/symbols/tables.generated.js';
 import { TABLE_IDS } from '../../src/symbols/types.js';
 import type { TableEntry } from '../../src/symbols/types.js';
 
@@ -286,6 +287,232 @@ describe('the Model III ROM table', () => {
   });
 });
 
+describe('the Model I ROM table', () => {
+  const rom = TABLES['rom-model1'];
+  const model3 = TABLES['rom-model3'];
+  const at = (key: number): TableEntry | undefined => rom.find((e) => e.key === key);
+  const atModel3 = (key: number): TableEntry | undefined => model3.find((e) => e.key === key);
+  const pages = (e: TableEntry | undefined, source: string): string[] => (e?.cite ?? []).filter((c) => c.source === source).map((c) => c.page);
+  const hex4 = (key: number): string => key.toString(16).toUpperCase().padStart(4, '0');
+
+  // Where a Model I source documents the same routine or variable at the same address as the Model III table, the Model I entry takes that name and
+  // kind, so the comparison classes the address shared (spec 4.3 and 4.6). Each of these addresses is documented by Paay or Decker for the Model I.
+  const SHARED_ROM = [
+    0x0000, 0x0008, 0x000b, 0x000d, 0x0010, 0x0013, 0x0018, 0x001b, 0x0020, 0x0028, 0x002b, 0x0030, 0x0033, 0x0038, 0x003b, 0x0040, 0x0049, 0x0060, 0x0066,
+    0x0150, 0x01c9, 0x01f8, 0x0212, 0x0235, 0x0264, 0x0287, 0x0296, 0x0314, 0x032a, 0x033a, 0x0348, 0x0358, 0x0361, 0x0384, 0x038b, 0x0394, 0x039c, 0x05d9,
+    0x093e, 0x0a7f, 0x0a9a, 0x0af4, 0x0e6c, 0x0faf, 0x19a2, 0x19ae, 0x1a19, 0x1bb3, 0x20f9, 0x20fe, 0x213f, 0x2169, 0x21c9, 0x2337, 0x28a7, 0x2b75, 0x2bf5, 0x2c1f,
+  ] as const;
+  const SHARED_RAM = [0x400c, 0x4020, 0x4028, 0x4029] as const;
+  // Addresses both tables enter for different things: the Model I routine differs from the Model III one, so each Model I entry has a note saying how.
+  const DIFFERENT = [0x0050, 0x01d9, 0x03c2] as const;
+
+  it('has at least 60 entries', () => {
+    expect(rom.length).toBeGreaterThanOrEqual(60);
+  });
+
+  it('names each address of the asylum16 list that a Model I source documents, and not $0112, which is only text in the start-up banner', () => {
+    const documented = [0x0000, 0x0008, 0x0010, 0x0020, 0x0030, 0x0038, 0x002b, 0x0033, 0x01f8, 0x0212, 0x0235, 0x0264, 0x0287, 0x0296, 0x093e, 0x1a19];
+    for (const key of documented) expect(at(key), hex4(key)).toMatchObject({ kind: 'routine' });
+    // Paay p. 5 puts the "RADIO SHACK LEVEL II BASIC" message at 0111 and Decker p. 80 lists 0112-0115 as part of its text: data, not a routine, so no entry.
+    expect(at(0x0112)).toBeUndefined();
+    expect(at(0x0111)).toBeUndefined();
+  });
+
+  it('names $KBWAIT at 0x0049, citing Paay p. 4 and Decker p. 13 for the Model I and the Model III manual where Tandy prints the name', () => {
+    expect(at(0x0049)).toMatchObject({ name: '$KBWAIT', kind: 'routine', coined: false });
+    expect(pages(at(0x0049), 'paay')).toEqual(['4']);
+    expect(pages(at(0x0049), 'decker')).toEqual(['13']);
+    expect(pages(at(0x0049), 'm3-basic')).toEqual(['12/12']);
+  });
+
+  it('has the eight RST vectors, 0x00 through 0x38, named as the Model III table names them', () => {
+    for (const key of [0x00, 0x08, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38]) {
+      expect(at(key), `RST ${key.toString(16)}`).toMatchObject({ kind: 'routine', name: atModel3(key)?.name });
+    }
+  });
+
+  it('takes the Model III name and kind at every address both machines document, so the comparison classes it shared', () => {
+    for (const key of [...SHARED_ROM, ...SHARED_RAM]) {
+      const entry = at(key);
+      expect(entry, hex4(key)).toBeDefined();
+      expect(entry?.name, hex4(key)).toBe(atModel3(key)?.name);
+      expect(entry?.kind, hex4(key)).toBe(atModel3(key)?.kind);
+      expect(entry?.coined, hex4(key)).toBe(atModel3(key)?.coined);
+      expect(ROM_COMPARISON[hex4(key)], hex4(key)).toBe('shared');
+      // Entered from the Model I sources, not copied from the Model III table.
+      expect(entry?.purpose, hex4(key)).not.toBe(atModel3(key)?.purpose);
+    }
+  });
+
+  it('classes as different, each with a note, the three addresses where the two ROMs hold different routines', () => {
+    const different = Object.entries(ROM_COMPARISON).filter(([, cls]) => cls === 'different').map(([addr]) => addr);
+    expect(different).toEqual(DIFFERENT.map(hex4));
+    for (const key of DIFFERENT) expect(at(key)?.note, hex4(key)).toBeTruthy();
+    expect(at(0x0050)).toMatchObject({ name: 'CTRLCHARTAB', kind: 'region', length: 16 });
+    expect(at(0x0050)?.note).toContain('$RSRCV');
+    expect(at(0x01d9)).toMatchObject({ name: 'CASBITOUT', kind: 'routine' });
+    expect(at(0x01d9)?.note).toContain('$PRSCN');
+    expect(at(0x03c2)).toMatchObject({ name: 'IODISPATCH', kind: 'routine' });
+    expect(at(0x03c2)?.note).toContain('PRDRIVER');
+  });
+
+  it('lists $DELAY at 0060 as shared, with a note on the timing difference from Decker p. 53', () => {
+    expect(ROM_COMPARISON['0060']).toBe('shared');
+    expect(pages(at(0x0060), 'decker')).toContain('53');
+    expect(at(0x0060)?.note).toMatch(/14\.66.*14\.80/);
+    const row = buildSymbolOutputs(dataDir).comparison.split('\n').find((line) => line.startsWith('| `$0060` |'));
+    expect(row).toMatch(/^\| `\$0060` \| shared \| `\$DELAY` \(routine\) \| `\$DELAY` \(routine\) \| Model I: .*14\.80/);
+  });
+
+  it('leaves no unexplained difference between the two ROM tables', () => {
+    expect(compareRoms(rom, model3).unexplained).toEqual([]);
+  });
+
+  it('keeps cassette addresses that behave differently on the Model I in the Model I table with their own names and a note on the Model III', () => {
+    // 0284 and 0293 select the drive first on the Model I (Decker p. 17); the Model III has only a jump to 0287 and 0243 there.
+    expect(at(0x0284)).toMatchObject({ name: 'CSHWRSEL', kind: 'routine' });
+    expect(at(0x0293)).toMatchObject({ name: 'CSHINSEL', kind: 'routine' });
+    // 0287 and 0296 do not turn the motor on here, which the Model III's do.
+    expect(at(0x0287)?.note).toContain('Model III');
+    expect(at(0x0296)?.note).toContain('Model III');
+    // The Model III keeps 0212 only as XOR A; RET.
+    expect(at(0x0212)?.note).toContain('XOR A');
+  });
+
+  it('names the Model I drivers and printer status test at their own addresses, noting where the Model III keeps them', () => {
+    expect(at(0x03e3)).toMatchObject({ name: 'KBDRIVER', kind: 'routine' });
+    expect(at(0x0458)).toMatchObject({ name: 'VDDRIVER', kind: 'routine' });
+    expect(at(0x058d)).toMatchObject({ name: 'PRDRIVER', kind: 'routine' });
+    expect(at(0x05d1)).toMatchObject({ name: 'PRTTEST', kind: 'routine' });
+    expect(at(0x03e3)?.note).toContain('3024');
+    expect(at(0x0458)?.note).toContain('0473');
+    expect(at(0x058d)?.note).toContain('03C2');
+    expect(at(0x05d1)?.note).toContain('044B');
+  });
+
+  it('enters the RST jump vectors at 4000H to 4012H as three-byte vectors, 4003H for RST 10H although Paay p. 24 misprints 4001', () => {
+    const VECTORS: readonly (readonly [number, string])[] = [
+      [0x4000, 'SYNCHKVEC'], [0x4003, 'NEXTCHARVEC'], [0x4006, 'CMPHLDEVEC'], [0x4009, 'TESTNTFVEC'], [0x400c, 'BREAKVEC'], [0x400f, 'DEBUGVEC'], [0x4012, 'INTVEC'],
+    ];
+    for (const [key, name] of VECTORS) expect(at(key), name).toMatchObject({ name, kind: 'vector', length: 3, coined: true });
+    expect(at(0x4001)).toBeUndefined();
+    expect(pages(at(0x4003), 'paay')).toEqual(['2']);
+    expect(pages(at(0x4000), 'l2-1979')).toEqual(['D-1']);
+  });
+
+  it('enters the three device control blocks field by field, as Paay p. 25 and the Level II manual D-2 give them', () => {
+    const FIELDS: readonly (readonly [number, string, number])[] = [
+      [0x4015, 'KBDCB', 1], [0x4016, 'KBDRVADDR', 2], [0x401d, 'VDDCB', 1], [0x401e, 'VDDRVADDR', 2], [0x4020, 'CURADDR', 2],
+      [0x4025, 'PRDCB', 1], [0x4026, 'PRDRVADDR', 2], [0x4028, 'PRTPAGELEN', 1], [0x4029, 'PRTLINECNT', 1],
+    ];
+    for (const [key, name, length] of FIELDS) {
+      expect(at(key), name).toMatchObject({ name, kind: 'variable', length });
+      expect(pages(at(key), 'paay'), name).toEqual(['25']);
+      expect(pages(at(key), 'l2-1979'), name).toEqual(['D-2']);
+    }
+  });
+
+  it('enters the reserved RAM of Paay pp. 26 to 28 that Decker pp. 64 to 71 confirm, as variables or vectors with their lengths', () => {
+    const RAM: readonly (readonly [number, string, 'variable' | 'vector', number])[] = [
+      [0x4036, 'KBROWS', 'variable', 7], [0x403d, 'PORTFFBITS', 'variable', 1], [0x408e, 'USRVEC', 'variable', 2], [0x4093, 'INPORT', 'vector', 3],
+      [0x4096, 'OUTPORT', 'vector', 3], [0x4099, 'INKEYBUF', 'variable', 1], [0x409b, 'PRTCOLUMN', 'variable', 1], [0x409c, 'OUTDEVFLAG', 'variable', 1],
+      [0x40a4, 'PROGSTART', 'variable', 2], [0x40a6, 'LINEPOS', 'variable', 1], [0x40a7, 'IOBUFPTR', 'variable', 2], [0x40af, 'NTF', 'variable', 1],
+      [0x40b1, 'MEMTOP', 'variable', 2], [0x40f9, 'VARSTART', 'variable', 2], [0x40fb, 'ARRAYSTART', 'variable', 2], [0x40fd, 'FREESTART', 'variable', 2],
+      [0x411d, 'ACC', 'variable', 8], [0x4127, 'AACC', 'variable', 8],
+    ];
+    for (const [key, name, kind, length] of RAM) {
+      expect(at(key), name).toMatchObject({ name, kind, length, coined: true });
+      expect(pages(at(key), 'paay').length, name).toBeGreaterThan(0);
+      expect(pages(at(key), 'decker').length, name).toBeGreaterThan(0);
+    }
+    // The USR vector is where the Level II manual says to POKE 16526 and 16527 (page 8-8).
+    expect(pages(at(0x408e), 'l2-1979')).toEqual(['8-8']);
+    // Paay p. 26 calls 403D the print size flag; Decker p. 11 says it holds the bits last sent to port FFH. The entry records both.
+    expect(at(0x403d)?.note).toContain('print size flag');
+  });
+
+  it('keeps clear of the DOS entry points that LDOS names, which stay in the DOS table: none of 402DH to 4035H, none from 4400H up', () => {
+    const overlaps = (e: TableEntry, from: number, to: number): boolean => e.key < to && e.key + e.length > from;
+    for (const e of rom) {
+      expect(overlaps(e, 0x402d, 0x4036), `${e.name} at ${hex4(e.key)} overlaps 402DH-4035H (LDOS @EXIT, @ABORT, @DVRHK)`).toBe(false);
+      expect(overlaps(e, 0x4400, 0x10000), `${e.name} at ${hex4(e.key)} reaches the LDOS entry points from 4400H`).toBe(false);
+    }
+    const set = selectSymbols({ machine: 1, dos: 'ldos' });
+    expect(set.code(0x402d)?.name).toBe('@EXIT');
+    expect(set.code(0x4030)?.name).toBe('@ABORT');
+    expect(set.code(0x4400)?.name).toBe('@CMD');
+  });
+
+  it('keeps ROM entries below $4000 as routines, the one ROM data table as a region, and RAM entries from $4000 as variables or vectors', () => {
+    for (const e of rom) {
+      if (e.key >= 0x4000) expect(['variable', 'vector'], e.name).toContain(e.kind);
+      else if (e.key === 0x0050) expect(e.kind, e.name).toBe('region');
+      else expect(e.kind, e.name).toBe('routine');
+    }
+  });
+
+  it('uses Tandy names, which start with $, only where the Model III manual prints them, and coins every other name', () => {
+    for (const e of rom) expect(e.coined, e.name).toBe(!e.name.startsWith('$'));
+    // Each Tandy name here is Tandy's at the same address in the Model III table, and cites the manual page the Model III entry cites for it.
+    for (const e of rom.filter((x) => !x.coined)) {
+      expect(atModel3(e.key)?.name, e.name).toBe(e.name);
+      expect(pages(e, 'm3-basic'), e.name).toEqual(pages(atModel3(e.key), 'm3-basic'));
+    }
+    // Every Tandy name of the Model III ROM table has a Model I entry except the ones for routines the Model I lacks.
+    const missing = model3.filter((e) => !e.coined && at(e.key)?.name !== e.name).map((e) => e.name);
+    expect(missing).toEqual(['$RSRCV', '$RSTX', '$RSINIT', '$INITIO', '$ROUTE', '$PRSCN', '$VDLINE', '$KBBRK', '$CLKON', '$CLKOFF', '$DATE', '$TIME', '$SETCAS']);
+  });
+
+  it('cites Paay (printed pages 2 to 30), Decker (1 to 126), the Level II manual, and Tandy only for a Tandy name; never kiwisincebirth', () => {
+    for (const e of rom) {
+      expect(e.cite.some((c) => ['paay', 'decker', 'l2-1979'].includes(c.source)), `${e.name} cites no Model I source`).toBe(true);
+      for (const c of e.cite) {
+        expect(['paay', 'decker', 'l2-1979', 'm3-basic'], `${e.name} cites ${c.source}`).toContain(c.source);
+        if (c.source === 'paay') expect(Number(c.page), `${e.name} cites paay ${c.page}`).toBeGreaterThanOrEqual(2);
+        if (c.source === 'paay') expect(Number(c.page), `${e.name} cites paay ${c.page}`).toBeLessThanOrEqual(30);
+        if (c.source === 'decker') expect(c.page, `${e.name} cites decker ${c.page}`).toMatch(/^[1-9]\d{0,2}$/);
+        if (c.source === 'decker') expect(Number(c.page), `${e.name} cites decker ${c.page}`).toBeLessThanOrEqual(126);
+        if (c.source === 'l2-1979') expect(['8-8', '8-9', 'D-1', 'D-2'], `${e.name} cites l2-1979 ${c.page}`).toContain(c.page);
+        if (c.source === 'm3-basic') expect(e.name.startsWith('$'), `${e.name} cites the Model III manual but is not a Tandy name`).toBe(true);
+      }
+    }
+    expect(rom.some((e) => e.cite.some((c) => c.source === 'kiwisincebirth'))).toBe(false);
+  });
+
+  it('cites the Level II manual p. 8-9 for the USR linkage: CALL 0A7FH to take the argument, JP 0A9AH to return a value', () => {
+    expect(pages(at(0x0a7f), 'l2-1979')).toEqual(['8-9']);
+    expect(pages(at(0x0a9a), 'l2-1979')).toEqual(['8-9']);
+  });
+
+  it('cites Decker on the printed page its text and footers give: 51 for the first two RSTs, 52 for the rest, 53 for $DELAY', () => {
+    for (const key of [0x0008, 0x0010]) expect(pages(at(key), 'decker'), hex4(key)).toEqual(['51']);
+    for (const key of [0x0018, 0x0020, 0x0028, 0x0030, 0x0038]) expect(pages(at(key), 'decker'), hex4(key)).toEqual(['52']);
+    expect(pages(at(0x0060), 'decker')).toEqual(['53']);
+    // Decker's "Page 65" footer is missing from its OCR; the 403DH entry sits between the "Page 64" and "Page 66" footers, on printed page 65.
+    expect(pages(at(0x403d), 'decker')).toContain('65');
+  });
+
+  it('names the Model I ROM, RST vectors, and RAM it documents through selectSymbols, under both Model I DOS choices', () => {
+    for (const dos of ['ldos', 'none'] as const) {
+      const set = selectSymbols({ machine: 1, dos });
+      expect(set.code(0x0049)?.name, dos).toBe('$KBWAIT');
+      expect(set.code(0x0033)?.name, dos).toBe('$VDCHAR');
+      expect(set.code(0x03e3)?.name, dos).toBe('KBDRIVER');
+      expect(set.data(0x4017)).toMatchObject({ entry: { name: 'KBDRVADDR' }, offset: 1 });
+      expect(set.data(0x40a5)).toMatchObject({ entry: { name: 'PROGSTART' }, offset: 1 });
+      expect(set.data(0x4122)).toMatchObject({ entry: { name: 'ACC' }, offset: 5 });
+    }
+  });
+
+  it('tags a Model I name with [Model I] only where the comparison does not class its address shared', () => {
+    const set = selectSymbols({ machine: 1, dos: 'none' });
+    expect(set.machineTag(at(0x0049)!)).toBeUndefined();
+    expect(set.machineTag(at(0x0060)!)).toBeUndefined();
+    expect(set.machineTag(at(0x01d9)!)).toBe('[Model I]');
+    expect(set.machineTag(at(0x03e3)!)).toBe('[Model I]');
+  });
+});
+
 describe('buildSymbolOutputs on an edited copy of the data', () => {
   const copies: string[] = [];
   afterAll(() => {
@@ -356,6 +583,7 @@ describe('buildSymbolOutputs on an edited copy of the data', () => {
     expect(r.errors).toEqual([]);
     expect(r.comparison).toContain('| `$0049` | different | `$KEY` (routine) | `$KBWAIT` (routine) | Model I: Model III renamed it |');
     expect(r.module).toContain("'0049': 'different'");
-    expect(r.entries).toBe(buildSymbolOutputs(dataDir).entries + 1);
+    // The edited copy swaps the whole Model I ROM file for this one entry.
+    expect(r.entries).toBe(buildSymbolOutputs(dataDir).entries - TABLES['rom-model1'].length + 1);
   });
 });

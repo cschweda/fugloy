@@ -1,4 +1,1036 @@
 {
   "table": "rom-model1",
-  "entries": []
+  "entries": [
+    {
+      "addr": "0000",
+      "name": "$RESET",
+      "kind": "routine",
+      "purpose": "power-on and RESET entry: disable interrupts, clear A, and jump to the cold-start code at 0674H",
+      "cite": [{ "source": "paay", "page": "2" }, { "source": "decker", "page": "51" }, { "source": "m3-basic", "page": "12/15" }],
+      "note": "RST 00H continues at 0674H here; on the Model III it continues at 3015H (decker 51)"
+    },
+    {
+      "addr": "0008",
+      "name": "SYNCHK",
+      "kind": "routine",
+      "purpose": "check that (HL) equals the byte after the RST, else syntax error; then get the next text character",
+      "cite": [{ "source": "paay", "page": "2" }, { "source": "decker", "page": "51" }],
+      "coined": true
+    },
+    {
+      "addr": "000B",
+      "name": "GETPC",
+      "kind": "routine",
+      "purpose": "POP HL then JP (HL): return with the caller's return address in HL, so relocatable code can find itself",
+      "cite": [{ "source": "decker", "page": "53" }],
+      "coined": true
+    },
+    {
+      "addr": "000D",
+      "name": "DISKBOOT",
+      "kind": "routine",
+      "purpose": "warm restart: jump to the disk bootstrap loader at 069FH without re-initializing the system",
+      "cite": [{ "source": "decker", "page": "53" }],
+      "coined": true
+    },
+    {
+      "addr": "0010",
+      "name": "NEXTCHAR",
+      "kind": "routine",
+      "purpose": "step HL to the next non-blank text character; carry for a digit, zero at a colon or end of line",
+      "cite": [{ "source": "paay", "page": "2" }, { "source": "decker", "page": "51" }],
+      "coined": true
+    },
+    {
+      "addr": "0013",
+      "name": "GETDEV",
+      "kind": "routine",
+      "purpose": "read a byte into A from the device whose control block DE addresses; Z if it was ready",
+      "cite": [{ "source": "decker", "page": "10" }],
+      "coined": true
+    },
+    {
+      "addr": "0018",
+      "name": "CMPHLDE",
+      "kind": "routine",
+      "purpose": "compare HL with DE as unsigned 16-bit numbers; Z if equal, carry if DE is the larger",
+      "cite": [{ "source": "paay", "page": "3" }, { "source": "decker", "page": "52" }],
+      "coined": true
+    },
+    {
+      "addr": "001B",
+      "name": "PUTDEV",
+      "kind": "routine",
+      "purpose": "send the byte in A to the device whose control block DE points to; Z is set if the device was ready",
+      "cite": [{ "source": "decker", "page": "10" }],
+      "coined": true
+    },
+    {
+      "addr": "0020",
+      "name": "TESTNTF",
+      "kind": "routine",
+      "purpose": "test the number type flag at 40AFH; the flags show the type and A returns the type minus 3",
+      "cite": [{ "source": "paay", "page": "3" }, { "source": "decker", "page": "52" }],
+      "coined": true
+    },
+    {
+      "addr": "0028",
+      "name": "BREAKRST",
+      "kind": "routine",
+      "purpose": "jump through the vector at 400CH, a no-op without a disk system and a DOS hook for BREAK and overlays",
+      "cite": [{ "source": "paay", "page": "3" }, { "source": "decker", "page": "52" }],
+      "coined": true
+    },
+    {
+      "addr": "002B",
+      "name": "$KBCHAR",
+      "kind": "routine",
+      "purpose": "scan the keyboard once: A returns the key's character code, or zero if no key is down (DE is used)",
+      "cite": [{ "source": "paay", "page": "3" }, { "source": "decker", "page": "12" }, { "source": "m3-basic", "page": "12/11" }]
+    },
+    {
+      "addr": "0030",
+      "name": "DEBUGRST",
+      "kind": "routine",
+      "purpose": "jump through the vector at 400FH, which a disk system uses as its DEBUG entry",
+      "cite": [{ "source": "paay", "page": "3" }, { "source": "decker", "page": "52" }],
+      "coined": true
+    },
+    {
+      "addr": "0033",
+      "name": "$VDCHAR",
+      "kind": "routine",
+      "purpose": "display the character in A at the cursor, carrying out control codes (DE is used)",
+      "cite": [{ "source": "paay", "page": "3" }, { "source": "decker", "page": "14" }, { "source": "m3-basic", "page": "12/20" }]
+    },
+    {
+      "addr": "0038",
+      "name": "INTRST",
+      "kind": "routine",
+      "purpose": "jump through the vector at 4012H, which is EI and RET without a disk system",
+      "cite": [{ "source": "paay", "page": "4" }, { "source": "decker", "page": "52" }],
+      "coined": true
+    },
+    {
+      "addr": "003B",
+      "name": "$PRCHAR",
+      "kind": "routine",
+      "purpose": "send A to the line printer when it is ready; with A zero it only returns the printer status in Z",
+      "cite": [{ "source": "paay", "page": "4" }, { "source": "decker", "page": "15" }, { "source": "m3-basic", "page": "12/14" }]
+    },
+    {
+      "addr": "0040",
+      "name": "$KBLINE",
+      "kind": "routine",
+      "purpose": "read a line from the keyboard by jumping to the line-input routine at 05D9H",
+      "cite": [{ "source": "decker", "page": "13" }, { "source": "m3-basic", "page": "12/12" }]
+    },
+    {
+      "addr": "0049",
+      "name": "$KBWAIT",
+      "kind": "routine",
+      "purpose": "wait until a key is pressed and return its character in A, by calling 002BH in a loop (DE is used)",
+      "cite": [{ "source": "paay", "page": "4" }, { "source": "decker", "page": "13" }, { "source": "m3-basic", "page": "12/12" }]
+    },
+    {
+      "addr": "0050",
+      "name": "CTRLCHARTAB",
+      "kind": "region",
+      "length": 16,
+      "purpose": "table of the control codes for ENTER, CLEAR, BREAK, the arrow keys, and space: eight two-byte entries",
+      "cite": [{ "source": "paay", "page": "4" }],
+      "coined": true,
+      "note": "on the Model III this address is $RSRCV, the RS-232-C receive routine (decker 19)"
+    },
+    {
+      "addr": "0060",
+      "name": "$DELAY",
+      "kind": "routine",
+      "purpose": "pause set by BC: about 14.66 microseconds a count, and about a second at BC of zero",
+      "cite": [{ "source": "paay", "page": "4" }, { "source": "decker", "page": "53" }, { "source": "m3-basic", "page": "12/10" }],
+      "note": "each count takes about 14.66 microseconds here and about 14.80 on the Model III, whose loop has an extra instruction (decker 53)"
+    },
+    {
+      "addr": "0066",
+      "name": "NMIENTRY",
+      "kind": "routine",
+      "purpose": "RESET button entry: restart through 0000H if a disk controller is present, else go to BASIC Ready at 06CCH",
+      "cite": [{ "source": "paay", "page": "4" }, { "source": "decker", "page": "54" }],
+      "coined": true,
+      "note": "the Model III handler tests port E4H for a disk interrupt instead (decker 54)"
+    },
+    {
+      "addr": "012D",
+      "name": "ERR_L3",
+      "kind": "routine",
+      "purpose": "raise the L3 ERROR, where the Disk BASIC command vectors from 4152H point when no Disk BASIC is loaded",
+      "cite": [{ "source": "paay", "page": "5" }, { "source": "decker", "page": "61" }, { "source": "decker", "page": "72" }],
+      "coined": true
+    },
+    {
+      "addr": "0132",
+      "name": "BASICPOINT",
+      "kind": "routine",
+      "purpose": "BASIC POINT entry point; the SET and RESET entries follow at 0135H and 0138H",
+      "cite": [{ "source": "paay", "page": "5" }],
+      "coined": true
+    },
+    {
+      "addr": "0135",
+      "name": "BASICSET",
+      "kind": "routine",
+      "purpose": "BASIC SET entry point",
+      "cite": [{ "source": "paay", "page": "5" }],
+      "coined": true
+    },
+    {
+      "addr": "0138",
+      "name": "BASICRESET",
+      "kind": "routine",
+      "purpose": "BASIC RESET entry point",
+      "cite": [{ "source": "paay", "page": "5" }],
+      "coined": true
+    },
+    {
+      "addr": "0150",
+      "name": "PIXELOP",
+      "kind": "routine",
+      "purpose": "pixel routine behind SET, RESET, and POINT: function and X on the stack, Y in A, then JP here",
+      "cite": [{ "source": "paay", "page": "5" }, { "source": "decker", "page": "15" }],
+      "coined": true
+    },
+    {
+      "addr": "01C9",
+      "name": "$VDCLS",
+      "kind": "routine",
+      "purpose": "clear the screen and home the cursor, as BASIC CLS does",
+      "cite": [{ "source": "paay", "page": "5" }, { "source": "decker", "page": "15" }, { "source": "m3-basic", "page": "12/21" }]
+    },
+    {
+      "addr": "01D3",
+      "name": "BASICRANDOM",
+      "kind": "routine",
+      "purpose": "the core of BASIC RANDOM: store the Z80 refresh register in the seed byte at 40ABH and return",
+      "cite": [{ "source": "paay", "page": "6" }, { "source": "decker", "page": "29" }],
+      "coined": true
+    },
+    {
+      "addr": "01D9",
+      "name": "CASBITOUT",
+      "kind": "routine",
+      "purpose": "write one bit to the cassette as pulses with delay loops between them (uses AF, B, and HL)",
+      "cite": [{ "source": "paay", "page": "6" }, { "source": "decker", "page": "16" }],
+      "coined": true,
+      "note": "on the Model III this address is $PRSCN, the print-screen routine (decker 16, 80)"
+    },
+    {
+      "addr": "01F8",
+      "name": "$CSOFF",
+      "kind": "routine",
+      "purpose": "turn the cassette motor off",
+      "cite": [{ "source": "paay", "page": "6" }, { "source": "decker", "page": "16" }, { "source": "m3-basic", "page": "12/8" }]
+    },
+    {
+      "addr": "01FE",
+      "name": "CASDEFDRIVE",
+      "kind": "routine",
+      "purpose": "choose the cassette drive from BASIC text (# then -1 or -2 and a comma, else drive 1), then select it",
+      "cite": [{ "source": "decker", "page": "16" }],
+      "coined": true
+    },
+    {
+      "addr": "0212",
+      "name": "CASSELECT",
+      "kind": "routine",
+      "purpose": "select the cassette drive named by A (0 first, 1 second) and turn its motor on",
+      "cite": [{ "source": "paay", "page": "6" }, { "source": "decker", "page": "17" }],
+      "coined": true,
+      "note": "the Model III keeps this address only as XOR A; RET, so Model I software that calls it still runs (decker 17)"
+    },
+    {
+      "addr": "0215",
+      "name": "CASMOTORON",
+      "kind": "routine",
+      "purpose": "turn the cassette motor on without selecting a drive, so the drive chosen earlier stays selected",
+      "cite": [{ "source": "decker", "page": "17" }],
+      "coined": true
+    },
+    {
+      "addr": "021E",
+      "name": "CASINRESET",
+      "kind": "routine",
+      "purpose": "reset the cassette input at port FFH (uses AF and HL)",
+      "cite": [{ "source": "decker", "page": "17" }],
+      "coined": true
+    },
+    {
+      "addr": "022C",
+      "name": "CASBLINK",
+      "kind": "routine",
+      "purpose": "blink the right-hand asterisk at the top right of the screen while a tape loads (uses AF)",
+      "cite": [{ "source": "paay", "page": "6" }, { "source": "decker", "page": "17" }],
+      "coined": true,
+      "note": "on the Model III this address only jumps to 0212H, which clears A and returns (decker 17)"
+    },
+    {
+      "addr": "0235",
+      "name": "$CSIN",
+      "kind": "routine",
+      "purpose": "read one byte from the cassette into A, with BC, DE, and HL kept",
+      "cite": [{ "source": "paay", "page": "6" }, { "source": "decker", "page": "17" }, { "source": "m3-basic", "page": "12/7" }]
+    },
+    {
+      "addr": "0241",
+      "name": "CASBITIN",
+      "kind": "routine",
+      "purpose": "read one bit from the cassette and shift it into A; 0235H calls it eight times for a byte (uses AF and HL)",
+      "cite": [{ "source": "paay", "page": "6" }, { "source": "decker", "page": "17" }],
+      "coined": true
+    },
+    {
+      "addr": "0264",
+      "name": "$CSOUT",
+      "kind": "routine",
+      "purpose": "write the byte in A to the cassette, with BC, DE, and HL kept",
+      "cite": [{ "source": "paay", "page": "6" }, { "source": "decker", "page": "17" }, { "source": "m3-basic", "page": "12/9" }]
+    },
+    {
+      "addr": "0284",
+      "name": "CSHWRSEL",
+      "kind": "routine",
+      "purpose": "select the cassette drive through 01FEH and turn the motor on, then write the leader and sync byte at 0287H",
+      "cite": [{ "source": "decker", "page": "17" }],
+      "coined": true,
+      "note": "on the Model III this address holds only JP 0287H (decker 17)"
+    },
+    {
+      "addr": "0287",
+      "name": "$CSHWR",
+      "kind": "routine",
+      "purpose": "write the cassette leader and the A5H sync byte; the motor must already be on, which 0284H arranges",
+      "cite": [{ "source": "paay", "page": "6" }, { "source": "decker", "page": "17" }, { "source": "m3-basic", "page": "12/7" }],
+      "note": "unlike the Model III routine at this address, this one does not turn the cassette on (decker 17)"
+    },
+    {
+      "addr": "0293",
+      "name": "CSHINSEL",
+      "kind": "routine",
+      "purpose": "select the cassette drive through 01FEH and turn the motor on, then look for the leader and sync byte at 0296H",
+      "cite": [{ "source": "decker", "page": "17" }],
+      "coined": true,
+      "note": "on the Model III this address holds only JP 0243H (decker 17)"
+    },
+    {
+      "addr": "0296",
+      "name": "$CSHIN",
+      "kind": "routine",
+      "purpose": "read the cassette past the leader and the A5H sync byte, then show two asterisks; the motor must be on",
+      "cite": [{ "source": "paay", "page": "7" }, { "source": "decker", "page": "17" }, { "source": "m3-basic", "page": "12/6" }],
+      "note": "unlike the Model III routine at this address, this one does not turn the cassette on (decker 17)"
+    },
+    {
+      "addr": "02B5",
+      "name": "BASICSYSTEM",
+      "kind": "routine",
+      "purpose": "main routine of the BASIC SYSTEM command, which loads a machine-language tape",
+      "cite": [{ "source": "paay", "page": "7" }],
+      "coined": true
+    },
+    {
+      "addr": "0314",
+      "name": "CSINWORD",
+      "kind": "routine",
+      "purpose": "read two bytes from a running cassette into HL, low byte first, as a SYSTEM tape's entry address is read",
+      "cite": [{ "source": "paay", "page": "7" }, { "source": "decker", "page": "17" }],
+      "coined": true
+    },
+    {
+      "addr": "032A",
+      "name": "OUTCHAR",
+      "kind": "routine",
+      "purpose": "send A to the output device that the flag at 409CH selects: video, printer, or cassette",
+      "cite": [{ "source": "paay", "page": "7" }, { "source": "decker", "page": "10" }],
+      "coined": true
+    },
+    {
+      "addr": "033A",
+      "name": "VDCHARCOL",
+      "kind": "routine",
+      "purpose": "display A as 0033H does but keep DE, and refresh the cursor column that TAB reads at 40A6H",
+      "cite": [{ "source": "paay", "page": "7" }, { "source": "decker", "page": "15" }],
+      "coined": true
+    },
+    {
+      "addr": "0348",
+      "name": "CURCOLUMN",
+      "kind": "routine",
+      "purpose": "return the cursor column on its line in A: 0 to 63, or 0 to 31 in 32-character mode",
+      "cite": [{ "source": "decker", "page": "15" }],
+      "coined": true
+    },
+    {
+      "addr": "0358",
+      "name": "KBSAVEDE",
+      "kind": "routine",
+      "purpose": "scan the keyboard like 002BH but keep DE; it first calls the DOS link at 41C4H, which an entry at 035BH skips",
+      "cite": [{ "source": "decker", "page": "13" }],
+      "coined": true,
+      "note": "Paay (p. 7) lists the same routine at 035BH, just past the DOS link"
+    },
+    {
+      "addr": "0361",
+      "name": "KBINBUF",
+      "kind": "routine",
+      "purpose": "read a line from the keyboard into the BASIC input buffer with echo, 240 characters at most; carry if BREAK",
+      "cite": [{ "source": "paay", "page": "8" }, { "source": "decker", "page": "13" }],
+      "coined": true
+    },
+    {
+      "addr": "0384",
+      "name": "KBWAITDE",
+      "kind": "routine",
+      "purpose": "wait for a key like 0049H but keep DE, by calling 0358H in a loop",
+      "cite": [{ "source": "decker", "page": "13" }],
+      "coined": true
+    },
+    {
+      "addr": "038B",
+      "name": "DEVRESETPRT",
+      "kind": "routine",
+      "purpose": "select video as the output device again, first ending a partly printed printer line with a carriage return",
+      "cite": [{ "source": "decker", "page": "11" }],
+      "coined": true
+    },
+    {
+      "addr": "0394",
+      "name": "PRTCR",
+      "kind": "routine",
+      "purpose": "send a carriage return to the printer through 039CH",
+      "cite": [{ "source": "decker", "page": "16" }],
+      "coined": true
+    },
+    {
+      "addr": "039C",
+      "name": "PRTCHARPOS",
+      "kind": "routine",
+      "purpose": "send A to the printer, keeping all registers; counts the line position at 409BH, turns a line feed into CR",
+      "cite": [{ "source": "paay", "page": "8" }, { "source": "decker", "page": "16" }],
+      "coined": true
+    },
+    {
+      "addr": "03C2",
+      "name": "IODISPATCH",
+      "kind": "routine",
+      "purpose": "the I/O driver entry routine behind 0013H and 001BH: runs the driver the control block at DE names",
+      "cite": [{ "source": "decker", "page": "82" }],
+      "coined": true,
+      "note": "the Model III has its printer driver, PRDRIVER, at this address; its I/O driver entry routine is at 0674H (decker 82)"
+    },
+    {
+      "addr": "03E3",
+      "name": "KBDRIVER",
+      "kind": "routine",
+      "purpose": "the Model I keyboard driver that the keyboard control block points to: scans the keys, returns ASCII in A",
+      "cite": [{ "source": "paay", "page": "8" }, { "source": "decker", "page": "13" }],
+      "coined": true,
+      "note": "the Model III keeps its keyboard driver at 3024H (decker 13)"
+    },
+    {
+      "addr": "0458",
+      "name": "VDDRIVER",
+      "kind": "routine",
+      "purpose": "the Model I video driver that the video control block points to: shows the character in C, scrolls",
+      "cite": [{ "source": "paay", "page": "8" }, { "source": "decker", "page": "15" }],
+      "coined": true,
+      "note": "the Model III keeps its video driver at 0473H (decker 15)"
+    },
+    {
+      "addr": "04C3",
+      "name": "VD64MODE",
+      "kind": "routine",
+      "purpose": "switch the display to 64-character mode (uses A)",
+      "cite": [{ "source": "paay", "page": "8" }],
+      "coined": true
+    },
+    {
+      "addr": "04F6",
+      "name": "VD32MODE",
+      "kind": "routine",
+      "purpose": "switch the display to 32-character mode (uses A and HL)",
+      "cite": [{ "source": "paay", "page": "8" }],
+      "coined": true
+    },
+    {
+      "addr": "057C",
+      "name": "VDCLRTOEND",
+      "kind": "routine",
+      "purpose": "clear the screen from the address in HL to the end of video memory (uses DE and A)",
+      "cite": [{ "source": "paay", "page": "8" }],
+      "coined": true
+    },
+    {
+      "addr": "058D",
+      "name": "PRDRIVER",
+      "kind": "routine",
+      "purpose": "the Model I printer driver, whose address the printer control block holds: it prints the character in C",
+      "cite": [{ "source": "paay", "page": "9" }, { "source": "decker", "page": "16" }],
+      "coined": true,
+      "note": "the Model III keeps its printer driver at 03C2H (decker 16)"
+    },
+    {
+      "addr": "05D1",
+      "name": "PRTTEST",
+      "kind": "routine",
+      "purpose": "read the printer status at 37E8H; Z is set when the printer is ready to take a character (uses AF)",
+      "cite": [{ "source": "decker", "page": "16" }],
+      "coined": true,
+      "note": "the Model III keeps this routine at 044BH (decker 16)"
+    },
+    {
+      "addr": "05D9",
+      "name": "LINEINPUT",
+      "kind": "routine",
+      "purpose": "echoing line input into the buffer at HL, B characters at most, ended by ENTER or BREAK; B returns the length",
+      "cite": [{ "source": "paay", "page": "9" }, { "source": "decker", "page": "13" }],
+      "coined": true
+    },
+    {
+      "addr": "06CC",
+      "name": "READYREENTRY",
+      "kind": "routine",
+      "purpose": "return to BASIC Ready without the false Out of Memory message, by loading BC with 1A18H and jumping to 19AEH",
+      "cite": [{ "source": "paay", "page": "9" }, { "source": "decker", "page": "54" }],
+      "coined": true,
+      "note": "on the Model III 06CCH is part of the LIST command and no longer returns to BASIC (decker 54, 82)"
+    },
+    {
+      "addr": "07B2",
+      "name": "ERR_OV",
+      "kind": "routine",
+      "purpose": "raise the OV ERROR (overflow)",
+      "cite": [{ "source": "paay", "page": "10" }, { "source": "decker", "page": "61" }],
+      "coined": true
+    },
+    {
+      "addr": "093E",
+      "name": "MUL10SNG",
+      "kind": "routine",
+      "purpose": "multiply the single-precision accumulator by 10",
+      "cite": [{ "source": "decker", "page": "28" }],
+      "coined": true
+    },
+    {
+      "addr": "0A7F",
+      "name": "CINT",
+      "kind": "routine",
+      "purpose": "convert the accumulator to an integer in HL; a USR routine calls this to take its argument",
+      "cite": [{ "source": "paay", "page": "13" }, { "source": "decker", "page": "31" }, { "source": "l2-1979", "page": "8-9" }],
+      "coined": true
+    },
+    {
+      "addr": "0A9A",
+      "name": "HLTOACC",
+      "kind": "routine",
+      "purpose": "make the integer in HL the accumulator's value; a USR routine jumps here to hand its result back to BASIC",
+      "cite": [{ "source": "paay", "page": "13" }, { "source": "decker", "page": "33" }, { "source": "l2-1979", "page": "8-9" }],
+      "coined": true
+    },
+    {
+      "addr": "0AF4",
+      "name": "CHKSTRING",
+      "kind": "routine",
+      "purpose": "return if the accumulator holds a string, else raise a type mismatch error (BC, DE, and HL kept)",
+      "cite": [{ "source": "paay", "page": "13" }, { "source": "decker", "page": "42" }],
+      "coined": true
+    },
+    {
+      "addr": "0AF6",
+      "name": "ERR_TM",
+      "kind": "routine",
+      "purpose": "raise the TM ERROR (type mismatch)",
+      "cite": [{ "source": "paay", "page": "13" }, { "source": "decker", "page": "61" }],
+      "coined": true
+    },
+    {
+      "addr": "0E6C",
+      "name": "ASCTONUM",
+      "kind": "routine",
+      "purpose": "read the numeric text at HL into the accumulator, in the smallest number type that holds it",
+      "cite": [{ "source": "paay", "page": "15" }, { "source": "decker", "page": "34" }],
+      "coined": true
+    },
+    {
+      "addr": "0FAF",
+      "name": "OUTHLDEC",
+      "kind": "routine",
+      "purpose": "print the positive integer in HL in decimal on the device that 409CH selects",
+      "cite": [{ "source": "decker", "page": "34" }],
+      "coined": true
+    },
+    {
+      "addr": "1997",
+      "name": "ERR_SN",
+      "kind": "routine",
+      "purpose": "raise the SN ERROR (syntax error)",
+      "cite": [{ "source": "paay", "page": "15" }, { "source": "decker", "page": "61" }],
+      "coined": true
+    },
+    {
+      "addr": "19A2",
+      "name": "BASICERROR",
+      "kind": "routine",
+      "purpose": "BASIC error exit: put the even error code, 0 to 2CH, in E and jump here",
+      "cite": [{ "source": "decker", "page": "60" }],
+      "coined": true
+    },
+    {
+      "addr": "19AE",
+      "name": "READYALT",
+      "kind": "routine",
+      "purpose": "return to BASIC Ready without a false Out of Memory message: load BC with 1A18H, then jump here",
+      "cite": [{ "source": "decker", "page": "54" }],
+      "coined": true
+    },
+    {
+      "addr": "1A19",
+      "name": "$READY",
+      "kind": "routine",
+      "purpose": "return to BASIC Ready by jumping here, the entry Radio Shack documents; may leave a false Out of Memory error",
+      "cite": [{ "source": "paay", "page": "16" }, { "source": "decker", "page": "54" }, { "source": "m3-basic", "page": "12/15" }]
+    },
+    {
+      "addr": "1AF8",
+      "name": "FIXLINEPTRS",
+      "kind": "routine",
+      "purpose": "recompute the forward line pointers of the BASIC program, as a renumbering program needs (uses A, HL, DE)",
+      "cite": [{ "source": "paay", "page": "16" }, { "source": "decker", "page": "56" }],
+      "coined": true
+    },
+    {
+      "addr": "1B2C",
+      "name": "FINDLINE",
+      "kind": "routine",
+      "purpose": "find the BASIC line numbered DE: carry if found, BC at that line and HL at the next one (uses AF, BC, and HL)",
+      "cite": [{ "source": "paay", "page": "16" }, { "source": "decker", "page": "56" }],
+      "coined": true
+    },
+    {
+      "addr": "1BB3",
+      "name": "INPROMPT",
+      "kind": "routine",
+      "purpose": "show a question mark and a space, then read a line as 0361H does",
+      "cite": [{ "source": "paay", "page": "16" }, { "source": "decker", "page": "14" }],
+      "coined": true
+    },
+    {
+      "addr": "1E4A",
+      "name": "ERR_FC",
+      "kind": "routine",
+      "purpose": "raise the FC ERROR (illegal function call)",
+      "cite": [{ "source": "paay", "page": "17" }, { "source": "decker", "page": "61" }],
+      "coined": true
+    },
+    {
+      "addr": "1E5A",
+      "name": "ASCTODE",
+      "kind": "routine",
+      "purpose": "read the unsigned decimal number at HL into DE; HL returns at the delimiter",
+      "cite": [{ "source": "paay", "page": "18" }, { "source": "decker", "page": "35" }],
+      "coined": true
+    },
+    {
+      "addr": "20F9",
+      "name": "NEWLINE",
+      "kind": "routine",
+      "purpose": "send a carriage return to the output device unless the cursor is already at the start of a line",
+      "cite": [{ "source": "decker", "page": "15" }],
+      "coined": true
+    },
+    {
+      "addr": "20FE",
+      "name": "OUTCR",
+      "kind": "routine",
+      "purpose": "send a carriage return to the device that 409CH selects",
+      "cite": [{ "source": "decker", "page": "11" }],
+      "coined": true
+    },
+    {
+      "addr": "213F",
+      "name": "TABTO",
+      "kind": "routine",
+      "purpose": "BASIC TAB on the device 409CH selects: E is the column, HL the text to print or a zero byte",
+      "cite": [{ "source": "decker", "page": "11" }],
+      "coined": true
+    },
+    {
+      "addr": "2169",
+      "name": "DEVRESETCAS",
+      "kind": "routine",
+      "purpose": "select video as the output device again, first switching the cassette off if it was in use",
+      "cite": [{ "source": "decker", "page": "11" }],
+      "coined": true
+    },
+    {
+      "addr": "21C9",
+      "name": "INPUTSTMT",
+      "kind": "routine",
+      "purpose": "BASIC INPUT: show the prompt at HL if any, read the line, and assign the variables that follow",
+      "cite": [{ "source": "decker", "page": "14" }],
+      "coined": true
+    },
+    {
+      "addr": "2337",
+      "name": "EVALEXPR",
+      "kind": "routine",
+      "purpose": "evaluate the BASIC expression at HL into the accumulator; it ends at a zero, comma, ) or colon, where HL returns",
+      "cite": [{ "source": "paay", "page": "19" }, { "source": "decker", "page": "36" }],
+      "coined": true
+    },
+    {
+      "addr": "260D",
+      "name": "FINDVAR",
+      "kind": "routine",
+      "purpose": "find or create the BASIC variable named at HL; DE returns its address (a string's three-byte vector)",
+      "cite": [{ "source": "paay", "page": "20" }, { "source": "decker", "page": "36" }],
+      "coined": true
+    },
+    {
+      "addr": "28A7",
+      "name": "OUTSTR",
+      "kind": "routine",
+      "purpose": "print the string at HL, ended by a zero byte or a quote, on the device 409CH selects, as PRINT does",
+      "cite": [{ "source": "paay", "page": "21" }, { "source": "decker", "page": "11" }],
+      "coined": true
+    },
+    {
+      "addr": "2B05",
+      "name": "ACCTODE",
+      "kind": "routine",
+      "purpose": "convert the accumulator to an integer in DE; Z is set if the result is 255 or less",
+      "cite": [{ "source": "paay", "page": "22" }, { "source": "decker", "page": "31" }],
+      "coined": true
+    },
+    {
+      "addr": "2B75",
+      "name": "OUTSTRZ",
+      "kind": "routine",
+      "purpose": "print the zero-terminated string at HL on the device that 409CH selects, through 032AH",
+      "cite": [{ "source": "decker", "page": "11" }],
+      "coined": true
+    },
+    {
+      "addr": "2BF5",
+      "name": "BASICCSAVE",
+      "kind": "routine",
+      "purpose": "BASIC CSAVE: save the program to cassette, with HL at the quoted one-character file name",
+      "cite": [{ "source": "paay", "page": "22" }, { "source": "decker", "page": "17" }],
+      "coined": true
+    },
+    {
+      "addr": "2C1F",
+      "name": "BASICCLOAD",
+      "kind": "routine",
+      "purpose": "BASIC CLOAD: load or verify a program from cassette; it ends at BASIC Ready instead of returning",
+      "cite": [{ "source": "paay", "page": "23" }, { "source": "decker", "page": "18" }],
+      "coined": true
+    },
+    {
+      "addr": "4000",
+      "name": "SYNCHKVEC",
+      "kind": "vector",
+      "length": 3,
+      "purpose": "jump vector for RST 08H, set at start-up to continue at 1C96H, the syntax-check code",
+      "cite": [{ "source": "paay", "page": "2" }, { "source": "paay", "page": "24" }, { "source": "decker", "page": "51" }, { "source": "l2-1979", "page": "D-1" }],
+      "coined": true
+    },
+    {
+      "addr": "4003",
+      "name": "NEXTCHARVEC",
+      "kind": "vector",
+      "length": 3,
+      "purpose": "jump vector for RST 10H, set at start-up to continue at 1D78H, the next-character code",
+      "cite": [{ "source": "paay", "page": "2" }, { "source": "decker", "page": "51" }],
+      "coined": true
+    },
+    {
+      "addr": "4006",
+      "name": "CMPHLDEVEC",
+      "kind": "vector",
+      "length": 3,
+      "purpose": "jump vector for RST 18H, set at start-up to continue at 1C90H, the HL and DE compare",
+      "cite": [{ "source": "paay", "page": "3" }, { "source": "paay", "page": "24" }, { "source": "decker", "page": "52" }],
+      "coined": true
+    },
+    {
+      "addr": "4009",
+      "name": "TESTNTFVEC",
+      "kind": "vector",
+      "length": 3,
+      "purpose": "jump vector for RST 20H, set at start-up to continue at 25D9H, the number-type test",
+      "cite": [{ "source": "paay", "page": "3" }, { "source": "paay", "page": "24" }, { "source": "decker", "page": "52" }],
+      "coined": true
+    },
+    {
+      "addr": "400C",
+      "name": "BREAKVEC",
+      "kind": "vector",
+      "length": 3,
+      "purpose": "RST 28H's RAM jump vector: a lone RET without a disk system; the keyboard driver calls it on BREAK",
+      "cite": [{ "source": "paay", "page": "3" }, { "source": "paay", "page": "24" }, { "source": "decker", "page": "52" }],
+      "coined": true
+    },
+    {
+      "addr": "400F",
+      "name": "DEBUGVEC",
+      "kind": "vector",
+      "length": 3,
+      "purpose": "jump vector for RST 30H, a lone RET without a disk system; a DOS uses it as its DEBUG entry",
+      "cite": [{ "source": "paay", "page": "3" }, { "source": "paay", "page": "24" }, { "source": "decker", "page": "52" }],
+      "coined": true
+    },
+    {
+      "addr": "4012",
+      "name": "INTVEC",
+      "kind": "vector",
+      "length": 3,
+      "purpose": "RST 38H's RAM jump vector: EI and RET without a disk system, a disk system's interrupt entry with one",
+      "cite": [{ "source": "paay", "page": "4" }, { "source": "paay", "page": "24" }, { "source": "decker", "page": "52" }],
+      "coined": true
+    },
+    {
+      "addr": "4015",
+      "name": "KBDCB",
+      "kind": "variable",
+      "purpose": "start of the 8-byte keyboard control block, its device type byte, normally 1 (read only)",
+      "cite": [{ "source": "paay", "page": "25" }, { "source": "decker", "page": "8" }, { "source": "l2-1979", "page": "D-2" }],
+      "coined": true
+    },
+    {
+      "addr": "4016",
+      "name": "KBDRVADDR",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "address of the keyboard driver, which the keyboard scan jumps to on each scan",
+      "cite": [{ "source": "paay", "page": "25" }, { "source": "decker", "page": "8" }, { "source": "l2-1979", "page": "D-2" }],
+      "coined": true
+    },
+    {
+      "addr": "401D",
+      "name": "VDDCB",
+      "kind": "variable",
+      "purpose": "start of the 8-byte video control block, its device type byte, normally 7 (read and write)",
+      "cite": [{ "source": "paay", "page": "25" }, { "source": "decker", "page": "8" }, { "source": "l2-1979", "page": "D-2" }],
+      "coined": true
+    },
+    {
+      "addr": "401E",
+      "name": "VDDRVADDR",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "address of the video driver, which the video control block points to",
+      "cite": [{ "source": "paay", "page": "25" }, { "source": "decker", "page": "8" }, { "source": "l2-1979", "page": "D-2" }],
+      "coined": true
+    },
+    {
+      "addr": "4020",
+      "name": "CURADDR",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "address of the cursor in video memory, low byte first, in the range 3C00H to 3FFFH",
+      "cite": [{ "source": "paay", "page": "25" }, { "source": "decker", "page": "8" }, { "source": "l2-1979", "page": "D-2" }],
+      "coined": true
+    },
+    {
+      "addr": "4025",
+      "name": "PRDCB",
+      "kind": "variable",
+      "purpose": "start of the 8-byte printer control block, its device type byte, normally 6 (write only)",
+      "cite": [{ "source": "paay", "page": "25" }, { "source": "decker", "page": "8" }, { "source": "l2-1979", "page": "D-2" }],
+      "coined": true
+    },
+    {
+      "addr": "4026",
+      "name": "PRDRVADDR",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "address of the printer driver; pointing it at the video driver sends LPRINT to the screen, and the reverse",
+      "cite": [{ "source": "paay", "page": "25" }, { "source": "decker", "page": "8" }, { "source": "l2-1979", "page": "D-2" }],
+      "coined": true
+    },
+    {
+      "addr": "4028",
+      "name": "PRTPAGELEN",
+      "kind": "variable",
+      "purpose": "lines per page for the printer, 67 at start-up",
+      "cite": [{ "source": "paay", "page": "25" }, { "source": "decker", "page": "8" }, { "source": "decker", "page": "9" }, { "source": "l2-1979", "page": "D-2" }],
+      "coined": true,
+      "note": "start-up sets 67 on both machines; the Model III counts the page length plus one, so a 66-line form wants 66 here (decker 9)"
+    },
+    {
+      "addr": "4029",
+      "name": "PRTLINECNT",
+      "kind": "variable",
+      "purpose": "lines already printed on the current page",
+      "cite": [{ "source": "paay", "page": "25" }, { "source": "decker", "page": "8" }, { "source": "decker", "page": "9" }, { "source": "l2-1979", "page": "D-2" }],
+      "coined": true,
+      "note": "the Model III holds this count plus one (decker 9)"
+    },
+    {
+      "addr": "4036",
+      "name": "KBROWS",
+      "kind": "variable",
+      "length": 7,
+      "purpose": "last state of the seven keyboard rows (3801H-3840H), so a scan can tell a new press from a held key",
+      "cite": [{ "source": "paay", "page": "26" }, { "source": "decker", "page": "64" }, { "source": "decker", "page": "65" }],
+      "coined": true
+    },
+    {
+      "addr": "403D",
+      "name": "PORTFFBITS",
+      "kind": "variable",
+      "purpose": "bits last written to port FFH: bit 3 is 32-character video, bit 2 the cassette relay, bits 1-0 the audio",
+      "cite": [{ "source": "paay", "page": "26" }, { "source": "decker", "page": "11" }, { "source": "decker", "page": "65" }],
+      "coined": true,
+      "note": "Paay calls this the print size flag, 0 for 64 characters and F8H for 32; Decker gives it as the bits last sent to port FFH (decker 11); the Model III keeps its port ECH bits at 4210H"
+    },
+    {
+      "addr": "408E",
+      "name": "USRVEC",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "address of the USR routine, low byte first; BASIC programs POKE it into 16526 and 16527",
+      "cite": [{ "source": "paay", "page": "26" }, { "source": "decker", "page": "66" }, { "source": "l2-1979", "page": "8-8" }],
+      "coined": true
+    },
+    {
+      "addr": "4093",
+      "name": "INPORT",
+      "kind": "vector",
+      "length": 3,
+      "purpose": "RAM routine IN A,(n) then RET: poke the port number n into its second byte at 4094H before calling it",
+      "cite": [{ "source": "paay", "page": "26" }, { "source": "decker", "page": "66" }],
+      "coined": true
+    },
+    {
+      "addr": "4096",
+      "name": "OUTPORT",
+      "kind": "vector",
+      "length": 3,
+      "purpose": "RAM routine OUT (n),A then RET: poke the port number n into its second byte at 4097H before calling it",
+      "cite": [{ "source": "paay", "page": "26" }, { "source": "decker", "page": "66" }],
+      "coined": true
+    },
+    {
+      "addr": "4099",
+      "name": "INKEYBUF",
+      "kind": "variable",
+      "purpose": "key buffer for INKEY$: a non-zero value here is returned before the keyboard is scanned",
+      "cite": [{ "source": "paay", "page": "26" }, { "source": "decker", "page": "66" }],
+      "coined": true
+    },
+    {
+      "addr": "409B",
+      "name": "PRTCOLUMN",
+      "kind": "variable",
+      "purpose": "number of characters already sent to the printer on the current line, for a TAB that works past column 63",
+      "cite": [{ "source": "paay", "page": "26" }, { "source": "decker", "page": "66" }],
+      "coined": true
+    },
+    {
+      "addr": "409C",
+      "name": "OUTDEVFLAG",
+      "kind": "variable",
+      "purpose": "output device for the general output routines: 0 video, 1 printer, 255 cassette",
+      "cite": [{ "source": "paay", "page": "26" }, { "source": "decker", "page": "67" }],
+      "coined": true
+    },
+    {
+      "addr": "40A4",
+      "name": "PROGSTART",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "pointer to the start of the BASIC program text; the byte just below it must be zero",
+      "cite": [{ "source": "paay", "page": "26" }, { "source": "decker", "page": "67" }],
+      "coined": true
+    },
+    {
+      "addr": "40A6",
+      "name": "LINEPOS",
+      "kind": "variable",
+      "purpose": "cursor column on the current video line, which TAB and POS read",
+      "cite": [{ "source": "paay", "page": "27" }, { "source": "decker", "page": "67" }],
+      "coined": true
+    },
+    {
+      "addr": "40A7",
+      "name": "IOBUFPTR",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "pointer to the BASIC input buffer, used by the line-input routines and while BASIC tokenizes a line",
+      "cite": [{ "source": "paay", "page": "27" }, { "source": "decker", "page": "67" }],
+      "coined": true
+    },
+    {
+      "addr": "40AF",
+      "name": "NTF",
+      "kind": "variable",
+      "purpose": "number type flag for the accumulator: 2 integer, 3 string, 4 single precision, 8 double precision",
+      "cite": [{ "source": "paay", "page": "27" }, { "source": "decker", "page": "68" }],
+      "coined": true
+    },
+    {
+      "addr": "40B1",
+      "name": "MEMTOP",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "pointer to the last memory address BASIC may use, set from the answer to MEMORY SIZE?",
+      "cite": [{ "source": "paay", "page": "27" }, { "source": "decker", "page": "68" }],
+      "coined": true
+    },
+    {
+      "addr": "40F9",
+      "name": "VARSTART",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "pointer to the simple variables, which is also the end of the BASIC program",
+      "cite": [{ "source": "paay", "page": "28" }, { "source": "decker", "page": "70" }],
+      "coined": true
+    },
+    {
+      "addr": "40FB",
+      "name": "ARRAYSTART",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "pointer to the start of the array variables",
+      "cite": [{ "source": "paay", "page": "28" }, { "source": "decker", "page": "71" }],
+      "coined": true
+    },
+    {
+      "addr": "40FD",
+      "name": "FREESTART",
+      "kind": "variable",
+      "length": 2,
+      "purpose": "pointer to the end of the arrays, where free memory begins",
+      "cite": [{ "source": "paay", "page": "28" }, { "source": "decker", "page": "71" }],
+      "coined": true
+    },
+    {
+      "addr": "411D",
+      "name": "ACC",
+      "kind": "variable",
+      "length": 8,
+      "purpose": "the arithmetic accumulator: an integer fills 4121H-4122H, a single 4121H-4124H, and a double all eight bytes",
+      "cite": [{ "source": "paay", "page": "28" }, { "source": "decker", "page": "26" }],
+      "coined": true
+    },
+    {
+      "addr": "4127",
+      "name": "AACC",
+      "kind": "variable",
+      "length": 8,
+      "purpose": "the auxiliary accumulator that the double-precision routines use, 4127H to 412EH",
+      "cite": [{ "source": "paay", "page": "28" }, { "source": "decker", "page": "26" }],
+      "coined": true
+    }
+  ]
 }

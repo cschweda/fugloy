@@ -6,87 +6,117 @@ Every address in either table. `shared` means both tables give it the same name 
 
 | Class | Addresses |
 | --- | ---: |
-| shared | 0 |
-| different | 0 |
-| model1-only | 0 |
-| model3-only | 109 |
+| shared | 62 |
+| different | 3 |
+| model1-only | 60 |
+| model3-only | 44 |
 
 | Address | Class | Model I | Model III | Note |
 | --- | --- | --- | --- | --- |
-| `$0000` | model3-only | - | `$RESET` (routine) |  |
-| `$0008` | model3-only | - | `SYNCHK` (routine) |  |
-| `$000B` | model3-only | - | `GETPC` (routine) |  |
-| `$000D` | model3-only | - | `DISKBOOT` (routine) |  |
-| `$0010` | model3-only | - | `NEXTCHAR` (routine) |  |
-| `$0013` | model3-only | - | `GETDEV` (routine) |  |
-| `$0018` | model3-only | - | `CMPHLDE` (routine) |  |
-| `$001B` | model3-only | - | `PUTDEV` (routine) |  |
-| `$0020` | model3-only | - | `TESTNTF` (routine) |  |
-| `$0028` | model3-only | - | `BREAKRST` (routine) |  |
-| `$002B` | model3-only | - | `$KBCHAR` (routine) |  |
-| `$0030` | model3-only | - | `DEBUGRST` (routine) |  |
-| `$0033` | model3-only | - | `$VDCHAR` (routine) |  |
-| `$0038` | model3-only | - | `INTRST` (routine) |  |
-| `$003B` | model3-only | - | `$PRCHAR` (routine) |  |
-| `$0040` | model3-only | - | `$KBLINE` (routine) |  |
-| `$0049` | model3-only | - | `$KBWAIT` (routine) |  |
-| `$0050` | model3-only | - | `$RSRCV` (routine) |  |
+| `$0000` | shared | `$RESET` (routine) | `$RESET` (routine) | Model I: RST 00H continues at 0674H here; on the Model III it continues at 3015H (decker 51) |
+| `$0008` | shared | `SYNCHK` (routine) | `SYNCHK` (routine) |  |
+| `$000B` | shared | `GETPC` (routine) | `GETPC` (routine) |  |
+| `$000D` | shared | `DISKBOOT` (routine) | `DISKBOOT` (routine) |  |
+| `$0010` | shared | `NEXTCHAR` (routine) | `NEXTCHAR` (routine) |  |
+| `$0013` | shared | `GETDEV` (routine) | `GETDEV` (routine) |  |
+| `$0018` | shared | `CMPHLDE` (routine) | `CMPHLDE` (routine) |  |
+| `$001B` | shared | `PUTDEV` (routine) | `PUTDEV` (routine) |  |
+| `$0020` | shared | `TESTNTF` (routine) | `TESTNTF` (routine) |  |
+| `$0028` | shared | `BREAKRST` (routine) | `BREAKRST` (routine) |  |
+| `$002B` | shared | `$KBCHAR` (routine) | `$KBCHAR` (routine) |  |
+| `$0030` | shared | `DEBUGRST` (routine) | `DEBUGRST` (routine) |  |
+| `$0033` | shared | `$VDCHAR` (routine) | `$VDCHAR` (routine) |  |
+| `$0038` | shared | `INTRST` (routine) | `INTRST` (routine) |  |
+| `$003B` | shared | `$PRCHAR` (routine) | `$PRCHAR` (routine) |  |
+| `$0040` | shared | `$KBLINE` (routine) | `$KBLINE` (routine) |  |
+| `$0049` | shared | `$KBWAIT` (routine) | `$KBWAIT` (routine) |  |
+| `$0050` | different | `CTRLCHARTAB` (region) | `$RSRCV` (routine) | Model I: on the Model III this address is $RSRCV, the RS-232-C receive routine (decker 19) |
 | `$0055` | model3-only | - | `$RSTX` (routine) |  |
 | `$005A` | model3-only | - | `$RSINIT` (routine) |  |
-| `$0060` | model3-only | - | `$DELAY` (routine) |  |
-| `$0066` | model3-only | - | `NMIENTRY` (routine) |  |
+| `$0060` | shared | `$DELAY` (routine) | `$DELAY` (routine) | Model I: each count takes about 14.66 microseconds here and about 14.80 on the Model III, whose loop has an extra instruction (decker 53) |
+| `$0066` | shared | `NMIENTRY` (routine) | `NMIENTRY` (routine) | Model I: the Model III handler tests port E4H for a disk interrupt instead (decker 54) |
 | `$0069` | model3-only | - | `$INITIO` (routine) |  |
 | `$006C` | model3-only | - | `$ROUTE` (routine) |  |
-| `$0150` | model3-only | - | `PIXELOP` (routine) |  |
-| `$01C9` | model3-only | - | `$VDCLS` (routine) |  |
-| `$01D9` | model3-only | - | `$PRSCN` (routine) |  |
-| `$01F8` | model3-only | - | `$CSOFF` (routine) |  |
-| `$0212` | model3-only | - | `CASSELECT` (routine) | Model III: on the Model I this address selects the cassette drive named by A and starts its motor |
+| `$012D` | model1-only | `ERR_L3` (routine) | - |  |
+| `$0132` | model1-only | `BASICPOINT` (routine) | - |  |
+| `$0135` | model1-only | `BASICSET` (routine) | - |  |
+| `$0138` | model1-only | `BASICRESET` (routine) | - |  |
+| `$0150` | shared | `PIXELOP` (routine) | `PIXELOP` (routine) |  |
+| `$01C9` | shared | `$VDCLS` (routine) | `$VDCLS` (routine) |  |
+| `$01D3` | model1-only | `BASICRANDOM` (routine) | - |  |
+| `$01D9` | different | `CASBITOUT` (routine) | `$PRSCN` (routine) | Model I: on the Model III this address is $PRSCN, the print-screen routine (decker 16, 80) |
+| `$01F8` | shared | `$CSOFF` (routine) | `$CSOFF` (routine) |  |
+| `$01FE` | model1-only | `CASDEFDRIVE` (routine) | - |  |
+| `$0212` | shared | `CASSELECT` (routine) | `CASSELECT` (routine) | Model I: the Model III keeps this address only as XOR A; RET, so Model I software that calls it still runs (decker 17); Model III: on the Model I this address selects the cassette drive named by A and starts its motor |
 | `$0214` | model3-only | - | `PRTCRRAW` (routine) |  |
+| `$0215` | model1-only | `CASMOTORON` (routine) | - |  |
 | `$021B` | model3-only | - | `$VDLINE` (routine) |  |
+| `$021E` | model1-only | `CASINRESET` (routine) | - |  |
+| `$022C` | model1-only | `CASBLINK` (routine) | - | Model I: on the Model III this address only jumps to 0212H, which clears A and returns (decker 17) |
 | `$022E` | model3-only | - | `BRKTOREADY` (routine) |  |
-| `$0235` | model3-only | - | `$CSIN` (routine) |  |
-| `$0264` | model3-only | - | `$CSOUT` (routine) |  |
-| `$0287` | model3-only | - | `$CSHWR` (routine) |  |
+| `$0235` | shared | `$CSIN` (routine) | `$CSIN` (routine) |  |
+| `$0241` | model1-only | `CASBITIN` (routine) | - |  |
+| `$0264` | shared | `$CSOUT` (routine) | `$CSOUT` (routine) |  |
+| `$0284` | model1-only | `CSHWRSEL` (routine) | - | Model I: on the Model III this address holds only JP 0287H (decker 17) |
+| `$0287` | shared | `$CSHWR` (routine) | `$CSHWR` (routine) | Model I: unlike the Model III routine at this address, this one does not turn the cassette on (decker 17) |
 | `$028D` | model3-only | - | `$KBBRK` (routine) |  |
-| `$0296` | model3-only | - | `$CSHIN` (routine) |  |
+| `$0293` | model1-only | `CSHINSEL` (routine) | - | Model I: on the Model III this address holds only JP 0243H (decker 17) |
+| `$0296` | shared | `$CSHIN` (routine) | `$CSHIN` (routine) | Model I: unlike the Model III routine at this address, this one does not turn the cassette on (decker 17) |
 | `$0298` | model3-only | - | `$CLKON` (routine) |  |
 | `$02A1` | model3-only | - | `$CLKOFF` (routine) |  |
-| `$0314` | model3-only | - | `CSINWORD` (routine) |  |
-| `$032A` | model3-only | - | `OUTCHAR` (routine) |  |
-| `$033A` | model3-only | - | `VDCHARCOL` (routine) |  |
-| `$0348` | model3-only | - | `CURCOLUMN` (routine) |  |
-| `$0358` | model3-only | - | `KBSAVEDE` (routine) |  |
-| `$0361` | model3-only | - | `KBINBUF` (routine) |  |
-| `$0384` | model3-only | - | `KBWAITDE` (routine) |  |
-| `$038B` | model3-only | - | `DEVRESETPRT` (routine) |  |
-| `$0394` | model3-only | - | `PRTCR` (routine) |  |
-| `$039C` | model3-only | - | `PRTCHARPOS` (routine) |  |
-| `$03C2` | model3-only | - | `PRDRIVER` (routine) |  |
+| `$02B5` | model1-only | `BASICSYSTEM` (routine) | - |  |
+| `$0314` | shared | `CSINWORD` (routine) | `CSINWORD` (routine) |  |
+| `$032A` | shared | `OUTCHAR` (routine) | `OUTCHAR` (routine) |  |
+| `$033A` | shared | `VDCHARCOL` (routine) | `VDCHARCOL` (routine) |  |
+| `$0348` | shared | `CURCOLUMN` (routine) | `CURCOLUMN` (routine) |  |
+| `$0358` | shared | `KBSAVEDE` (routine) | `KBSAVEDE` (routine) | Model I: Paay (p. 7) lists the same routine at 035BH, just past the DOS link |
+| `$0361` | shared | `KBINBUF` (routine) | `KBINBUF` (routine) |  |
+| `$0384` | shared | `KBWAITDE` (routine) | `KBWAITDE` (routine) |  |
+| `$038B` | shared | `DEVRESETPRT` (routine) | `DEVRESETPRT` (routine) |  |
+| `$0394` | shared | `PRTCR` (routine) | `PRTCR` (routine) |  |
+| `$039C` | shared | `PRTCHARPOS` (routine) | `PRTCHARPOS` (routine) |  |
+| `$03C2` | different | `IODISPATCH` (routine) | `PRDRIVER` (routine) | Model I: the Model III has its printer driver, PRDRIVER, at this address; its I/O driver entry routine is at 0674H (decker 82) |
+| `$03E3` | model1-only | `KBDRIVER` (routine) | - | Model I: the Model III keeps its keyboard driver at 3024H (decker 13) |
 | `$0440` | model3-only | - | `PRTWAIT` (routine) |  |
 | `$044B` | model3-only | - | `PRTTEST` (routine) |  |
+| `$0458` | model1-only | `VDDRIVER` (routine) | - | Model I: the Model III keeps its video driver at 0473H (decker 15) |
 | `$0473` | model3-only | - | `VDDRIVER` (routine) |  |
-| `$05D9` | model3-only | - | `LINEINPUT` (routine) |  |
-| `$093E` | model3-only | - | `MUL10SNG` (routine) |  |
-| `$0A7F` | model3-only | - | `CINT` (routine) |  |
-| `$0A9A` | model3-only | - | `HLTOACC` (routine) |  |
-| `$0AF4` | model3-only | - | `CHKSTRING` (routine) |  |
-| `$0E6C` | model3-only | - | `ASCTONUM` (routine) |  |
-| `$0FAF` | model3-only | - | `OUTHLDEC` (routine) |  |
-| `$19A2` | model3-only | - | `BASICERROR` (routine) |  |
-| `$19AE` | model3-only | - | `READYALT` (routine) |  |
-| `$1A19` | model3-only | - | `$READY` (routine) |  |
-| `$1BB3` | model3-only | - | `INPROMPT` (routine) |  |
-| `$20F9` | model3-only | - | `NEWLINE` (routine) |  |
-| `$20FE` | model3-only | - | `OUTCR` (routine) |  |
-| `$213F` | model3-only | - | `TABTO` (routine) |  |
-| `$2169` | model3-only | - | `DEVRESETCAS` (routine) |  |
-| `$21C9` | model3-only | - | `INPUTSTMT` (routine) |  |
-| `$2337` | model3-only | - | `EVALEXPR` (routine) |  |
-| `$28A7` | model3-only | - | `OUTSTR` (routine) |  |
-| `$2B75` | model3-only | - | `OUTSTRZ` (routine) |  |
-| `$2BF5` | model3-only | - | `BASICCSAVE` (routine) |  |
-| `$2C1F` | model3-only | - | `BASICCLOAD` (routine) |  |
+| `$04C3` | model1-only | `VD64MODE` (routine) | - |  |
+| `$04F6` | model1-only | `VD32MODE` (routine) | - |  |
+| `$057C` | model1-only | `VDCLRTOEND` (routine) | - |  |
+| `$058D` | model1-only | `PRDRIVER` (routine) | - | Model I: the Model III keeps its printer driver at 03C2H (decker 16) |
+| `$05D1` | model1-only | `PRTTEST` (routine) | - | Model I: the Model III keeps this routine at 044BH (decker 16) |
+| `$05D9` | shared | `LINEINPUT` (routine) | `LINEINPUT` (routine) |  |
+| `$06CC` | model1-only | `READYREENTRY` (routine) | - | Model I: on the Model III 06CCH is part of the LIST command and no longer returns to BASIC (decker 54, 82) |
+| `$07B2` | model1-only | `ERR_OV` (routine) | - |  |
+| `$093E` | shared | `MUL10SNG` (routine) | `MUL10SNG` (routine) |  |
+| `$0A7F` | shared | `CINT` (routine) | `CINT` (routine) |  |
+| `$0A9A` | shared | `HLTOACC` (routine) | `HLTOACC` (routine) |  |
+| `$0AF4` | shared | `CHKSTRING` (routine) | `CHKSTRING` (routine) |  |
+| `$0AF6` | model1-only | `ERR_TM` (routine) | - |  |
+| `$0E6C` | shared | `ASCTONUM` (routine) | `ASCTONUM` (routine) |  |
+| `$0FAF` | shared | `OUTHLDEC` (routine) | `OUTHLDEC` (routine) |  |
+| `$1997` | model1-only | `ERR_SN` (routine) | - |  |
+| `$19A2` | shared | `BASICERROR` (routine) | `BASICERROR` (routine) |  |
+| `$19AE` | shared | `READYALT` (routine) | `READYALT` (routine) |  |
+| `$1A19` | shared | `$READY` (routine) | `$READY` (routine) |  |
+| `$1AF8` | model1-only | `FIXLINEPTRS` (routine) | - |  |
+| `$1B2C` | model1-only | `FINDLINE` (routine) | - |  |
+| `$1BB3` | shared | `INPROMPT` (routine) | `INPROMPT` (routine) |  |
+| `$1E4A` | model1-only | `ERR_FC` (routine) | - |  |
+| `$1E5A` | model1-only | `ASCTODE` (routine) | - |  |
+| `$20F9` | shared | `NEWLINE` (routine) | `NEWLINE` (routine) |  |
+| `$20FE` | shared | `OUTCR` (routine) | `OUTCR` (routine) |  |
+| `$213F` | shared | `TABTO` (routine) | `TABTO` (routine) |  |
+| `$2169` | shared | `DEVRESETCAS` (routine) | `DEVRESETCAS` (routine) |  |
+| `$21C9` | shared | `INPUTSTMT` (routine) | `INPUTSTMT` (routine) |  |
+| `$2337` | shared | `EVALEXPR` (routine) | `EVALEXPR` (routine) |  |
+| `$260D` | model1-only | `FINDVAR` (routine) | - |  |
+| `$28A7` | shared | `OUTSTR` (routine) | `OUTSTR` (routine) |  |
+| `$2B05` | model1-only | `ACCTODE` (routine) | - |  |
+| `$2B75` | shared | `OUTSTRZ` (routine) | `OUTSTRZ` (routine) |  |
+| `$2BF5` | shared | `BASICCSAVE` (routine) | `BASICCSAVE` (routine) |  |
+| `$2C1F` | shared | `BASICCLOAD` (routine) | `BASICCLOAD` (routine) |  |
 | `$3000` | model3-only | - | `CSHWR500` (routine) |  |
 | `$3003` | model3-only | - | `CSHWR1500` (routine) |  |
 | `$3006` | model3-only | - | `CSHIN500` (routine) |  |
@@ -104,14 +134,44 @@ Every address in either table. `shared` means both tables give it the same name 
 | `$3033` | model3-only | - | `$DATE` (routine) |  |
 | `$3036` | model3-only | - | `$TIME` (routine) |  |
 | `$3042` | model3-only | - | `$SETCAS` (routine) |  |
-| `$400C` | model3-only | - | `BREAKVEC` (vector) |  |
+| `$4000` | model1-only | `SYNCHKVEC` (vector) | - |  |
+| `$4003` | model1-only | `NEXTCHARVEC` (vector) | - |  |
+| `$4006` | model1-only | `CMPHLDEVEC` (vector) | - |  |
+| `$4009` | model1-only | `TESTNTFVEC` (vector) | - |  |
+| `$400C` | shared | `BREAKVEC` (vector) | `BREAKVEC` (vector) |  |
+| `$400F` | model1-only | `DEBUGVEC` (vector) | - |  |
+| `$4012` | model1-only | `INTVEC` (vector) | - |  |
+| `$4015` | model1-only | `KBDCB` (variable) | - |  |
+| `$4016` | model1-only | `KBDRVADDR` (variable) | - |  |
 | `$4019` | model3-only | - | `CAPSLOCK` (variable) |  |
 | `$401C` | model3-only | - | `CURBLINK` (variable) |  |
-| `$4020` | model3-only | - | `CURADDR` (variable) |  |
+| `$401D` | model1-only | `VDDCB` (variable) | - |  |
+| `$401E` | model1-only | `VDDRVADDR` (variable) | - |  |
+| `$4020` | shared | `CURADDR` (variable) | `CURADDR` (variable) |  |
 | `$4023` | model3-only | - | `CURCHAR` (variable) |  |
-| `$4028` | model3-only | - | `PRTPAGELEN` (variable) |  |
-| `$4029` | model3-only | - | `PRTLINECNT` (variable) |  |
+| `$4025` | model1-only | `PRDCB` (variable) | - |  |
+| `$4026` | model1-only | `PRDRVADDR` (variable) | - |  |
+| `$4028` | shared | `PRTPAGELEN` (variable) | `PRTPAGELEN` (variable) | Model I: start-up sets 67 on both machines; the Model III counts the page length plus one, so a 66-line form wants 66 here (decker 9) |
+| `$4029` | shared | `PRTLINECNT` (variable) | `PRTLINECNT` (variable) | Model I: the Model III holds this count plus one (decker 9) |
 | `$402B` | model3-only | - | `PRTWIDTH` (variable) |  |
+| `$4036` | model1-only | `KBROWS` (variable) | - |  |
+| `$403D` | model1-only | `PORTFFBITS` (variable) | - | Model I: Paay calls this the print size flag, 0 for 64 characters and F8H for 32; Decker gives it as the bits last sent to port FFH (decker 11); the Model III keeps its port ECH bits at 4210H |
+| `$408E` | model1-only | `USRVEC` (variable) | - |  |
+| `$4093` | model1-only | `INPORT` (vector) | - |  |
+| `$4096` | model1-only | `OUTPORT` (vector) | - |  |
+| `$4099` | model1-only | `INKEYBUF` (variable) | - |  |
+| `$409B` | model1-only | `PRTCOLUMN` (variable) | - |  |
+| `$409C` | model1-only | `OUTDEVFLAG` (variable) | - |  |
+| `$40A4` | model1-only | `PROGSTART` (variable) | - |  |
+| `$40A6` | model1-only | `LINEPOS` (variable) | - |  |
+| `$40A7` | model1-only | `IOBUFPTR` (variable) | - |  |
+| `$40AF` | model1-only | `NTF` (variable) | - |  |
+| `$40B1` | model1-only | `MEMTOP` (variable) | - |  |
+| `$40F9` | model1-only | `VARSTART` (variable) | - |  |
+| `$40FB` | model1-only | `ARRAYSTART` (variable) | - |  |
+| `$40FD` | model1-only | `FREESTART` (variable) | - |  |
+| `$411D` | model1-only | `ACC` (variable) | - |  |
+| `$4127` | model1-only | `AACC` (variable) | - |  |
 | `$41E8` | model3-only | - | `RSRXBUF` (variable) |  |
 | `$41F0` | model3-only | - | `RSTXBUF` (variable) |  |
 | `$41F8` | model3-only | - | `RSBAUD` (variable) |  |
