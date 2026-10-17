@@ -18,3 +18,5 @@ pnpm --filter @fugloy/web render-brand        # re-renders og-image.png and the 
 Then look at `og-image.png`: a listing row wider than the panel throws no error, it just runs off the edge.
 The script needs the dev dependencies `opentype.js` and `@fontsource/jetbrains-mono` (the card's font).
 The tagline, wordmark and footer are not regenerated; edit the SVG by hand for those.
+
+The card's text is outlined from JetBrains Mono (copyright The JetBrains Mono Project Authors), used under the SIL Open Font License 1.1: https://github.com/JetBrains/JetBrainsMono
