@@ -2,7 +2,7 @@
 // A yes/no question in a native modal <dialog> (never window.confirm).
 import { nextTick, ref, watch } from 'vue';
 
-const props = defineProps<{ open: boolean; title: string; message: string; confirmLabel: string }>();
+const props = withDefaults(defineProps<{ open: boolean; title: string; message: string; confirmLabel: string; testid?: string }>(), { testid: 'confirm-dialog' });
 const emit = defineEmits<{ confirm: []; cancel: [] }>();
 const dialog = ref<HTMLDialogElement | null>(null);
 const yes = ref<HTMLButtonElement | null>(null);
@@ -22,7 +22,7 @@ watch(
 </script>
 
 <template>
-  <dialog ref="dialog" class="fg-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message" data-testid="confirm-dialog" @close="open && emit('cancel')">
+  <dialog ref="dialog" class="fg-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message" :data-testid="testid" @close="open && emit('cancel')">
     <div class="flex flex-col gap-3">
       <h2 id="confirm-title" class="fg-strong text-sm font-bold">{{ title }}</h2>
       <p id="confirm-message" class="fg-muted text-xs">{{ message }}</p>

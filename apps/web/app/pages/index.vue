@@ -11,11 +11,13 @@ import RowMenu from '~/components/listing/RowMenu.vue';
 import HintsTab from '~/components/HintsTab.vue';
 import FirstScreen from '~/components/FirstScreen.vue';
 import ConfirmDialog from '~/components/ConfirmDialog.vue';
+import CarryOverDialog from '~/components/CarryOverDialog.vue';
 import OpenProblem from '~/components/OpenProblem.vue';
 import StatusLine from '~/components/StatusLine.vue';
 import IndexTab from '~/components/side/IndexTab.vue';
 import ProgramTab from '~/components/side/ProgramTab.vue';
 import SymbolTab from '~/components/side/SymbolTab.vue';
+import { asHintText } from '~/utils/hint-drop';
 import { resolveGoTo } from '~/utils/goto';
 import { followOf, stepCursor } from '~/utils/edit-targets';
 import { cursorRowIndex, rowLookup } from '~/utils/row-lookup';
@@ -44,6 +46,7 @@ const RIGHT_TABS: PageTab<RightTab>[] = [
 ];
 const leftTab = ref<LeftTab>('listing');
 const rightTab = ref<RightTab>('program');
+const persistence = usePersistence();
 const nav = useNavigation(scrollTo);
 const listing = ref<InstanceType<typeof ListingView> | null>(null);
 
@@ -108,10 +111,28 @@ async function receive(file: File): Promise<void> {
   } finally {
     reading.value = false;
   }
+  // A hint file is told by its content: it goes to the open program.
+  const hints = asHintText(bytes);
+  if (hints !== null) {
+    if (session.value === null) wb.report(`${file.name} is a hint file. Open the program it belongs to first, then drop it again.`);
+    else dropHints(hints, file.name);
+    return;
+  }
   // Opening a program replaces the open one, so ask. Anything else fails
   // without replacing it (a PDF also points at the Manuals page).
   if (wb.wouldReplace(bytes)) pendingReplace.value = { bytes, name: file.name };
   else wb.openBytes(bytes, file.name);
+}
+
+function dropHints(text: string, name: string): void {
+  const refused = useEditing().loadHints(text, name);
+  if (refused === null) {
+    editMessage.value = null;
+    leftTab.value = 'hints';
+  } else {
+    leftTab.value = 'listing';
+    editMessage.value = refused;
+  }
 }
 
 function confirmReplace(): void {
@@ -414,6 +435,7 @@ onBeforeUnmount(() => {
       @submit="editor.submitInline"
       @cancel="editor.closeInline"
     />
+    <CarryOverDialog :candidate="persistence.carry.value" :program="session?.name ?? ''" @accept="persistence.acceptCarry()" @dismiss="persistence.dismissCarry()" />
     <ConfirmDialog
       :open="pendingReplace !== null"
       title="Replace the open program?"

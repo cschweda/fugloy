@@ -444,3 +444,18 @@ html.dark body {
 }
 .fg-hints-text:focus-visible { outline: 2px solid var(--fg-accent); outline-offset: 1px; }
 .fg-hints-warnings { margin: 6px 0 0; padding-left: 18px; list-style: disc; color: var(--fg-text); }
+
+/* Your work: Back up and Restore in the top bar */
+.fg-menu { position: relative; }
+.fg-menu > summary { cursor: pointer; list-style: none; }
+.fg-menu > summary::-webkit-details-marker { display: none; }
+.fg-menu-panel {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; width: 260px;
+  display: flex; flex-direction: column; gap: 8px; padding: 10px;
+  background: var(--fg-bg); border: 1px solid var(--fg-border); border-radius: 6px;
+}
+.fg-backup-note {
+  position: fixed; right: 12px; bottom: 36px; z-index: 40; max-width: 360px; padding: 8px 12px;
+  background: var(--fg-bg); border: 1px solid var(--fg-border); border-radius: 6px;
+}
+.fg-status-save { font-weight: 600; }

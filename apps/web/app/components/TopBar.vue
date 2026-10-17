@@ -11,6 +11,7 @@
       <NuxtLink to="/technical-details" class="fg-link">Technical details</NuxtLink>
       <NuxtLink to="/manuals" class="fg-link">Manuals</NuxtLink>
       <NuxtLink to="/about" class="fg-link">About</NuxtLink>
+      <BackupMenu />
     </nav>
   </header>
 </template>

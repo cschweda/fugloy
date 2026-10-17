@@ -12,11 +12,16 @@ const hasFiles = (e: DragEvent): boolean => e.dataTransfer?.types.includes('File
 function stopFileDrop(e: DragEvent): void {
   if (hasFiles(e)) e.preventDefault();
 }
+const persistence = usePersistence();
+const flushNow = (): void => void persistence.flush();
 onMounted(() => {
+  void persistence.start();
+  window.addEventListener('pagehide', flushNow);
   document.addEventListener('dragover', stopFileDrop);
   document.addEventListener('drop', stopFileDrop);
 });
 onBeforeUnmount(() => {
+  window.removeEventListener('pagehide', flushNow);
   document.removeEventListener('dragover', stopFileDrop);
   document.removeEventListener('drop', stopFileDrop);
 });

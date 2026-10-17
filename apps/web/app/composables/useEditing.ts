@@ -3,7 +3,7 @@
 // the previous file exactly and can never disagree with it. DOM-free.
 import { computed, shallowRef, watch } from 'vue';
 import type { ComputedRef } from 'vue';
-import { OpenError, withHintFile, writeHints } from '@fugloy/disasm';
+import { applyHints, OpenError, parseHints, withHintFile, writeHints } from '@fugloy/disasm';
 import type { HintFile, Session } from '@fugloy/disasm';
 import { applyEdit, applyHintLines } from '../utils/edits';
 import type { Edit, EditResult } from '../utils/edits';
@@ -15,15 +15,17 @@ export interface Editing {
   apply(e: Edit): string | null;
   /** Adds a proposal's hint lines, as one undoable edit. */
   applyLines(lines: readonly string[]): string | null;
+  /** Replaces the hint file with a dropped one, as one undoable edit; returns why it was refused, or null. */
+  loadHints(text: string, source: string): string | null;
   undo(): void;
   redo(): void;
   canUndo: ComputedRef<boolean>;
   canRedo: ComputedRef<boolean>;
 }
 
-function analyzed(s: Session, file: HintFile): Session | string {
+function analyzed(s: Session, file: HintFile, source: string | undefined = s.hintSource): Session | string {
   try {
-    return withHintFile(s, file, s.hintSource);
+    return withHintFile(s, file, source);
   } catch (err) {
     if (err instanceof OpenError) return [err.message, ...err.details].join(': ');
     return err instanceof Error ? err.message : String(err);
@@ -45,8 +47,8 @@ export function createEditing(wb: Workbench): Editing {
   );
 
   /** Moves the session to `file`; the cursor stays on its address, since it is one. */
-  function show(s: Session, file: HintFile): string | null {
-    const next = analyzed(s, file);
+  function show(s: Session, file: HintFile, source?: string): string | null {
+    const next = analyzed(s, file, source);
     if (typeof next === 'string') return next;
     wb.session.value = next;
     return null;
@@ -65,6 +67,20 @@ export function createEditing(wb: Workbench): Editing {
     return null;
   }
 
+  function loadHints(text: string, source: string): string | null {
+    const s = wb.session.value;
+    if (s === null) return 'no program is open';
+    const parsed = parseHints(text);
+    if (parsed.errors.length > 0) return `${source} does not parse: ${parsed.errors.map((e) => `line ${e.line}: ${e.message}`).join('; ')}`;
+    // The library pairs blocks by length and hash, so one file serves several builds; only a file with no matching block is refused.
+    if (applyHints(parsed.file, s.module.image, s.hash, s.normalize).matched.length === 0) return 'these hints are for another program (no block matched)';
+    const error = show(s, parsed.file, source);
+    if (error !== null) return error;
+    past.value = [...past.value, s.hintFile];
+    future.value = [];
+    return null;
+  }
+
   function step(from: typeof past, to: typeof past): void {
     const s = wb.session.value;
     const file = from.value.at(-1);
@@ -77,6 +93,7 @@ export function createEditing(wb: Workbench): Editing {
   return {
     apply: (e) => (wb.session.value === null ? 'no program is open' : commit(applyEdit(wb.session.value, e))),
     applyLines: (lines) => (wb.session.value === null ? 'no program is open' : commit(applyHintLines(wb.session.value, lines))),
+    loadHints,
     undo: () => step(past, future),
     redo: () => step(future, past),
     canUndo: computed(() => past.value.length > 0),
