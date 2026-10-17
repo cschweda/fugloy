@@ -34,17 +34,33 @@ tutor, not a reference card.
    memory as row and column, ports by name and what they control.
 6. A quieter details strip: size in bytes, T-states (both when
    conditional), the flags it changes, and "undocumented" when it is.
+7. **Block comments** (added at the user's request the same day): a few
+   lines of the user's own prose above a routine or any line, such as
+   "; Draws the sub at row B, column C". They are kept in the hint file
+   and shown in the listing, the zmac source and the IR.
+8. **Routine summary** (added the same day): Explain also says what the
+   routine around the line does, from facts the analysis proves: what it
+   writes on the screen, which ports and ROM routines it uses, what data
+   it reads and writes, its loops, and who calls it. A **Use as comment**
+   button puts that summary into the routine's block comment, for the
+   user to rewrite in their own words ("draw the sprite"). The tutor
+   supplies facts; the user supplies meaning.
 
 ## Non-goals
 
 - **BASIC lines.** A `.BAS` listing shows a short "Explain covers machine
   code; BASIC comes later" note. The user deferred BASIC to a later phase.
 - Running code. This is static: no emulator, nothing executed.
-- Explaining a whole routine or the whole program in prose. The scope is
-  one line, plus the few lines that set it up.
-- Game meaning. Fugløy cannot know that $5200 is the "player's score".
-  Only names the user or the tables gave, and facts the analysis proves,
-  appear.
+- Explaining the whole program in prose. The scope is one line, the few
+  lines that set it up, and the facts of the routine around it.
+- Game meaning. Fugløy cannot know that $5200 is the "player's score" or
+  that a routine draws a sprite. Only names the user or the tables gave,
+  and facts the analysis proves, appear. The user adds meaning through
+  names and comments.
+- **AI-written summaries.** Having a language model guess what a routine
+  does would send the program to an online service. That breaks "your
+  files stay in your browser", and the user does not want to handle
+  copyrighted programs that way. Discussed and left out.
 
 ## Anti-goals
 
@@ -156,6 +172,68 @@ More patterns can be added later as one entry each.
 - **RST.** `RST 08H` and the rest read through their table entries; RST 08H
   also mentions its inline byte.
 
+## Block comments
+
+- **Hint format.** A new directive, `note <text>`, keyed like `comment`
+  (`block <index>:<offset> note <text>`). There may be several at one
+  address. They keep their order in the file, one line of prose each. An
+  empty `note` is a blank comment line, which separates paragraphs.
+  `writeHints` keeps them in input order within an address (it already
+  sorts stably). `at` lines do not take `note`: block comments describe
+  code, and code is loaded. The project plan's hint-file section is
+  updated in the same change. Existing hint files are unaffected, because
+  the format takes new directives without a version bump.
+- **Listing.** Each note line prints as `; text` on its own row above the
+  address's label (or above the line, when it has none), with a blank row
+  before the first. The listing goldens change only for files with notes,
+  so the existing 112 do not change.
+- **zmac source.** The same `; text` lines above the label. The round trip
+  still assembles byte-identically, since comments assemble to nothing.
+- **IR.** An address's notes appear as `notes: string[]` beside its name
+  and comment.
+- **Workbench.** The right-click menu gets **Block comment…**, and so
+  does a key (`Shift+;`, which is `:` on a US keyboard; the builder may
+  pick another free key and must list it in the key help). It opens a
+  multi-line box at the cursor, prefilled with the address's current notes.
+  Saving replaces all the notes at that address, as one undoable edit.
+  Emptying the box removes them. The cursor's address is where the notes
+  go. When the cursor is inside a routine, the box offers "above the
+  routine (L4A21)" and "above this line" as a choice; the default is the
+  routine.
+
+## Routine summary
+
+- **What a routine is.** The code reached from a routine's start by
+  following jumps and branches but not calls, stopping at returns. Its
+  start is the nearest address at or before the line that is called (or
+  RST'd), or is an entry point, and from which the line is reachable that
+  way. If no such start reaches the line, there is no routine summary,
+  only the line explanation. Cap: 2,000 instructions. Past that, the
+  summary says it stopped.
+- **Facts it reports**, each only when proven, as plain sentences:
+  - length (instructions and bytes);
+  - who calls it and jumps to it (links);
+  - how it ends (returns, jumps on to another routine, or loops forever);
+  - screen writes: rows and columns when the addresses are known
+    (direct stores, stores through a known HL, block copies and fills
+    into $3C00–$3FFF), otherwise "writes to the screen" when a store's
+    address is a known screen address but not the exact cell;
+  - keyboard reads ($3800–$38FF, by row of the key matrix where the table
+    names it);
+  - ports read and written, with their names;
+  - ROM routines it calls, with their purposes;
+  - program routines it calls (names, links);
+  - data labels it reads and writes (names, links);
+  - loops (count when known).
+- **Use as comment** writes the summary as note lines at the routine's
+  start, through the same edit path as the Block comment box. It opens the
+  box prefilled, so the user can change it before saving. It never saves
+  silently.
+- The summary is computed when Explain shows a line in a routine whose
+  summary is not cached. It is cached per session and routine start, and
+  must stay within the listing's current bar for a cursor step (the cache
+  makes stepping inside one routine free).
+
 ## Where it lives
 
 - **Engine:** `packages/disasm/src/explain/`, so it can run in the
@@ -180,6 +258,19 @@ More patterns can be added later as one entry each.
   placed first (Explain, Symbol, Index, Program, Manual, Run).
 
 ## Tests and done-criteria
+
+- Hint format: `note` parses, writes back in order, round-trips. Several
+  notes at one address keep their order. An empty note is a blank line.
+  `at … note` is refused with a clear error.
+- Listing and zmac: notes print above the label. The 112 existing goldens
+  are unchanged. Sea Dragon with a note still round-trips byte-identically
+  through zmac.
+- Routine summary: golden summaries for three Sea Dragon routines. One
+  writes the screen with known rows and columns, one calls ROM routines,
+  and one loops with a known count. A routine reached from two starts
+  reports from the nearest start that reaches the line.
+- Browser: Block comment from the menu and from the key, then Undo.
+  Use as comment prefills the box and saves only on Save.
 
 - An exhaustion test: every documented and undocumented opcode form
   explains without throwing and yields a non-empty sentence.
@@ -232,6 +323,13 @@ Check these while reading:
    falling through.
 10. "Moves the program" also comes from an applied `relocate` hint.
 11. `@fugloy/z80` gains generated opcode-family and flag fields.
+12. Block comments are a new `note` directive, several per address, with
+    no `at` form.
+13. The Block comment key is `Shift+;` (`:`), and the box defaults to
+    "above the routine".
+14. What counts as a routine, its 2,000-instruction cap, and the list of
+    facts the summary reports.
+15. Use as comment opens the box prefilled and never saves on its own.
 
 ## Left to the builder
 
