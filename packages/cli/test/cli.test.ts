@@ -7,6 +7,8 @@ import { run } from '../src/index.js';
 import type { Io } from '../src/index.js';
 import { loadBas, loadRaw } from '@fugloy/disasm';
 import { assemble, expectSameImage, skipIfNoZmac } from '../../disasm/test/roundtrip/zmac.js';
+import { writeBasic } from '../../disasm/test/writers/basic-tokenizer.js';
+import type { BasicLineSpec } from '../../disasm/test/writers/basic-tokenizer.js';
 
 const fixtures = fileURLToPath(new URL('../../../fixtures/synthetic/', import.meta.url));
 
@@ -503,7 +505,7 @@ describe('--machine and --dos', () => {
     expect(err.join('')).toBe('fugloy: --machine must be 1, 3, or 4\n');
   });
 
-  it('names nothing in the --sweep listing or the plain BASIC listing', async () => {
+  it('names nothing in the --sweep listing, and puts no tables header in a plain BASIC listing', async () => {
     const sweep = await list('--sweep');
     expect(sweep.code).toBe(0);
     expect(sweep.text).not.toContain('; symbols:');
@@ -512,6 +514,72 @@ describe('--machine and --dos', () => {
     const bas = capture();
     expect(await run([`${fixtures}bas/prog-62c8.bas`], bas.io)).toBe(0);
     expect(bas.out.join('')).not.toContain('; symbols:');
+  });
+
+  /** Runs the CLI on a tokenized BASIC program, saved from $42E9 as Level II does, with these flags. */
+  async function listBasic(lines: BasicLineSpec[], ...flags: string[]): Promise<{ code: number; text: string; lines: string[] }> {
+    const path = join(dir, 'prog.bas');
+    await writeFile(path, writeBasic(lines, 0x42e9));
+    const { io, out } = capture();
+    const code = await run([path, ...flags], io);
+    const text = out.join('');
+    return { code, text, lines: text.split('\n') };
+  }
+  const noteLines = (lines: string[]): string[] => lines.filter((l) => /^; {3}\d/.test(l));
+  const VIDEO_NOTE = /^; {3}15360 = \$3C00 .+ \(VIDEO\)$/;
+  const KEYBOARD_NOTE = /^; {3}14400 = \$3840 .+ \(KEYBOARD\+64\)$/;
+
+  it('notes the PEEK and POKE addresses a plain BASIC listing uses from the selected tables, under the line that uses them', async () => {
+    const program: BasicLineSpec[] = [{ number: 10, text: 'POKE 15360,65' }, { number: 20, text: 'X=PEEK(14400)' }, { number: 30, text: 'PRINT 15360' }];
+    for (const flags of [[], ['--machine', '3'], ['--machine', '1'], ['--dos', 'none']]) {
+      const { code, lines } = await listBasic(program, ...flags);
+      expect(code, flags.join(' ')).toBe(0);
+      const at = lines.indexOf('10 POKE 15360,65');
+      expect(lines[at + 1], flags.join(' ')).toMatch(VIDEO_NOTE);
+      expect(lines[at + 2], flags.join(' ')).toBe('20 X=PEEK(14400)');
+      expect(lines[at + 3], flags.join(' ')).toMatch(KEYBOARD_NOTE);
+      expect(lines[at + 4], flags.join(' ')).toBe('30 PRINT 15360');
+      expect(lines.some((l) => l.startsWith('; symbols:')), flags.join(' ')).toBe(false);
+    }
+  });
+
+  it('notes nothing in a BASIC listing under --machine 4, which names service calls only, nor with --sweep', async () => {
+    const program: BasicLineSpec[] = [{ number: 10, text: 'POKE 15360,65' }, { number: 20, text: 'X=PEEK(14400)' }];
+    expect(noteLines((await listBasic(program, '--machine', '4')).lines)).toEqual([]);
+    expect(noteLines((await listBasic(program, '--sweep')).lines)).toEqual([]);
+  });
+
+  it('puts the same notes in the pass 1 listing of a BASIC program with hidden code', async () => {
+    const program: BasicLineSpec[] = [
+      { number: 10, text: 'POKE 15360,65' },
+      { number: 20, raw: [0xc3, 0x00, 0x00, 0xc9, 0x00, 0x3e] },
+      { number: 30, text: 'X=PEEK(14400)' },
+    ];
+    const { code, lines } = await listBasic(program);
+    expect(code).toBe(0);
+    expect(lines).toContain('; symbols: Model III ROM, hardware, TRSDOS 1.3');
+    const at = lines.indexOf('10 POKE 15360,65');
+    expect(lines[at + 1]).toMatch(VIDEO_NOTE);
+    expect(lines[at + 2]).toMatch(/^; line 20: machine code/);
+    const later = lines.indexOf('30 X=PEEK(14400)');
+    expect(lines[later + 1]).toMatch(KEYBOARD_NOTE);
+    expect(noteLines(lines)).toHaveLength(2);
+  });
+
+  it('colors a note line whole, as a comment, without changing a character of the listing', async () => {
+    const path = join(dir, 'colored.bas');
+    await writeFile(path, writeBasic([{ number: 10, text: 'POKE 15360,65' }], 0x42e9));
+    const plain = capture();
+    expect(await run([path], plain.io)).toBe(0);
+    const { io, out } = capture();
+    io.stdoutIsTerminal = true;
+    io.env = {};
+    expect(await run([path, '--color'], io)).toBe(0);
+    const colored = out.join('');
+    // eslint-disable-next-line no-control-regex
+    expect(colored.replace(/\x1b\[[0-9;]*m/g, '')).toBe(plain.out.join(''));
+    const note = noteLines(plain.out.join('').split('\n'))[0]!;
+    expect(colored).toContain(`\x1b[90m${note}\x1b[0m`);
   });
 
   it('names the same addresses in --format zmac and defines each name with an EQU', async () => {

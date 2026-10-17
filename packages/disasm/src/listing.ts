@@ -11,11 +11,13 @@ import { codeLineLabel } from './basic/structure.js';
 import { dbItems } from './emit/strings.js';
 import { filePieces } from './analysis/relocate.js';
 import { rowStarts } from './analysis/words.js';
+import { basReferences } from './basic/addresses.js';
 import type { CmdModule } from './cmd.js';
 import type { MemoryImage } from './memory.js';
 import type { RawModule } from './raw.js';
 import type { Analysis } from './pipeline.js';
 import { describeSelection } from './symbols/select.js';
+import type { SymbolSet } from './symbols/select.js';
 import type { TableEntry } from './symbols/types.js';
 import { linearSweep } from './sweep.js';
 import type { ListingLine, Section } from './sweep.js';
@@ -23,6 +25,12 @@ import type { ListingLine, Section } from './sweep.js';
 export interface RenderOptions {
   /** File name for the header line. */
   source?: string;
+  /**
+   * The tables whose names `renderBasListing` gives the constant addresses of a BASIC
+   * line's PEEK, POKE, and DEFUSR; without them nothing is named. A pass 1 listing
+   * names from the tables its analysis was run with, not from this.
+   */
+  tables?: SymbolSet;
 }
 
 const $ = (n: number): string => `$${hex4(n)}`;
@@ -137,6 +145,35 @@ function legendWhere(e: TableEntry): string {
 /** `; table name $KBWAIT = $0049: wait for a key (m3-basic 12/12)` */
 function legendLine(e: TableEntry): string {
   return `; table name ${e.name} = ${legendWhere(e)}: ${e.purpose} (${e.cite.map((c) => `${c.source} ${c.page}`).join(', ')})`;
+}
+
+/** What the notes under a BASIC line ask of the tables: the name covering an address as data, with the offset into it, and the name at an address as code. */
+interface BasNames {
+  data(addr: number): { entry: TableEntry; offset: number } | undefined;
+  code(addr: number): TableEntry | undefined;
+}
+
+/**
+ * The note lines under a BASIC line (design spec §5.4): one for each distinct
+ * constant address its PEEKs, POKEs, and DEFUSRs use that the tables name, in
+ * the order the line reads them, as `;   16526 = $408E USR vector (USRVEC)`: the
+ * address in decimal and in hex, the purpose, and the name. A note line and not
+ * a trailing comment, because `;` is BASIC's PRINT separator and would read as
+ * program text. A PEEK or POKE takes a data name and else a code name, a DEFUSR
+ * the reverse; inside a span the name carries the decimal offset, `USRVEC+1`.
+ */
+function basNotes(line: BasLine, names: BasNames): string[] {
+  const notes: string[] = [];
+  for (const { addr, use } of basReferences(line)) {
+    const asData = names.data(addr);
+    const routine = names.code(addr);
+    const asCode = routine === undefined ? undefined : { entry: routine, offset: 0 };
+    const found = use === 'data' ? (asData ?? asCode) : (asCode ?? asData);
+    if (found === undefined) continue;
+    const { entry, offset } = found;
+    notes.push(`;   ${addr} = ${$(addr)} ${entry.purpose} (${offset === 0 ? entry.name : `${entry.name}+${offset}`})`);
+  }
+  return notes;
 }
 
 export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {}): string {
@@ -266,11 +303,20 @@ export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {})
     }
   };
   if (mod.format === 'bas') {
-    // A BASIC line reads as its text; a code line as rows at its true addresses. Symbols the rows do not show are named.
+    // A BASIC line reads as its text, with the notes a plain listing gives it; a code line as rows at its true addresses. Symbols the rows do not show are named.
+    // A note is no operand, so a table name the program took for a symbol of its own (`dropped`) still counts.
+    const free = externals.ignoringCollisions();
+    const names: BasNames = {
+      data: (addr) => {
+        const found = free.data(addr);
+        return found === undefined ? undefined : { entry: found.entry, offset: addr - found.entry.key };
+      },
+      code: (addr) => free.code(addr)?.entry,
+    };
     out.push('');
     for (const line of mod.lines) {
       const shown = listsAsCode(line) ? { from: line.bodyAddr, to: lastBodyByte(line) } : null;
-      if (shown === null) out.push(line.text === '' ? `${line.number}` : `${line.number} ${line.text}`);
+      if (shown === null) out.push(line.text === '' ? `${line.number}` : `${line.number} ${line.text}`, ...basNotes(line, names));
       else {
         out.push(`; ${codeLineLabel(line)}`);
         rows(shown.from, shown.to);
@@ -298,14 +344,29 @@ export function renderPass1Listing(analysis: Analysis, opts: RenderOptions = {})
   return `${out.join('\n')}\n`;
 }
 
+/**
+ * A tokenized BASIC program as text, one detokenized line per program line. With
+ * `opts.tables`, the line after one whose PEEK, POKE, or DEFUSR uses a constant
+ * address the tables name is a note line (`basNotes`). The tables apply only
+ * outside the program's own image, as everywhere else in the listings.
+ */
 export function renderBasListing(prog: BasProgram, opts: RenderOptions = {}): string {
   const unparsed = prog.lines.filter((l) => !l.parsed).length;
   const out = [
     `; ${prefix(opts)}tokenized BASIC, ${plural(prog.lines.length, 'line')}, saved from ${$(prog.base)} to ${$(prog.end)}, ${prog.header ? 'FF header' : 'no FF header'}, ${unparsed} unparsed`,
   ];
   for (const w of prog.warnings) out.push(`; warning: ${w}`);
+  const { tables } = opts;
+  const names: BasNames | undefined =
+    tables === undefined
+      ? undefined
+      : {
+          data: (addr) => (prog.image.isLoaded(addr) ? undefined : tables.data(addr)),
+          code: (addr) => (prog.image.isLoaded(addr) ? undefined : tables.code(addr)),
+        };
   for (const line of prog.lines) {
     out.push(line.parsed ? `${line.number} ${line.text}` : `${line.number} [unparsed: ${plural(line.body.length, 'byte')} at ${$(line.bodyAddr)}: ${line.reason}]`);
+    if (names !== undefined) out.push(...basNotes(line, names));
   }
   return `${out.join('\n')}\n`;
 }
