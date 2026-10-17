@@ -160,14 +160,15 @@ Releases are tagged `vX.Y.Z` on `main`.
   archive.org url), and `permissionUrl` (required wherever a source is marked
   redistributable), replacing the free-text `locator`.
 - Browser tests in CI: a `web` job in `ci.yml` installs Chromium and runs the
-  web type check, the generate, the unit tests, the SEO checks on the
-  generated pages, and the Playwright specs (49 pass, 4 skip without the
-  gitignored samples and PDFs). `done-criterion.spec.ts` tells the workbench
+  web type check, the unit tests, the SEO checks on the generated pages,
+  and the Playwright specs; the specs that need gitignored samples or PDFs
+  skip there. `done-criterion.spec.ts` tells the workbench
   story on Sea Dragon in one test: open it, go to `4B9E`, rename it `INIT`,
   comment it, undo both and redo them, reload and find both saved, export the
   hint file and zmac source and match the zmac byte for byte against
   `@fugloy/cli`'s `run` for the downloaded hints, export a `.CMD` that reloads
-  through `loadCmd` to seadrg01's image and entry, and drop a JPEG. The
+  through `loadCmd` to seadrg01's image and entry, undo and redo a new edit in
+  the reloaded page, and drop a JPEG. The
   listing performance spec's timing limits apply only with `FUGLOY_PERF=1`.
 - Phase 4's checks, recorded 2026-10-17:
   - The v1 done-criterion, met locally: `asylum.spec.ts` opens asylum16 in
@@ -186,7 +187,7 @@ Releases are tagged `vX.Y.Z` on `main`.
     stands in for a run by hand in trs80gp or trsjs. The tape is loaded by
     the fast path, not by playing its pulses through `CLOAD`/`SYSTEM`. It
     skips without the ROM.
-  - Listing performance in Chromium on an Apple M4 Max, with
+  - Listing performance in Chromium on an Apple M4, with
     `FUGLOY_PERF=1`: a raw 48K load of seadrg01 (18,562 rows) flings to the
     bottom and back with frames at p50 16.7 ms and p95 16.8 ms and no long
     task; 101 scrollbar jumps a frame apart, p95 16.7 ms; `scrollToAddr`
@@ -201,8 +202,12 @@ Releases are tagged `vX.Y.Z` on `main`.
   over rows).
 - MEMTOP's purpose in `rom-model3` no longer says it falls back to the top of
   RAM; it is the Memory Size? answer.
-- The workbench's G box reads bare hex with a letter in it (`4B9E`) as an
-  address when no label has that name; an all-digit entry stays decimal.
+- The workbench's G box (UI input only; the hint file keeps its number
+  rules): an explicit `$4B9E`, `0x4B9E`, or `4B9EH` is an address; otherwise
+  a label name, ignoring case, so a label spelled like hex (`CAFE`) wins;
+  otherwise bare hex of one to four digits (`4000` is `$4000`, `B` is
+  `$000B`); decimal needs a `#` (`#19358`). Anything past `$FFFF` is refused,
+  and an unknown token says what to type.
 - In the workbench, Eliminator opens as Model I: `elimin8d` calls `$01D3`,
   which only the Model I ROM has, though its README says it runs on both.
 

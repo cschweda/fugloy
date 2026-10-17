@@ -37,7 +37,7 @@ jobs:
         run: pnpm fixtures && pnpm symbols && git diff --exit-code -- fixtures/synthetic packages/disasm/src/symbols/tables.generated.ts packages/disasm/data/symbols/COMPARISON.md
 
   web:
-    name: web workbench (typecheck, generate, unit, SEO, browser)
+    name: web workbench (typecheck, unit, SEO, browser)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,8 +51,8 @@ jobs:
       - run: pnpm build
       - run: pnpm --filter @fugloy/web exec playwright install --with-deps chromium
       - run: pnpm --filter @fugloy/web typecheck
-      - run: pnpm --filter @fugloy/web generate
       - run: pnpm --filter @fugloy/web test
+      # test:seo generates the site first, and the Playwright web server generates it again before serving it.
       - run: pnpm --filter @fugloy/web test:seo
       # Timing limits in listing-perf.spec.ts apply only with FUGLOY_PERF=1, so a slow runner cannot fail the build.
       - run: pnpm --filter @fugloy/web test:e2e

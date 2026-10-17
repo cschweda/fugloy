@@ -5,13 +5,13 @@
 // used when it is present; the raw 48K load needs nothing outside the repo.
 // The timing limits apply only with FUGLOY_PERF=1; CI runs the rest.
 import { existsSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { repo, resolveSample } from './samples';
 
-const repo = (path: string): string => fileURLToPath(new URL(`../../../../${path}`, import.meta.url));
-const ASYLUM = repo('fixtures/real/Asylum (1981)(Frank Corr & William F Denman Jr-Med Systems Software)[CMD]/asylum16.cmd');
-const ASYLUM_HINTS = repo('fixtures/hints/asylum16.hints');
+const ASYLUM = resolveSample('asylum16.cmd');
+const ASYLUM_HINTS = join(repo, 'fixtures/hints/asylum16.hints');
 /** FUGLOY_PERF=1 enforces the timing limits; without it the numbers are printed and only correctness is checked. */
 const PERF = process.env.FUGLOY_PERF === '1';
 
@@ -45,9 +45,9 @@ const CASES: Case[] = [
   { name: 'raw 48K load of seadrg01', jumps: spread(0x4000, 0xffff, 12), available: true },
   {
     name: 'asylum16 with its hints',
-    input: () => ({ bytes: Array.from(readFileSync(ASYLUM)), name: 'asylum16.cmd', hints: readFileSync(ASYLUM_HINTS, 'utf8') }),
+    input: () => ({ bytes: Array.from(readFileSync(ASYLUM!)), name: 'asylum16.cmd', hints: readFileSync(ASYLUM_HINTS, 'utf8') }),
     jumps: spread(0x42f3, 0x7ff6, 12),
-    available: existsSync(ASYLUM) && existsSync(ASYLUM_HINTS),
+    available: ASYLUM !== null && existsSync(ASYLUM_HINTS),
   },
 ];
 

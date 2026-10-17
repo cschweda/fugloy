@@ -213,7 +213,7 @@ A static Nuxt 4 site running the core library in the browser. Files never leave 
 | **T** | declare a jump table from the selection |
 | **N** | rename the label under the cursor |
 | **;** | comment the cursor row |
-| **G** | go to an address (`$4B9E`, `4B9EH`, `0x4B9E`, bare `4B9E`; all digits read as decimal) or a label |
+| **G** | go to an address or a label: `$4B9E`, `0x4B9E`, or `4B9EH` is an address; otherwise a label name, ignoring case (so a label `CAFE` wins); otherwise bare hex of one to four digits (`4000` is `$4000`); decimal needs a `#` (`#19358`); past `$FFFF` is refused. UI input only: the hint file keeps its own number rules |
 | **Enter** | follow the operand's target |
 | **Alt+←** / **Alt+→** | back / forward through targets followed |
 | **⌘Z** / **Ctrl+Z**, **⇧⌘Z** / **Ctrl+Y** | undo / redo |

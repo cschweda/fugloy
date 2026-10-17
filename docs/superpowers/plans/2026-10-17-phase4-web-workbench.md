@@ -591,6 +591,7 @@
   8. Export `.CMD`: reloading it through `loadCmd` gives seadrg01's image.
   9. Drop a JPEG: the not-a-program message appears.
   10. ⌘Z twice: both edits undone.
+  (As built, Task 18: step 10 runs before the reload, then ⇧⌘Z twice restores the edits, because undo history is per page session and a reload starts a new one; the saved hint file survives it. After the exports, the spec checks ⌘Z and ⇧⌘Z again in the reloaded page's own history. The story lives in `done-criterion.spec.ts`, beside the existing `workbench.spec.ts`.)
 - `asylum.spec.ts`: skipped unless `sample/` holds asylum16.cmd (reuse `resolveSample` logic). Opens it with `fixtures/hints/asylum16.hints` under Model I, checks that named ROM calls are shown, renames one label, reloads, and sees it kept.
 
 - [ ] **Step 1: Write both specs.** Run `pnpm --filter @fugloy/web e2e`. Expected: workbench passes, and asylum passes locally (or skips in a clean worktree).

@@ -2,8 +2,10 @@
 // Sea Dragon, rename and comment from the keyboard, reload and find the work
 // saved, export it and check the exports against the CLI and the loader, drop
 // a file that is not a program, and undo. The steps follow the phase 4 plan's
-// Task 18, except that undo runs before the reload: the edit history lives in
-// the page, so a reload starts a new one (the saved hint file survives it).
+// Task 18, except that step 10 (undo both edits) runs before the reload: the
+// edit history is per page session, so a reload starts a new one (the saved
+// hint file survives it). After the exports, undo is checked again in the
+// reloaded page's own history.
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -140,6 +142,27 @@ test('the v1 workbench story: open, edit, save, reload, export, drop, undo', asy
   expect(exported.entry).toBe(original.entry);
   expect(Buffer.from(exported.image.loaded).equals(Buffer.from(original.image.loaded))).toBe(true);
   expect(Buffer.from(exported.image.bytes).equals(Buffer.from(original.image.bytes))).toBe(true);
+
+  // Undo after the exports. The reloaded page has a history of its own, and exports are not edits:
+  // ⌘Z leaves the saved work as it is. A new edit then undoes and redoes as one step.
+  await page.locator('.fg-listing').focus();
+  await page.keyboard.press('ControlOrMeta+z');
+  expect(await hintText(page)).toBe(edited);
+  await page.keyboard.press('g');
+  await page.keyboard.type('499A');
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('status-line')).toContainText('cursor $499A');
+  await page.keyboard.press(';');
+  await page.getByTestId('inline-edit-input').fill('calls INIT');
+  await page.keyboard.press('Enter');
+  await expect(await row(page, 0x499a)).toContainText('; calls INIT');
+  await page.locator('.fg-listing').focus();
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(await row(page, 0x499a)).not.toContainText('calls INIT');
+  expect(await hintText(page)).toBe(edited);
+  await page.locator('.fg-listing').focus();
+  await page.keyboard.press('ControlOrMeta+Shift+z');
+  await expect(await row(page, 0x499a)).toContainText('; calls INIT');
 
   // 9. A JPEG dropped on the workbench is not a program, and the open one stays.
   await page.evaluate(() => {

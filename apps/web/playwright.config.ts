@@ -1,7 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 
-// Browser checks against the generated site. Task 18 wires these into CI; for
-// now they run locally with `pnpm --filter @fugloy/web test:e2e`.
+// Browser checks against the generated site, served statically on :4173 (the web
+// server generates it first). Run with `pnpm --filter @fugloy/web test:e2e`; CI's
+// `web` job runs them too. The specs import @fugloy/disasm and @fugloy/cli as Node
+// resolves them, from dist/, so run `pnpm build` first. Local-only specs skip
+// without their gitignored files; FUGLOY_PERF=1 enforces listing-perf's timings.
 export default defineConfig({
   testDir: 'test/e2e',
   testMatch: '**/*.spec.ts',

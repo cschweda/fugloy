@@ -21,7 +21,7 @@ import ManualTab from '~/components/side/ManualTab.vue';
 import type { ManualRequest } from '~/components/side/ManualTab.vue';
 import { useManuals } from '~/composables/useManuals';
 import { asHintText } from '~/utils/hint-drop';
-import { resolveGoTo } from '~/utils/goto';
+import { GOTO_PLACEHOLDER, resolveGoTo } from '~/utils/goto';
 import { followOf, stepCursor } from '~/utils/edit-targets';
 import { cursorRowIndex, rowLookup } from '~/utils/row-lookup';
 import type { KeyBinding } from '~/composables/useWorkbenchKeys';
@@ -414,7 +414,8 @@ onBeforeUnmount(() => {
                 ref="goInput"
                 v-model="goText"
                 class="fg-input fg-mono"
-                placeholder="$4B9E or a label"
+                :placeholder="GOTO_PLACEHOLDER"
+                title="Hex: $4B9E or 4B9E. Decimal: #19358. Or a label name."
                 autocomplete="off"
                 spellcheck="false"
                 data-testid="goto-input"

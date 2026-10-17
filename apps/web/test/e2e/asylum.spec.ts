@@ -1,34 +1,13 @@
 // The v1 done-criterion (docs/Fugloy-Project-Plan.md): asylum16, a copyrighted
 // Model I game, opened in the browser with its committed hint file, read under
 // Model I with the ROM calls named, annotated, and saved. The program lives in
-// gitignored sample folders (fixtures/real/ today, or sample/), found the way
-// packages/disasm/test/real/samples.ts finds it; without it the test skips, so
-// CI and a clean worktree pass.
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+// gitignored sample folders (fixtures/real/ today, or sample/), found by
+// ./samples.ts; without it the test skips, so CI and a clean worktree pass.
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
-
-const repo = fileURLToPath(new URL('../../../../', import.meta.url));
-
-/** Full path of a sample program by basename, searched in the gitignored sample folders, or null. */
-function resolveSample(name: string): string | null {
-  const find = (dir: string): string | null => {
-    for (const entry of readdirSync(dir)) {
-      const path = join(dir, entry);
-      const hit = statSync(path).isDirectory() ? find(path) : entry === name ? path : null;
-      if (hit !== null) return hit;
-    }
-    return null;
-  };
-  for (const root of ['sample', 'fixtures/real'].map((d) => join(repo, d))) {
-    if (!existsSync(root)) continue;
-    const hit = find(root);
-    if (hit !== null) return hit;
-  }
-  return null;
-}
+import { repo, resolveSample } from './samples';
 
 const ASYLUM = resolveSample('asylum16.cmd');
 const HINTS = join(repo, 'fixtures/hints/asylum16.hints');
