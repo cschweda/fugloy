@@ -3,6 +3,8 @@
  * Extracted in emu phase 0 from cschweda/trs80-emulator at 11612849 (v1.6.0); see NOTICE.md.
  */
 export { Machine } from './machine/machine.js';
+export { Debugger, COVERAGE } from './debug/debugger.js';
+export { LABEL_FILE_VERSION, COVERAGE_FIELDS, encodeRle, decodeRle, parseLabelFile, mergeLabelFiles } from './debug/label-file.js';
 export { ROM_HASHES } from './machine/rom-hashes.js';
 export { TRS80System, CPU_CLOCK_HZ, RTC_HZ, RTC_INTERVAL_TSTATES } from './machine/trs80-system.js';
 export { Z80CPU } from './cpu/z80cpu.js';

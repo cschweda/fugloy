@@ -12,8 +12,28 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -b"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cschweda/fugloy.git",
+    "directory": "packages/z80"
+  },
+  "homepage": "https://github.com/cschweda/fugloy#readme",
+  "bugs": {
+    "url": "https://github.com/cschweda/fugloy/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
   }
 }

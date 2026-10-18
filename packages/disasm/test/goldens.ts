@@ -46,7 +46,7 @@ export function goldenCases(): GoldenCase[] {
   const programs = [
     ...files('fixtures/synthetic/cmd', (f) => f.endsWith('.cmd')),
     ...files('fixtures/synthetic/bas', (f) => f.endsWith('.bas')),
-    ...readdirSync(`${root}examples`).sort().flatMap((d) => files(`examples/${d}`, (f) => !f.endsWith('.md') && !f.endsWith('.hints'))),
+    ...readdirSync(`${root}examples`).sort().flatMap((d) => files(`examples/${d}`, (f) => !f.endsWith('.md') && !f.endsWith('.hints') && !f.endsWith('.labels.json'))),
   ];
   for (const rel of programs) {
     const name = rel.split('/').at(-1)!;

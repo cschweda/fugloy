@@ -24,6 +24,7 @@ software archives:
 | `seadrg02.cmd`–`seadrg04.cmd` | The same game at `$8000`, with the stub at `$B681` |
 | `seadrg06.cmd`–`seadrg11.cmd` | Builds that load the game where it runs |
 | `seadrg01.hints` | The two hint lines Fugløy proposes for `seadrg01.cmd`, under the skeleton `--write-hints` writes, then names and block comments for the game's main routines and data: an annotated listing |
+| `seadrg01.labels.json` | The label and coverage file `@fugloy/emu` wrote while running `seadrg01.cmd` from `$497F` through the title screen and ENTER: which bytes ran, which were only read, and which subroutines were called and how often (`packages/emu/scripts/sea-dragon-labels.mjs` rewrites it, given the Model III ROM) |
 
 A build numbered 05 also exists. It was rebuilt with Zeta Microcomputer
 Software's OFFSET utility, and its loader carries Zeta's own copyright, which
@@ -36,6 +37,8 @@ pnpm build
 pnpm fugloy examples/sea-dragon/seadrg01.cmd            # pass 1 finds only the 15-byte stub, and proposes the move
 pnpm fugloy examples/sea-dragon/seadrg01.cmd --hints examples/sea-dragon/seadrg01.hints
                                                          # the game at $497F, 45% of its bytes decoded as code, annotated
+pnpm fugloy examples/sea-dragon/seadrg01.cmd --hints examples/sea-dragon/seadrg01.hints --labels examples/sea-dragon/seadrg01.labels.json
+                                                         # the same, with what the emulator saw run as roots and comments
 pnpm fugloy examples/sea-dragon/seadrg06.cmd --color    # a build that loads in place, in color on a terminal
 ```
 

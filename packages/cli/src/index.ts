@@ -1,5 +1,5 @@
 /**
- * The fugloy command: `fugloy <file> [--base <hex>] [--entry <hex>]... [--format listing|zmac|ir] [--sweep] [-o <path>]`.
+ * The fugloy command: `fugloy <file> [--base <hex>] [--entry <hex>]... [--hints <path>] [--labels <path>] [--format listing|zmac|ir] [--sweep] [-o <path>]`.
  * Reads one file, detects its format from content, runs Pass 1 with the ROM,
  * hardware, and DOS tables that `--machine` and `--dos` choose, and prints a
  * listing, zmac source, or the JSON IR. Only this package touches the file
@@ -12,6 +12,7 @@ import {
   OpenError,
   openProgram,
   parseHints,
+  parseLabelFile,
   rebaseBas,
   renderBasListing,
   renderCmdListing,
@@ -21,6 +22,7 @@ import {
   selectSymbols,
   skeletonHints,
   withHintFile,
+  withLabelFile,
   writeHints,
 } from '@fugloy/disasm';
 import type { Dos, Hint, Machine, Session, SymbolSelection } from '@fugloy/disasm';
@@ -40,7 +42,7 @@ export interface Io {
   env?: Record<string, string | undefined>;
 }
 
-export const USAGE = `Usage: fugloy <file> [--base <hex> | --rebase <hex>] [--entry <hex>]... [--hints <path> | --write-hints <path>] [--machine 1|3|4] [--dos trsdos|ldos|none] [--format listing|zmac|ir] [--sweep] [--color] [-o <path>]
+export const USAGE = `Usage: fugloy <file> [--base <hex> | --rebase <hex>] [--entry <hex>]... [--hints <path> | --write-hints <path>] [--labels <path>] [--machine 1|3|4] [--dos trsdos|ldos|none] [--format listing|zmac|ir] [--sweep] [--color] [-o <path>]
 
 Prints a listing of a TRS-80 .CMD load module, raw binary, or tokenized Level
 II .BAS program. The format is detected from the file's content, never its
@@ -58,6 +60,15 @@ listing instead, with each code line disassembled at its true address.
   --entry <hex>    add an entry point for pass 1; may repeat
   --hints <path>   apply a hint file: entries, code/data overrides, tables,
                    names, comments (see docs/Fugloy-Project-Plan.md, "Hint file")
+  --labels <path>  apply a label and coverage file the emulator wrote for this
+                   program (docs/label-format.md): executed instructions and
+                   code labels become entry points; bytes only read (never
+                   run or written) stop descent as data, a heuristic that
+                   never overrides another entry point; code that changed at
+                   runtime (a program that moved or rewrote itself) is
+                   skipped with a warning unless a relocate hint says where
+                   it runs; names and evidence are kept; the hint file wins
+                   where both speak; refused when written for another program
   --write-hints <path>
                    write a hint-file skeleton for this program (identities and
                    any --entry addresses) and exit; refuses to overwrite
@@ -124,6 +135,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
     color: { type: 'boolean' },
     hints: { type: 'string' },
     'write-hints': { type: 'string' },
+    labels: { type: 'string' },
     output: { type: 'string', short: 'o' },
     help: { type: 'boolean' },
     version: { type: 'boolean' },
@@ -195,6 +207,14 @@ export async function run(argv: string[], io: Io): Promise<number> {
   }
   if (values.sweep === true && values.hints !== undefined) {
     io.stderr('fugloy: --hints has no effect with --sweep; drop one of them\n');
+    return 2;
+  }
+  if (values.sweep === true && values.labels !== undefined) {
+    io.stderr('fugloy: --labels has no effect with --sweep; drop one of them\n');
+    return 2;
+  }
+  if (values.labels !== undefined && values['write-hints'] !== undefined) {
+    io.stderr('fugloy: --labels has no effect with --write-hints; drop one of them\n');
     return 2;
   }
   if (values.hints !== undefined && values['write-hints'] !== undefined) {
@@ -288,6 +308,29 @@ export async function run(argv: string[], io: Io): Promise<number> {
       return 2;
     }
     if (format !== 'listing') for (const w of session.applied.warnings) io.stderr(`fugloy: warning: ${w}\n`);
+  }
+
+  if (values.labels !== undefined) {
+    let labelText: string;
+    try {
+      labelText = new TextDecoder().decode(await io.readFile(values.labels));
+    } catch (e) {
+      io.stderr(`fugloy: cannot read ${values.labels}: ${(e as Error).message}\n`);
+      return 1;
+    }
+    const parsed = parseLabelFile(labelText);
+    if (parsed.file === null) {
+      for (const err of parsed.errors) io.stderr(`fugloy: ${values.labels}: ${err}\n`);
+      return 2;
+    }
+    try {
+      session = withLabelFile(session, parsed.file, basename(values.labels));
+    } catch (e) {
+      if (!(e instanceof OpenError) || e.kind !== 'labels') throw e;
+      io.stderr(`fugloy: ${values.labels}: ${e.message}\n`);
+      return 2;
+    }
+    if (format !== 'listing') for (const w of session.analysis.labels?.warnings ?? []) io.stderr(`fugloy: warning: ${w}\n`);
   }
 
   // An entry may name a runtime address that a relocate hint created, but not the file address it moved away from.

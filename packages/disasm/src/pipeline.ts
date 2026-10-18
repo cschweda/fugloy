@@ -22,6 +22,7 @@ import type { MinedEntry } from './basic/entries.js';
 import { basStructure, codeLineLabel } from './basic/structure.js';
 import { emptyAnnotations } from './hints/apply.js';
 import type { Annotations, Override } from './hints/apply.js';
+import type { LabelsSummary } from './labels/apply.js';
 import { blockIdentities } from './hints/identity.js';
 import type { Module } from './ir.js';
 import type { SymbolSet } from './symbols/select.js';
@@ -46,6 +47,8 @@ export interface AnalyzeOptions {
   annotations?: Annotations;
   /** Where the annotations came from, for the listing header and the IR. */
   hints?: HintsSummary;
+  /** How a label and coverage file applied; its decisions are already merged into `annotations`. */
+  labels?: LabelsSummary;
   /** The base a rebased .BAS program was saved from; operands into the old range are then stale. */
   rebasedFrom?: number;
   /** The ROM, hardware, and DOS names to give addresses outside the image, from `selectSymbols`; without it nothing is named. */
@@ -68,6 +71,7 @@ export interface Analysis {
   /** The table entries the instructions' operands and the DW words are named with (each gets a zmac EQU), in table order then by key; empty without `tables`. An RST vector or service call that only a comment names is not here. */
   tablesUsed: TableEntry[];
   hints?: HintsSummary;
+  labels?: LabelsSummary;
   /** Entry points a .BAS program's text plants, with evidence (null address when unresolved); empty for other formats. */
   entries: MinedEntry[];
   /** Heuristic suggestions that change nothing until declared in a hint file. */
@@ -104,7 +108,7 @@ function withStructure(prog: BasProgram, hints: Annotations): { annotations: Ann
 export function analyze(mod: Module, opts: AnalyzeOptions = {}): Analysis {
   const hints = opts.annotations ?? emptyAnnotations();
   const basic = mod.format === 'bas' ? withStructure(mod, hints) : null;
-  const annotations = basic?.annotations ?? hints;
+  let annotations = basic?.annotations ?? hints;
   const entries = mod.format === 'bas' ? mineEntries(mod) : [];
   const entry = mod.format === 'bas' ? null : mod.entry;
   const roots: number[] = entry === null ? [] : [entry];
@@ -113,6 +117,20 @@ export function analyze(mod: Module, opts: AnalyzeOptions = {}): Analysis {
   for (const o of hints.overrides) if (o.kind === 'code') roots.push(o.addr);
   for (const m of entries) if (m.addr !== null) roots.push(m.addr);
   roots.push(...(basic?.candidates ?? []));
+  // A root only a label file gave is an instruction that ran or a code label; one that is a root for any other reason stays an
+  // entry in the listing, and a read-only run of the label file never ends a path there.
+  if (hints.executed !== undefined || hints.labelRoots !== undefined) {
+    const fromLabels = new Set([...(hints.executed ?? []), ...(hints.labelRoots ?? [])]);
+    const other = new Set<number>(roots.filter((r) => !fromLabels.has(r)));
+    for (const r of [entry, ...(opts.entries ?? []).map((e) => e & 0xffff), ...hints.overrides.filter((o) => o.kind === 'code').map((o) => o.addr)]) if (r !== null) other.add(r);
+    for (const m of entries) if (m.addr !== null) other.add(m.addr);
+    for (const c of basic?.candidates ?? []) other.add(c);
+    annotations = {
+      ...annotations,
+      ...(hints.executed === undefined ? {} : { executed: hints.executed.filter((a) => !other.has(a)) }),
+      ...(hints.labelRoots === undefined ? {} : { labelRoots: hints.labelRoots.filter((a) => !other.has(a)) }),
+    };
+  }
   // applyHints refuses bad relocations and reports them; annotations built directly are checked here.
   const { space, errors: relocationErrors } = analysisSpace(mod.image, annotations.relocations);
   const pass1 = recursiveDescent(space.image, roots, annotations);
@@ -152,6 +170,7 @@ export function analyze(mod: Module, opts: AnalyzeOptions = {}): Analysis {
   const tablesUsed = externalUses(pass1.instructions.values(), externals, symbols);
   const analysis: Analysis = { module: mod, pass1, entry, roots: pass1.roots, transfer, annotations, symbols, externals, tablesUsed, entries, proposals, space, relocationErrors };
   if (opts.hints !== undefined) analysis.hints = opts.hints;
+  if (opts.labels !== undefined) analysis.labels = opts.labels;
   if (opts.rebasedFrom !== undefined) analysis.rebasedFrom = opts.rebasedFrom & 0xffff;
   return analysis;
 }

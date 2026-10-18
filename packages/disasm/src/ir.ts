@@ -19,6 +19,7 @@ import { commentEntries } from './emit/operands.js';
 import { basNoteEntries } from './listing-header.js';
 import type { BasNames } from './listing-header.js';
 import type { Analysis, HintsSummary, Proposal } from './pipeline.js';
+import type { LabelsSummary } from './labels/apply.js';
 import type { RawModule } from './raw.js';
 import type { Cite, Dos, EntryKind, Machine, TableEntry, TableId } from './symbols/types.js';
 
@@ -67,6 +68,7 @@ export interface Ir {
   /** Block comments from `note` hints, in address order; present only when there are some. */
   notes?: { addr: number; lines: string[] }[];
   hints?: HintsSummary;
+  labels?: LabelsSummary;
 }
 
 /** The table names the note lines of a .BAS listing speak of; the same lookup `basRows` makes, which counts a name the program took for a symbol of its own. */
@@ -88,7 +90,7 @@ export function buildIr(
   mod: Module,
   pass1: Pass1,
   source?: string,
-  analysis?: Pick<Analysis, 'symbols' | 'annotations' | 'hints' | 'entries' | 'proposals' | 'space'> & Partial<Pick<Analysis, 'externals' | 'tablesUsed'>>,
+  analysis?: Pick<Analysis, 'symbols' | 'annotations' | 'hints' | 'entries' | 'proposals' | 'space'> & Partial<Pick<Analysis, 'externals' | 'tablesUsed' | 'labels'>>,
 ): Ir {
   const selection = analysis?.externals?.selection;
   const tableNames: IrTableName[] | undefined =
@@ -126,5 +128,6 @@ export function buildIr(
     ...(outside.length === 0 ? {} : { outsideComments: outside }),
     ...(notes.length === 0 ? {} : { notes }),
     ...(analysis?.hints === undefined ? {} : { hints: analysis.hints }),
+    ...(analysis?.labels === undefined ? {} : { labels: analysis.labels }),
   };
 }

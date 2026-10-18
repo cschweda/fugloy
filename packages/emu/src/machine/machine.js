@@ -10,6 +10,7 @@ import { Video } from '../devices/video.js';
 import { Sound } from '../devices/sound.js';
 import { loadBas } from '../loaders/bas.js';
 import { cassetteDeck, loadCas, loadCmd } from '../loaders/load.js';
+import { Debugger } from '../debug/debugger.js';
 import { KeyQueue, romKeyReturn } from '../devices/key-queue.js';
 
 /**
@@ -46,6 +47,19 @@ export class Machine {
   load;
   /** @type {ReturnType<typeof cassetteDeck>} The cassette deck: insert a .CAS at a baud, rewind, read the motor relay. */
   cassette;
+  /** @type {Debugger} Breakpoints, watchpoints, hooks, coverage, the instruction trace, snapshots, labels, and the label file (spec §7, §8). */
+  debug;
+
+  /** True inside `run`, false inside `step`, which ignores breakpoints. */
+  #checkBreaks = false;
+  /** True until a run's first boundary has passed; that boundary is never checked, so a run resumes past a break. */
+  #firstBoundary = false;
+  /** @type {number | null} The PC where the last run stopped for a breakpoint: the next run's first boundary skips the check there only. */
+  #resumePc = null;
+  /** True while `step` or `run` executes, so a callback cannot re-enter either. */
+  #busy = false;
+  /** Set by the hook when a breakpoint held the boundary, read by `run`. */
+  #stopped = false;
 
   /**
    * @param {{ model?: 3, ram?: 48, roms: { level2: Uint8Array }, log?: (level: string, text: string) => void }} opts
@@ -96,10 +110,16 @@ export class Machine {
     sys.io.onSoundWrite = (cycle, value) => this.sound.record(cycle, value);
     sys.io.onSoundReset = () => this.sound.clear();
     this.keyboard = new KeyQueue(sys.keyboard, () => sys.cpu.cycles);
+    this.debug = new Debugger(this);
+    // Each load records its manifest and the bytes' hash for the label file (the last one wins).
+    const record = (/** @type {any} */ manifest, /** @type {Uint8Array} */ bytes) => {
+      this.debug.recordLoad(manifest, bytes);
+      return manifest;
+    };
     this.load = {
-      bas: (bytes) => loadBas(this, bytes),
-      cmd: (bytes) => loadCmd(this, bytes),
-      cas: (bytes, opts) => loadCas(this, bytes, opts),
+      bas: (bytes) => record(loadBas(this, bytes), bytes),
+      cmd: (bytes) => record(loadCmd(this, bytes), bytes),
+      cas: (bytes, opts) => record(loadCas(this, bytes, opts), bytes),
     };
     this.cassette = cassetteDeck(this);
     this.io = {
@@ -116,6 +136,18 @@ export class Machine {
   /** Hardware reset: CPU to $0000, cycle count to 0, RAM kept (TRS80System.reset). */
   reset() {
     this.system.reset();
+    this.#resumePc = null;
+    this.sound.clear();
+    this.keyboard.clear();
+  }
+
+  /**
+   * Internal: a restore starts a fresh timeline, so the PC where the last run stopped for a
+   * breakpoint is forgotten, and the key queue and sound ring (whose cycle stamps belong to the
+   * old timeline) are cleared.
+   */
+  newTimeline() {
+    this.#resumePc = null;
     this.sound.clear();
     this.keyboard.clear();
   }
@@ -127,19 +159,42 @@ export class Machine {
    * ($002B) or wait-for-key ($0049), return from that routine with the character as the ROM
    * would (spec §6, "Keyboard-scan hook"). That return stands in for the boundary's instruction,
    * as one RET (10 T-states); a halted CPU idles instead, as it does for any instruction, so the next boundary is at the caller's return address.
-   * @returns {boolean} true when the hook stood in for the instruction
+   * Between draining and the keyboard hook, a breakpoint hit (only while `debug.active`, and
+   * never in `step`) stops the boundary: nothing executes. Last, with memory accesses watched or
+   * hooked, the debugger is told an instruction starts at PC, so its fetches are not taken for
+   * reads and its accesses carry its PC; the keyboard hook's stand-in and a halted CPU's idle
+   * start none (the idle reads nothing; the stand-in's stack reads carry the CPU's PC).
+   * @returns {boolean | 'stop'} true when the hook stood in for the instruction, 'stop' when a breakpoint holds the boundary
    */
   #beforeInstruction() {
     const cpu = this.system.cpu;
     const kb = this.keyboard;
     if (cpu.cycles >= kb.nextAt) kb.drain(cpu.cycles);
-    if (kb.hasFeed && !cpu.halted) {
-      const pc = cpu.registers.PC;
-      if (pc === 0x002b || pc === 0x0049) {
-        romKeyReturn(cpu, pc, kb.takeFeed());
-        return true;
-      }
+    // A run's first boundary skips the check only at the PC its predecessor stopped at; a halted
+    // CPU idles at HALT+1 on every boundary, so it is never checked.
+    const pc = cpu.registers.PC;
+    const first = this.#firstBoundary && pc === this.#resumePc;
+    this.#firstBoundary = false;
+    this.#resumePc = null;
+    if (this.debug.active && this.#checkBreaks && !cpu.halted && this.debug.beforeInstruction(pc, first)) {
+      this.#stopped = true;
+      this.#resumePc = pc;
+      return 'stop';
     }
+    if (cpu.halted) return false;
+    if (kb.hasFeed && (pc === 0x002b || pc === 0x0049)) {
+      const debug = this.debug;
+      if (debug.tracksAccess) {
+        debug.standIn(true);
+        try {
+          romKeyReturn(cpu, pc, kb.takeFeed());
+        } finally {
+          debug.standIn(false);
+        }
+      } else romKeyReturn(cpu, pc, kb.takeFeed());
+      return true;
+    }
+    if (this.debug.startsInstruction) this.debug.startInstruction(pc);
     return false;
   }
 
@@ -154,15 +209,41 @@ export class Machine {
   step(n = 1) {
     const sys = this.system;
     const start = sys.cpu.cycles;
-    for (let k = 0; k < n; k++) sys.stepInstruction(this.#hook);
+    const debug = this.debug;
+    if (this.#busy) throw new Error('step: the machine is already running; step and run cannot be called from a when or until callback');
+    this.#busy = true;
+    this.#checkBreaks = false;
+    try {
+      for (let k = 0; k < n; k++) {
+        sys.stepInstruction(this.#hook);
+        if (debug.active) debug.afterInstruction();
+      }
+    } catch (e) {
+      // A hook or callback that threw leaves no instruction open, no edge recorded for it, and no stop pending for the next call.
+      if (debug.active) {
+        debug.endInstruction();
+        debug.afterInstruction();
+      }
+      throw e;
+    } finally {
+      this.#busy = false;
+    }
     return { cycles: sys.cpu.cycles - start, halted: sys.cpu.halted };
   }
 
   /**
    * Run until a T-state budget is spent or a condition holds, both checked after each
-   * instruction; at least one instruction always runs. The condition wins a tie.
+   * instruction; at least one instruction always runs. The condition wins a tie with the budget.
+   * A breakpoint stops the run before its instruction executes, and the next run starts past it
+   * (only at that PC, so hit counts do not depend on how a session is split into runs). A
+   * breakpoint at a run's first boundary that it did not just stop at stops with `cycles: 0`
+   * (an interrupt response at that boundary counts). Breakpoints are not checked while halted.
+   * A watch with `stop` returns after the instruction whose access hit it; after an instruction
+   * the order is watch stop, then `until`, then the budget. `step` logs watch hits but never stops.
+   * A stop watch hit by an interrupt response at a boundary a breakpoint then holds stays pending:
+   * the next run returns `'watch'` after the held instruction (a `step` in between drops it).
    * @param {{ cycles?: number, until?: Until }} opts
-   * @returns {{ reason: 'cycles' | 'halt' | 'predicate', cycles: number }}
+   * @returns {{ reason: 'cycles' | 'halt' | 'predicate', cycles: number } | { reason: 'break' | 'watch', id: number, cycles: number }}
    */
   run({ cycles, until } = {}) {
     if (cycles === undefined && until === undefined) throw new Error('run needs cycles, until, or both; with neither it would never stop');
@@ -172,14 +253,43 @@ export class Machine {
     const cpu = sys.cpu;
     const start = cpu.cycles;
     const target = cycles === undefined ? Infinity : start + cycles;
-    for (;;) {
-      sys.stepInstruction(this.#hook);
-      if (until === 'halt') {
-        if (cpu.halted) return { reason: 'halt', cycles: cpu.cycles - start };
-      } else if (until !== undefined && until(this)) {
-        return { reason: 'predicate', cycles: cpu.cycles - start };
+    const debug = this.debug;
+    if (this.#busy) throw new Error('run: the machine is already running; step and run cannot be called from a when or until callback');
+    this.#busy = true;
+    this.#checkBreaks = true;
+    this.#firstBoundary = true;
+    this.#stopped = false;
+    try {
+      for (;;) {
+        sys.stepInstruction(this.#hook);
+        if (this.#stopped) {
+          this.#stopped = false;
+          // A watch stop from this boundary's interrupt response stays pending: the next run returns it after the held instruction.
+          debug.endInstruction();
+          const id = /** @type {number} */ (debug.stopId);
+          debug.stopId = null;
+          return { reason: 'break', id, cycles: cpu.cycles - start };
+        }
+        if (debug.active) {
+          const w = debug.afterInstruction();
+          if (w !== null) return { reason: 'watch', id: w, cycles: cpu.cycles - start };
+        }
+        if (until === 'halt') {
+          if (cpu.halted) return { reason: 'halt', cycles: cpu.cycles - start };
+        } else if (until !== undefined && until(this)) {
+          return { reason: 'predicate', cycles: cpu.cycles - start };
+        }
+        if (cpu.cycles >= target) return { reason: 'cycles', cycles: cpu.cycles - start };
       }
-      if (cpu.cycles >= target) return { reason: 'cycles', cycles: cpu.cycles - start };
+    } catch (e) {
+      // A hook or callback that threw leaves no instruction open, no edge recorded for it, and no stop pending for the next call.
+      if (debug.active) {
+        debug.endInstruction();
+        debug.afterInstruction();
+      }
+      throw e;
+    } finally {
+      this.#busy = false;
     }
   }
 }

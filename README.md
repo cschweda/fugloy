@@ -506,6 +506,15 @@ CI builds the pinned zmac and requires it, then runs typecheck, the tests,
 the build, and a check that the committed synthetic fixtures and the generated
 symbol tables still match their sources, on every push and pull request.
 
+Releases to npm go through `./publish.sh`, in two steps, from `main` after
+CI has passed. `./publish.sh check core` (or `emu`) runs every check, packs
+the packages, installs the tarballs in a scratch project and runs them, and
+stages them in `.release/`. `./publish.sh publish` then publishes those
+exact tarballs with npm's two-factor code: it asks for the code, or takes
+it as `--otp <code>`, and tags the release. `core` is `@fugloy/z80`,
+`@fugloy/disasm`, and `@fugloy/cli` at one version; `emu` is `@fugloy/emu`.
+Bump the version and add its `CHANGELOG.md` entry in a commit first.
+
 ## License
 
 MIT, © 2026 Christopher Schweda. See [LICENSE](LICENSE).

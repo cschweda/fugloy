@@ -43,7 +43,52 @@ console.log(m.video.text().join('\n'))     // the screen, 16 lines
 
 `step`, `run`, the registers, memory, the keyboard (matrix typing and a ROM
 keyboard hook), sound events, and the three loaders are described in spec §3.
-The debugger (breakpoints, trace, coverage, snapshots) is phase 3.
+
+## Debugging
+
+`m.debug` stops on breakpoints and watches, logs memory hits, records which
+bytes ran, were read, written, jumped to, and called, keeps a bounded trace,
+takes snapshots, and writes the label and coverage file that `@fugloy/disasm`
+reads (`fugloy seadrg01.cmd --labels seadrg01.labels.json`). Continuing the
+example above, just after `m.load.cmd`:
+
+```js
+import { writeFileSync } from 'node:fs'
+
+m.debug.break(0x497f, { once: true })        // Sea Dragon's stub copies the game down, then jumps here
+m.run({ cycles: second })                    // → { reason: 'break', id: 1, cycles }
+m.debug.coverage.enable()                    // from here on: exec, operand, read, write, jump, call
+m.debug.trace.enable({ depth: 10_000 })      // the last 10,000 instructions
+const top = m.debug.watch(0x3c00, 64, { write: true })    // log every write to the screen's top line
+m.run({ cycles: 5 * second })
+m.debug.hits(top)                            // [{ id: 2, kind: 'write', cycle, pc, addr, value, prev }, …]
+m.debug.callers(0x6212)                      // [{ from: 18974, kind: 'call', count: 80 }, …]
+m.debug.label(0x6212, 'TONE')                // a user label: the listing names the routine TONE
+writeFileSync('seadrg01.labels.json', JSON.stringify(m.debug.labelFile({ name: 'seadrg01.cmd' }), null, 2))
+```
+
+Coverage can start at the load: the label file's `write` field marks every
+byte a self-relocating program's copy writes, and every loaded byte that
+differs from what the load placed, so the disassembler neither mistakes moved
+code for data nor applies the moved code's coverage to the file's bytes (a
+relocate hint says where it runs).
+Everything on `m.debug` is described in spec §3 and §7, the file in §8 and
+[`docs/label-format.md`](../../docs/label-format.md).
+`examples/sea-dragon/seadrg01.labels.json` is the file of the scripted session
+in `test/integration/sea-dragon-session.js`; `node
+packages/emu/scripts/sea-dragon-labels.mjs` rewrites it (it needs the ROM).
+
+Debugging off costs nothing measurable, and the debugger keeps the §4 target.
+On Sea Dragon, 20 emulated seconds of its title screen
+(`node packages/emu/scripts/benchmark.mjs off|debug`, each mode in its own
+process, on the laptop that built phase 3):
+
+| Mode | Speed |
+|---|---|
+| Debugging off | about 42× real time (41.5–43.3× over three runs; phase 2 measured about 43×) |
+| Coverage and a 10,000-deep trace | about 30× real time (29.5–30.7×) |
+
+`test/integration/benchmark.test.js` asserts at least 20× for both.
 
 - Spec: [`docs/fugloy-emu-spec.md`](../../docs/fugloy-emu-spec.md) (phases 0–7 in §11)
 - Label and coverage file shared with `mcp` and `disasm`: [`docs/label-format.md`](../../docs/label-format.md)

@@ -17,6 +17,8 @@ export interface Override {
   kind: OverrideKind;
   /** Bytes covered; 0 for a `code` hint without a length (a root only). */
   length: number;
+  /** A `nocode` from a label file's coverage: bytes read and never executed. Every byte of it ends a path, not only the first. */
+  fromLabels?: true;
 }
 
 export interface TableHint {
@@ -35,6 +37,19 @@ export interface Annotations {
   notes: Map<number, string[]>;
   /** Regions that execute elsewhere; every other address here is already a runtime address. */
   relocations: Relocation[];
+  /** Entries known only because a label file saw them execute: roots, but not marked `entry` in the listing. */
+  executed?: number[];
+  /**
+   * Roots only a label file gave (its executed instructions and code labels). Every other root is
+   * stronger: a read-only run of the label file never ends a path at one (descent trims the run there).
+   */
+  labelRoots?: number[];
+  /**
+   * Loaded bytes a label file saw change at runtime (written while coverage was on, or since the
+   * load), outside any relocation: what ran there was not the file's bytes. A path from a
+   * `labelRoots` root ends before decoding one; paths from every other root ignore them.
+   */
+  changed?: { addr: number; length: number }[];
 }
 
 export interface Applied {

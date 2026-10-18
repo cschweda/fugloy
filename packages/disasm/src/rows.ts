@@ -93,7 +93,9 @@ export function listingRows(analysis: Analysis, opts: RenderOptions = {}): Row[]
   // Worked out once: the legend and the comment column both read them.
   const notes = externalNotes(instructions, externals, symbols);
   const out: Row[] = pass1Header(analysis, opts, notes).map((text) => ({ kind: 'header', text }));
-  const rootSet = new Set(roots);
+  // A root only a label file's coverage gave is an instruction that ran, not an entry point.
+  const executed = new Set(annotations.executed ?? []);
+  const rootSet = new Set(roots.filter((r) => !executed.has(r)));
   /** After a rebase, an absolute operand into the program's old range still points where the program no longer is. */
   const inOldRange = (v: number): boolean => rebasedFrom !== undefined && v >= rebasedFrom && v < rebasedFrom + loaded;
   const stale = (addr: number): boolean =>

@@ -64,7 +64,7 @@ Phase 0 kept upstream's file names inside these folders (`cpu/z80cpu.js`, `machi
 
 ### Public API
 
-Emu phase 2 built the part below marked **built**; the rest (marked **phase 3 and later**) is still the sketch, and nothing in it is promised to the letter until it is built.
+Emu phases 2 and 3 built the part below marked **built**; the rest (marked **phase 5 and later**) is still the sketch, and nothing in it is promised to the letter until it is built.
 
 ```js
 import { Machine, ROM_HASHES } from '@fugloy/emu'                     // built
@@ -78,15 +78,17 @@ const m = new Machine({ model: 3, ram: 48, roms: { level2: romBytes }, log })   
 
 ```js
 m.reset()                  // CPU to $0000 and cycles to 0; RAM kept; clears m.sound and m.keyboard
-m.step(n = 1)              // n whole instructions → { cycles, halted }
-m.run({ cycles, until })   // until = 'halt' | predicate(m) → { reason: 'cycles' | 'halt' | 'predicate', cycles }
+m.step(n = 1)              // n whole instructions → { cycles, halted }; breakpoints and watch stops are ignored
+m.run({ cycles, until })   // until = 'halt' | predicate(m)
+                           //   → { reason: 'cycles' | 'halt' | 'predicate', cycles } | { reason: 'break' | 'watch', id, cycles }
 m.cycles                   // total T-states since reset
 ```
 
 - `step` and `run` return the T-states they spent (`cycles`), not the total. An interrupt response counts with the instruction after it.
-- `run` needs `cycles`, `until`, or both; with neither it throws, since it would never stop. It always executes at least one instruction: `run({ cycles: 0 })` runs one.
+- `run` needs `cycles`, `until`, or both; with neither it throws, since it would never stop. It executes at least one instruction (`run({ cycles: 0 })` runs one), with one exception: a breakpoint at its first boundary that it did not just stop at returns `{ reason: 'break', id, cycles: 0 }` (plus the T-states of an interrupt response delivered at that boundary) without executing anything (§7).
 - Both limits are checked after each instruction, so `until` is not checked before the first one. When the `until` condition (`'halt'` or the predicate) and the cycle budget are both met at the same boundary, the condition wins and `reason` is `'halt'` or `'predicate'`.
-- `reason` has no `'break'` or `'watch'` yet: they arrive with the debugger (§7, phase 3).
+- `'break'` and `'watch'` come from the debugger (§7); `id` names the breakpoint or the watch. A breakpoint stops before its instruction; after an instruction the order is a watch stop, then `until`, then the budget.
+- `step` and `run` cannot be called from inside a `when`, `until`, or hook callback: they throw.
 - `m.rom` is `{ bytes, sha256, recognized }`: the image's length, its SHA-256 as hex, and the name of the known ROM it matches or `null`. `ROM_HASHES` is the table behind it, `{ sha256: name }`. It includes the FreHD-patched Model III Rev C image, labelled as patched.
 
 **State (built)**
@@ -123,7 +125,7 @@ m.cassette.insert(bytes, { baud }) / rewind() / motor
 - `sound.events` returns a copy and allocates one object per event, up to 65,536 per call: fine for a tool call, not for a per-frame loop. The ring keeps the newest events.
 - Keys are a character (`'A'`, `'1'`, `' '`) or a name: `ENTER CLEAR BREAK UP DOWN LEFT RIGHT SHIFT SPACE`. On the Model III an unshifted letter key types the capital, so `'A'` presses the bare A key and `'a'` presses SHIFT+A. `press` and `release` must use the same name; a mismatch leaves the key down.
 - In matrix mode `type` presses each character for half of a `1/cps`-second window and releases it for the other half, starting now or when the typing already queued ends. A program that reads the keyboard slowly can miss a short tap: **Rear Guard needs ENTER held about 0.5 s** (`type('\n', { cps: 1 })`). A high `cps` shortens the hold and can drop keys, and typing at the ROM's line editor with no pause for ENTER can lose characters.
-- The key queue is not machine state: `serializeState` does not carry it. A restore (§7, phase 3) must clear it with `m.keyboard.clear()`.
+- The key queue is not machine state: `serializeState` does not carry it, and `m.debug.restore` clears it (§7).
 
 **Loaders (built)**
 
@@ -133,28 +135,58 @@ m.load.bas(bytes)          // tokenized or ASCII (§6) → { format: 'bas', kind
 m.load.cas(bytes, { baud = 500, via = 'rom' })   // → { format: 'cas', kind, name, entry?, blocks, baud, via } (§6)
 ```
 
-Every loader returns a manifest of where the bytes landed and why (§6). `m.load.cmd` and `m.load.cas` with `via: 'fast'` also clear the keyboard queue (the feed buffer and queued matrix keys, queued keys released), so text typed for the previous program does not reach the new one; `via: 'rom'` leaves it, since the caller types `CLOAD` or `SYSTEM` next. `baud` is ignored via `'fast'`. `m.load.bas`: for a tokenized program, `start` and `end` are the program area (`$40A4`) and its end, and `blocks` holds one `{ addr: start, len, why: 'BASIC program' }`; for ASCII, `start` is the current `$40A4` pointer, `end` is `null`, and `blocks` is empty, because the text is typed by BASIC as the machine runs. `m.load.cas` with `via: 'rom'` marks every block `predicted: true`: nothing has landed yet. `m.load.dsk` is phase 5.
+Every loader returns a manifest of where the bytes landed and why (§6), and records it with the SHA-256 of the bytes it was given in `m.debug.loaded` for the label file (§8); the last load wins. `m.load.cmd` and `m.load.cas` with `via: 'fast'` also clear the keyboard queue (the feed buffer and queued matrix keys, queued keys released), so text typed for the previous program does not reach the new one; `via: 'rom'` leaves it, since the caller types `CLOAD` or `SYSTEM` next. `baud` is ignored via `'fast'`. `m.load.bas`: for a tokenized program, `start` and `end` are the program area (`$40A4`) and its end, and `blocks` holds one `{ addr: start, len, why: 'BASIC program' }`; for ASCII, `start` is the current `$40A4` pointer, `end` is `null`, and `blocks` is empty, because the text is typed by BASIC as the machine runs. `m.load.cas` with `via: 'rom'` marks every block `predicted: true`: nothing has landed yet. `m.load.dsk` is phase 5.
 
-**Phase 3 and later (the sketch)**
+**Debugger (built, phase 3)**
+
+```js
+import { COVERAGE, encodeRle, decodeRle, parseLabelFile, mergeLabelFiles } from '@fugloy/emu'
+
+m.debug.break(addr, { once = false, when })   // → id; stop before the instruction at addr; when(m) gates each hit
+m.debug.unbreak(id)                           // → false when no breakpoint has that id
+m.debug.breaks                                // [{ id, addr, once, hits }], in id order
+m.debug.watch(addr, len, { read = false, write = true, stop = false })   // → id; len bytes from addr, wrapping at $FFFF
+m.debug.unwatch(id)                           // its hits stay in the log
+m.debug.watches                               // [{ id, addr, len, read, write, stop, hits }]
+m.debug.hits(id?)                             // [{ id, kind: 'read' | 'write', cycle, pc, addr, value, prev }], oldest first
+m.debug.hitsOverflowed / m.debug.clearHits()  // the log keeps the newest 65,536 hits
+m.debug.hooks.onMemRead = (addr, val) => {}   // data reads only; a function or null
+m.debug.hooks.onMemWrite = (addr, val, prev) => {}
+m.debug.hooks.onPort = (port, val, dir) => {} // dir 'in' | 'out'
+
+m.debug.coverage.enable() / disable() / clear()   // coverage and callers, one switch; clear empties both
+m.debug.coverage.enabled / bits               // bits: the live Uint8Array(65536) of COVERAGE flags
+m.debug.callers(addr)                         // [{ from, kind: 'call' | 'jp' | 'jr' | 'rst' | 'ret-to', count }]
+m.debug.callerMap()                           // Map<target, [{ from, kind, count }]>
+
+m.debug.trace.enable({ depth, regs = false }) // depth 1..1,000,000 is required: the trace is never unlimited
+m.debug.trace.disable() / clear() / enabled
+m.debug.trace.last(n)                         // [{ pc, bytes, cycles, regs? }], oldest first
+m.debug.trace.collapsed(n)                    // [{ entries, repeat }]: repeated PC sequences merged
+
+m.debug.snapshot() / m.debug.restore(snap)    // the machine state, JSON-safe; restore is exact
+m.video.diff(snap)                            // [{ row, col, was, now }]: video RAM cells changed since snap
+
+m.debug.label(addr, name, { kind = 'code', size })   // a user label; the same address replaces
+m.debug.labels                                // [{ addr, name, kind, size?, source: 'user' }], by address
+m.debug.loaded                                // { manifest, sha256 } of the last m.load.* call, or null
+m.debug.labelFile({ name, started, input })   // the §8 object for this session
+```
+
+- Everything on `m.debug` is optional and costs nothing when unused: the Machine checks one boolean per instruction while nothing is set, and the CPU's memory and port accessors are swapped for instrumented ones only while a watch, a hook, or coverage needs them. §7 has the behaviour in detail.
+- `COVERAGE` is `{ EXEC: 1, OPERAND: 2, READ: 4, WRITE: 8, JUMP_TARGET: 16, CALL_TARGET: 32 }`. Ids count up from 1 across breakpoints and watches.
+- `label` takes an identifier name (a letter or `_`, then letters, digits, or `_`, up to 32 characters), `kind` `'code'` or `'data'`, and an optional `size` of 1 to 65,536 bytes.
+- `labelFile` names the program by `name`, else by the last load's manifest; with neither it throws `labelFile needs a name: nothing was loaded through m.load` (or, after a `.BAS` load, whose manifest has no name, that the manifest carries none). `started` and `input` are strings recorded in the session only when given; the core reads no clock.
+- `encodeRle(bits, mask)` and `decodeRle(text)` convert one coverage field (§8); `decodeRle` returns a `Uint8Array(65536)` of 0 and 1 and throws when a run is not hex or the runs do not sum to 65,536. `parseLabelFile(value)` (the parsed object or its JSON text) → `{ file, errors }` checks every rule of §8, keeping unknown top-level keys; `file` is null when there are errors. `mergeLabelFiles(a, b)` applies the §8 merge rule and throws for two different programs or a broken file.
+
+**Phase 5 and later (the sketch)**
 
 ```js
 m.fdc.mount(drive, image) / unmount(drive)    // phase 5
 m.load.dsk(bytes)                              // phase 5
-
-// debug (phase 3)
-m.debug.break(addr, { once })
-m.debug.watch(addr, len, { read, write })
-m.debug.trace.enable({ depth })
-m.debug.trace.last(n)     // [{ pc, op, text, regs? }]
-m.debug.coverage          // see §8
-m.debug.snapshot() / restore(snap)
-m.debug.callers(addr)
-m.debug.hooks.onMemRead = (addr, val) => {}
-m.debug.hooks.onMemWrite = (addr, val, prev) => {}
-m.debug.hooks.onPort = (port, val, dir) => {}
 ```
 
-Everything on `m.debug` is optional and costs nothing when unused. The debugger features (§7) are phase 3. `serializeState` and `restoreState` are exported from the package now, as the base for `snapshot` and `restore`.
+`serializeState` and `restoreState` are exported from the package too: `snapshot` and `restore` are built on them.
 
 ## 4. CPU
 
@@ -229,15 +261,30 @@ Each loader returns a manifest the debugger records: where bytes landed and why.
 
 ## 7. Debugger interface
 
-Phase 3; none of this is built in phase 2.
+Built in emu phase 3 (the API is listed in §3). The rulings below, numbered as in the phase 3 plan, settle what the first draft of this section left open.
 
-- **Breakpoints:** by PC; optional `once`; optional condition `(m) => bool`. Hit returns control from `run()` with reason `'break'` and the breakpoint id.
-- **Watchpoints:** address range, read and/or write; hit log records `{ cycle, pc, addr, value, prev }`. Watches do not stop execution unless `stop: true`.
-- **Trace:** ring buffer of the last N executed instructions `{ pc, opcode bytes, mnemonic, cycles }`; optional register snapshot per entry. Loop collapsing: consecutive identical PC sequences are reported once with a repeat count. A `run()` with trace on and no depth limit is refused.
-- **Coverage:** per-byte bitfield across 64 KB (and per bank on Model 4): `EXEC` (fetched as opcode), `OPERAND` (fetched as instruction operand), `READ`, `WRITE`, `JUMP_TARGET`, `CALL_TARGET`. This is the single most valuable output for Fugløy — it separates code from data by observation.
-- **Callers:** map of target → set of `{ fromPc, kind: 'call' | 'jp' | 'jr' | 'rst' | 'ret-to' }` built from the trace hook.
-- **Snapshots:** full machine state (CPU, RAM, device state, cycle count) as a serializable object; restore is exact. Used for differential testing (§10) and for "try this input, rewind." A snapshot does **not** include the trace ring, hit log, or coverage; those are debugger state, not machine state, and survive a restore. Document this; it will surprise someone. The key queue (`m.keyboard`) is not machine state either, and a snapshot does not carry it, so `restore` must call `m.keyboard.clear()`; likewise `m.sound` is cleared on restore.
-- **Screen diff:** `m.video.diff(sinceSnapshot)` returns changed cells; cheap way to detect "something printed."
+- **Breakpoints:** by PC; optional `once` (removed after its first hit); optional condition `when(m) => bool`, checked at each hit. A hit stops `run()` before the instruction executes, with reason `'break'` and the breakpoint id; when several at one PC hit, each counts the hit and the lowest id is reported.
+  - `step` ignores breakpoints and watch stops; only `run` stops on them (Ruling 3). `step(n)` is an explicit instruction count.
+  - A run resumes past the breakpoint it stopped at (Ruling 4, as built): `run()`'s first boundary skips the check only when its PC is where the previous run stopped with `'break'`. That memory clears after the boundary, on `reset`, and on `restore`. A run whose first boundary holds a breakpoint it did not just stop at returns `{ reason: 'break', id, cycles: 0 }` (plus any interrupt response delivered at that boundary), so `run()` can return without executing an instruction. Hit counts therefore do not depend on how a session is split into runs.
+  - No breakpoint is checked while the CPU is halted: it is not about to run the instruction at PC. A breakpoint at HALT+1 fires once an interrupt has returned there and the CPU runs it.
+  - A breakpoint stop does not tick the FDC. `step` and `run` called from inside a `when` or `until` callback throw.
+- **Watchpoints:** an address range (`len` bytes from `addr`, wrapping at `$FFFF`), read and/or write. Each matching access appends a frozen hit `{ id, kind, cycle, pc, addr, value, prev }` to a log that keeps the newest 65,536 (`hitsOverflowed` says when older ones were dropped). `cycle` is `m.cycles` at the access; `prev` is the byte a write replaced, and equals `value` for a read. Watches do not stop execution unless `stop: true`, and then `run` returns `{ reason: 'watch', id }` right after the instruction that made the access; `step` logs the hit but never stops.
+  - Fetches are not reads (Ruling 2): instruction fetches never count as `READ` coverage, read watches, or `onMemRead`. A read is a fetch when it is among the instruction's first `len` reads and its address is `pc + k` for the k-th read; lengths come from the instruction's bytes (`instructionInfo`, tested for every opcode against `@fugloy/z80`).
+  - `pc` is the start of the instruction making the access. A halted CPU opens no instruction, and an access outside one (an interrupt response's push, the IM 2 vector read, the keyboard hook's stand-in RET) carries the CPU's PC at that moment.
+  - When several stop watches hit in one instruction, the lowest id is reported. A stop watch hit by an interrupt response at a boundary a breakpoint then holds stays pending: the next run executes the held instruction and returns `'watch'` right after it. A `step` in between, or a `restore`, drops it, and `unwatch` drops that watch's own pending stop (another watch's stays).
+  - Order of stops: a breakpoint (before the instruction); after the instruction, a watch stop, then `until`, then the cycle budget.
+- **Hooks:** `onMemRead(addr, value)` on every data read (never a fetch), `onMemWrite(addr, value, prev)` on every memory write, `onPort(port, value, dir)` on every port access. Each is a function or `null`.
+- **Trace:** a preallocated ring of the last `depth` executed instructions, each `{ pc, bytes, cycles, regs? }` (`regs` when enabled with `regs: true`); `last` and `collapsed` return fresh copies. Entries carry no mnemonic (Ruling 5): formatting is the caller's, and the MCP server formats with `@fugloy/disasm`. `cycles` excludes an interrupt response; only executed instructions leave entries. `enable` needs a `depth` of 1 to 1,000,000, so a trace is never unlimited, and allocates a fresh, empty ring; `disable` keeps what was recorded. Loop collapsing (`collapsed(n)`): consecutive repetitions of one PC sequence (period 1 to 64, at least two repeats) are reported once with a repeat count.
+- **Coverage:** a per-byte bitfield across 64 KB (and per bank on Model 4, phase 6): `EXEC`, `OPERAND`, `READ`, `WRITE`, `JUMP_TARGET`, `CALL_TARGET`. This is the single most valuable output for Fugløy — it separates code from data by observation.
+  - `EXEC` marks the first byte of every executed instruction, prefix included, and `OPERAND` its other bytes (Ruling 1), in `step` and `run` alike. A lone prefix the CPU runs as its own step (§4) is a one-byte instruction.
+  - `READ` and `WRITE` are data accesses, never fetches. `JUMP_TARGET` is where a taken `JP`, `JR`, `DJNZ`, or `JP (HL)` landed, and `CALL_TARGET` where a taken `CALL` or `RST` landed. Where a `RET` lands is not marked (the callers map records it as `ret-to`).
+  - Taken is decided by the landing PC: a conditional transfer to its own fall-through address counts as taken, and a `RET` that pops `pc + len` counts as not taken.
+  - Interrupt responses record no edge, and the keyboard hook's stand-in RET marks nothing.
+  - Coverage and callers share one switch, `m.debug.coverage.enable()` (Ruling 6); `clear()` empties both.
+- **Callers:** a map of target → `{ from, kind: 'call' | 'jp' | 'jr' | 'rst' | 'ret-to', count }`, where `count` is how many times that edge was taken (Ruling 8), recorded with coverage.
+- **Snapshots:** full machine state (CPU, RAM, device state, cycle count) as a serializable object that survives `JSON.stringify`; restore is exact. Used for differential testing (§10) and for "try this input, rewind." A snapshot does **not** include the trace ring, hit log, coverage, or callers; those are debugger state, not machine state, and survive a restore, as do breakpoints, watches, hooks, and labels. Document this; it will surprise someone. A restore starts a fresh timeline: it clears the key queue (`m.keyboard`) and the sound ring (`m.sound`), whose cycle stamps belong to the old one, the PC where the last run stopped for a breakpoint, and any pending watch stop. Known limit: the NMI edge latch is not serialized, so a restore is exact only while the FDC's INTRQ is idle (phase 5 fixes it).
+- **Screen diff:** `m.video.diff(snap)` returns the video RAM cells changed since a snapshot, `{ row, col, was, now }` as raw bytes over the 64-column RAM layout (also in 32-column mode, where only even columns show); a cheap way to detect "something printed."
+- **Labels and the label file:** `m.debug.label` names addresses (`source: 'user'`), and `m.debug.labelFile` writes the session as the §8 file.
 
 ## 8. Label and coverage file format
 
@@ -255,19 +302,43 @@ Shared contract between `emu`, `mcp`, and `disasm`. JSON, one file per program, 
     { "addr": 28000, "name": "SCORE", "kind": "data", "size": 2, "source": "user" }
   ],
   "coverage": {
-    "encoding": "rle-hex",
-    "exec": "…", "operand": "…", "read": "…", "write": "…"
+    "0:0": {
+      "encoding": "rle-hex",
+      "exec": "5000,1,AFFF", "operand": "5001,2,AFFD", "read": "6D60,2,929E",
+      "write": "6D60,2,929E", "jump": "5020,1,AFDF", "call": "5068,1,AF97"
+    }
   },
-  "callers": { "20584": [ { "from": 20500, "kind": "call" } ] },
+  "callers": { "20584": [ { "from": 20500, "kind": "call", "count": 212 } ] },
   "sessions": [ { "started": "2026-10-14T14:02:00Z", "cycles": 48201339, "input": "keyboard: 'RUN\\r', 'A' …" } ]
 }
 ```
 
+The example elides `sha256` and `input` (`…`); a real `sha256` is 64 lowercase hex digits. `fixtures/synthetic/label-file/sample.labels.json` is a complete file written by the emulator from a synthetic session (`pnpm fixtures` writes it; a test fails when the committed copy differs).
+
 Rules: `source` is always one of `loader | observed | user | disasm`; the disassembler never overwrites a `user` label; `observed` labels carry `evidence` so a human can judge them.
+
+- **Keys.** All eight top-level keys are required. A reader keeps keys it does not know, and so does the merge. Addresses are JSON numbers (decimal), 0 to 65,535.
+- **`fugloy`** is the format version, `1`. A reader refuses any other.
+- **`program`**: `name`, a non-empty string; `sha256`, the SHA-256 of the program file as given to the loader, 64 lowercase hex digits, omitted when unknown (the emulator omits it when nothing was loaded through `m.load`); `model`, `1`, `3`, or `4`. A label file is keyed by address, so a reader applying it to a program whose hash differs from a present `sha256` refuses it (phase 3 Ruling 10).
+- **`load`**: `{ addr, len, source }` per block that landed, `len` 1 to 65,536. The emulator writes `source` as `<format>-block-<i>`, where `i` is the block's index in the loader's manifest (`cmd-block-0`, `cas-block-2`, `bas-block-0`), and leaves out blocks that have not landed. A `.CAS` loaded `via: 'rom'` lists none: its manifest only predicts the blocks (`predicted: true`), and the file never learns when the ROM's loader has read them; load it `via: 'fast'` to have them listed.
+- **`entry`**: the entry address, or `null` when the program has none (BASIC).
+- **`labels`**: `{ addr, name, kind, size?, source, evidence?, map?, page? }`, at most one per `(map, page, addr)`, `map` and `page` counting as 0 when absent (both readers key duplicates this way). `kind` is `code` or `data`; `size`, when present, is 1 to 65,536 bytes; `evidence` is required when `source` is `observed`; `name` and `evidence` hold no control character (U+0000 to U+001F, U+007F), which would start a new line in a listing or zmac source. The emulator writes them sorted by address: `ENTRY` (`kind: 'code'`, `source: 'loader'`) at the entry; an `observed` label named `SUB_hhhh` (four uppercase hex digits) at every `CALL` or `RST` target inside the loaded blocks, with evidence `called N× from M sites` (`N` the times taken, `M` the distinct call sites, and `1 site` in the singular) (Ruling 9); and the `user` labels from `m.debug.label`. At one address the higher source wins: `user` over `observed` over `disasm` over `loader`. A name of the generated shape (`L`, `SUB_`, `DATA_`, or `TBL_` followed by four hex digits) means "no name given": the disassembler still takes the address as code and the evidence as a comment, under its own name.
+- **`coverage`**: one object per `"<map>:<page>"` key, each `{ encoding: "rle-hex", exec, operand, read, write, jump, call }`, the six fields being the `EXEC`, `OPERAND`, `READ`, `WRITE`, `JUMP_TARGET`, and `CALL_TARGET` bits of §7 (Ruling 7), with one addition: `write` marks a byte written while coverage was on, **or changed since the load**, that is, a byte inside a landed `load` block that differs, when the file is written, from what the loader placed there. So a program that moved or rewrote itself before coverage started still says so. (A byte rewritten with the value it held, while coverage was off, is not marked; nothing about it changed.) **`rle-hex`**: comma-separated run lengths in hex, alternating zero-runs and one-runs and starting with a zero-run, which may be `0`, summing to 65,536 (`10000` in hex), with no spaces. A field with no bit set is `"10000"`; one with every bit set is `"0,10000"`. Every run is one to five hex digits, never empty. The emulator writes uppercase hex and no zero-length run after the first; a reader accepts either case and zero-length runs (`0`) anywhere.
+- **`callers`**: keyed by the target address as a decimal string without leading zeros; each value a list of `{ from, kind, count }`, `kind` one of `call | jp | jr | rst | ret-to` and `count` (≥ 1) how many times that edge was taken (Ruling 8). The emulator writes targets in ascending order and each list sorted by `from`, then `kind`.
+- **`sessions`**: one `{ cycles, started?, input? }` per recorded session: `cycles` is `m.cycles` when the file was written, `started` a time string (ISO 8601) and `input` a description of what was typed, both supplied by the caller. The emulator never reads a clock, so a file without `started` is byte-identical across runs.
+
+**Applying the file (the disassembler).** Every address in the file is a runtime address, so the disassembler applies it to the analysis space (the program's image with each relocate hint applied), and it states nothing about the program's bytes that the session did not see there:
+
+- An executed instruction (an `exec` bit) and a `code` label become entry points, except where the bytes changed at runtime: an instruction any of whose bytes is marked `write`, outside the runtime region of a relocate hint, ran bytes that are not the program's, and is skipped. One summary warning counts them: `N executed or labelled addresses changed at runtime (…); their coverage is not applied to the file's bytes`. Inside a relocate hint's region they apply: the hint says the program's bytes run there. A path that starts at one of these entry points also ends before decoding a changed byte; a path from any other entry point ignores `write`.
+- A run of bytes that were read and never executed, never fetched as an operand, and never written becomes data that ends a path (`nocode`). This is a heuristic, not an observation: code that never ran and that the program only read (a checksum over itself, a copy loop's source) is typed as data too. It never ends a path at an entry point from another source (the module's entry, a hint's `entry` or `code`, `--entry`, a `.BAS` program's planted entries and code lines, a hint table's targets): the run stops short of such an entry point.
+- `data` labels type their bytes and name them even where they were written: data is what a program writes.
+- The hint file wins for names, comments, and overlapping overrides (Ruling 11); a file for another program is refused (Ruling 10).
+
+**When to start coverage.** From the load is the natural default, and what the MCP server will do: the program's own copy or decompression marks every byte it writes, so nothing it moved is mistaken for data, and paired with a relocate hint nothing is lost. Started later (after a loader stub has moved the game, say), `write` still marks what changed since the load, and the game's own data reads then show as read-only runs, which the disassembler applies as data. Use: `fugloy prog.cmd --hints prog.hints --labels prog.labels.json` (or `withLabelFile` in `@fugloy/disasm`).
 
 Coverage bitfields are over the 64 KB address space. On Model 4 with 128 KB, the file carries one coverage object per `(map, page)` combination seen, keyed `"coverage": { "0:0": {…}, "2:1": {…} }`; Model I/III use the single key `"0:0"`. Addresses in `labels`, `load` and `callers` are likewise `{ addr, map?, page? }` with map/page omitted when zero. Decide this now or every consumer grows a special case later.
 
-Merging rule for `coverage export`: union of bitfields per key; `labels` merged by address with `user` winning over `observed` winning over `disasm` winning over `loader`; `sessions` appended, never rewritten.
+Merging rule for `coverage export` (`mergeLabelFiles(a, b)`): two files whose `program.sha256` are both present and differ are refused. Otherwise: union of bitfields per coverage key; `labels` merged by address with `user` winning over `observed` winning over `disasm` winning over `loader`, `b` winning a tie; `load` unioned without duplicates; `entry` is `a`'s unless it is `null`; `callers` unioned, with the counts of one `(from, kind)` edge summed; `sessions` appended (`a`'s first), never rewritten; `program` is `a`'s, taking `b`'s `sha256` when `a` has none.
 
 ## 9. MCP server tool list
 
@@ -303,7 +374,7 @@ Guardrails: `trace` and `peek` cap at 4 KB of output per call; `run` caps at 10 
 | Machine | Boot Level II ROM to `READY` prompt | Screen matches golden text within N cycles |
 | Machine | Boot TRSDOS 1.3 from a DMK image | `TRSDOS Ready` on screen |
 | Loaders | Fixture `.CMD`/`.BAS`/`.CAS` files (gitignored `fixtures/real/`) | Manifest matches recorded expectation |
-| Debugger | Scripted session: load, break, watch, type, check screen | Deterministic hit log, byte-identical across runs |
+| Debugger | Scripted session: load, break, watch, type, check screen | Deterministic hit log, byte-identical across runs (and the label file: `test/integration/label-session.test.js`) |
 | Differential | Run a program in `emu` and the same program in trs80gp or sdltrs via its own trace; compare PC+regs per instruction | Zero divergence over the session (this test is also the Fugløy verification harness, pointed at the recompiled JS instead) |
 | Determinism | Run the same scripted session twice; compare final snapshots | Byte-identical |
 
@@ -316,7 +387,7 @@ The exercisers are GPL-2.0 and never committed. `pnpm zex:install` fetches them,
 | 0 | Extract `cschweda/trs80-emulator` into `packages/emu`; strip DOM; ESM; test runner | Boots to `READY` in Node with no DOM stubs |
 | 1 | Z80 core hardened | ZEXALL passes |
 | 2 | Model III devices + `.CMD`/`.BAS`/`.CAS` loaders | Three real programs run to a recognizable screen. **Met** (2026-10-17): through `Machine`, Sea Dragon, Eliminator (`elimin8c`), and Rear Guard (`reargrd5`) load with `m.load.cmd` and reach their title screens on the Model III ROM, each differing from the READY screen in more than 256 cells and answering a key. Armored Patrol was tried and rejected (its screen differs in only 152 cells). Determinism: one scripted session run twice ends byte-identical in `serializeState`, every port `FF` event, and the cycle count: on a synthetic ROM in CI, and on Sea Dragon locally (`test/integration/determinism.test.js`). |
-| 3 | Debugger API + coverage + §8 file format | A scripted session produces a label file Fugløy's disassembler consumes |
+| 3 | Debugger API + coverage + §8 file format | A scripted session produces a label file Fugløy's disassembler consumes. **Met** (2026-10-18): `m.debug` (breakpoints, watches and the hit log, hooks, coverage and callers, the trace, snapshots, `m.video.diff`, labels) and `m.debug.labelFile`; `@fugloy/disasm` reads the file (`withLabelFile`, the CLI's `--labels`). In CI, a synthetic `.CMD` on a synthetic ROM, run with coverage, a 10,000-deep trace, and a write watch, writes a file under which the disassembler types the table the program reads as data where it would otherwise decode it as code, and names the subroutine it calls `SUB_7020` with the comment `observed: called 4× from 1 site`; two runs end with identical hit logs, traces, and files (`test/integration/label-session.test.js`). On the Model III ROM, a Sea Dragon session (coverage from `$497F`, title screen, ENTER) rewrites the committed `examples/sea-dragon/seadrg01.labels.json` byte for byte, and with the committed hints every one of its 459 executed or labelled roots starts an instruction the hints decode (none lost, no overlap, no hint name lost) and it adds the observed call counts of the 3 subroutines inside the loaded blocks; without the hints it skips the 165 addresses the copy changed, with one warning, and decodes no instruction whose bytes differ from what ran (`packages/disasm/test/sea-dragon-labels.test.ts`, no ROM needed). With the hints the program is already fully decoded, so the label file adds no instruction there: the synthetic session carries the proof that coverage changes a listing. The same session with coverage from the load keeps all 2,896 hinted instructions (`label-session.test.js`, ROM). Speed on Sea Dragon (`scripts/benchmark.mjs`, each mode in its own process): about 42× real time with debugging off, about 30× with coverage and a 10,000-deep trace; the suite asserts the §4 target, ≥ 20×, for both. |
 | 4 | `@fugloy/mcp` v0.1 | Claude Code can load a game, find its print routine, and label it unaided |
 | 5 | FDC + disk images | TRSDOS boots; a disk-based game runs |
 | 6 | Model I, then Model 4 | Each model's ROM boots and its fixture programs run |

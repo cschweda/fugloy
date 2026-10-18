@@ -92,7 +92,7 @@ export class TRS80System {
    * `runTStates` and the Machine facade both step through here, so the
    * RTC keeps one schedule however the machine is driven. Returns the
    * T-states consumed, an interrupt response included.
-   * @param {() => boolean | void} [beforeExecute] called after interrupt delivery, with PC at the instruction about to run; returning true means it stood in for that instruction, which then does not execute
+   * @param {() => boolean | 'stop' | void} [beforeExecute] called after interrupt delivery, with PC at the instruction about to run; returning true means it stood in for that instruction, which then does not execute; returning 'stop' means no instruction executes at all (a debugger break)
    * @returns {number}
    */
   stepInstruction(beforeExecute) {
@@ -113,8 +113,16 @@ export class TRS80System {
 
     // beforeExecute returning true has executed the boundary's instruction itself (the
     // Machine's ROM keyboard-scan hook stands in for a RET), so the CPU does not run one.
+    // Returning 'stop' runs nothing and the disk controller does not tick: like the normal path,
+    // it never ticks for an interrupt response's T-states. The return value is those T-states.
     const before = this.cpu.cycles;
-    if (beforeExecute === undefined || beforeExecute() !== true) {
+    if (beforeExecute !== undefined) {
+      const r = beforeExecute();
+      if (r === 'stop') {
+        return before - start;
+      }
+      if (r !== true) this.cpu.executeInstruction();
+    } else {
       this.cpu.executeInstruction();
     }
     this.io.fdc.tick(this.cpu.cycles - before);
