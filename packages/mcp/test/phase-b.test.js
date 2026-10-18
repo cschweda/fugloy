@@ -152,6 +152,11 @@ describe('phase B tools', () => {
     expect(json.hits[0]).toMatchObject({ id: 1, kind: 'write', pc: 0x7033, addr: 0x3c00, value: 0x53, prev: 0x20 });
     expect((await call('hits', { id: 7 })).text).toBe('There is no watch #7; the watches are #1 on 3C00h–3FFFh.');
     expect((await call('hits', { n: '5' })).text).toBe('The argument "n" is a decimal number; write 1024, not "5" (lengths and counts are never hex or strings).');
+    // The By-pc attribution the text shows is in the JSON too, every PC of it.
+    expect(json.byPc).toEqual([{ pc: 0x7033, count: 13, routine: 0x7030 }]);
+    // The emulator's log is one for every watch, so clearing one watch's hits is refused.
+    expect(await call('hits', { id: 1, clear: true })).toEqual({ text: "clear empties every watch's hits; call hits with clear and no id.", isError: true });
+    expect(JSON.parse(await ok(call, 'hits', { format: 'json' })).total).toBe(13);
     const cleared = (await ok(call, 'hits', { n: 1, clear: true })).split('\n');
     expect(cleared.at(-1)).toBe('Cleared the hit log (every watch\'s hits).');
     expect(await ok(call, 'hits', {})).toBe('No hits are logged.');
@@ -225,6 +230,31 @@ describe('phase B tools', () => {
     expect(rom[1]).toBe('? 0000  31 00 80     LD SP,8000H');
     expect((await ok(call, 'disasm', { addr: '7003', n: 1, labels: false })).split('\n')[0]).toBe('* 7003  21 00 3C     LD HL,3C00H');
     expect((await call('disasm', { addr: '7000', n: 0 })).text).toBe('n must be between 1 and 512, not 0.');
+    await close();
+  });
+
+  it('disasm names a 16-bit constant only with a data name, never a routine', async () => {
+    const { call, close } = await server();
+    const prog = buildCmd([{ addr: 0x7000, data: [0x01, 0x08, 0x00, 0x21, 0x00, 0x3c, 0xcd, 0x08, 0x00, 0x2a, 0x08, 0x00] }], 0x7000);
+    writeFileSync(at('consts.cmd'), prog);
+    await ok(call, 'load', { path: at('consts.cmd') });
+    expect((await ok(call, 'disasm', { addr: '7000', n: 4 })).split('\n').slice(0, 4)).toEqual([
+      '? 7000  01 08 00     LD BC,0008H',
+      '? 7003  21 00 3C     LD HL,3C00H       ; VIDEO',
+      '? 7006  CD 08 00     CALL 0008H        ; SYNCHK',
+      '? 7009  2A 08 00     LD HL,(0008H)     ; SYNCHK',
+    ]);
+    await close();
+  });
+
+  it('disasm wraps from FFFFh to 0000h', async () => {
+    const { call, close } = await raiders();
+    expect((await ok(call, 'disasm', { addr: 'FFFE', n: 3 })).split('\n').slice(0, 4)).toEqual([
+      '? FFFE  00           NOP',
+      '? FFFF  00           NOP',
+      '$RESET:',
+      '? 0000  31 00 80     LD SP,8000H',
+    ]);
     await close();
   });
 

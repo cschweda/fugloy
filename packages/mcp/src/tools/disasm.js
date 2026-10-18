@@ -32,12 +32,14 @@ function sessionName(labels, addr) {
   return undefined;
 }
 
-/** A ROM or hardware name for a data address: a variable, vector, or region covering it, or a routine starting there. */
-function dataName(/** @type {number} */ addr) {
+/** A ROM or hardware data name covering `addr`: a variable, vector, or region. */
+function dataOnlyName(/** @type {number} */ addr) {
   const covering = model3().data(addr);
-  if (covering) return plus(covering.entry.name, covering.offset);
-  return model3().code(addr)?.name;
+  return covering ? plus(covering.entry.name, covering.offset) : undefined;
 }
+
+/** A ROM or hardware name for a memory operand's address: a data name covering it, or a routine starting there. */
+const dataName = (/** @type {number} */ addr) => dataOnlyName(addr) ?? model3().code(addr)?.name;
 
 /**
  * The names an instruction's operands refer to, session labels first.
@@ -54,9 +56,12 @@ function operandNames(ins, labels) {
     if (op.kind === 'rel' || op.kind === 'rst' || (op.kind === 'imm16' && flow)) {
       const target = op.kind === 'rel' ? op.target : op.kind === 'rst' ? op.addr : op.value;
       name = sessionName(labels, target) ?? model3().code(target)?.name;
-    } else if (op.kind === 'mem' || op.kind === 'imm16') {
-      const addr = op.kind === 'mem' ? op.addr : op.value;
-      name = sessionName(labels, addr) ?? dataName(addr);
+    } else if (op.kind === 'mem') {
+      name = sessionName(labels, op.addr) ?? dataName(op.addr);
+    } else if (op.kind === 'imm16') {
+      // A constant that no jump or call uses may not be an address at all (LD BC,0008H is a
+      // count as often as a pointer), so only a data name, never a routine's, is offered.
+      name = sessionName(labels, op.value) ?? dataOnlyName(op.value);
     } else if (op.kind === 'port') {
       name = model3().port(op.value)?.name;
     }
