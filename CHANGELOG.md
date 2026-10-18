@@ -226,6 +226,57 @@ unreleased, on the `emu-phase5` branch:
   the unverified list, with `_dmkWriteSector` dropping bytes past the end;
   the real-disk checks), §10 and §11 row 5; MCP spec §5 `load`; the emu and
   MCP READMEs, the root README, and CLAUDE.md.
+- Phase 6 prep, behaviour-neutral on the Model III: the WD1793 takes its CPU
+  clock as a constructor option (`new FDC1793({ cpuHz })`, 2,027,520 by
+  default), and derives the step rates, settling, byte times, revolution, and
+  index-pulse width from it (`fdcTimes(cpuHz)`; the exported constants are
+  the Model III's values, unchanged). The drive-select latch is taken decoded,
+  `fdc.select(drive, side, mfm)`; the Model III's port `F4` is decoded in
+  `src/machine/io.js` (`decodeModel3Select`), and `fdc.selectDrive(byte)`
+  stays as a convenience for a bare controller.
+
+### Fixed
+
+From the emu phase 5 final review, `@fugloy/emu`, on `emu-phase5`:
+
+- Read Track no longer throws (a `TypeError` on a null disk) when the drive
+  goes empty or none is selected while it waits for the index pulse (a guest
+  `OUT` to port `F4`, or `m.fdc.unmount`): the command ends on the not-ready
+  path, Busy reset, an interrupt, Not Ready in the status. Write Track ends
+  the same way. Every other place the controller reaches the disk was checked
+  to sample Ready or find an ID first.
+- A snapshot restores each disk as the container it was: each disk entry
+  carries `format`, and a JV1's `dirTrack`, and `restoreState` parses the
+  bytes as that container (`new DiskImage(bytes, name, { format, dirTrack })`)
+  instead of detecting. Before, a blank disk formatted with a first track of
+  5 × 1024 or 8 × 512 sectors serialized but threw on restore (JV3 detection
+  refuses fewer than ten sectors), and a JV1 whose track 0, sector 0 the
+  program rewrote came back with the directory track its new byte 2 named.
+  A snapshot without these fields is detected as before.
+- A DMK ID with no data mark within 30 (FM) or 43 (MFM) bytes of its CRC is
+  kept (`noData` in `trackIds`) instead of dropped: Read Address and a Type I
+  verify read it, Read Sector passes over it to Record Not Found, and Write
+  Sector lays its data field where the chip writes one, which Read Sector
+  then reads.
+- `TRS80System.stepInstruction` resets its in-instruction flag (`_executing`)
+  in a `finally`, so a `beforeExecute` callback or an instruction that throws
+  no longer leaves later debugger port pokes waiting on the controller.
+- Docs: emu spec §5 (the ENTER-to-title check covers the two dual-boot DMKs;
+  `ELIMATOR.dsk` is checked only to its menu; Master Reset not modeled and
+  Read or Write Track with no disk at the index pulse, both unverified; the
+  DMK ID with no data mark; disks in a snapshot), §3, and §8 and
+  `docs/label-format.md` (a disk loaded with `m.load.dsk` contributes no
+  `load` blocks, and `labelFile()` needs a `name` for one). MCP `formatOf`
+  notes that a JV1 that also parses as a `.CMD` loads as a program.
+
+### Release coupling
+
+`@fugloy/mcp`'s disk support needs emu APIs that `@fugloy/emu` 0.2.0 does not
+have (`m.fdc`, `m.load.dsk`, `DiskImage`, `CPU_CLOCK_HZ`). Its dependency is
+`workspace:^`, which publishes as `^` the emu version in the workspace, so
+`@fugloy/emu` must be bumped to 0.3.0 and released before the next
+`@fugloy/mcp` release; an mcp published against emu 0.2.0 would install an
+emu without the disk controller.
 
 ## [1.2.0] - 2026-10-18
 

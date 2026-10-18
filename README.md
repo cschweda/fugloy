@@ -331,7 +331,9 @@ whose phases A–F are done, from the tools through snapshots and diffs,
 resources and prompts, and the npm release. Disk images (5) are built on
 a branch, unreleased: the WD1793 controller, JV1, JV3, and DMK images, and
 MCP `load` booting a disk, on which Eliminator, Rear Guard, and Scarfman
-load from their disks to their titles. Next are the Model I and Model 4, and a differential
+load from their disks to their titles. Because MCP `load` then needs the
+emulator's disk API, `@fugloy/emu` 0.3.0 has to be released before the next
+`@fugloy/mcp`. Next are the Model I and Model 4, and a differential
 harness (see the roadmap in [CLAUDE.md](CLAUDE.md)). Later,
 phase 5 adds an assembler with an IDE in the workbench: write Z80 code,
 assemble it, and run it on an emulated Model I or Model III. Every change is

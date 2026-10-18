@@ -66,7 +66,10 @@ boot to their Duo-Loader menu and load each game to its title, and Scarfman
 boots to its title (`packages/emu/test/integration/disk-boot.test.js`); no
 TRSDOS 1.3 image is present, so the emu spec §10 TRSDOS row stays open.
 Disk images stay in the gitignored `fixtures/real/`; synthetic ones are in
-`fixtures/synthetic/disk/`. Next: merge `emu-phase5`, then emu phase 6.
+`fixtures/synthetic/disk/`. Release coupling: MCP `load` now needs emu's
+`m.fdc`, `m.load.dsk`, `DiskImage`, and `CPU_CLOCK_HZ`, which emu 0.2.0 lacks,
+so emu must be bumped to 0.3.0 and released before the next `@fugloy/mcp`
+release. Next: merge `emu-phase5`, then emu phase 6.
 
 ## Stack and layout
 
