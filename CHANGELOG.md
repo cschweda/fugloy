@@ -8,6 +8,35 @@ Releases are tagged `vX.Y.Z` on `main`.
 
 ## [Unreleased]
 
+Emu phase 3 (`@fugloy/emu`, unreleased): the debugger and the label and
+coverage file, which the disassembler reads. Phase 3's done-criterion is met:
+a scripted session produces a label file Fugløy's disassembler consumes.
+
+### Added
+
+- `m.debug` (spec §3, §7): breakpoints with `once` and `when`, read and write
+  watches with a 65,536-entry hit log, memory and port hooks, coverage of
+  executed, operand, read, written, jumped-to, and called bytes with a callers
+  map (one switch), a bounded instruction trace with loops collapsed,
+  snapshots and `m.video.diff`, and user labels. Debugging off costs nothing
+  measurable: Sea Dragon runs at about 42× real time with it off and about 30×
+  with coverage and a 10,000-deep trace on, both over the §4 target of 20×.
+- `m.debug.labelFile()`, `parseLabelFile`, `mergeLabelFiles`, and the
+  `rle-hex` coverage encoding: the label and coverage file of spec §8 and
+  `docs/label-format.md`, with a committed synthetic fixture.
+- `@fugloy/disasm` reads the file (`parseLabelFile`, `withLabelFile`), and the
+  CLI applies it with `--labels <path>`: executed bytes become roots, read-only
+  runs stop descent, observed subroutines get their evidence as a comment, and
+  a file written for another program is refused. Hint files win.
+- `examples/sea-dragon/seadrg01.labels.json`: the file of a scripted Sea Dragon
+  session (coverage from `$497F`, after the loader's copy, through the title
+  screen and ENTER), written by `packages/emu/scripts/sea-dragon-labels.mjs`.
+  With the committed hints it adds 457 roots and contradicts nothing.
+- The deliverable proof, `packages/emu/test/integration/label-session.test.js`:
+  a synthetic session's file makes the disassembler type a table as data and
+  name the subroutine, and two runs end with identical hit logs and files.
+  `packages/emu/scripts/benchmark.mjs` measures speed per mode.
+
 Emu phase 2 (`@fugloy/emu`, unreleased): the Model III as a `Machine`, with
 the devices and loaders that run real programs. Phase 2's done-criterion is
 met: Sea Dragon, Eliminator, and Rear Guard load and reach their title screens
