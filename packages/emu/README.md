@@ -129,6 +129,44 @@ process, on the laptop that built phase 3):
 - ROM images are never bundled or committed; `roms/` here is gitignored and
   paths are supplied by the caller.
 
+## Differential testing
+
+Emu phase 7 runs a program here and in [trsjs](https://trsjs.48k.ca/)
+(Peter Phillips's JavaScript conversion of George Phillips's trs80gp) in
+lockstep, and compares the two after every instruction: PC, every register
+(F bit by bit, R as 7 bits), IFF1/2, IM, the T-states, and every memory
+write, with video RAM at checkpoints and at the end. Keys go into both
+keyboard matrices at the same T-state. trsjs has no license, so it is never
+committed or bundled: `pnpm trsjs:install` fetches it into the gitignored
+`tools/trsjs/`, pinned by SHA-256, and the tests that need it are opt-in.
+
+```sh
+pnpm trsjs:install
+FUGLOY_TRSJS=1 pnpm vitest run packages/emu/test/diff                     # about a minute: the harness tests and six game sessions
+FUGLOY_TRSJS=1 FUGLOY_TRSJS_SWEEP=1 pnpm vitest run packages/emu/test/diff # also every other .CMD in examples/ and fixtures/real/
+pnpm diff examples/sea-dragon/seadrg01.cmd --instructions 10000000        # one program, with a report
+```
+
+`pnpm diff <program> [--keys <script.json>] [--instructions N] [--from-cycle C] [--strict | --strict-all]`
+boots the Model III ROM from `fugloy.mcp.json`, loads the `.CMD` or `.BAS`,
+and prints the count of each known difference and the first divergence, if
+any, with ten instructions disassembled on each side. Exit status 0 means no
+divergence, 1 a divergence, 2 a usage error.
+
+Where the two differ, trsjs is the inaccurate side, and the harness says so
+explicitly. Some differences it corrects in the reference (a write to ROM or
+the keyboard, a byte stored wider than 8 bits, PC running past `$FFFF`, a
+repeating CPDR's T-states, a DD or FD prefix trsjs skips); the rest are known classes in
+`test/diff/known.js`, each with the evidence for it, counted rather than
+reported (flag bits 3 and 5; BIT's S and P/V; R on an interrupt and on
+DDCB/FDCB; the HALT return address; carry after CPI/CPD/CPIR/CPDR; and three
+interrupt timings). Everything else is a divergence. On the six sessions
+(Sea Dragon, Eliminator c and e, Rear Guard 5 and 4, Armored Patrol, 10
+million instructions each) there is none. The harness found two bugs here,
+now fixed: a halted CPU did not count R, and port `FF` did not read port
+`EC`'s bits back. Details in spec §10 and §11 (phase 7). The Model I waits
+for a Model I reference; trsjs is Model III only.
+
 ## Testing the Z80 core
 
 ZEXDOC and ZEXALL, Frank Cringle's Z80 instruction exercisers, are GPL-2.0, so

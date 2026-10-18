@@ -11,7 +11,7 @@ phase 2 onward and the MCP server follow, in the Roadmap's order. The recompiler
 bundler stay in Part 2 until the plan's kill criteria have been reviewed. If a
 task seems to need machinery from a later step, stop and say so.
 
-Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.2.0, `@fugloy/emu` 0.2.0, and `@fugloy/mcp` 0.1.0 on npm (2026-10-18); emu phases 2 and 3 merged to `main` (2026-10-18); emu phase 4 (`@fugloy/mcp` v0.1, MCP phases A–C) merged to `main` (2026-10-18); MCP phases A–F done; emu phase 5 (disk controller and images) merged (2026-10-18), unreleased; emu phase 6 (Model I) is next.**
+Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.2.0, `@fugloy/emu` 0.2.0, and `@fugloy/mcp` 0.1.0 on npm (2026-10-18); emu phases 2 and 3 merged to `main` (2026-10-18); emu phase 4 (`@fugloy/mcp` v0.1, MCP phases A–C) merged to `main` (2026-10-18); MCP phases A–F done; emu phase 5 (disk controller and images) merged (2026-10-18), unreleased; emu phase 6 (Model I) is next; emu phase 7 (differential harness against trsjs) done for the Model III on branch `emu-phase7`, not yet merged.**
 v1 is disassembler phases 1–4: the core decoder and loaders (v0.1.0), Pass 1
 and Pass 2 (v0.2.0), the cited symbol tables (phase 3: eight JSON tables, 634
 entries, in `packages/disasm/data/symbols/`, compiled by `pnpm symbols`), and
@@ -69,7 +69,17 @@ Disk images stay in the gitignored `fixtures/real/`; synthetic ones are in
 `fixtures/synthetic/disk/`. Release coupling: MCP `load` now needs emu's
 `m.fdc`, `m.load.dsk`, `DiskImage`, and `CPU_CLOCK_HZ`, which emu 0.2.0 lacks,
 so emu must be bumped to 0.3.0 and released before the next `@fugloy/mcp`
-release. Next: emu phase 6 (Model I).
+release. Next: emu phase 6 (Model I). Emu phase 7 ran beside it and is
+done for the Model III on `emu-phase7`, not yet merged (plan
+`docs/superpowers/plans/2026-10-18-emu-phase7-differential.md`): trsjs, Peter
+Phillips's JavaScript conversion of trs80gp, is the reference; it has no
+license, so `pnpm trsjs:install` fetches it into the gitignored `tools/trsjs/`
+(SHA-256 pinned) and its tests run only with `FUGLOY_TRSJS=1`
+(`packages/emu/test/diff/`, `pnpm diff <program>`). Six scripted game
+sessions of 10 million instructions each run with no divergence the known
+classes (`test/diff/known.js`, each with its evidence) do not explain; the
+harness found and fixed two core bugs (R while halted, port `FF` bits 5–1).
+The Model I waits for a Model I reference (MAME or xtrs, ask the user first).
 
 ## Stack and layout
 
@@ -132,7 +142,8 @@ release. Next: emu phase 6 (Model I).
    and disk images. 6: Model I, then Model 4. 7: differential harness. Phases 0,
    1, 2, and 3 are done and merged; phase 4, `@fugloy/mcp` v0.1, is done and
    merged; emu 0.2.0 and mcp 0.1.0 are on npm (2026-10-18); phase 5 is done
-   and merged; phase 6 is next.
+   and merged; phase 6 is next; phase 7 is done for the Model III on
+   `emu-phase7` (unmerged), the Model I pending a Model I reference.
 4. **mcp — phases A–F** (`docs/fugloy-mcp-spec.md` §11). A: lifecycle,
    execution, and inspection tools. B: break, watch, trace, callers, disasm.
    C: labels, coverage, sidecar file. D: snapshots, diff, search, callees.
