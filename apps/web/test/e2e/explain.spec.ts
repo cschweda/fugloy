@@ -1,7 +1,7 @@
 // The Explain tab, in a browser against the generated site: a click on a line
 // opens it, arrow keys re-explain while it shows (and only then), previews and
 // links move the cursor, a data row shows its region and picture, BASIC gets
-// its note, and axe finds nothing.
+// its note, a code line shows "Why it’s here", and axe finds nothing.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import AxeBuilder from '@axe-core/playwright';
@@ -161,6 +161,28 @@ test('the $888B LDIR says each fact once: one link per address, the pattern adds
   await expect(page.getByTestId('explain-pattern')).toContainText('Copies 13,953 bytes');
 });
 
+test('"Why it’s here": a PRINT_TEXT caller names the screen, XOR A shows all three parts, and a line with none has no section', async ({ page }) => {
+  await open(page);
+  await (await row(page, 0x4b86)).click();
+  const why = page.getByTestId('explain-why');
+  await expect(why.getByRole('heading', { level: 3 })).toHaveText('Why it’s here');
+  await expect(why.getByRole('heading', { level: 4 })).toHaveText(['What it does here']);
+  await expect(why.getByTestId('explain-why-purpose')).toHaveText('What it does hereDE holds $3F15 (VIDEO+0315H, the screen, row 12, column 21); its next use is not certain: the call at $4B8B may use or change it.');
+  await expect(why.getByTestId('explain-why-register')).toHaveCount(0);
+  // The routine section below names TITLE_FRAME, so the why section does not repeat it.
+  await expect(page.getByTestId('explain-routine')).toContainText('TITLE_FRAME');
+  await expect(why.getByTestId('explain-why-routine')).toHaveCount(0);
+  // A link in it moves the cursor, as everywhere in the tab.
+  await why.getByTestId('explain-why-purpose').getByRole('button', { name: '$4B8B' }).click();
+  await cursorAt(page, 0x4b8b);
+  // CALL PRINT_TEXT: nothing but the routine reference, so no section.
+  await expect(page.getByTestId('explain-line')).toContainText('CALL PRINT_TEXT');
+  await expect(page.getByTestId('explain-why')).toHaveCount(0);
+  await (await row(page, 0x4983)).click();
+  await expect(page.getByTestId('explain-why').getByRole('heading', { level: 4 })).toHaveText(['Why A', 'What it does here', 'Why write it this way']);
+  await expect(page.getByTestId('explain-why-idiom')).toContainText('Programmers write XOR A rather than LD A,00H');
+});
+
 test('a shift-click extends the selection and does not open Explain', async ({ page }) => {
   await open(page);
   await (await row(page, 0x49a7)).click({ modifiers: ['Shift'] });
@@ -178,7 +200,7 @@ test('a .BAS program gets the BASIC note', async ({ page }) => {
   await expect(page.getByTestId('explain-lead')).toHaveText('Explain covers machine code; BASIC comes later.');
 });
 
-test('axe finds nothing on the Explain tab, for a code line and a data row', async ({ page }) => {
+test('axe finds nothing on the Explain tab, for a code line, a data row and the "Why it’s here" section', async ({ page }) => {
   await open(page);
   const violations = async (): Promise<string[]> => {
     const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']).analyze();
@@ -189,5 +211,9 @@ test('axe finds nothing on the Explain tab, for a code line and a data row', asy
   expect(await violations()).toEqual([]);
   await (await row(page, 0x7dd5)).click();
   await expect(page.getByTestId('region-canvas')).toBeVisible();
+  expect(await violations()).toEqual([]);
+  // The "Why it’s here" section.
+  await (await row(page, 0x4b86)).click();
+  await expect(page.getByTestId('explain-why')).toBeVisible();
   expect(await violations()).toEqual([]);
 });

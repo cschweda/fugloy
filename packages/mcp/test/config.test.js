@@ -54,7 +54,7 @@ describe('loadConfig', () => {
   it('falls back to the defaults when there is no config file', () => {
     expect(loadConfig({ cwd, env: {}, home })).toEqual({ roms: {}, defaultModel: 3, limits: DEFAULT_LIMITS, source: null });
     expect(DEFAULT_LIMITS).toEqual({
-      runSecondsEmulated: 10, runSecondsWall: 5, outputBytes: 8192, traceDepth: 2000, stepMax: 100, peekMax: 1024,
+      runSecondsEmulated: 10, runSecondsWall: 5, outputBytes: 8192, traceDepth: 2000, stepMax: 100, peekMax: 1024, snapshots: 16,
     });
   });
 

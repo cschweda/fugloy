@@ -9,7 +9,7 @@ packages/emu/roms/
 docs/reference/
 # Local ROM paths for the emulator and the MCP server (fugloy.mcp.example.json shows the format).
 fugloy.mcp.json
-# Sidecar label files the MCP server writes beside a program (prompts/story-0*.md load the
+# Sidecar label files the MCP server writes beside a program (packages/mcp/prompts/*.md load the
 # committed examples, so a session would otherwise leave one in examples/).
 examples/**/*.fugloy.json
 # Your Claude Code MCP config, copied from .mcp.json.example (a committed one would start the server for everyone).

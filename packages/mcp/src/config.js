@@ -15,6 +15,7 @@ export const DEFAULT_LIMITS = Object.freeze({
   traceDepth: 2000,
   stepMax: 100,
   peekMax: 1024,
+  snapshots: 16,
 });
 
 /**
@@ -22,7 +23,7 @@ export const DEFAULT_LIMITS = Object.freeze({
  *   roms: Record<string, string>,
  *   defaultModel: 3,
  *   fixtures?: string,
- *   limits: { runSecondsEmulated: number, runSecondsWall: number, outputBytes: number, traceDepth: number, stepMax: number, peekMax: number },
+ *   limits: { runSecondsEmulated: number, runSecondsWall: number, outputBytes: number, traceDepth: number, stepMax: number, peekMax: number, snapshots: number },
  *   source: string | null,
  * }} Config
  */

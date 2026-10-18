@@ -130,13 +130,13 @@ importers:
   packages/mcp:
     dependencies:
       '@fugloy/disasm':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../disasm
       '@fugloy/emu':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../emu
       '@fugloy/z80':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../z80
       '@modelcontextprotocol/sdk':
         specifier: 1.32.0

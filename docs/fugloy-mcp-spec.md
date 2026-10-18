@@ -36,7 +36,7 @@ Claude Code ──stdio/JSON-RPC──▶ @fugloy/mcp ──in-process──▶ 
 |---|---|---|
 | `Machine` | Process | Created on first `load` or `reset`, with model from config or the `load` call |
 | Breakpoints, watches | Process | Survive `reset` unless `clear: true` |
-| Snapshots | Process | Named; capped at 16; LRU eviction with a notice |
+| Snapshots | Process | Named; capped at 16 (`limits.snapshots`); LRU eviction with a notice (taking, restoring, or diffing a snapshot counts as a use); each records the program it belongs to and outlives a `load`, but `restore` refuses a snapshot of another program |
 | Labels | Process + disk | Loaded from `<program>.fugloy.json` beside the program if present; `label` writes back on every change; `coverage export` writes the full §8 file |
 | Trace ring | Process | Cleared on `reset` |
 | Hit log | Process | Cleared on `reset` or `hits clear` |
@@ -121,8 +121,8 @@ Schemas are JSON Schema in the SDK; shown here abbreviated. Required fields mark
 | `peek` | `addr*`, `len?` (default 64, max 1024) | Hex dump with labels; 1024 bytes is 64 lines, inside the output cap |
 | `poke` | `addr*`, `bytes*`, `force?` (needed for ROM, `0000h–37FFh`) | Bytes written and previous values, `old → new` |
 | `disasm` | `addr*`, `n?` (instructions, default 32, at most 512), `labels?` (default true) | Linear listing (`@fugloy/z80`) with coverage marks (`*` executed, as an instruction or as another instruction's operand, `d` read or written as data, `?` never seen; when a line starts on a byte executed only as an operand, a closing note names the first such address, since the listing is out of step with the code there) and, after `;`, the names an instruction's targets and operands refer to: session labels first, then the Model III ROM and hardware tables of `@fugloy/disasm` (`VIDEO`, `KEYBOARD+40h`); a labelled address gets a `NAME:` line |
-| `screen` | `diff?` (since last `screen` call or a snapshot name) | Full screen or changed cells as `(row,col) old→new` |
-| `search` | `bytes*` or `text*`, `range?` | Addresses of every match |
+| `screen` | `diff?` (`true`: since the last `screen` call, or since `load` or `restore`; a snapshot name: since that snapshot) | Full screen or changed cells as `(row,col) old→new`; every call, and `load` and `restore`, makes the screen it leaves the baseline for the next `diff: true` |
+| `search` | `bytes*` (hex string or array) or `text*` (printable ASCII), `range?`, `fold?` (text only) | Addresses of every match, eight a line, under a count: the 64K address space as the CPU sees it, ROM and the keyboard included, unless `range` narrows it (a match lies wholly inside the range). `text` matches bytes exactly; `fold: true` also takes the other case of a letter and, for `@`, `A`–`Z`, and `[` to `_` (and the lower-case letters), the `00h`–`1Fh` byte the Model III's character generator shows as that character, so text written to video RAM in either form is found. At most 256 addresses, then `… and N more matches past the first 256; narrow range to see them.` An empty pattern, both patterns, or neither is refused |
 
 ### Debugging
 
@@ -135,7 +135,7 @@ Schemas are JSON Schema in the SDK; shown here abbreviated. Required fields mark
 | `hits` | `id?`, `n?` (default 50), `clear?`, `format?` | Hit log, newest last: `cycle pc addr value prev` and the watch; first a `By pc:` line counting every hit by the PC that made it, each with the routine it is in (the nearest call target at or below it, within 256 bytes, since load: a heuristic) |
 | `trace` | `n?` (default 100, ≤ depth limit), `regs?` | Trace lines, oldest first, loops collapsed (uncollapsed with `regs`, which adds the registers before each instruction). The rule: `run` with `trace: true` and every `step` record, and nothing else does, since tracing slows emulation about fourfold. Each enables a fresh emulator ring for its own length; the server keeps the newest `limits.traceDepth` instructions across all of them, so a `step` never erases a traced run, and only `load` and `reset` empty it. `… (N cycles ran untraced)` marks execution that was not recorded between two stretches. (`since?` is deferred.) |
 | `callers` | `addr*`, `format?` | `from kind count` rows (`call`, `jp`, `jr`, `rst`, `ret-to`), recorded with coverage from the load; for an address nothing reached, the nearest call target at or below it |
-| `callees` | `addr*`, `depth?` | Addresses this routine calls, as a tree |
+| `callees` | `addr*`, `depth?` (1–4, default 2) | The routines this routine called since load, as an indented tree: each callee with its call count, call sites, `(RST)` for an RST, and its name (a label, else the Model III ROM table's). Built from the callers map: the `call` and `rst` edges whose instruction lies in the routine's extent, from its address to its first executed RET as `suggest` defines it (a heuristic for a routine that jumps elsewhere). A routine already expanded is marked `(callees listed above)`, a call back into the path `(recursive; see above)`. An address that never ran as an instruction says so and names the nearest call target below it |
 
 ### Knowledge
 
@@ -151,10 +151,10 @@ Schemas are JSON Schema in the SDK; shown here abbreviated. Required fields mark
 
 | Tool | Input | Output |
 |---|---|---|
-| `snapshot` | `name*` | Confirmation, size |
-| `restore` | `name*` | Register block |
-| `snapshots` | — | List with cycle counts |
-| `diff` | `a*`, `b*` (snapshot names or `"now"`), `range?` | Changed bytes as `addr old→new`, grouped into runs |
+| `snapshot` | `name*` (up to 64 characters; `now` is reserved) | `snapshot "before" at cycle 10,137,610 (67 KB)`; a second snapshot of one name replaces the first and says so; past the cap, a line naming the snapshot evicted. The machine state of the emu spec §7 (not coverage, callers, the hit log, the trace, breakpoints, watches, or labels) |
+| `restore` | `name*`, `clearDebug?` (default false) | `Restored "before" (cycle N, PROGRAM).`, what was kept or cleared, and the register block. Coverage, callers, the hit log, and the trace are kept, as in the emu spec §7; `clearDebug: true` clears coverage, callers, and the hit log (not the trace), so a branch explored and abandoned does not count as covered. A snapshot taken with another program loaded (or with none) is refused with a sentence naming the program to load first, since its memory would sit under this program's labels and sidecar |
+| `snapshots` | — | `name cycle program`, least recently used first (the first is evicted next), with the count and cap |
+| `diff` | `a*`, `b*` (snapshot names or `"now"`, the running machine), `range?` (inside `3C00-FFFF`, the default: video RAM and RAM) | A count line (`2 runs, 3 bytes changed`), then each run of adjacent changed bytes as `7E10h–7E11h (2 bytes)  64 00 → C8 00`, eight bytes a line under a header for longer runs, with any label inside a run after `;` |
 
 ## 6. Resources and prompts
 
@@ -179,6 +179,12 @@ Schemas are JSON Schema in the SDK; shown here abbreviated. Required fields mark
 
 Prompts are where the reverse-engineering method lives. The tools are deliberately dumb.
 
+As built (MCP phase E, 2026-10-18; `packages/mcp/src/resources.js`, `prompts.js`):
+
+- Resources are plain text (`text/plain`). Reading one changes nothing: `fugloy://screen` does not move the baseline `screen diff: true` compares with. One that needs a program reads as the tool's sentence until one is loaded. `fugloy://program/manifest` is the text `load` returned. `fugloy://rom/{model}/symbols` is generated from `@fugloy/disasm`'s cited symbol tables, the Model III ROM and hardware ones (the machine 3, no-DOS selection the `disasm` tool names from), one line per entry: address, range, or port; kind; name; purpose (167 entries). Only model 3 exists; `fugloy://rom/1/symbols` reads as a sentence naming emu phase 6. `resources/list` lists `fugloy://rom/3/symbols`; the template is in `resources/templates/list`.
+- Prompt texts live in `packages/mcp/prompts/<name>.md`, shipped in the npm package (`files`), and are read once when the server starts; the server sends each file's `## Prompt` section (a blockquote, its lines joined) with `{placeholders}` filled in, as one user message. The same files are what a person pastes into Claude Code, so story 7's prompt and `label-pass` are one text (`label-pass.md`); story 1 is `story-01.md`, which `find-writer` generalizes. The repository's root `prompts/` holds only a README pointing there.
+- Arguments (strings, as the protocol has them): `orient {path}`; `find-writer {path, range}` (a range as the tools read it, `"3C00-3FFF"`; the prompt gets it as `3C00h–3FFFh` and the `watch addr`/`len` to set); `label-pass {path, minCalls?}` (a decimal count, default 5); `explain {addr}` (any address spelling or a label; sent as `6140h`). `path` is passed on as given, so a path outside the repository works as it does for `load`. Arguments are checked like a tool's: a missing or unknown one, a bad range or address, or a non-decimal `minCalls` is refused with a sentence (the server answers `prompts/get` itself rather than with the SDK's argument text). A missing prompt file does not stop the server; the prompt is listed, and `prompts/get` answers with a sentence naming the file.
+
 ## 7. Guardrails
 
 | Limit | Default | Why |
@@ -186,9 +192,9 @@ Prompts are where the reverse-engineering method lives. The tools are deliberate
 | Output per call | 8 KB | Context budget; agent can page. Every tool that can exceed it truncates with a trailing line `… (N more; use offset=…)` and accepts `offset` |
 | `run` emulated time | 10 s | A busy-wait would otherwise spin forever |
 | `run` wall-clock | 5 s | Backstop if emulation is slow |
-| `trace` depth | 2000 entries | Ring buffer memory; a `trace` call returns at most 100 lines per page |
+| `trace` depth | 2000 entries | Ring buffer memory; a `trace` call returns at most 100 trace lines per page (the first page also has its heading line), the rest with `offset` |
 | `step` | 100 | Beyond that, use `run` with a break |
-| Snapshots | 16 | Each is ~64–128 KB |
+| Snapshots | 16 (`limits.snapshots`) | Each is ~64–128 KB (about 67 KB of state plus the 49 KB `diff` reads) |
 | `poke` into ROM | Refused unless `force: true` | Catches agent mistakes |
 | `load` outside `fixtures` dir | Allowed, but the path is echoed back | Transparency about what ran |
 | Filesystem writes | Only the sidecar label file and explicit `coverage export` paths; an existing file at such a path that is not a label file only with `overwrite: true` | The server never writes elsewhere |
@@ -219,7 +225,7 @@ Claude Code config (`.mcp.json` in the Fugløy repo so it's project-scoped):
 }
 ```
 
-Until phase F publishes the package, and inside the monorepo during development, run the working tree instead. The repository commits that config as `.mcp.json.example` rather than `.mcp.json`, because a committed `.mcp.json` would start the server in every contributor's Claude Code session; copy it to `.mcp.json` (gitignored) to use it:
+Inside the monorepo during development, run the working tree instead. The repository commits that config as `.mcp.json.example` rather than `.mcp.json`, because a committed `.mcp.json` would start the server in every contributor's Claude Code session; copy it to `.mcp.json` (gitignored) to use it:
 
 ```json
 {
@@ -235,13 +241,13 @@ Until phase F publishes the package, and inside the monorepo during development,
 
 The bin imports `@fugloy/disasm` and `@fugloy/z80` from their `dist/` folders, so run `pnpm build` (or `pnpm typecheck`, which builds them) once after cloning. `fugloy.mcp.json` names your ROM (copy `fugloy.mcp.example.json`). For a headless check, `claude -p "<prompt>" --mcp-config <file> --allowedTools "mcp__trs80__*"` runs one session non-interactively.
 
-Dependency declaration in `packages/mcp/package.json` uses pnpm's `workspace:*` for `@fugloy/emu`, `@fugloy/disasm`, and `@fugloy/z80`, since the monorepo is a pnpm workspace; `pnpm pack` and `pnpm publish` rewrite each to the exact version of the local package, so the published package carries ordinary semver ranges. (Publish with pnpm, not npm: npm would leave `workspace:*` in place and fail to fetch it.)
+Dependency declaration in `packages/mcp/package.json` uses pnpm's `workspace:^` for `@fugloy/emu`, `@fugloy/disasm`, and `@fugloy/z80`, since the monorepo is a pnpm workspace; `pnpm pack` rewrites each to a caret range on the local package's version, so `@fugloy/mcp` 0.1.0 is published depending on `@fugloy/emu` `^0.2.0`, `@fugloy/disasm` and `@fugloy/z80` `^1.2.0`, and, pinned exactly, the MCP SDK 1.32.0 and zod 4.6.5. `./publish.sh check mcp` packs it that way (npm would leave `workspace:^` in place and fail to fetch it), refuses unless those `@fugloy` versions are on npm (or emu is staged, which makes the check a rehearsal that stages nothing), installs the tarball in a scratch project, and checks that `npx fugloy-mcp` answers `initialize` and `tools/list` over a pipe; `@fugloy/emu` is published first.
 
 First session, verbatim:
 
 > load fixtures/real/DEFENDER.CMD, run until the screen settles, and tell me what ROM routines it called.
 
-The prompts for stories 1 and 7 are kept in `prompts/story-01.md` and `prompts/story-07.md` (§13, "How to use the stories").
+The prompts for stories 1 and 7 are kept in `packages/mcp/prompts/story-01.md` and `packages/mcp/prompts/label-pass.md`, the second also served as the `label-pass` prompt (§6, §13 "How to use the stories").
 
 ## 10. Testing
 
@@ -263,9 +269,9 @@ The MCP Inspector (`npx @modelcontextprotocol/inspector`) is the manual test har
 | A | `load`, `reset`, `status`, `run`, `step`, `regs`, `peek`, `poke`, `screen`, `key` | Agent can load a game and reach its title screen. **Met** (2026-10-18): `test/phase-a-rom.test.js` loads Sea Dragon from `examples/`, and two `run until: "settled"` calls (the intro animation's cycle, then the title's) leave the title and copyright on `screen`; ENTER then reaches `1 or 2 Players?`. An ASCII `.BAS` program is typed in through the ROM and runs. The phase A tools run on a synthetic ROM in CI (`test/phase-a.test.js`) |
 | B | `break`, `watch`, `hits`, `trace`, `callers`, `disasm` | Story 1 (find the print routine) works. **Met** for a synthetic program (2026-10-18): `test/story-1.test.js` replays load, run until screen, a video RAM watch, ENTER, hits, callers, and disasm, which name the routine at `7030h` and its three call sites, and byte-compares the committed `test/golden/story-01.txt`; and for a real game (see C) |
 | C | `label`, `labels`, `coverage`, `suggest`, sidecar file | Story 3 and 7 work; Fugløy reads the output. **Met** (2026-10-18), which is emu phase 4's done-criterion (emu spec §11). Story 7 in scripted form, `test/story-7-rom.test.js` on Sea Dragon and the Model III ROM: load, two settled runs, ENTER, one player, Novice, a scripted minute of arrow keys and SPACE; `suggest minCalls=5` lists `6140h` (700 calls from 6 sites) among the routines that write video RAM; a watch on the screen line that holds text shows every write there made at `6141h`, in the routine called at `6140h`, and every value printable; `label` names it `PRINT` with a note, `coverage export` writes the sidecar, and `@fugloy/disasm` reads that file and lists `PRINT:`, the note, and `CALL PRINT`. Story 3 on a synthetic program, `test/phase-c.test.js`: coverage separates code from data and the exported file is read by the disassembler. Unaided, a headless Claude Code session given story 1's prompt on Sea Dragon loaded it, watched video RAM, ran until settled, read `hits`, `suggest`, `callers`, and `disasm`, and labelled `6140h` `PRINT_TEXT` with a correct note, in 15 turns (2026-10-18; `packages/mcp/README.md`). Story 7 on three games unaided, §10's agent acceptance, is the release check for F |
-| D | Snapshots, `diff`, `search`, `callees` | Story 2 (locate variables) works |
-| E | Resources, prompts, ROM symbol tables | `orient` prompt gives a useful first report unaided |
-| F | Guardrail hardening, golden transcripts, npm publish | v0.1.0 on npm under `@fugloy` |
+| D | Snapshots, `diff`, `search`, `callees` | Story 2 (locate variables) works. **Met** (2026-10-18). Snapshots and `diff`: `test/phase-d-snapshots.test.js` replays story 2 on a synthetic program (snapshot, `key` A, run, `diff` names the score byte at `7E10h` and a press counter, peek, a second press, label `SCORE`) and byte-compares the committed `test/golden/story-02.txt`. `search` and `callees`: `test/phase-d-search.test.js` finds bytes and text (folded and not) on a synthetic program, checks the 256-address cap and the refusals, and draws a three-level callee tree with a recursive routine and an RST |
+| E | Resources, prompts, ROM symbol tables | `orient` prompt gives a useful first report unaided. **Met** (2026-10-18). Resources, prompts, and the ROM symbols resource (§6 "As built"): `test/phase-e.test.js` lists and reads each resource before and after a load, gets each prompt with its arguments filled in (and `label-pass` byte for byte the story 7 file's prompt), refuses bad arguments with sentences, starts with the prompt files missing, and finds `0033h $VDCHAR` with its purpose in `fugloy://rom/3/symbols`. Unaided, a headless Claude Code session given the `orient` prompt on Sea Dragon (19 turns, 56 s) read the manifest, saw that the entry at `8881h` only copies the game down to `497Fh` and jumps there, ran to the title, read `fugloy://rom/3/symbols`, checked `callers` on the six common ROM entry points and found the game calls none (it drives the screen, keyboard, and port `FFh` itself), and proposed `514Eh` (the most-called routine, a drawing routine), `4B5Eh` (the only one reading the keyboard), `6212h` (sound), and the title-loop steps as the first to name, with snapshot and diff as the next step; it labelled nothing, as asked |
+| F | Guardrail hardening, golden transcripts, npm publish | v0.1.0 on npm under `@fugloy`. Guardrails and transcripts are in (2026-10-18): `test/guardrails.test.js` trips each §7 limit and checks its text (the output cap and paging, `run`'s emulated and wall-clock caps, trace depth and its 100-line page, `step`, `peek`, the snapshot cap, `poke` into ROM, `load` outside the fixtures folder, and a session calling every tool that writes only the sidecar and an explicit export path), and does §10's round trip across two child processes of the bin; `test/golden.test.js` adds story 3 (`test/golden/story-03.txt`, coverage separating code, data, and never-seen bytes on a synthetic program) and replays every golden story twice, byte for byte. Release readiness (2026-10-18): `@fugloy/mcp` 0.1.0 and `@fugloy/emu` 0.2.0 are packaged (LICENSE, `publishConfig`, absolute README links; mcp's `@fugloy` dependencies `workspace:^`, packed as `^0.2.0` and `^1.2.0`), and `./publish.sh check mcp` checks the tarball, refuses unless the `@fugloy` versions it needs are on npm (core 1.2.0 and emu first; with emu only staged it is a rehearsal), and checks that `npx fugloy-mcp` answers `initialize` and `tools/list` over a pipe. §10's agent acceptance, story 7 unaided on three games, passed (2026-10-18): Sea Dragon 18 of 22 listed (twelve agreeing with the hand-made hints' names), Eliminator 17 of 17 listed, Rear Guard 24 of 24, each with evidence notes; results in the CHANGELOG (`## [mcp 0.1.0]`) and `packages/mcp/README.md`. **Met** (2026-10-18): v0.1.0 on npm, after `@fugloy/emu` 0.2.0 (`npx -y @fugloy/mcp` installs and answers with 29 tools) |
 
 Phase A can begin the day `@fugloy/emu` boots to `READY` in Node (emu Phase 0), using `key` to type BASIC; `load` for `.CMD` arrives with emu Phase 2. Phases B–C need emu Phase 3. Don't start A before emu Phase 0 is green — a server over a core that can't boot is two things to debug at once.
 
@@ -276,9 +282,9 @@ Phase A can begin the day `@fugloy/emu` boots to `READY` in Node (emu Phase 0), 
 - [x] Is `suggest`'s heuristic list worth hard-coding, or should it just emit raw counts and leave judgment to the agent? Settled in emu phase 4: both. Raw counts come first (calls, distinct call sites), then four notes attributed by instruction address and labelled "by address, heuristic": `writes video RAM`, `reads the keyboard`, `writes port FFh (sound)`, `loops ≥ 1000× a call` (§5 `suggest`). On Sea Dragon the notes single out the drawing, printing, and sound routines among twenty targets; the agent still decides which one prints text, with `hits`.
 - [ ] Streamable HTTP for workbench sharing: in scope for 1.0 or never?
 - [ ] One server per machine model, or a `model` switch at `load`? (Current spec: switch at `load`, which forces a reset.) Emu phase 4 has the `model` argument; only 3 exists, and 1 or 4 is refused naming emu phase 6.
-- [ ] Publish ROM symbol tables as a separate `@fugloy/rom-symbols` package so the disassembler and workbench share them?
+- [x] Publish ROM symbol tables as a separate `@fugloy/rom-symbols` package so the disassembler and workbench share them? Settled in MCP phase E: no. The tables stay in `@fugloy/disasm` (cited JSON, compiled by `pnpm symbols`), which the workbench already uses and the MCP server depends on; `fugloy://rom/{model}/symbols` is generated from them (§6).
 - [x] Fixture programs are copyrighted games in a gitignored folder. Golden transcripts (§10) embed their screen text and bytes. Are those transcripts committable, or do they need to live outside the public repo too? Settled in emu phase 4: a golden transcript is committed only for a session on a synthetic ROM and a synthetic program (`test/golden/story-01.txt`); a session on the real Model III ROM, even with a public-domain game, asserts properties instead, since its output would carry ROM screen text.
-- [ ] `restore` resets machine state but not coverage or the hit log (emu spec §7). Should the MCP layer offer `restore clearDebug: true` so an agent exploring alternatives doesn't pollute coverage with abandoned branches?
+- [x] `restore` resets machine state but not coverage or the hit log (emu spec §7). Should the MCP layer offer `restore clearDebug: true` so an agent exploring alternatives doesn't pollute coverage with abandoned branches? Settled in MCP phase D: yes. `restore` keeps coverage, callers, the hit log, and the trace by default; `clearDebug: true` clears coverage, callers, and the hit log (and the per-address facts `suggest` reads), keeping the trace (§5 `restore`).
 
 ## 13. User stories and how to use them
 
@@ -366,7 +372,7 @@ You review `DEFENDER.fugloy.json` the next morning. Twenty-three draft labels wi
 1. **As phase gates.** Each build phase in §11 names the story it unlocks. A phase isn't done because the tools exist; it's done when the story runs end to end. Put the story's exact prompt in the phase's PR description.
 2. **As golden transcripts.** Record each story's tool-call sequence against a fixture program and store it under `test/golden/story-01.txt` etc. The test replays the sequence and byte-compares output. When you change a formatter, these tell you what moved.
 3. **As the README.** Stories 1, 2 and 7, written as above, *are* the documentation. Someone who reads three sessions knows how to use the server better than someone who reads the tool table.
-4. **As Claude Code prompts.** Keep the story prompts in `prompts/` in the repo. When you sit down to reverse-engineer a new game, you paste story 7's prompt and go make coffee. The `label-pass` MCP prompt is the same text, offered through the protocol.
+4. **As Claude Code prompts.** Keep the story prompts in `packages/mcp/prompts/` in the repo (shipped in the npm package). When you sit down to reverse-engineer a new game, you paste story 7's prompt and go make coffee. The `label-pass` MCP prompt is the same text, offered through the protocol.
 5. **As a gap detector.** Any story you can't tell with the §5 tool list means a tool is missing. Story 2 is why `diff` exists; story 4 (computed jumps) is why `break` takes a condition.
 6. **As GitHub issues.** One issue per story, labeled `story`, closed by the PR that makes its golden transcript pass. The issue list is then the roadmap and the changelog at once.
 
