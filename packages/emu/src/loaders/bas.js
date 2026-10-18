@@ -62,6 +62,8 @@ function parseTokenized(bytes) {
     const lines = walk(bytes, start, base);
     if (lines) return { kind: 'tokenized', lines };
   }
+  // No pointer chain holds together (a bad next pointer, say): fall back to splitting at each 00,
+  // which throws "truncated" only when the program runs off the end of the file.
   return { kind: 'tokenized', lines: scan(bytes, start) };
 }
 
@@ -76,7 +78,7 @@ export function parseBas(bytes) {
   let text = '';
   for (let i = 0; i < bytes.length; i++) {
     const b = bytes[i];
-    if (b === 0) throw new Error(`not a .BAS file: NUL at offset ${i} (a tokenized file starts with $FF)`);
+    if (b === 0) throw new Error(`not a .BAS file: NUL at offset ${i} (looks like tokenized BASIC without the $FF header; add a leading $FF byte to load it)`);
     if (!((b >= 0x20 && b <= 0x7e) || b === 0x0d || b === 0x0a || b === 0x09)) {
       throw new Error(`not a .BAS file: byte ${hex(b)} at offset ${i} is neither tokenized ($FF first) nor ASCII text`);
     }

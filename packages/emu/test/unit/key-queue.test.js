@@ -226,4 +226,11 @@ describe('m.keyboard ROM keyboard-scan hook', () => {
     expect(() => m.keyboard.feed('\u0000')).toThrow(/feed/);
     expect(() => m.keyboard.feed('é')).toThrow(/feed/);
   });
+
+  it('feed is atomic: one bad character queues nothing', () => {
+    const m = machine(JR_SELF);
+    expect(() => m.keyboard.feed('AB\u0000C')).toThrow(/feed/);
+    expect(m.keyboard.pending).toBe(0);
+    expect(m.keyboard.hasFeed).toBe(false);
+  });
 });

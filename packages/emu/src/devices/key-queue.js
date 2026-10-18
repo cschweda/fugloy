@@ -144,6 +144,13 @@ export class KeyQueue {
    * Queue typing. In matrix mode each character is pressed for half of a 1/cps-second window and
    * released for the other half, so a repeated letter registers twice; typing starts now, or when
    * the typing already queued ends. In hook mode it is `feed`.
+   *
+   * Pick `cps` for the program. The default 10 cps holds each key 50 ms of emulated time, long
+   * enough for the ROM's keyboard driver, which debounces. A program that reads the keyboard
+   * slowly, or only once a frame or less often, can miss a short tap: Rear Guard needs ENTER held
+   * about half a second (`{ cps: 1 }`). A high `cps` shortens the hold and can drop keys, and
+   * typing at the ROM's line editor with no pause for the ENTER can lose characters. For
+   * `press` and `release`, use the same name for both: a mismatch leaves the key down.
    * @param {string} str '\n' is ENTER
    * @param {{ cps?: number, mode?: 'matrix' | 'hook' }} [opts]
    */
@@ -168,10 +175,12 @@ export class KeyQueue {
   /**
    * Queue characters for the ROM keyboard-scan hook: each is returned once by the next call to
    * $002B or $0049. The matrix is not touched.
+   * All characters are checked first, so a bad one throws and queues nothing.
    * @param {string} str '\n' is ENTER
    */
   feed(str) {
-    for (const ch of str) this.#feed.push(romCode(ch));
+    const codes = Array.from(str, romCode);
+    for (const code of codes) this.#feed.push(code);
   }
 
   /** Queued events not yet delivered: matrix presses and releases, and fed characters. */

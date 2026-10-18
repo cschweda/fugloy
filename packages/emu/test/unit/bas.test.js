@@ -36,7 +36,7 @@ describe('parseBas', () => {
   });
 
   it('a headerless tokenized file is not detected: it holds NULs, so it is not ASCII', () => {
-    expect(() => parseBas(read('no-header.bas'))).toThrow(/^not a \.BAS file: NUL/);
+    expect(() => parseBas(read('no-header.bas'))).toThrow(/^not a \.BAS file: NUL.*looks like tokenized BASIC without the \$FF header; add a leading \$FF byte to load it/);
   });
 
   it('bas-edge: a file cut before 00 00 is truncated', () => {
