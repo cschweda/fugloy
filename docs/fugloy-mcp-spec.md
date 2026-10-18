@@ -217,13 +217,29 @@ Claude Code config (`.mcp.json` in the Fugløy repo so it's project-scoped):
 }
 ```
 
-Inside the monorepo during development, point `command` at `node packages/mcp/bin/fugloy-mcp.js` instead so you're testing the working tree, not the published package.
+Until phase F publishes the package, and inside the monorepo during development, run the working tree instead. The repository commits that config as `.mcp.json.example` rather than `.mcp.json`, because a committed `.mcp.json` would start the server in every contributor's Claude Code session; copy it to `.mcp.json` (gitignored) to use it:
+
+```json
+{
+  "mcpServers": {
+    "trs80": {
+      "command": "node",
+      "args": ["packages/mcp/bin/fugloy-mcp.js"],
+      "env": { "FUGLOY_CONFIG": "./fugloy.mcp.json" }
+    }
+  }
+}
+```
+
+The bin imports `@fugloy/disasm` and `@fugloy/z80` from their `dist/` folders, so run `pnpm build` (or `pnpm typecheck`, which builds them) once after cloning. `fugloy.mcp.json` names your ROM (copy `fugloy.mcp.example.json`). For a headless check, `claude -p "<prompt>" --mcp-config <file> --allowedTools "mcp__trs80__*"` runs one session non-interactively.
 
 Dependency declaration in `packages/mcp/package.json` uses pnpm's `workspace:*` for `@fugloy/emu`, `@fugloy/disasm`, and `@fugloy/z80`, since the monorepo is a pnpm workspace; `pnpm pack` and `pnpm publish` rewrite each to the exact version of the local package, so the published package carries ordinary semver ranges. (Publish with pnpm, not npm: npm would leave `workspace:*` in place and fail to fetch it.)
 
 First session, verbatim:
 
 > load fixtures/real/DEFENDER.CMD, run until the screen settles, and tell me what ROM routines it called.
+
+The prompts for stories 1 and 7 are kept in `prompts/story-01.md` and `prompts/story-07.md` (§13, "How to use the stories").
 
 ## 10. Testing
 
@@ -242,9 +258,9 @@ The MCP Inspector (`npx @modelcontextprotocol/inspector`) is the manual test har
 
 | Phase | Scope | Done when |
 |---|---|---|
-| A | `load`, `reset`, `status`, `run`, `step`, `regs`, `peek`, `poke`, `screen`, `key` | Agent can load a game and reach its title screen |
-| B | `break`, `watch`, `hits`, `trace`, `callers`, `disasm` | Story 1 (find the print routine) works. **Met** for a synthetic program (2026-10-18): `test/story-1.test.js` replays load, run until screen, a video RAM watch, ENTER, hits, callers, and disasm, which name the routine at `7030h` and its three call sites, and byte-compares the committed `test/golden/story-01.txt` |
-| C | `label`, `labels`, `coverage`, `suggest`, sidecar file | Story 3 and 7 work; Fugløy reads the output |
+| A | `load`, `reset`, `status`, `run`, `step`, `regs`, `peek`, `poke`, `screen`, `key` | Agent can load a game and reach its title screen. **Met** (2026-10-18): `test/phase-a-rom.test.js` loads Sea Dragon from `examples/`, and two `run until: "settled"` calls (the intro animation's cycle, then the title's) leave the title and copyright on `screen`; ENTER then reaches `1 or 2 Players?`. An ASCII `.BAS` program is typed in through the ROM and runs. The phase A tools run on a synthetic ROM in CI (`test/phase-a.test.js`) |
+| B | `break`, `watch`, `hits`, `trace`, `callers`, `disasm` | Story 1 (find the print routine) works. **Met** for a synthetic program (2026-10-18): `test/story-1.test.js` replays load, run until screen, a video RAM watch, ENTER, hits, callers, and disasm, which name the routine at `7030h` and its three call sites, and byte-compares the committed `test/golden/story-01.txt`; and for a real game (see C) |
+| C | `label`, `labels`, `coverage`, `suggest`, sidecar file | Story 3 and 7 work; Fugløy reads the output. **Met** (2026-10-18), which is emu phase 4's done-criterion (emu spec §11). Story 7 in scripted form, `test/story-7-rom.test.js` on Sea Dragon and the Model III ROM: load, two settled runs, ENTER, one player, Novice, a scripted minute of arrow keys and SPACE; `suggest minCalls=5` lists `6140h` (700 calls from 6 sites) among the routines that write video RAM; a watch on the screen line that holds text shows every write there made at `6141h`, in the routine called at `6140h`, and every value printable; `label` names it `PRINT` with a note, `coverage export` writes the sidecar, and `@fugloy/disasm` reads that file and lists `PRINT:`, the note, and `CALL PRINT`. Story 3 on a synthetic program, `test/phase-c.test.js`: coverage separates code from data and the exported file is read by the disassembler. Unaided, a headless Claude Code session given story 1's prompt on Sea Dragon loaded it, watched video RAM, ran until settled, read `hits`, `suggest`, `callers`, and `disasm`, and labelled `6140h` `PRINT_TEXT` with a correct note, in 15 turns (2026-10-18; `packages/mcp/README.md`). Story 7 on three games unaided, §10's agent acceptance, is the release check for F |
 | D | Snapshots, `diff`, `search`, `callees` | Story 2 (locate variables) works |
 | E | Resources, prompts, ROM symbol tables | `orient` prompt gives a useful first report unaided |
 | F | Guardrail hardening, golden transcripts, npm publish | v0.1.0 on npm under `@fugloy` |
@@ -254,12 +270,12 @@ Phase A can begin the day `@fugloy/emu` boots to `READY` in Node (emu Phase 0), 
 ## 12. Open questions
 
 - [x] Condition expressions on `break`: a tiny custom evaluator, or accept only `reg == value` forms? (A real expression language is a security surface, even in-process.) Settled in emu phase 4: only `<reg> <op> <value>` clauses joined by `&&` (§5 `break`).
-- [ ] Should `key` understand BASIC line injection (`10 PRINT "HI"`) as a special case, or is `cps` pacing enough?
-- [ ] Is `suggest`'s heuristic list worth hard-coding, or should it just emit raw counts and leave judgment to the agent?
+- [x] Should `key` understand BASIC line injection (`10 PRINT "HI"`) as a special case, or is `cps` pacing enough? Settled in emu phase 4: no special case. `key` types through the matrix at `cps` (default 20) or, with `mode: "hook"`, hands characters to the ROM's keyboard routine, which takes BASIC lines at any speed; and `load` of an ASCII `.BAS` file types the program in through the hook.
+- [x] Is `suggest`'s heuristic list worth hard-coding, or should it just emit raw counts and leave judgment to the agent? Settled in emu phase 4: both. Raw counts come first (calls, distinct call sites), then four notes attributed by instruction address and labelled "by address, heuristic": `writes video RAM`, `reads the keyboard`, `writes port FFh (sound)`, `loops ≥ 1000× a call` (§5 `suggest`). On Sea Dragon the notes single out the drawing, printing, and sound routines among twenty targets; the agent still decides which one prints text, with `hits`.
 - [ ] Streamable HTTP for workbench sharing: in scope for 1.0 or never?
-- [ ] One server per machine model, or a `model` switch at `load`? (Current spec: switch at `load`, which forces a reset.)
+- [ ] One server per machine model, or a `model` switch at `load`? (Current spec: switch at `load`, which forces a reset.) Emu phase 4 has the `model` argument; only 3 exists, and 1 or 4 is refused naming emu phase 6.
 - [ ] Publish ROM symbol tables as a separate `@fugloy/rom-symbols` package so the disassembler and workbench share them?
-- [ ] Fixture programs are copyrighted games in a gitignored folder. Golden transcripts (§10) embed their screen text and bytes. Are those transcripts committable, or do they need to live outside the public repo too?
+- [x] Fixture programs are copyrighted games in a gitignored folder. Golden transcripts (§10) embed their screen text and bytes. Are those transcripts committable, or do they need to live outside the public repo too? Settled in emu phase 4: a golden transcript is committed only for a session on a synthetic ROM and a synthetic program (`test/golden/story-01.txt`); a session on the real Model III ROM, even with a public-domain game, asserts properties instead, since its output would carry ROM screen text.
 - [ ] `restore` resets machine state but not coverage or the hit log (emu spec §7). Should the MCP layer offer `restore clearDebug: true` so an agent exploring alternatives doesn't pollute coverage with abandoned branches?
 
 ## 13. User stories and how to use them

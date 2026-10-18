@@ -16,8 +16,10 @@ The repository holds parts that are versioned and released separately:
   0.1.0 and not yet on npm, so its phases are listed under [Unreleased]. Its
   first release moves them to an `## [emu X.Y.Z]` heading, tagged
   `emu-vX.Y.Z`.
-- **The MCP server**, `@fugloy/mcp`, is an unpublished 0.1.0 stub. It is
-  built in emu phase 4, which is not on `main` yet.
+- **The MCP server**, `@fugloy/mcp`, is versioned 0.x on its own. It is at
+  0.1.0 (MCP phases A–C, built as emu phase 4) and not yet on npm, so its
+  work is listed under [Unreleased] until its first release, after MCP
+  phase F, which gets a heading of its own as the emulator's will.
 - **The web workbench**, `apps/web`, is not on npm and has no version of its
   own: Netlify builds it from `main` and serves it at fugloy.netlify.app
   (app.fugloy.dev to follow). Its changes are listed under the core release
@@ -32,11 +34,22 @@ creates and pushes the tag.
 
 ## [Unreleased]
 
-Nothing in the core packages since 1.1.0. The emulator, `@fugloy/emu` 0.1.0
-(not on npm), has phases 0–3 of eight done, listed here until its first
-release. Phases 0 and 1 were merged while core 1.0.0 was being built, and
-phases 2 and 3 between 1.0.0 and 1.1.0. Emu phase 4, `@fugloy/mcp` v0.1 (MCP
-phases A–C), is being built on a branch and is not on `main`.
+In the core packages since 1.1.0: the disassembler shows a label's `note`
+(emu phase 4, below). The emulator, `@fugloy/emu` 0.1.0 (not on npm), has
+phases 0–4 of eight done, listed here until its first release. Phases 0 and 1
+were merged while core 1.0.0 was being built, and phases 2 and 3 between 1.0.0
+and 1.1.0. Phase 4 is done on the `emu-phase4` branch and not yet merged.
+
+Emu phase 4: the MCP server, `@fugloy/mcp` 0.1.0 (not on npm), with MCP
+phases A–C. Phase 4's done-criterion is met: Claude Code loaded a game, found
+its print routine, and labelled it unaided. Given only story 1's prompt on Sea
+Dragon (`prompts/story-01.md`), a headless session (`claude -p`, the server
+from the working tree, the MCP tools its only tools; 2026-10-18, 15 turns, 47
+s) watched video RAM, ran until the screen settled, read `hits` (the credits
+written at `$6141`, in the routine called at `$6140`), `suggest`, `callers`,
+and `disasm`, and labelled `$6140` `PRINT_TEXT` with a note that matches the
+hand annotation in `seadrg01.hints`. This is the first entry in the agent
+acceptance log of MCP spec §10.
 
 Emu phase 3: the debugger and the label and coverage file, which the
 disassembler reads from 1.1.0. Phase 3's done-criterion is met: a scripted
@@ -55,14 +68,148 @@ the Model III ROM to `READY` in Node.
 
 ### Added
 
-Emu phase 4 (`@fugloy/mcp`, in progress):
+Emu phase 4 (`@fugloy/mcp` 0.1.0, MCP phases A–C; MCP spec §5, §11):
 
-- The stdio server skeleton (`bin/fugloy-mcp.js`, MCP SDK 1.32.0): the
-  `fugloy.mcp.json` config (`$FUGLOY_CONFIG`, then the working directory,
-  then `~/.config/fugloy/`, with the §7 limits as defaults), the one-machine
-  session, the output cap, errors as `isError` sentences, a stdout guard that
-  sends console output and the emulator's log to stderr, and the `status`
-  tool.
+- The stdio server (`bin/fugloy-mcp.js`, MCP SDK 1.32.0, zod 4.6.5, plain
+  JavaScript, no build step): one Model III per process, nothing running
+  between calls. The `fugloy.mcp.json` config is read from `$FUGLOY_CONFIG`
+  (a set variable that names no file is an error, not a fallback), then the
+  working directory, then `~/.config/fugloy/`; ROM and fixtures paths are
+  relative to the file; `limits` override the §7 defaults (output 8,192 bytes
+  a call, `run` 10 s emulated and 5 s wall clock, trace depth 2,000, `step`
+  100, `peek` 1,024), and an unknown limit or a bad value is refused with a
+  sentence naming the file. A stdout guard, installed before anything else
+  loads, sends console output and the emulator's log to stderr, so stdout
+  carries JSON-RPC and nothing else (a test spawns the bin over pipes and
+  checks every line).
+- Conventions for every tool (spec §4): results are text; errors are
+  `isError` sentences, never stack traces. Addresses take `5200`, `0x5200`,
+  `$5200`, `5200h`, a JSON number (decimal), or a label name, and echo as
+  `5200h`; an all-hex label such as `ACC` is refused naming both readings.
+  Lengths and counts are decimal, and a string where one belongs is answered
+  `write 1024, not "400"`. Tools list real JSON schemas, and invalid
+  arguments get the same plain sentences. Output past the cap is cut at a
+  line with `… (N more; use offset=…)`; `offset` pages through the last
+  output without running the tool again.
+- Phase A, lifecycle, execution, inspection: `load`, `reset`, `status`,
+  `run`, `step`, `key`, `regs`, `peek`, `poke`, `screen`.
+  - `load` detects `.CMD`, `.BAS` (tokenized or ASCII), and `.CAS` by
+    content, never by extension, boots the ROM to `READY` first (ENTER at
+    Cass? and Memory Size?), and returns a manifest: format, every block
+    with its range and record, the entry, the ROM recognised by hash, the
+    boot time, the sidecar found, and the resolved path. `model: 1` or `4` is
+    refused naming emu phase 6. A load that fails leaves the session as it
+    was. `reset: false` loads into the running machine.
+  - `run` takes `cycles`, `seconds`, or `until`: `break`, `halt`, `screen`
+    (the first change, checked every 2,000 T-states), `settled`, or
+    `pc:<addr>`, with `trace` on request. `settled` waits for the first
+    change, then stops when video RAM returns to a state it held since then
+    (an animation or blink cycle closed; states kept by hash, compared
+    exactly) or stays the same for 0.5 s emulated. Sea Dragon reaches its
+    title with two calls: the intro's cycle, then the title's. Every stop is
+    cycle-based, so a session repeats byte for byte; the wall-clock cap is
+    the one exception, and only when it trips.
+  - `step` (1–100) prints the instructions it ran, then the registers.
+  - `key` types `text`, then named `keys` (`ENTER`, `BREAK`, `CLEAR`, the
+    arrows, `SHIFT`, `SPACE`), through the keyboard matrix at `cps` (default
+    20) or, with `mode: "hook"`, through the ROM's keyboard routine; it runs
+    until every key is delivered plus 0.2 s, within one wall-clock deadline,
+    and returns the screen diff.
+  - `regs` (text or JSON), `peek` (up to 1,024 bytes, with labels), `poke`
+    (old → new; ROM only with `force`, the keyboard never), `screen` (the 64
+    or 32 columns as text, or a diff since the last call).
+  - `reset` before any load powers on a machine with no program, for BASIC.
+- Phase B, debugging: `break`, `unbreak`, `watch`, `unwatch`, `hits`,
+  `trace`, `callers`, `disasm`.
+  - `break` takes `once` and a `condition` of `<reg> <op> <value>` clauses
+    joined by `&&` and nothing else (registers, pairs, `IX IY SP PC`, flags
+    `ZF CF SF PVF HF NF`; `C` and `H` are the registers), echoed with values
+    in hex. `unbreak` by id, address, or all.
+  - `watch` on read, write, or both, optionally stopping `run`; `hits` shows
+    the log newest last, after a `By pc:` line that counts every hit by the
+    instruction that made it and names the routine each is in (the nearest
+    call target at or below it, a heuristic), with `clear` and JSON.
+  - `trace`: `run trace: true` and every `step` record (tracing costs about
+    4× speed, so nothing else does); the server keeps the newest 2,000
+    instructions across stretches, marks untraced gaps, and collapses loops
+    unless `regs` is asked for.
+  - `callers`: `from kind count` rows (`call`, `jp`, `jr`, `rst`,
+    `ret-to`), recorded from the load; for an address nothing reached, the
+    nearest call target at or below it.
+  - `disasm`: a linear listing with `@fugloy/z80`, each line marked `*`
+    executed, `d` read or written as data, or `?` never seen, and names after
+    `;`: session labels, then the Model III ROM and hardware tables of
+    `@fugloy/disasm` (`VIDEO+28Dh`). A 16-bit constant gets only data names,
+    never a ROM routine's.
+- Phase C, knowledge: `label`, `unlabel`, `labels`, `coverage`, `suggest`,
+  and the sidecar.
+  - `label` checks a name as the disassembler does (no mnemonic, register,
+    zmac word, or generated `SUB_hhhh` shape, and not a name another address
+    has), takes `kind`, `size`, and a `note`, replaces a label at the same
+    address and says so. `unlabel` by address or name; `labels` by range and
+    source, with notes and evidence.
+  - `coverage`: the share of loaded bytes executed, the code and data
+    ranges, the bytes never seen, and what ran outside the loaded blocks;
+    `ranges` as a table; JSON; and `export`, which writes the full label and
+    coverage file, this session merged into the earlier sessions' coverage
+    and callers and appended as a session record, to `path` or the sidecar.
+    Exporting again in one session replaces its record instead of counting
+    twice.
+  - `suggest`: the unnamed call targets outside the ROM reached by `CALL` or
+    `RST` at least `minCalls` times (default 5), most calls first: calls,
+    distinct callers, then notes by address, heuristic: `writes video RAM`,
+    `reads the keyboard`, `writes port FFh (sound)`, `loops ≥ 1000× a call`.
+    The server watches memory and port traffic from the load through the
+    emulator's hooks and credits a routine with what its instructions did,
+    from the target to its first executed unconditional `RET`, within 256
+    bytes. The hooks cost about 1–3% (Sea Dragon at about 33× real time with
+    coverage and them, 42× with debugging off).
+  - The sidecar `<program>.fugloy.json` beside the program, in the format of
+    `docs/label-format.md`: `load` reads it (or one in the config's
+    fixtures folder; writes still go beside the program) and its labels are
+    used at once; `label` and `unlabel` rewrite it at once. A sidecar that
+    is not JSON, breaks a rule of the format, was written for another
+    program, or is a link is reported and never overwritten. Before every
+    write the server checks the file is still what it last read or wrote, so
+    a hand edit, a removal, or a file that appeared is never overwritten; it
+    never writes through a link, and `coverage export` compares files by
+    device and inode, so no spelling can name the program, the ROM, or an
+    ignored sidecar. After `load` with `reset: false` of another program,
+    `export` refuses and `coverage` and `suggest` say the coverage is mixed.
+    The sidecar and explicit export paths are the only files the server
+    writes.
+- Tests, on a synthetic 14K ROM and synthetic programs, so CI runs them: the
+  config, the argument rules and formatters, every tool, the guardrails, the
+  stdout rule over a real pipe, determinism (one session twice, identical
+  text), and story 1 replayed on RAIDERS and byte-compared with the committed
+  `packages/mcp/test/golden/story-01.txt`. With the Model III ROM in
+  `fugloy.mcp.json`: `phase-a-rom.test.js` (Sea Dragon to its title and
+  "1 or 2 Players?", an ASCII `.BAS` program typed in and run) and
+  `story-7-rom.test.js`, story 7 in scripted form on Sea Dragon: a minute of
+  arrow keys and SPACE, `suggest minCalls=5` (`$6140`, 700 calls from 6
+  sites, writes video RAM), a watch on the screen line holding text whose
+  every write comes from `$6141` with a printable value, `label` with a
+  note, `coverage export`, and `@fugloy/disasm` listing `PRINT:`, the note,
+  and `CALL PRINT` from the exported file. Golden transcripts are committed
+  only for synthetic sessions; ROM sessions assert properties, since their
+  output would carry ROM screen text.
+- `prompts/story-01.md` and `prompts/story-07.md`, the story prompts to paste
+  into Claude Code, and `.mcp.json.example`, the dev config that runs the
+  working tree (copy it to `.mcp.json`, now gitignored; a committed one
+  would start the server in every contributor's session).
+- The label and coverage file (emu spec §8, `docs/label-format.md`) gains
+  `note` on a label of any source: a remark for a human, without control
+  characters. The emulator's `parseLabelFile` checks it, `m.debug.label`
+  takes it, and `@fugloy/disasm` reads it and shows it as the line's comment,
+  ahead of any evidence (`note; observed: …`); a hint file's comment still
+  wins.
+- The emulator's memory and port hooks get the instruction's address as a
+  trailing `pc` argument (`onMemRead(addr, value, pc)`,
+  `onMemWrite(addr, value, prev, pc)`, `onPort(port, value, dir, pc)`), the
+  same `pc` a watch hit carries. Existing hooks are unaffected.
+- `m.keyboard.type` and `feed` document an array of keys, each a character
+  or a key name (`type(['ENTER'])` presses ENTER, where `type('ENTER')`
+  types five letters), with a test.
 
 Emu phase 3:
 

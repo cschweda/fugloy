@@ -7,9 +7,12 @@ the Z80 CPU (`src/cpu/`), the Model III memory map, I/O ports, and system
 (`src/machine/`), the keyboard matrix, cassette, WD1793 disk controller, disk
 images, and printer (`src/devices/`), the `.CAS` and `.CMD` formats
 (`src/loaders/`), and save states (`src/debug/`). Model III only for now.
-Phases 0–3 of the spec's eight are done: the Z80 core passes ZEXDOC and
-ZEXALL, the `Machine` below runs real programs, and `m.debug` writes the label
-and coverage file. Phase 4 is the MCP server, `@fugloy/mcp`.
+Phases 0–4 of the spec's eight are done: the Z80 core passes ZEXDOC and
+ZEXALL, the `Machine` below runs real programs, `m.debug` writes the label
+and coverage file, and phase 4, the MCP server
+[`@fugloy/mcp`](https://github.com/cschweda/fugloy/blob/main/packages/mcp/README.md),
+drives it for an AI assistant (on the `emu-phase4` branch until it is
+merged).
 
 The renderer, the WebAudio driver, the turbo throttle, the web UI, and every
 ROM, disk, and program file stayed upstream: rendering and sound belong to the
