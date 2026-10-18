@@ -117,6 +117,9 @@ importers:
 
   packages/emu:
     devDependencies:
+      '@fugloy/disasm':
+        specifier: workspace:*
+        version: link:../disasm
       '@fugloy/z80':
         specifier: workspace:*
         version: link:../z80

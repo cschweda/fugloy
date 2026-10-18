@@ -15,6 +15,7 @@
     "node": ">=22"
   },
   "devDependencies": {
+    "@fugloy/disasm": "workspace:*",
     "@fugloy/z80": "workspace:*"
   }
 }
