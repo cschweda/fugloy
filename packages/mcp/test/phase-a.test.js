@@ -86,6 +86,23 @@ const PIECES = (() => {
   return buildCmd([{ addr: 0x7000, data: code }], 0x7000);
 })();
 
+/** BLINK: prints A, then blinks a star beside it, on and off every tenth of a second, forever. */
+const BLINK = (() => {
+  const code = new Array(0x29).fill(0);
+  const place = (addr, bytes) => code.splice(addr - 0x7000, bytes.length, ...bytes);
+  place(0x7000, [0x31, 0x00, 0x7f]); //              7000  LD SP,7F00H
+  place(0x7003, [0x3e, 0x41, 0x32, 0x00, 0x3c]); //  7003  LD A,'A' / LD (3C00H),A
+  place(0x7008, [0x3e, 0x2a, 0x32, 0x01, 0x3c]); //  7008  LD A,'*' / LD (3C01H),A
+  place(0x700d, [0xcd, 0x20, 0x70]); //              700D  CALL 7020H
+  place(0x7010, [0x3e, 0x20, 0x32, 0x01, 0x3c]); //  7010  LD A,' ' / LD (3C01H),A
+  place(0x7015, [0xcd, 0x20, 0x70]); //              7015  CALL 7020H
+  place(0x7018, [0x18, 0xee]); //                    7018  JR 7008H
+  place(0x7020, [0x01, 0x78, 0x1e]); //              7020  LD BC,1E78H   about 0.1 s of
+  place(0x7023, [0x0b, 0x78, 0xb1]); //              7023  DEC BC / LD A,B / OR C
+  place(0x7026, [0x20, 0xfb, 0xc9]); //              7026  JR NZ,7023H / RET
+  return buildCmd([{ addr: 0x7000, data: code }], 0x7000);
+})();
+
 /** The synthetic ROM with a wait loop at 0049h for the keyboard hook to return from. */
 function hookRom() {
   const rom = syntheticRom();
@@ -104,6 +121,7 @@ beforeAll(() => {
   writeFileSync(at('keys.cmd'), KEYS);
   writeFileSync(at('fed.cmd'), FED);
   writeFileSync(at('pieces.cmd'), PIECES);
+  writeFileSync(at('blink.cmd'), BLINK);
   writeFileSync(at('bad.cas'), new Uint8Array([0x00, 0xa5, 0x55, 0x42, 0x41, 0x44, 0x20, 0x20, 0x20, 0x99]));
   writeFileSync(at('hello.cas'), buildCas('HELLO', [{ addr: 0x7000, data: [0x76] }], 0x7000));
   writeFileSync(at('notes.txt'), 'just some words\n');
@@ -261,7 +279,7 @@ describe('phase A tools', () => {
     await close();
   });
 
-  it('run until settled waits for the drawing to stop, where until screen stops at its start', async () => {
+  it('run until settled waits for a static screen to go quiet, where until screen stops at its first change', async () => {
     const { call, close } = await server();
     await ok(call, 'load', { path: at('pieces.cmd') });
     const first = (await ok(call, 'run', { until: 'screen' })).split('\n');
@@ -276,6 +294,18 @@ describe('phase A tools', () => {
     // A screen that never changes runs to the cap.
     await ok(call, 'load', { path: at('keys.cmd') });
     expect((await ok(call, 'run', { until: 'settled', seconds: 1 })).split('\n')[0]).toBe('stopped: cycles (the 1 s asked for)');
+    await close();
+  });
+
+  it('run until settled stops when a blink cycle closes', async () => {
+    const { call, close } = await server();
+    await ok(call, 'load', { path: at('blink.cmd') });
+    // The first change shows "A*"; the star goes off at 0.1 s ("A "), and back on at 0.2 s
+    // returns to "A*", a state already seen, so the blink cycle has closed.
+    const lines = (await ok(call, 'run', { until: 'settled' })).split('\n');
+    expect(lines[0]).toBe('stopped: settled (video RAM returned to a state it held since it first changed: an animation or blink cycle closed)');
+    expect(lines[1]).toMatch(/^Ran 4\d\d,\d{3} cycles \(0\.2\d\d s emulated\)$/);
+    expect(lines.slice(-3)).toEqual(['2 cells changed', "(0,0) ' '→'A'", "(0,1) ' '→'*'"]);
     await close();
   });
 
@@ -456,6 +486,8 @@ describe('phase A tools', () => {
       ['load', { path: at('hello.cmd') }],
       ['run', { until: 'screen' }],
       ['load', { path: at('pieces.cmd') }],
+      ['run', { until: 'settled' }],
+      ['load', { path: at('blink.cmd') }],
       ['run', { until: 'settled' }],
       ['load', { path: at('hello.cmd') }],
       ['step', { n: 5 }],

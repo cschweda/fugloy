@@ -31,13 +31,15 @@ describe.skipIf(config.roms.model3 === undefined)('phase A on the Model III ROM'
     expect(manifest).toMatch(/\nEntry: [0-9A-F]{4}h \(the PC is there now\)\n/);
     expect(manifest).toContain(`Path: ${seaDragon}`);
 
-    // The game's first drawing stops the run; its title follows about 5 s later. until "settled"
-    // cannot reach it: the title's graphics animate and its <ENTER> prompt blinks about every
-    // 0.17 s, so video RAM never stays the same for 0.5 s (see the Task 3 fix-round report).
-    const first = await ok(call, 'run', { until: 'screen' });
-    expect(first.split('\n')[0]).toBe('stopped: screen (video RAM changed)');
-    expect(first).toMatch(/\n\d+ cells? changed/);
-    expect((await ok(call, 'run', { seconds: 6 })).split('\n')[0]).toBe('stopped: cycles (the 6 s asked for)');
+    // Sea Dragon opens with an animation that loops (settled stops when its cycle closes, about
+    // 1.6 s in, before the title), then draws its title in pieces, animates it, and blinks
+    // <ENTER>: the second settled stops when that cycle closes, with the title on screen.
+    const intro = await ok(call, 'run', { until: 'settled' });
+    expect(intro.split('\n')[0]).toMatch(/^stopped: settled \(/);
+    expect(intro).toMatch(/\n\d+ cells? changed/);
+    expect(await ok(call, 'screen', {})).not.toContain('Westmoreland');
+    const settled = await ok(call, 'run', { until: 'settled' });
+    expect(settled.split('\n')[0]).toBe('stopped: settled (video RAM returned to a state it held since it first changed: an animation or blink cycle closed)');
 
     const title = await ok(call, 'screen', {});
     expect(title).toContain('BY: Wayne Westmoreland & Terry Gilman');

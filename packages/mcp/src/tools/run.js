@@ -25,7 +25,7 @@ function parseUntil(until, session) {
 export default {
   name: 'run',
   description:
-    'Run the machine. Stops at a breakpoint or stop watch, or at until ("break": only those; "halt": the CPU runs HALT; "screen": video RAM changes, checked every 2,000 T-states; "settled": video RAM changes and then stays the same for 0.5 s emulated, which reaches a title screen drawn in pieces; "pc:<addr>": the PC reaches addr), or after cycles (decimal T-states) or seconds (emulated), and always at the emulated cap (limits.runSecondsEmulated, 10 s) or the wall-clock cap (limits.runSecondsWall, 5 s). trace: true records the instructions while it runs. Returns the stop reason, the cycles run, the register block, and with until "screen" or "settled" the screen diff.',
+    'Run the machine. Stops at a breakpoint or stop watch, or at until ("break": only those; "halt": the CPU runs HALT; "screen": video RAM changes, checked every 2,000 T-states; "settled": after video RAM first changes, it returns to a state already seen since (an animation or blink cycle closed) or stays the same for 0.5 s emulated, which reaches a title screen drawn in pieces; "pc:<addr>": the PC reaches addr), or after cycles (decimal T-states) or seconds (emulated), and always at the emulated cap (limits.runSecondsEmulated, 10 s) or the wall-clock cap (limits.runSecondsWall, 5 s). trace: true records the instructions while it runs. Returns the stop reason, the cycles run, the register block, and with until "screen" or "settled" the screen diff.',
   inputSchema: {
     cycles: z.number().int().optional().describe('T-states to run at most, a decimal count'),
     seconds: z.number().optional().describe('Emulated seconds to run at most (at most limits.runSecondsEmulated)'),

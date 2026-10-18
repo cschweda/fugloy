@@ -57,15 +57,19 @@ export function bootToReady(m, limit = BOOT_SECONDS) {
 /**
  * @typedef {'halt' | 'drained' | { pc: number }} Until
  * @typedef {{ reason: 'break' | 'watch', id: number, cycles: number }
- *   | { reason: 'halt' | 'screen' | 'settled' | 'pc' | 'drained' | 'cycles' | 'wallclock', cycles: number }} Stop
+ *   | { reason: 'settled', how: 'cycle' | 'quiet', cycles: number }
+ *   | { reason: 'halt' | 'screen' | 'pc' | 'drained' | 'cycles' | 'wallclock', cycles: number }} Stop
  */
 
 /**
  * Run the session's machine for at most `budget` T-states, or until `until` holds, video RAM
  * differs from `screenFrom` (checked at slice ends), a breakpoint or stop watch fires, or the
  * wall-clock cap passes. With `settle`, `screenFrom` is where a wait starts instead: after video
- * RAM first differs from it, the run stops once video RAM has stayed the same for `SETTLE`
- * T-states, as seen at slice ends. When the budget and a condition are met at the same point
+ * RAM first differs from it, the run stops when video RAM returns to a state already seen since
+ * that first change (an animation or blink cycle has closed: `how: 'cycle'`), or once it has
+ * stayed the same for `SETTLE` T-states (`how: 'quiet'`), as seen at slice ends. States are kept
+ * by a hash of the 1,024 bytes and compared exactly on a hash match, so a collision cannot stop
+ * the run. When the budget and a condition are met at the same point
  * the condition wins; the wall clock is checked last.
  * @param {import('./session.js').Session} session
  * @param {{ budget: number, until?: Until, screenFrom?: Uint8Array, settle?: boolean, deadline?: number }} opts
@@ -90,6 +94,18 @@ export function runMachine(session, { budget, until, screenFrom, settle = false,
   /** @type {Uint8Array | null} Video RAM as last seen while settling, once it first changed. */
   let seen = null;
   let quietSince = 0;
+  /** @type {Map<number, Uint8Array[]>} Every video RAM state seen since the first change, by hash. */
+  const states = new Map();
+  /** Record the state video RAM holds now; true when it was already recorded. */
+  const recur = () => {
+    const h = hash(video);
+    const same = states.get(h);
+    if (same?.some((s) => !differs(video, s))) return true;
+    const copy = Uint8Array.from(video);
+    if (same) same.push(copy);
+    else states.set(h, [copy]);
+    return false;
+  };
   for (;;) {
     const done = m.cycles - start;
     const next = Math.min(target, start + SLICE * (Math.floor(done / SLICE) + 1));
@@ -103,11 +119,13 @@ export function runMachine(session, { budget, until, screenFrom, settle = false,
         if (differs(video, screenFrom)) {
           seen = Uint8Array.from(video);
           quietSince = m.cycles;
+          recur();
         }
       } else if (differs(video, seen)) {
         seen.set(video);
         quietSince = m.cycles;
-      } else if (m.cycles - quietSince >= SETTLE) return { reason: 'settled', cycles: ran };
+        if (recur()) return { reason: 'settled', how: 'cycle', cycles: ran };
+      } else if (m.cycles - quietSince >= SETTLE) return { reason: 'settled', how: 'quiet', cycles: ran };
     } else if (screenFrom && differs(video, screenFrom)) return { reason: 'screen', cycles: ran };
     if (m.cycles >= target) return { reason: 'cycles', cycles: ran };
     if (performance.now() > deadline) return { reason: 'wallclock', cycles: ran };
@@ -116,6 +134,13 @@ export function runMachine(session, { budget, until, screenFrom, settle = false,
 
 /** The default wall-clock deadline: `limits.runSecondsWall` from now. */
 export const wallDeadline = (/** @type {import('./session.js').Session} */ session) => performance.now() + session.config.limits.runSecondsWall * 1000;
+
+/** FNV-1a over video RAM: a cheap key for the states `settled` has seen. */
+function hash(/** @type {Uint8Array} */ bytes) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < bytes.length; i++) h = Math.imul(h ^ bytes[i], 0x01000193);
+  return h >>> 0;
+}
 
 /** True when two copies of video RAM differ anywhere. */
 function differs(/** @type {Uint8Array} */ a, /** @type {Uint8Array} */ b) {
@@ -146,7 +171,9 @@ export function stoppedLine(stop, session, why) {
     case 'screen':
       return 'stopped: screen (video RAM changed)';
     case 'settled':
-      return 'stopped: settled (video RAM changed, then stayed the same for 0.5 s emulated)';
+      return stop.how === 'cycle'
+        ? 'stopped: settled (video RAM returned to a state it held since it first changed: an animation or blink cycle closed)'
+        : 'stopped: settled (video RAM changed, then stayed the same for 0.5 s emulated)';
     case 'pc':
       return `stopped: pc (reached ${hex4(/** @type {number} */ (why.pc))})`;
     case 'drained':
