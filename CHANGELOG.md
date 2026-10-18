@@ -1,12 +1,30 @@
 # Changelog
 
 All notable changes to Fugløy are recorded here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); until 1.0 each
-project phase lands as a minor version.
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Phases 1 and 2
+landed as minor versions; 1.0.0 is v1, phases 1–4 of the plan.
 
 Releases are tagged `vX.Y.Z` on `main`.
 
 ## [Unreleased]
+
+## [1.0.0] - 2026-10-17
+
+v1: phases 3 and 4 of the plan. Phase 3 names ROM, hardware, and DOS
+addresses from eight cited symbol tables (634 entries, every one citing a
+page of a published source). Phase 4 is the web workbench in `apps/web`, a
+static Nuxt site that runs the disassembler in the browser: facing pages, the
+four public-domain Westmoreland and Gilman games one click away, keyboard
+editing through the hint file, a spec sheet, saving in the browser with back
+up and restore, exports to zmac, hints, IR, `.CMD` and `.CAS`,
+bring-your-own manuals opened at the cited page, the **Explain** tab that
+explains each line in plain English from proven values, and block comments.
+Deliverable, met: asylum16 opens in Chromium with its hints under Model I,
+shows its ROM calls named, and keeps a rename and a comment across a reload;
+CI runs the same flow on Sea Dragon. The site is live at
+fugloy.netlify.app (app.fugloy.dev to follow). `@fugloy/z80`,
+`@fugloy/disasm`, and `@fugloy/cli` are 1.0.0; the `@fugloy/emu` and
+`@fugloy/mcp` packages keep their own 0.1.0.
 
 ### Added
 

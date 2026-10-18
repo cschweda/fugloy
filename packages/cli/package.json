@@ -1,6 +1,6 @@
 {
   "name": "@fugloy/cli",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "fugloy command-line disassembler",
   "license": "MIT",
   "type": "module",

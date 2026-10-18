@@ -160,24 +160,22 @@ Planned, per the roadmap:
 
 ## Status
 
-**Current release: [v0.2.0](https://github.com/cschweda/fugloy/releases/tag/v0.2.0)**, phase 2: Pass 1 and Pass 2.
-It brings recursive descent, zmac source that reassembles to the identical
-memory image, a JSON IR, labels, the hint file, machine code hidden in
-tokenized BASIC found by parse validity and placed at its true addresses,
-strings, jump-table and loader-stub proposals, rebasing, relocated regions
-analyzed where they run, colored listings, and the public-domain *Sea Dragon*
-to try it on. Phase 1, the core decoder and loaders, shipped as
-[v0.1.0](https://github.com/cschweda/fugloy/releases/tag/v0.1.0). Phase 3, the
-symbol tables, is built and not yet released (see `[Unreleased]` in
-[CHANGELOG.md](CHANGELOG.md)): ROM, hardware, and DOS addresses come out by
-name, each name cited to a page of a published source, with `--machine` and
-`--dos` choosing the tables. The emulator's phase 0 is done: the core of
-[trs80-emulator](https://github.com/cschweda/trs80-emulator) lives in
-`packages/emu`, free of the DOM, and boots the Model III ROM to `READY` in
-Node; its phase 1 hardened the Z80 core, which now passes the ZEXDOC and
-ZEXALL instruction exercisers. Next is phase 4, the web workbench; the
-emulator's phase 2, the Model III devices and program loaders, and the MCP
-server resume after v1 (see the roadmap in [CLAUDE.md](CLAUDE.md)). After v1,
+**Current release: [v1.0.0](https://github.com/cschweda/fugloy/releases/tag/v1.0.0)**, v1: phases 1–4 of the plan.
+Phase 3 names ROM, hardware, and DOS addresses from cited symbol tables, with
+`--machine` and `--dos` choosing them. Phase 4 is the web workbench, live at
+[fugloy.netlify.app](https://fugloy.netlify.app/): open a program or one of the
+four public-domain games, read and annotate the listing, click any line for a
+plain-English explanation in the Explain tab, write block comments, save in
+your browser, and export zmac source, hints, IR, `.CMD`, or `.CAS`. Earlier
+releases: phase 2, Pass 1 and Pass 2, as
+[v0.2.0](https://github.com/cschweda/fugloy/releases/tag/v0.2.0); phase 1, the
+core decoder and loaders, as
+[v0.1.0](https://github.com/cschweda/fugloy/releases/tag/v0.1.0). The
+emulator's phases 0 and 1 are done (the core of
+[trs80-emulator](https://github.com/cschweda/trs80-emulator) in
+`packages/emu`, booting the Model III ROM to `READY` in Node and passing ZEXDOC
+and ZEXALL). Next is the emulator's phase 2, the Model III devices and program
+loaders, then the MCP server (see the roadmap in [CLAUDE.md](CLAUDE.md)). Later,
 phase 5 adds an assembler with an IDE in the workbench: write Z80 code,
 assemble it, and run it on an emulated Model I or Model III. Every change is
 recorded in [CHANGELOG.md](CHANGELOG.md); releases are tagged `vX.Y.Z` on

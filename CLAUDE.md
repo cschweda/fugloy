@@ -6,41 +6,30 @@ holds the conventions that are not in the plan and the rules for working here.
 
 ## What we are building right now
 
-v1, phases 1–4 of the plan, in order; all four are now built. The Roadmap
-below puts the disassembler's phases 3 and 4 first and the emulator's phase 2
-onward and the MCP server after v1: do not build `packages/emu` past phase 1,
-nor the MCP server (`packages/mcp`), before v1 ships. The recompiler and
+v1, phases 1–4 of the plan, shipped as 1.0.0 on 2026-10-17. The emulator's
+phase 2 onward and the MCP server follow, in the Roadmap's order. The recompiler and
 bundler stay in Part 2 until the plan's kill criteria have been reviewed. If a
 task seems to need machinery from a later step, stop and say so.
 
-Current phase: **disasm phase 4 built and merged, not yet released** — the web workbench
-in `apps/web` (Nuxt 4 + Nuxt UI, static): facing pages, the four bundled
-games, keyboard editing through the hint file, the spec sheet, IndexedDB
-saving, exports (zmac, hints, IR, `.CMD`, `.CAS`), bring-your-own manuals, and
-the Technical details and About pages with full SEO. Design:
-`docs/superpowers/specs/2026-10-17-phase4-web-workbench-design.md`; plan:
-`docs/superpowers/plans/2026-10-17-phase4-web-workbench.md`. The v1
-done-criterion is met locally (asylum16 annotated and saved in Chromium under
-Model I, `apps/web/test/e2e/asylum.spec.ts`), and CI runs the browser flow on
-Sea Dragon. Merged to `main` 2026-10-17. Added after the merge, on the
-`explain-tab` branch: the **Explain tab** (design
-`docs/superpowers/specs/2026-10-17-explain-tab-design.md`, plan
-`docs/superpowers/plans/2026-10-17-explain-tab.md`; engine in
-`packages/disasm/src/explain/`, UI `apps/web/app/components/side/ExplainTab.vue`),
-which explains the clicked line in plain English from proven values, with
-previews, patterns, the routine summary, and data regions with a picture;
-**block comments** (the hint file's `note` directive, the `:` key); and an
-annotated Sea Dragon (`examples/sea-dragon/seadrg01.hints`, names and notes
-for its main routines and data). Next: deploy to `app.fugloy.dev` on Netlify (ask
-the user before the first deploy and before any DNS change), and release v1
-with phases 3 and 4 (see `[Unreleased]` in `CHANGELOG.md`); emu phase 2 and
-the MCP server resume after v1. Phase 3 (symbol tables: eight cited JSON
-tables, 634 entries, in `packages/disasm/data/symbols/`, compiled by
-`pnpm symbols`) is done and unreleased. Emu phase 1 is done: the Z80 core in
-`packages/emu` passes ZEXDOC and ZEXALL, all 67 groups each
-(`pnpm zex:install`, then `FUGLOY_ZEX=1`), and its T-states match
-`@fugloy/z80` for every opcode. Disassembler phase 2 shipped as v0.2.0,
-phase 1 as v0.1.0.
+Current phase: **v1 released as 1.0.0 (2026-10-17); next is emu phase 2.**
+v1 is disassembler phases 1–4: the core decoder and loaders (v0.1.0), Pass 1
+and Pass 2 (v0.2.0), the cited symbol tables (phase 3: eight JSON tables, 634
+entries, in `packages/disasm/data/symbols/`, compiled by `pnpm symbols`), and
+the web workbench in `apps/web` (phase 4: Nuxt 4 + Nuxt UI, static; design
+`docs/superpowers/specs/2026-10-17-phase4-web-workbench-design.md`, plan
+`docs/superpowers/plans/2026-10-17-phase4-web-workbench.md`), including the
+**Explain** tab (design `docs/superpowers/specs/2026-10-17-explain-tab-design.md`;
+engine `packages/disasm/src/explain/`, UI
+`apps/web/app/components/side/ExplainTab.vue`), block comments (the hint
+file's `note` directive, the `:` key), and an annotated Sea Dragon
+(`examples/sea-dragon/seadrg01.hints`). The site is deployed on Netlify at
+fugloy.netlify.app from `main`; the custom domains `app.fugloy.dev`,
+`fugloy.dev`, and `www.fugloy.dev` wait on DNS (ask the user before any DNS
+change). Emu phase 1 is done: the Z80 core in `packages/emu` passes ZEXDOC and
+ZEXALL, all 67 groups each (`pnpm zex:install`, then `FUGLOY_ZEX=1`), and its
+T-states match `@fugloy/z80` for every opcode. Next: emu phase 2 (Model III
+devices and `.CMD`/`.BAS`/`.CAS` loaders, `docs/fugloy-emu-spec.md` §11),
+then emu phase 3 and the MCP server.
 
 ## Stack and layout
 
@@ -81,9 +70,9 @@ phase 1 as v0.1.0.
    hidden-code detection, heuristics, rebasing, relocation. Sub-projects A
    (Pass 1 and the round-trip proof), B (labels and the hint file), C (hidden
    code, heuristics, rebasing, relocation).
-2. **disasm — phase 3 (done), then phase 4 (built)** (decided 2026-10-16):
-   symbol tables, then the web workbench; both unreleased until v1. Emu
-   phases 2+ and the MCP server resume after v1.
+2. **disasm — phase 3, then phase 4 (released as v1, 1.0.0, 2026-10-17)**:
+   symbol tables, then the web workbench. Emu phases 2+ and the MCP server
+   follow.
 3. **emu — phases 0–7** (`docs/fugloy-emu-spec.md` §11). 0: import
    `cschweda/trs80-emulator`, strip DOM, boot to `READY` in Node. 1: Z80 core
    passes ZEXALL. 2: Model III devices and `.CMD`/`.BAS`/`.CAS` loaders.
