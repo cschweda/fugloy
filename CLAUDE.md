@@ -11,7 +11,7 @@ later phases follow, in the Roadmap's order. The recompiler and
 bundler stay in Part 2 until the plan's kill criteria have been reviewed. If a
 task seems to need machinery from a later step, stop and say so.
 
-Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.2.0, `@fugloy/emu` 0.2.0, and `@fugloy/mcp` 0.1.0 on npm (2026-10-18); emu phases 2 and 3 merged to `main` (2026-10-18); emu phase 4 (`@fugloy/mcp` v0.1, MCP phases A–C) merged to `main` (2026-10-18); MCP phases A–F done; emu phase 5 (disk controller and images) merged (2026-10-18), unreleased; emu phase 6 done for the Model I on branch `emu-phase6`, not yet merged, with the Model 4 split off into its own plan; after the merge, emu phase 7 (the differential harness) is next.**
+Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.2.0, `@fugloy/emu` 0.2.0, and `@fugloy/mcp` 0.1.0 on npm (2026-10-18); emu phases 2 and 3 merged to `main` (2026-10-18); emu phase 4 (`@fugloy/mcp` v0.1, MCP phases A–C) merged to `main` (2026-10-18); MCP phases A–F done; emu phase 5 (disk controller and images) merged (2026-10-18), unreleased; emu phase 6 done for the Model I and merged (2026-10-18), with the Model 4 split off into its own plan; emu phase 7 (the differential harness against trsjs) is in progress on branch `emu-phase7`.**
 v1 is disassembler phases 1–4: the core decoder and loaders (v0.1.0), Pass 1
 and Pass 2 (v0.2.0), the cited symbol tables (phase 3: eight JSON tables, 634
 entries, in `packages/disasm/data/symbols/`, compiled by `pnpm symbols`), and
@@ -69,7 +69,7 @@ Disk images stay in the gitignored `fixtures/real/`; synthetic ones are in
 `fixtures/synthetic/disk/`. Release coupling: the MCP server now needs emu's
 `m.fdc`, `m.load.dsk`, `DiskImage`, `JV1_MODEL1_SD_TRACKS`, and `m.clockHz`, which emu 0.2.0 lacks,
 so emu must be bumped to 0.3.0 and released before the next `@fugloy/mcp`
-release. Emu phase 6 is done for the Model I on `emu-phase6`, unmerged (plan
+release. Emu phase 6 is done for the Model I and merged (plan
 `docs/superpowers/plans/2026-10-18-emu-phase6-model1.md`): `new Machine({
 model: 1, ram, expansion, lowercase })` (models described in
 `src/machine/models.js`; the Model III's save state is byte-identical to
@@ -85,8 +85,7 @@ no Model 4 ROM or boot disk is in `fixtures/real/`, so "its ROM boots" cannot
 be proven, and it becomes its own plan when one is supplied. The emu 0.3.0
 release also carries the Model I, which the next mcp needs. The Sea Dragon
 speed test runs only with `FUGLOY_BENCH=1` (it flaked beside the parallel
-suite); `./publish.sh check` runs it alone after the suite. Next: merge
-`emu-phase6`, then emu phase 7 (the differential harness).
+suite); `./publish.sh check` runs it alone after the suite. Next: emu phase 7 (the differential harness), in progress on `emu-phase7`.
 
 ## Stack and layout
 
@@ -150,7 +149,7 @@ suite); `./publish.sh check` runs it alone after the suite. Next: merge
    and disk images. 6: Model I, then Model 4. 7: differential harness. Phases 0,
    1, 2, and 3 are done and merged; phase 4, `@fugloy/mcp` v0.1, is done and
    merged; emu 0.2.0 and mcp 0.1.0 are on npm (2026-10-18); phase 5 is done
-   and merged; phase 6 is done for the Model I on `emu-phase6`, unmerged. The
+   and merged; phase 6 is done for the Model I and merged. The
    Model 4 half of phase 6 is split off (2026-10-18): with no Model 4 ROM or
    boot disk in `fixtures/real/`, "its ROM boots" cannot be proven, so it
    becomes its own plan once one is supplied. Phase 7 is next.
