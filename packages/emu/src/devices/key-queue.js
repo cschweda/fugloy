@@ -74,7 +74,8 @@ const KDCB = 0x4015;
  * `code` in A, verified against the ROM listing (spec §6, "Keyboard-scan hook"): DE = $4015 (the
  * KDCB), BC, HL, IX, IY and the alternate set unchanged, F as the routine's last flag-setting
  * instruction leaves it (`CP 01H` at $3100 for $002B, `OR A` at $004C for $0049), and the return
- * address popped. It costs what a RET costs, 10 T-states and one refresh-counter step; the
+ * address popped. It also does what the CPU does at the end of any instruction: clears `afterPrefix`
+ * and counts a pending EI down. It costs what a RET costs, 10 T-states and one refresh-counter step; the
  * routine's RAM side effects (its key-rollover buffer at $4036, the repeat counters) are not made.
  * @param {import('../cpu/z80cpu.js').Z80CPU} cpu
  * @param {number} pc
@@ -82,6 +83,7 @@ const KDCB = 0x4015;
  */
 export function romKeyReturn(cpu, pc, code) {
   const r = cpu.registers;
+  cpu.afterPrefix = false;
   r.A = code;
   r.F = pc === 0x0049 ? logicFlags(code) : cp01Flags(code);
   r.D = KDCB >> 8;
@@ -90,6 +92,15 @@ export function romKeyReturn(cpu, pc, code) {
   r.PC = cpu.readMemory(sp) | (cpu.readMemory((sp + 1) & 0xffff) << 8);
   r.SP = (sp + 2) & 0xffff;
   cpu.incrementR();
+  // The end of any instruction (Z80CPU.executeInstruction): a pending EI counts down and takes effect.
+  if (cpu.pendingEI > 0) {
+    cpu.pendingEI--;
+    if (cpu.pendingEI === 0) {
+      cpu.IFF1 = true;
+      cpu.IFF2 = true;
+    }
+  }
+  cpu.lastOpCycles = 10;
   cpu.cycles += 10;
 }
 

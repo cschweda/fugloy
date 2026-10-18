@@ -233,4 +233,43 @@ describe('m.keyboard ROM keyboard-scan hook', () => {
     expect(m.keyboard.pending).toBe(0);
     expect(m.keyboard.hasFeed).toBe(false);
   });
+
+  describe('the stand-in RET does the CPU end-of-instruction bookkeeping', () => {
+    // LD SP,8000H / JP 002AH; EI at $002A, the keyboard scan at $002B (a RET stand-in), return address $0000 on the stack.
+    const eiRom = () => machine([0x31, 0x00, 0x80, 0xc3, 0x2a, 0x00], { 0x2a: [0xfb], 0x2b: [0xc9] });
+    const atScan = (m) => m.run({ until: (mm) => mm.cpu.regs.pc === 0x002b });
+
+    it('counts a pending EI down, so interrupts are enabled after the RET as after any instruction', () => {
+      const m = eiRom();
+      m.keyboard.feed('A');
+      m.run({ until: (mm) => mm.cpu.regs.pc === 0x002a });
+      m.step(); // EI: interrupts still masked for the next instruction
+      expect(m.system.cpu.IFF1).toBe(false);
+      m.step(); // the hook's RET is that instruction
+      expect(m.system.cpu.IFF1).toBe(true);
+      expect(m.system.cpu.pendingEI).toBe(0);
+    });
+
+    it('clears afterPrefix', () => {
+      const m = eiRom();
+      m.keyboard.feed('A');
+      m.run({ until: (mm) => mm.cpu.regs.pc === 0x002a });
+      m.step();
+      m.system.cpu.afterPrefix = true;
+      m.step();
+      expect(m.system.cpu.afterPrefix).toBe(false);
+    });
+
+    it('does not stand in while the CPU is halted: the character stays fed and the halt idles 4 T-states', () => {
+      const m = eiRom();
+      m.keyboard.feed('A');
+      atScan(m);
+      m.system.cpu.halted = true;
+      const before = m.cycles;
+      m.step();
+      expect(m.cycles - before).toBe(4);
+      expect(m.keyboard.pending).toBe(1);
+      expect(m.cpu.regs.pc).toBe(0x002b);
+    });
+  });
 });

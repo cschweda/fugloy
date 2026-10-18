@@ -126,14 +126,14 @@ export class Machine {
    * events now due, then, with a fed character waiting and the PC at the ROM's keyboard scan
    * ($002B) or wait-for-key ($0049), return from that routine with the character as the ROM
    * would (spec §6, "Keyboard-scan hook"). That return stands in for the boundary's instruction,
-   * as one RET (10 T-states), so the next boundary is at the caller's return address.
+   * as one RET (10 T-states); a halted CPU idles instead, as it does for any instruction, so the next boundary is at the caller's return address.
    * @returns {boolean} true when the hook stood in for the instruction
    */
   #beforeInstruction() {
     const cpu = this.system.cpu;
     const kb = this.keyboard;
     if (cpu.cycles >= kb.nextAt) kb.drain(cpu.cycles);
-    if (kb.hasFeed) {
+    if (kb.hasFeed && !cpu.halted) {
       const pc = cpu.registers.PC;
       if (pc === 0x002b || pc === 0x0049) {
         romKeyReturn(cpu, pc, kb.takeFeed());
