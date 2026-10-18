@@ -19,7 +19,8 @@ const RING = 65536;
  * Coverage bits, one byte per address (spec §7): `EXEC` is the first byte of an executed
  * instruction, prefix included, and `OPERAND` its other bytes (phase 3 Ruling 1); `READ` and
  * `WRITE` are data accesses, never fetches (Ruling 2); `JUMP_TARGET` is where a taken jump, jump
- * relative, `DJNZ`, `JP (HL)`, or return landed, and `CALL_TARGET` where a taken call or `RST` did.
+ * relative, `DJNZ`, or `JP (HL)` landed, and `CALL_TARGET` where a taken call or `RST` did. Where a
+ * return lands is not marked (the callers map still records it as `ret-to`).
  */
 export const COVERAGE = Object.freeze({ EXEC: 1, OPERAND: 2, READ: 4, WRITE: 8, JUMP_TARGET: 16, CALL_TARGET: 32 });
 
@@ -27,6 +28,7 @@ export const COVERAGE = Object.freeze({ EXEC: 1, OPERAND: 2, READ: 4, WRITE: 8, 
 const EDGE_KINDS = /** @type {const} */ (['call', 'jp', 'jr', 'rst', 'ret-to']);
 /** @type {Record<string, number>} An `instructionInfo` kind → its EDGE_KINDS index. */
 const EDGE_OF = { call: 0, jp: 1, 'jp-ind': 1, jr: 2, djnz: 2, rst: 3, ret: 4 };
+const { EXEC, OPERAND, READ, WRITE, JUMP_TARGET, CALL_TARGET } = COVERAGE;
 
 /**
  * @typedef {{ id: number, addr: number, once: boolean, hits: number, when?: (m: any) => boolean }} BreakEntry
@@ -95,6 +97,8 @@ export class Debugger {
   #covOn = false;
   /** True while coverage records: enabled, and not inside the keyboard hook's stand-in RET. */
   #marking = false;
+  /** True during the keyboard hook's stand-in RET. */
+  #inStandIn = false;
   #bits = new Uint8Array(0x10000);
   /** @type {Map<number, Map<number, CallerEdge>>} target → (from * 8 + kind index) → edge */
   #callers = new Map();
@@ -331,8 +335,8 @@ export class Debugger {
       this.#kind = info.kind;
       this.#target = info.target;
       const bits = this.#bits;
-      bits[pc] |= 1;
-      for (let k = 1; k < len; k++) bits[(pc + k) & 0xffff] |= 2;
+      bits[pc] |= EXEC;
+      for (let k = 1; k < len; k++) bits[(pc + k) & 0xffff] |= OPERAND;
     }
   }
 
@@ -362,10 +366,11 @@ export class Debugger {
    * @param {boolean} on
    */
   standIn(on) {
+    this.#inStandIn = on;
     this.#marking = this.#covOn && !on;
   }
 
-  /** After a control-transfer instruction: when it was taken, mark where it landed and count the edge. */
+  /** After a control-transfer instruction: when it was taken, mark where it landed (not for a return) and count the edge. */
   #transfer() {
     const kind = /** @type {string} */ (this.#kind);
     const pc = this.#pc;
@@ -374,7 +379,8 @@ export class Debugger {
       if (to === ((pc + this.#len) & 0xffff)) return;
     } else if (kind !== 'jp-ind' && to !== this.#target) return;
     const e = EDGE_OF[kind];
-    this.#bits[to] |= e === 0 || e === 3 ? 32 : 16;
+    if (e === 0 || e === 3) this.#bits[to] |= CALL_TARGET;
+    else if (e !== 4) this.#bits[to] |= JUMP_TARGET;
     let edges = this.#callers.get(to);
     if (edges === undefined) {
       edges = new Map();
@@ -394,7 +400,7 @@ export class Debugger {
       if (k < this.#len && addr === ((this.#pc + k) & 0xffff)) return value;
     }
     addr &= 0xffff;
-    if (this.#marking) this.#bits[addr] |= 4;
+    if (this.#marking) this.#bits[addr] |= READ;
     if (this.#watchMask[addr] & 1) this.#hit('read', addr, value, value);
     if (this.#onMemRead !== null) this.#onMemRead(addr, value);
     return value;
@@ -407,7 +413,7 @@ export class Debugger {
     const watched = (this.#watchMask[addr] & 2) !== 0;
     const prev = watched || this.#onMemWrite !== null ? this.#plain.readMemory(addr) : 0;
     this.#plain.writeMemory(addr, value);
-    if (this.#marking) this.#bits[addr] |= 8;
+    if (this.#marking) this.#bits[addr] |= WRITE;
     if (watched) this.#hit('write', addr, value, prev);
     if (this.#onMemWrite !== null) this.#onMemWrite(addr, value, prev);
   };
@@ -478,7 +484,7 @@ export class Debugger {
     cpu.readPort = ports ? this.#readPort : plain.readPort;
     cpu.writePort = ports ? this.#writePort : plain.writePort;
     this.#readsOn = reads;
-    this.#marking = this.#covOn;
+    this.#marking = this.#covOn && !this.#inStandIn;
     this.tracksAccess = reads || writes;
     if (!this.tracksAccess) this.#inInstr = false;
   }

@@ -85,9 +85,10 @@ describe('coverage', () => {
 
   it('marks jump and call targets only when taken', () => {
     const m = runProgram();
-    // JR, JP (HL), JP NZ taken, and the two RETs' return addresses; never $0040 (JP NZ not
-    // taken) nor $0027 (where the first JP NZ fell through).
-    expect(marked(m, JUMP_TARGET)).toEqual([0x000d, 0x0011, 0x0020, 0x0021, 0x0023, 0x0030]);
+    // JR, JP (HL), JP NZ taken, and JP 0030H; never the RETs' landing addresses $000D and $0021
+    // (callers records those as ret-to), $0040 (JP NZ not taken), nor $0027 (where the first JP
+    // NZ fell through).
+    expect(marked(m, JUMP_TARGET)).toEqual([0x0011, 0x0020, 0x0023, 0x0030]);
     expect(marked(m, CALL_TARGET)).toEqual([0x0030, 0x0038]);
   });
 
@@ -141,8 +142,22 @@ describe('coverage', () => {
     expect(marked(m, READ)).toEqual([]); // the stand-in's stack reads are not marked
     expect(marked(m, WRITE)).toEqual([0x7ffe, 0x7fff]); // the CALL's push
     expect(marked(m, CALL_TARGET)).toEqual([0x002b]);
-    expect(marked(m, JUMP_TARGET)).toEqual([]); // no ret-to
+    expect(marked(m, JUMP_TARGET)).toEqual([]);
     expect([...m.debug.callerMap().keys()]).toEqual([0x002b]);
+  });
+
+  it('a hook during the stand-in RET does not turn marking back on', () => {
+    // As above; an onMemRead hook fired by the stand-in's first stack read installs a write hook,
+    // which re-instruments the CPU while the stand-in is still reading.
+    const m = machine([0x31, 0x00, 0x80, 0xcd, 0x2b, 0x00, 0x76]);
+    m.keyboard.type('A', { mode: 'hook' });
+    m.debug.coverage.enable();
+    m.debug.hooks.onMemRead = (addr) => {
+      if (addr === 0x7ffe) m.debug.hooks.onMemWrite = () => {};
+    };
+    m.run({ until: 'halt' });
+    expect(m.debug.hooks.onMemWrite).not.toBe(null);
+    expect(marked(m, READ)).toEqual([]); // neither $7FFE nor $7FFF
   });
 
   it('an interrupt response records no edge, but its push is a write', () => {
