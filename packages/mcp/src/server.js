@@ -9,7 +9,8 @@
  * `MCP error -32602` text, so `FugloyMcpServer` overrides the SDK's `validateToolInput` (an
  * internal; test/server.test.js pins it so an SDK upgrade that moves it fails loudly) to
  * validate with the same shape and throw a plain sentence naming the argument; the SDK turns a
- * thrown Error into an `isError` result. Put finer rules (addresses, decimal counts) in `args.js`,
+ * thrown Error into an `isError` result. A string given for a number says numbers are decimal
+ * (`len: "400"` is never 0400h), so declare lengths and counts as `z.number().int()`. Put finer rules (addresses, decimal counts) in `args.js`,
  * which throws sentences too. Anything a handler throws becomes an `isError` sentence, never a stack.
  *
  * Paging: `offset` is reserved (a tool may not declare it). The server keeps the last full
@@ -23,10 +24,19 @@ import { z } from 'zod';
 import { parseCount } from './args.js';
 import { cap } from './format/cap.js';
 import { Session } from './session.js';
+import key from './tools/key.js';
+import load from './tools/load.js';
+import peek from './tools/peek.js';
+import poke from './tools/poke.js';
+import regs from './tools/regs.js';
+import reset from './tools/reset.js';
+import run from './tools/run.js';
+import screen from './tools/screen.js';
 import status from './tools/status.js';
+import step from './tools/step.js';
 
-/** Every tool the server offers, in listing order. */
-export const TOOLS = [status];
+/** Every tool the server offers, in listing order (the spec §5 tables). */
+export const TOOLS = [load, reset, status, run, step, key, regs, peek, poke, screen];
 
 const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 
@@ -45,6 +55,10 @@ function argumentSentence(/** @type {import('zod').ZodError} */ error, /** @type
   const name = issue.path.length > 0 ? String(issue.path[0]) : 'arguments';
   const given = issue.path.length > 0 ? args[name] : args;
   if (given === undefined) return `The argument "${name}" is required.`;
+  // Review focus 1: "400" where a length belongs means 400, never 0400h, so say lengths are decimal.
+  if (issue.path.length === 1 && issue.code === 'invalid_type' && issue.expected === 'number' && typeof given === 'string') {
+    return `The argument "${name}" is a decimal number; write 1024, not ${JSON.stringify(given)} (lengths and counts are never hex or strings).`;
+  }
   const where = issue.path.length > 1 ? ` (at ${issue.path.join('.')})` : '';
   return `The argument "${name}" is not valid${where}: ${issue.message.replace(/^Invalid input: /, '')}; you gave ${JSON.stringify(given)}.`;
 }

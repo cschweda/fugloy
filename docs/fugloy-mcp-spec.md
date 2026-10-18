@@ -99,17 +99,17 @@ Schemas are JSON Schema in the SDK; shown here abbreviated. Required fields mark
 
 | Tool | Input | Output |
 |---|---|---|
-| `load` | `path*`, `model?` (1/3/4), `format?` (auto from extension), `reset?` (default true) | Manifest: format, blocks loaded (addr/len), entry point, which ROM was recognized, whether a sidecar label file was found |
-| `reset` | `keepRam?`, `clear?` (also drop breaks/watches) | Register block after reset |
+| `load` | `path*`, `model?` (only 3 until emu phase 6), `reset?` (default true: a fresh machine boots its ROM to READY first) | Manifest: format (from the content, never the extension: `.CMD`, `.BAS` tokenized or ASCII, `.CAS` by its leader and sync), blocks loaded (`addr–end (len)`), entry point, which ROM was recognized, whether a sidecar label file was found, the resolved path |
+| `reset` | `keepRam?` (default true; false zeroes `4000h–FFFFh`), `clear?` (also drop breaks/watches) | Register block after reset. Before any `load` it powers on a machine with no program |
 | `status` | — | Model, program name, cycles, PC, counts of breaks/watches/snapshots/labels, trace on/off |
 
 ### Execution
 
 | Tool | Input | Output |
 |---|---|---|
-| `run` | `cycles?`, `seconds?` (emulated, ≤ limit), `until?` = `"break" \| "halt" \| "screen" \| "pc:<addr>"`, `trace?` (bool) | Stop reason, cycles consumed, register block, and if `until:"screen"` the screen diff |
+| `run` | `cycles?`, `seconds?` (emulated, ≤ limit), `until?` = `"break" \| "halt" \| "screen" \| "pc:<addr>"`, `trace?` (bool) | `stopped: <reason>` (`break`, `watch`, `halt`, `screen`, `pc`, `cycles`, `wallclock`), cycles consumed, register block, and if `until:"screen"` the screen diff. `screen` stops at the first check (every 2,000 T-states) where video RAM differs from the call's start, so a game that draws its title in pieces takes a `run` with `seconds` to reach it |
 | `step` | `n?` (1–100) | Trace of the executed instructions plus final register block |
-| `key` | `text?`, `keys?` (array of named keys: `ENTER`, `BREAK`, `CLEAR`, `UP` …), `cps?` (default 20), `run?` (default true: run until the keyboard queue drains) | Cycles consumed; screen diff |
+| `key` | `text?`, `keys?` (array of named keys: `ENTER`, `BREAK`, `CLEAR`, `UP`, `DOWN`, `LEFT`, `RIGHT`, `SHIFT`, `SPACE`), `cps?` (default 20), `mode?` (`"matrix"`, the default, or `"hook"`: the ROM keyboard routine, which takes only characters, `ENTER`, and `SPACE`), `run?` (default true: run until the keyboard queue drains, then 0.2 s) | Cycles consumed; screen diff |
 
 ### Inspection
 
@@ -117,7 +117,7 @@ Schemas are JSON Schema in the SDK; shown here abbreviated. Required fields mark
 |---|---|---|
 | `regs` | `format?` | Register block |
 | `peek` | `addr*`, `len?` (default 64, max 1024) | Hex dump with labels; 1024 bytes is 64 lines, inside the output cap |
-| `poke` | `addr*`, `bytes*` | Bytes written and previous values |
+| `poke` | `addr*`, `bytes*`, `force?` (needed for ROM, `0000h–37FFh`) | Bytes written and previous values, `old → new` |
 | `disasm` | `addr*`, `n?` (instructions, default 32), `labels?` (default true) | Listing with labels and coverage marks (`*` executed, `?` never seen, `d` read as data) |
 | `screen` | `diff?` (since last `screen` call or a snapshot name) | Full screen or changed cells as `(row,col) old→new` |
 | `search` | `bytes*` or `text*`, `range?` | Addresses of every match |

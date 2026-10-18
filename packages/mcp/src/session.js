@@ -66,6 +66,17 @@ export class Session {
     return makeMachine(this.config, rom);
   }
 
+  /**
+   * Make `machine` the session's: coverage (and callers) on from the start (Ruling 3), and the
+   * screen baseline at what video RAM holds now. The trace stays off (Ruling 3).
+   * @param {Machine} machine
+   */
+  install(machine) {
+    this.machine = machine;
+    machine.debug.coverage.enable();
+    this.screenBaseline = Uint8Array.from(machine.video.raw);
+  }
+
   /** The machine, or a throw of `No program loaded; call load first.` */
   requireMachine() {
     if (this.machine === null) throw new Error(NO_MACHINE);

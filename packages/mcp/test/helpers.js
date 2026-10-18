@@ -37,3 +37,25 @@ export function syntheticRom() {
   rom.set([0x31, 0x00, 0x80, 0x18, 0xfe]);
   return rom;
 }
+
+/** A .CMD from records in order: `{ name }` → 05, `{ addr, data }` → 01; then the 02 entry record. */
+export function buildCmd(records, entry) {
+  const out = [];
+  for (const r of records) {
+    if (r.name !== undefined) out.push(0x05, r.name.length, ...[...r.name].map((c) => c.charCodeAt(0)));
+    else out.push(0x01, (r.data.length + 2) & 0xff, r.addr & 0xff, r.addr >> 8, ...r.data);
+  }
+  out.push(0x02, 0x02, entry & 0xff, entry >> 8);
+  return new Uint8Array(out);
+}
+
+/** A SYSTEM .CAS: leader, A5 sync, 55 and a six-byte name, one 3C block per `{ addr, data }`, then the 78 entry. */
+export function buildCas(name, blocks, entry) {
+  const out = [...new Array(16).fill(0), 0xa5, 0x55, ...[...name.padEnd(6)].map((c) => c.charCodeAt(0))];
+  for (const { addr, data } of blocks) {
+    const sum = data.reduce((s, b) => s + b, (addr & 0xff) + (addr >> 8));
+    out.push(0x3c, data.length & 0xff, addr & 0xff, addr >> 8, ...data, sum & 0xff);
+  }
+  out.push(0x78, entry & 0xff, entry >> 8);
+  return new Uint8Array(out);
+}

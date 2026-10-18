@@ -3,9 +3,11 @@
 A stdio MCP server that puts a running TRS-80 (`@fugloy/emu`) in front of
 Claude Code or any MCP client: load a program, run it, inspect memory and
 registers, inject input, read the screen, and record labels and coverage the
-Fugløy disassembler consumes. **In progress (emu phase 4):** the server
-skeleton, config, session, and the `status` tool are in; the other phase A–C
-tools follow (plan: `docs/superpowers/plans/2026-10-18-emu-phase4-mcp.md`).
+Fugløy disassembler consumes. **In progress (emu phase 4):** the phase A
+tools are in (`load`, `reset`, `status`, `run`, `step`, `key`, `regs`, `peek`,
+`poke`, `screen`), and with them an agent can load Sea Dragon and reach its
+title screen; the phase B and C tools follow (plan:
+`docs/superpowers/plans/2026-10-18-emu-phase4-mcp.md`).
 
 Run it from the monorepo with `node packages/mcp/bin/fugloy-mcp.js`. It reads
 `fugloy.mcp.json` from `$FUGLOY_CONFIG`, else the working directory, else
