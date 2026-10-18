@@ -99,8 +99,9 @@ lists the tools and calls them by hand.
 
 ## The tools
 
-One machine per server process, a Model III or (unreleased, emu phase 6) a
-Model I; nothing runs between calls.
+One machine per server process, a Model III, a Model I (since 0.1.1), or a
+Model 4 (in main, coming in 0.1.2, which needs `@fugloy/emu` 0.4.0); nothing
+runs between calls.
 Every result is text, and every error is a sentence the agent can act on.
 Addresses are hex (`5200`, `0x5200`, `$5200`, `5200h`), a JSON number
 (decimal), or a label name; lengths and counts are decimal. Arguments are
@@ -123,7 +124,7 @@ either closes an animation or blink cycle or stays still for 0.5 s; a title
 screen that animates takes one call per phase (Sea Dragon's intro, then its
 title).
 
-A disk image (unreleased, emu phase 5) goes into drive 0 of a fresh Model III,
+A disk image (since 0.1.1) goes into drive 0 of a fresh Model III,
 and `load` runs until the ROM has read the boot sector and jumped to it at
 `4300h`. The disk's own loader then reads the rest as the drive turns, which
 takes seconds of emulated time, so follow it with `run until: "settled"`,
@@ -138,7 +139,7 @@ run      until=settled               → (repeat; the title is up about 8 s afte
 A dual-boot disk (Eliminator, Rear Guard) shows its loader's menu first; hold
 ENTER half a second (`key keys=["ENTER"] cps=1`) and run on to the title.
 
-The Model I (unreleased, emu phase 6): `load` with `model: 1` builds a Model I
+The Model I (since 0.1.1): `load` with `model: 1` builds a Model I
 (48K, with the Expansion Interface) on `roms.model1` and boots it to `READY`,
 answering MEMORY SIZE? for you; the manifest says `Model: Model I (48K, with
 the Expansion Interface)`. A disk boots toward `4200h` (track 0, sector 0)
@@ -153,18 +154,26 @@ run      until=settled               → "BY: WAYNE WESTMORELAND & TERRY GILMAN"
 key      keys=["ENTER"] cps=1        → "1 OR 2 PLAYERS?"
 ```
 
-The Model 4 (unreleased, emu phase 6b): `load` with `model: 4` builds a 128K
+The Model 4 (emu phase 6b, in main, coming in 0.1.2 with `@fugloy/emu` 0.4.0): `load` with `model: 4` builds a 128K
 Model 4 on `roms.model4` and boots it to `READY` in Model III mode (memory map
 0, 2 MHz, 64 by 16), answering its `Cass ?` and `Memory Size?` for you; the
 manifest says `Model: Model 4 (128K; its ROM boots it in Model III mode:
-memory map 0, 2 MHz, 64 by 16)`. Model III programs and disks run on it as on
-the Model III (Sea Dragon reaches its title, Scarfman boots from disk).
+memory map 0, 2 MHz, 64 by 16)`. Model III programs and disks run on it (Sea
+Dragon matches the Model III screen for screen and T-state for T-state from
+`READY`, though the two ROMs differ in 727 bytes; Scarfman boots from disk).
 A program that switches to native mode is followed: emulated seconds count on
-the clock it selects (2 or 4 MHz), `screen` shows 80 by 24 when it selects
+the clock it selects (2 or 4 MHz), slice by slice, so they stay right across a
+switch within one call (the timer's 60 Hz at 4 MHz follows xtrs, unverified);
+`run until=screen` and `settled` compare only the bytes on screen; `poke` and
+`suggest` follow the memory map in force (map 2's keyboard is at `F400h`, its
+video RAM at `F800h`; maps 1–3 have RAM where map 0 has the ROM); `restore`
+refuses a snapshot from another model; `screen` shows 80 by 24 when it selects
 that, `snapshot` and `diff` compare `3C00h`–`FFFFh` as the CPU saw it in the
 memory map and page in force (a `Note:` says when two sides are in different
 maps, and video RAM the screen does not show is marked `video RAM off
-screen`), and coverage is kept and exported per map and page. `disasm` and
+screen`), and coverage is kept and exported per map and page (the views made
+from it, `disasm`'s marks, `suggest`, and the `coverage` counts, describe the
+map and page in force; `callers` counts across maps). `disasm` and
 `callees` name from the Model III tables (no Model 4 table is cited yet):
 
 ```
@@ -209,7 +218,7 @@ there is one.
 | `fugloy://screen` | The screen, as `screen` shows it |
 | `fugloy://labels` | The label table, as `labels` shows it |
 | `fugloy://program/manifest` | The manifest `load` returned |
-| `fugloy://rom/{model}/symbols` | A model's ROM entry points and variables, its memory-mapped regions, and its ports, one line each (`0033h  routine  $VDCHAR  display the character in A at the cursor`), from `@fugloy/disasm`'s cited symbol tables: `fugloy://rom/3/symbols` the Model III's (167 entries), `fugloy://rom/1/symbols` the Model I's (unreleased, emu phase 6) |
+| `fugloy://rom/{model}/symbols` | A model's ROM entry points and variables, its memory-mapped regions, and its ports, one line each (`0033h  routine  $VDCHAR  display the character in A at the cursor`), from `@fugloy/disasm`'s cited symbol tables: `fugloy://rom/3/symbols` the Model III's (167 entries), `fugloy://rom/1/symbols` the Model I's (since 0.1.1) |
 
 Prompts are where the method lives; the tools stay plain. Each prompt's
 text is a Markdown file in [`prompts/`](https://github.com/cschweda/fugloy/tree/main/packages/mcp/prompts), shipped in the package
@@ -369,4 +378,4 @@ No Model 4 native DOS yet (no LS-DOS 6 or TRSDOS 6 disk has been booted, and
 `load` boots the Model 4 in Model III mode only) and no Model 4 ROM symbol
 table, the Model 4 only at 128K (the emu also takes 64K), the Model I only at 48K with the Expansion Interface (the emu takes
 4–48K and `expansion: false`; `load` does not offer them), disk images in
-drive 0 only (unreleased, emu phase 5), and stdio only (Streamable HTTP is an open question, spec §12).
+drive 0 only, and stdio only (Streamable HTTP is an open question, spec §12).

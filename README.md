@@ -91,7 +91,8 @@ Sea Dragon already annotated, from
 ### The emulator
 
 `@fugloy/emu` is a headless TRS-80 Model III, and (since emu 0.3.0, phase 6) a
-Model I with its Expansion Interface, and (unreleased, emu phase 6b) a Model 4,
+Model I with its Expansion Interface, and (emu phase 6b, in main, to be released
+in emu 0.4.0 and mcp 0.1.2) a Model 4,
 in Model III mode and with its native hardware, in plain JavaScript, built on the
 core of [trs80-emulator](https://github.com/cschweda/trs80-emulator). It has
 no DOM and no Node APIs, and the same inputs give the same run every time, so
@@ -134,7 +135,7 @@ Rear Guard, each with a note saying how it knew.
 
 Install it with `npx -y @fugloy/mcp` as an MCP server
 (or run `node packages/mcp/bin/fugloy-mcp.js` from a clone, for development), with a
-`fugloy.mcp.json` that names your Model III ROM (and your Model I ROM, for `load` with `model: 1`, and your Model 4 ROM, for `model: 4`, unreleased, emu phase 6b); the setup (from npm or from
+`fugloy.mcp.json` that names your Model III ROM (and your Model I ROM, for `load` with `model: 1`, and your Model 4 ROM, for `model: 4`, in main and coming in mcp 0.1.2); the setup (from npm or from
 a clone), the tools, and those sessions are in its
 [README](packages/mcp/README.md), and the design is in
 [docs/fugloy-mcp-spec.md](docs/fugloy-mcp-spec.md).
@@ -342,10 +343,12 @@ lowercase modification), 500-baud cassette, and the keyboard, on which
 fourteen programs reach their titles and four disks boot, with MCP `load`
 taking `model: 1`; and a differential harness against trsjs (7), with no
 unexplained divergence in six game sessions on the Model III. The Model 4
-(6b) is built on the `emu-phase6b` branch, unreleased: on the Model 4 ROM it
-boots to Model III BASIC's `READY` and runs Model III programs and disks
-exactly as the Model III does, and its native hardware (four memory maps,
-128K banking, 80 by 24 video, the 4 MHz clock) runs synthetic programs;
+(6b) is in main, to be released in emu 0.4.0 and mcp 0.1.2: on the Model 4 ROM
+it boots to Model III BASIC's `READY`, where Model III programs and disks run
+(Sea Dragon matches the Model III screen for screen and T-state for T-state
+from `READY`; the two ROMs differ in 727 bytes), and its native hardware (four
+memory maps, 128K banking, 80 by 24 video, the 4 MHz clock, with the timer's
+60 Hz at 4 MHz following xtrs, unverified) runs synthetic programs;
 coverage is kept per memory map and page, and MCP `load` takes `model: 4`. A
 version 6 DOS booting waits for an LS-DOS 6 or TRSDOS 6 disk (see the
 roadmap in [CLAUDE.md](CLAUDE.md)). Later,
@@ -359,7 +362,7 @@ on `main`, the emulator's `emu-vX.Y.Z`, and the MCP server's `mcp-vX.Y.Z`.
 | `packages/z80` | Z80 opcode tables generated from the x/y/z/p/q decomposition (unprefixed, `CB`, `ED`, `DD`/`FD`, `DDCB`/`FDCB`) with length, operands, cycle counts, and control-flow effect; a decoder; an exhaustion test against an independently typed reference. No I/O. |
 | `packages/disasm` | 64K memory image with a load bitmap and block log, `.CMD` and `.BAS` loaders, content-based format detection, raw loader, a Level II BASIC parser and entry-point miner, pass 1 recursive descent, labels, the hint file, string and proposal heuristics, rebasing, relocation, the cited symbol tables (`data/symbols`, compiled by `pnpm symbols`), zmac emitter, JSON IR, linear sweep, plain-text listings. No Node or DOM APIs, so it runs in a browser. |
 | `packages/cli` | `fugloy <file> [--base <hex> \| --rebase <hex>] [--entry <hex>]... [--hints <path> \| --write-hints <path>] [--labels <path>] [--machine 1\|3\|4] [--dos trsdos\|ldos\|none] [--format listing\|zmac\|ir] [--sweep] [--color] [-o <path>]`, the only package that touches the file system. |
-| `packages/emu` | The headless, deterministic TRS-80 Model III and Model I emulator, built on the core of trs80-emulator: a Z80 CPU that passes ZEXALL, the `Machine` facade (`step`, `run`, registers, memory, video text, sound events, keyboard), `.CMD`, `.BAS`, and `.CAS` loaders with manifests, and the debugger `m.debug`, which writes the label and coverage file. No DOM, no Node APIs. Design in [docs/fugloy-emu-spec.md](docs/fugloy-emu-spec.md); usage in its [README](packages/emu/README.md). |
+| `packages/emu` | The headless, deterministic TRS-80 Model I, Model III, and Model 4 emulator, built on the core of trs80-emulator: a Z80 CPU that passes ZEXALL, the `Machine` facade (`step`, `run`, registers, memory, video text, sound events, keyboard), `.CMD`, `.BAS`, and `.CAS` loaders with manifests, and the debugger `m.debug`, which writes the label and coverage file. No DOM, no Node APIs. Design in [docs/fugloy-emu-spec.md](docs/fugloy-emu-spec.md); usage in its [README](packages/emu/README.md). |
 | `packages/mcp` | The stdio MCP server that lets an AI assistant drive the emulator (`bin/fugloy-mcp.js`, plain JavaScript): MCP phases A–F, 29 tools for loading, running, typing, inspecting, breakpoints and watches, callers and callees, a disassembly with coverage marks, snapshots and diffs, search, labels, coverage, and `suggest`, with the `<program>.fugloy.json` sidecar, plus resources and prompts. Design in [docs/fugloy-mcp-spec.md](docs/fugloy-mcp-spec.md); setup in its [README](packages/mcp/README.md). |
 | `apps/web` | The web workbench (`@fugloy/web`, Nuxt 4 and Nuxt UI, static, deployed to Netlify), running the disassembler in the browser. |
 | `fixtures/synthetic` | Generated fixtures, one `.CMD` or `.BAS` per loader rule and analysis case plus their hint files, written by the test suite's own `.CMD` writer and BASIC tokenizer. |

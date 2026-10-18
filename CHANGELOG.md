@@ -36,19 +36,26 @@ creates and pushes the tag.
 
 ## [Unreleased]
 
-The Model 4, for the next `@fugloy/emu` and the `@fugloy/mcp` that needs it.
-Emu phase 6b builds the Model 4 in Model III mode on its own ROM and its native
+The Model 4, merged to main (2026-10-18), for `@fugloy/emu` 0.4.0 and
+`@fugloy/mcp` 0.1.2. Emu phase 6b builds the Model 4 in Model III mode on its own ROM and its native
 hardware (memory maps and banking, 80×24 video, the 4 MHz clock), keys
 coverage by memory map and page, and lets the MCP server load Model 4
 programs. A version 6 DOS (LS-DOS 6 or TRSDOS 6) booting is still open: no
 such disk is at hand. The Model III and Model I are unchanged (their fixtures,
 goldens, save states, differential runs, and speed).
 
+Release coupling: `@fugloy/mcp` 0.1.2 needs `@fugloy/emu` 0.4.0 (its
+dependency packs to `^0.4.0`): on emu 0.3.0 `load { model: 4 }` throws "There
+is no Model 4 yet", because `modelOf(4)` throws there. Emu 0.4.0 is released
+first. No core change is needed: `@fugloy/disasm` already accepts
+`program.model: 4`, and nothing in `@fugloy/z80`, `@fugloy/disasm`, or
+`@fugloy/cli` changed since 1.2.0.
+
 ### Added
 
 Emu phase 6b (the Model 4; emu spec §5, §8, §11, §12; plan
-`docs/superpowers/plans/2026-10-18-emu-phase6b-model4.md`), on the
-`emu-phase6b` branch. No Model 4 Technical Reference Manual is at hand, so
+`docs/superpowers/plans/2026-10-18-emu-phase6b-model4.md`), for
+`@fugloy/emu` 0.4.0. No Model 4 Technical Reference Manual is at hand, so
 every hardware fact is from MAME's `trs80m3` driver and Tim Mann's xtrs, cited
 where the code decides it, with what is unverified listed in spec §5:
 
@@ -87,8 +94,8 @@ where the code decides it, with what is unverified listed in spec §5:
   T-states at either clock (xtrs; MAME keeps 30 Hz of real time, so spec §5
   lists it as an open check for the first LS-DOS 6 boot).
 - Model III mode: the Model 4 ROM boots to `Cass ?`, `Memory Size?`, and
-  Model III BASIC's `READY` in map 0 at 2 MHz, 64×16, and a Model 4 left there
-  runs Sea Dragon exactly as the Model III does, with the same screens at
+  Model III BASIC's `READY` in map 0 at 2 MHz, 64×16, and on a Model 4 left
+  there Sea Dragon matches the Model III, with the same screens at
   every quarter second and the same T-states from `READY` to "1 or 2
   Players?" (only the boot to `READY` differs, by 11 T-states, from the ROMs'
   727 different bytes; `test/integration/model4-boot.test.js`). Model III
@@ -115,7 +122,7 @@ where the code decides it, with what is unverified listed in spec §5:
   script, `vitest run --root ../.. packages/emu/`, on the root config; the
   root `pnpm test` still runs every package once).
 
-`@fugloy/mcp` (unreleased; needs this emu):
+`@fugloy/mcp` 0.1.2 (needs `@fugloy/emu` 0.4.0, which is published first):
 
 - `load { model: 4 }` builds a 128K Model 4 on `roms.model4` and boots it to
   `READY` in Model III mode, answering its `Cass ?` and `Memory Size?`; the
@@ -150,6 +157,80 @@ where the code decides it, with what is unverified listed in spec §5:
 - `@fugloy/mcp`: `load { model: 4 }` and `defaultModel: 4`, refused before as
   "no Model 4 yet", now build the Model 4; any other model is refused naming
   1, 3, and 4.
+- `@fugloy/emu`: the npm `description` and the `src/index.js` header name the
+  Model I, Model III, and Model 4 (the description still said "Model III
+  today").
+
+### Fixed
+
+The phase's final review (findings 1–8) and its Task 3 review (minors 1–8),
+fixed before the release:
+
+- `@fugloy/emu` 0.4.0:
+  - `m.mem.map`, a public read of the Model 4's memory map: `{ map, page,
+    register }` (map 0–3, port `$84` bits 0–1; the 128K page select, bits
+    4–6, 0 with 64K; the last byte written to port `$84`), a fresh object on
+    each read, and null on the Model III and Model I. Spec §3 lists it and now
+    says what `m.mem.ram` holds on the Model 4 (every 32K bank in physical
+    order, map 0's address A at `ram[A]`). The MCP server and the README use
+    it instead of reaching into `m.system.memory`
+    (`test/unit/model4.test.js`).
+  - `mergeLabelFiles` writes the merged coverage keys in the documented
+    order, `"0:0"` first, then ascending map, then page, as `writeLabelFile`
+    does; before, it kept first-seen order, so merging a `["0:0","3:3"]` file
+    with a `["0:0","2:0"]` one gave `["0:0","3:3","2:0"]`, and an MCP
+    `coverage export` or sidecar could break the stated order
+    (`test/unit/model4-coverage.test.js`).
+  - Spec §8 and `docs/label-format.md` (kept word for word): a load lands in
+    the map in force, which is map 0 unless the program switched maps before
+    an MCP `load { reset: false }`, whose `write` marks then go under that
+    map's key while its `load` entries carry no `map`; and a merge keeps the
+    key order. Spec §12 adds that a coverage key's page is port `$84`'s bits
+    as written, not the physical mapping, so with 128K and no paging keys
+    `x:0` and `x:1` describe the same memory.
+- `@fugloy/mcp` 0.1.2:
+  - `poke` follows the Model 4's memory map in force: map 0 as the Model III
+    (ROM `0000h`–`37FFh` refused without `force`, keyboard `3800h`–`3BFFh`);
+    map 1 has RAM in place of the ROM, so a plain poke writes it (before,
+    `force` patched the hidden ROM image and the `old → now` line showed no
+    change); map 2 refuses its keyboard at `F400h`–`F7FFh`, where a poke was
+    silently lost, and writes `3800h`; map 3 is all RAM.
+  - `suggest`'s facts follow the map: video RAM is `3C00h`–`3FFFh` and the
+    keyboard `3800h`–`3BFFh` in maps 0–1, `F800h`–`FFFFh` and `F400h`–`F7FFh`
+    in map 2, neither in map 3 (before, a map 2 or 3 access to `3800h` was
+    taken for the keyboard and map 2's real video and keyboard went unseen).
+  - Emulated seconds are right across a clock switch inside one call: the
+    run loop counts each 2,000 T-state slice on the clock in force at its
+    start, so `run seconds`, the `limits.runSecondsEmulated` cap, `settled`'s
+    0.5 s, `key`'s tail, and `Ran … (N s emulated)` agree with the clock the
+    program runs at. Before, the budget used the clock at the call's start and
+    the report the clock at its end: a `run seconds: 1` that switched to
+    4 MHz ran 2,027,520 T-states and reported "0.500 s emulated"; it now runs
+    about 4,053,000 and reports 1.000 s. A `cycles` budget still counts
+    T-states.
+  - `run until: "screen"` and `"settled"` compare only the bytes on screen
+    (the first width × rows of video RAM), so a program writing the Model 4's
+    off-screen video RAM (the second 1K at 64 by 16, the last 128 bytes at 80
+    by 24) no longer stops `screen` or resets `settled`.
+  - `restore` of a snapshot taken on another model answers with its own
+    sentence (`Snapshot "four" was taken on a Model 4, and the machine is a
+    Model III; a save state restores only into the model that saved it. Load
+    the program with model: 4 first, then restore.`) instead of the emulator's
+    vague "Not a TRS-80 Model III save state"; snapshots record their model.
+  - `screen diff`'s off-screen line names the region and the changed bytes
+    apart: `(1 byte of video RAM off screen (offsets 1024–2047) also changed,
+    at offset 1030; not shown)`, or `between offsets A and B` for several.
+  - The `diffView` comment says what the peek does: map 2's keyboard at
+    `F400h`–`F7FFh` reads the live matrix, so a key held at snapshot time
+    shows there.
+  - The MCP spec's Model 4 paragraph says that the views made from coverage
+    (`disasm`'s marks, `suggest`, the `coverage` counts) describe the map
+    and page in force, and that `callers` counts across maps.
+  - Tests in `test/model4.test.js` for each, on the synthetic ROM in CI.
+- Docs: the READMEs no longer say the Model 4 runs Model III programs
+  "exactly as" the Model III: Sea Dragon matches it screen for screen and
+  T-state for T-state from READY, and the two ROMs differ in 727 bytes; the
+  60 Hz timer at 4 MHz is marked as following xtrs, unverified.
 
 ## [mcp 0.1.1] - 2026-10-18
 

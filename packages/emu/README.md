@@ -8,7 +8,7 @@ the Z80 CPU (`src/cpu/`), the Model III memory map, I/O ports, and system
 images, and printer (`src/devices/`), the `.CAS` and `.CMD` formats
 (`src/loaders/`), and save states (`src/debug/`). Emu phase 6 added the
 Model I with its Expansion Interface (released in 0.3.0), and emu phase 6b
-the Model 4 (unreleased): Model III mode on the Model 4 ROM and the native
+the Model 4 (in main, to be released in 0.4.0, with `@fugloy/mcp` 0.1.2): Model III mode on the Model 4 ROM and the native
 hardware, with a version 6 DOS booting still open, as no LS-DOS 6 or TRSDOS 6
 disk is at hand.
 Phases 0–7 of the spec's eight are done (6 for the Model I, 7 for the Model III): the Z80 core passes ZEXDOC and
@@ -84,7 +84,7 @@ in spec §3.
 
 ### The Model I
 
-`model: 1` builds a Model I (unreleased, emu phase 6): the 12K Level II ROM
+`model: 1` builds a Model I (since 0.3.0, emu phase 6): the 12K Level II ROM
 (1.2 and 1.3 are recognised; a Model III ROM given for it is refused naming its
 model), 4, 16, 32, or 48K of RAM (`ram`, default 48), and the Expansion
 Interface (`expansion`, default `true`) with its 40 Hz clock in the latch at
@@ -117,24 +117,27 @@ what is still unverified against the Model I manual, are in spec §5.
 
 ### The Model 4
 
-`model: 4` builds a Model 4 (unreleased, emu phase 6b), with 64 or 128K of RAM
+`model: 4` builds a Model 4 (emu phase 6b, in main, coming in 0.4.0), with 64 or 128K of RAM
 (`ram`, default 128) and 2K of video RAM, on the Model 4 ROM (the TRS32 set's
 14K `MODEL4.ROM` is recognised as `model4-trs32`; a Model I or Model III ROM is
 refused, and the Model 4's on those models). The ROM boots it in Model III
 mode: memory map 0, 2 MHz, 64 by 16, where it answers `Cass ?` and
-`Memory Size?` and runs Model III programs and disks exactly as the Model III
-does. The native hardware is there for a program that selects it: the four
+`Memory Size?` and runs Model III programs and disks: Sea Dragon matches the
+Model III screen for screen and T-state for T-state from READY, and the
+Model III disks reach their titles; the two ROMs differ in 727 bytes, so the
+boot to READY takes 11 T-states more. The native hardware is there for a program that selects it: the four
 memory maps and the 128K page select behind port `$84` (`m.mem.ram` holds the
 32K banks in order, so in map 0 the CPU's address A is `ram[A]`; on the other
-models `ram[0]` is `$4000`), 80 by 24 video (port `$84` bit 2;
+models `ram[0]` is `$4000`; `m.mem.map` reads `{ map, page, register }`, null
+on the other models), 80 by 24 video (port `$84` bit 2;
 `m.video.columns` and `m.video.rows`), inverse video, and 4 MHz (port `$EC`
-bit 6; `m.clockHz` follows it, and the timer runs at 60 Hz there). Every fact
+bit 6; `m.clockHz` follows it, and the timer runs at 60 Hz there, following xtrs; unverified, spec §5). Every fact
 is from MAME and xtrs, cited in spec §5 with what is unverified:
 
 ```js
 const m4 = new Machine({ model: 4, roms: { level2: readFileSync('model4.rom') } })
 m4.run({ until: shows('Cass ?'), cycles: m4.clockHz })    // Model III mode: Cass ?, then Memory Size?
-m4.system.memory.map                                       // 0, until a program writes port $84
+m4.mem.map                                                 // { map: 0, page: 0, register: 0 }, until a program writes port $84
 m4.video.columns                                           // 64; 80 after OUT (84H) with bit 2 set
 ```
 
