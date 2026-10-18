@@ -233,3 +233,33 @@ describe('load-over-running', () => {
     }
   });
 });
+
+describe('a load drops text typed for the previous program', () => {
+  const PROG = buildCmd([{ addr: 0x7000, data: [0x18, 0xfe] }], 0x7000);
+  const tape = () => buildSystemCas([{ addr: 0x7000, data: [0x18, 0xfe] }], 0x7000);
+  const quiet = (m) => expect(Array.from(m.system.keyboard.rows)).toEqual(new Array(8).fill(0));
+
+  it.each([
+    ['load.cmd', (m) => m.load.cmd(PROG)],
+    ["load.cas via 'fast'", (m) => m.load.cas(tape(), { via: 'fast' })],
+  ])('%s clears the feed buffer and the queued and held matrix keys', (_, load) => {
+    const m = new Machine({ roms: { level2: HALT_ROM } });
+    m.keyboard.feed('HELLO');
+    m.keyboard.type('AB');
+    m.step(); // the first press is delivered; its release is still queued
+    expect(Array.from(m.system.keyboard.rows).some((r) => r !== 0)).toBe(true);
+    load(m);
+    expect(m.keyboard.pending).toBe(0);
+    expect(m.keyboard.hasFeed).toBe(false);
+    quiet(m);
+    m.run({ cycles: 500_000 });
+    quiet(m);
+  });
+
+  it("load.cas via 'rom' leaves the typing alone: the caller types CLOAD after it", () => {
+    const m = new Machine({ roms: { level2: HALT_ROM } });
+    m.keyboard.feed('CLOAD');
+    m.load.cas(tape());
+    expect(m.keyboard.pending).toBe(5);
+  });
+});

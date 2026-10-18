@@ -72,6 +72,8 @@ export function cassetteDeck(machine) {
 
 /**
  * Load a .CMD: write its 01 blocks and leave the machine ready to run at the transfer address.
+ * Text fed or typed for the previous program is dropped (the keyboard queue is cleared, queued
+ * keys released), so the new program's first keyboard read does not get stale input.
  * @param {import('../machine/machine.js').Machine} machine
  * @param {Uint8Array} bytes
  * @returns {CmdManifest}
@@ -79,6 +81,7 @@ export function cassetteDeck(machine) {
 export function loadCmd(machine, bytes) {
   const parsed = parseCmd(bytes);
   fastLoadCmd(machine.system, parsed);
+  machine.keyboard.clear();
   return {
     format: 'cmd',
     name: parsed.name,
@@ -90,6 +93,9 @@ export function loadCmd(machine, bytes) {
 /**
  * Load a .CAS, through the ROM's loader (the tape goes in the deck; the caller types CLOAD, or
  * SYSTEM and the name then `/`) or fast (written now; a SYSTEM tape also jumps to its entry).
+ * `baud` applies only via 'rom'; via 'fast' it is ignored and the manifest's `baud` is null.
+ * Via 'fast' the keyboard queue is cleared as `load.cmd` does; via 'rom' it is left alone, since
+ * the caller types CLOAD or SYSTEM next.
  * @param {import('../machine/machine.js').Machine} machine
  * @param {Uint8Array} bytes
  * @param {{ baud?: 500 | 1500, via?: 'rom' | 'fast' }} [opts]
@@ -121,6 +127,7 @@ export function loadCas(machine, bytes, { baud = 500, via = 'rom' } = {}) {
   } else {
     fastLoadBasic(system, parsed);
   }
+  if (via === 'fast') machine.keyboard.clear();
 
   const head = { format: /** @type {'cas'} */ ('cas'), kind: parsed.kind, name: parsed.name };
   const tail = { blocks, baud: via === 'rom' ? baud : null, via };

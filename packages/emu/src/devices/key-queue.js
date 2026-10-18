@@ -228,8 +228,11 @@ export class KeyQueue {
     this.nextAt = this.#next < events.length ? events[this.#next].at : Infinity;
   }
 
-  /** Drop everything queued (the matrix itself is reset by its owner). */
+  /** Drop everything queued, releasing any queued key that is down; keys held with `press` stay down. */
   clear() {
+    for (let i = this.#next; i < this.#events.length; i++) {
+      if (!this.#events[i].down) this.#matrix.keyUp(this.#events[i].code);
+    }
     this.#events = [];
     this.#next = 0;
     this.#feed.length = 0;
