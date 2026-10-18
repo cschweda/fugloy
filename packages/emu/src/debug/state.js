@@ -217,6 +217,9 @@ export function restoreState(system, state) {
   cpu.wz ??= 0; // absent in version-1 saves from before emu phase 1
   cpu.afterPrefix ??= false; // likewise
   for (const key of IO_SCALARS) io[key] = state.io[key];
+  // The Model 4's clock follows its mode register's bit 6; the state's disk counters are already
+  // in that clock's T-states, so nothing is rescaled.
+  if (system.model?.id === 4) system.selectClock((io.modeRegister & 0x40) !== 0, { rescale: false });
 
   system.memory.ram.set(ram);
   system.memory.videoRam.set(videoRam);

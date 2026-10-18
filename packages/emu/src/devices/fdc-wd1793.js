@@ -301,6 +301,36 @@ export class FDC1793 {
     this.fmMarks = false;
   }
 
+  /**
+   * Retime the controller for a CPU now clocked at `cpuHz` (the Model 4's clock switch,
+   * TRS80System.selectClock): its times are T-states, and a disk turns in real time, so they
+   * scale with the clock. With `rescale` (the default) the disk's angle (`indexClock`) and the
+   * command in flight (its `delay` to the next event and a step's `rate`) scale too, so the switch
+   * moves nothing in real time; without it they stay as they are (a save state's restore, whose
+   * counters were saved at this clock). The WD1771's own times are not retimed: the Model I has no
+   * clock switch.
+   * @param {number} cpuHz
+   * @param {{ rescale?: boolean }} [opts]
+   */
+  setCpuHz(cpuHz, { rescale = true } = {}) {
+    const ratio = cpuHz / this.cpuHz;
+    this.cpuHz = cpuHz;
+    const t = fdcTimes(cpuHz);
+    this.indexPeriod = t.indexPeriod;
+    this.indexWidth = t.indexWidth;
+    this.stepTStates = t.step;
+    this.settleTStates = t.settle;
+    this.byteTStatesMfm = t.byteMfm;
+    this.byteTStatesFm = t.byteFm;
+    if (!rescale) return;
+    this.indexClock = Math.min(Math.round(this.indexClock * ratio), this.indexPeriod - 1);
+    const p = this.pending;
+    if (p !== null) {
+      p.delay = Math.round(p.delay * ratio);
+      if (typeof p.rate === "number") p.rate = Math.round(p.rate * ratio);
+    }
+  }
+
   attachDrive(n, image) {
     const was = this._ready();
     this.drives[n & 3] = image;

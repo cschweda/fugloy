@@ -132,7 +132,8 @@ export class Machine {
     this.sound = new Sound();
     sys.io.onSoundWrite = (cycle, value) => this.sound.record(cycle, value);
     sys.io.onSoundReset = () => this.sound.clear();
-    this.keyboard = new KeyQueue(sys.keyboard, () => sys.cpu.cycles, sys.clockHz);
+    // Typing counts in the clock at the time it is queued (the Model 4's can switch).
+    this.keyboard = new KeyQueue(sys.keyboard, () => sys.cpu.cycles, () => sys.clockHz);
     this.debug = new Debugger(this);
     // Each load records its manifest and the bytes' hash for the label file (the last one wins).
     const record = (/** @type {any} */ manifest, /** @type {Uint8Array} */ bytes) => {
@@ -159,8 +160,10 @@ export class Machine {
   }
 
   /**
-   * The model's CPU clock in Hz: 2,027,520 on the Model III, 1,774,080 on the Model I (models.js).
-   * T-state counts (`cycles`, `run`'s budget, `m.sound` stamps) are in this clock's states.
+   * The CPU clock in Hz now: 2,027,520 on the Model III, 1,774,080 on the Model I, and on the
+   * Model 4 2,027,520, or 4,055,040 while port $EC bit 6 is set (models.js). T-state counts
+   * (`cycles`, `run`'s budget, `m.sound` stamps) are in this clock's states; on the Model 4 an
+   * emulated second is as many T-states as `clockHz` says at the time.
    * @returns {number}
    */
   get clockHz() {

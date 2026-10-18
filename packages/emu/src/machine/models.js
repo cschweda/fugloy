@@ -32,15 +32,26 @@
  *   `mem_read`, case 0x40).
  * - RAM 64 or 128 KB (spec §5; MAME trs80m3_m.cpp, `machine_start`, configures the banks for
  *   each); 128K by default (the phase 6b plan's interface; the choice is ours, unverified).
- * - Clock 2,027,520 Hz at power-on: the Model III's, which the Model 4 runs in Model III mode
- *   (spec §5: "4.055 MHz (2.027 in III mode)"); the 4 MHz switch (port $EC bit 6) is emu phase 6b
- *   Task 2's. Timer 30 Hz at power-on, as the Model III's (spec §5; the 60 Hz option is Task 2's).
+ * - Clock 2,027,520 Hz at power-on and after a reset: the Model III's, which the Model 4 runs in
+ *   Model III mode (spec §5: "4.055 MHz (2.027 in III mode)"). Port $EC bit 6 set doubles it to
+ *   4,055,040 Hz (MAME trs80m3_m.cpp, `port_ec_w`: "d6 CPU fast (1=4MHz, 0=2MHz)", the 20.2752 MHz
+ *   master clock divided by 5 or by 10; xtrs trs_interrupt.c, `trs_timer_speed`, CLOCK_MHZ_4
+ *   4.05504 and CLOCK_MHZ_3 2.02752). A port $EC write of bit 6 clear (and a reset, which writes 0
+ *   to the mode register) goes back to 2,027,520 Hz.
+ * - Timer 30 Hz at 2 MHz and 60 Hz at 4 MHz: xtrs trs_io.c, port $EC, "clock speed is on D6; it
+ *   affects timer HZ too", and `trs_timer_speed` (TIMER_HZ_3 30, TIMER_HZ_4 60). Either way one
+ *   tick every 67,584 T-states. MAME keeps the tick at 30 Hz of real time at both clocks
+ *   (trs80m3.cpp, `set_periodic_int` at 20.2752 MHz / 10 / 67584), so the sources disagree; xtrs,
+ *   whose Model 4 runs LS-DOS 6, is followed (spec §5, unverified).
  */
 
 /**
  * @typedef {{ id: 1 | 3 | 4, name: string, clockHz: number, timerHz: number, romTop: number,
  *   romSizes: readonly number[], romSizeText: string, ram: readonly number[], defaultRam: number,
- *   ramNote: string, roms: readonly string[], romTitle: string, stateMachine: string }} Model
+ *   ramNote: string, roms: readonly string[], romTitle: string, stateMachine: string,
+ *   fastClockHz?: number, fastTimerHz?: number }} Model
+ * `fastClockHz` and `fastTimerHz` are the Model 4's clock and timer with port $EC bit 6 set; the
+ * other models have no clock switch.
  */
 
 /** @type {Model} */
@@ -97,6 +108,8 @@ export const MODEL_4 = Object.freeze({
   roms: Object.freeze(['model4-trs32']),
   romTitle: 'the Model 4 ROM',
   stateMachine: 'trs80-model4',
+  fastClockHz: 4055040,
+  fastTimerHz: 60,
 });
 
 /** The models built, by number. */

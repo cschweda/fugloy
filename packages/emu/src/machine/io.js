@@ -24,6 +24,12 @@
  * The byte goes to `onMapWrite` (Model4Memory.setMapRegister, which decodes
  * it), and a reset writes 0 there (MAME `machine_reset`: "port_84_w(0)";
  * xtrs `trs_reset`: z80_out(0x84, 0)).
+ * On the Model 4, port 0xEC's bit 6 also picks the CPU clock, 4.05504 MHz
+ * set and 2.02752 MHz clear (MAME trs80m3_m.cpp, `port_ec_w`: "d6 CPU fast
+ * (1=4MHz, 0=2MHz)"; xtrs trs_io.c: "clock speed is on D6; it affects timer
+ * HZ too"); every write tells `onClockSelect` (TRS80System.selectClock), and a
+ * reset, which clears the mode register, selects 2 MHz again. The Model III
+ * has no clock switch, and its bit 6 changes nothing.
  *
  * The RTC heartbeat interrupt fires at 30 Hz; its latch bit is RTC_IRQ_BIT.
  * The keyboard is memory-mapped at 0x3800-0x3BFF (see MemorySystem), not
@@ -66,6 +72,7 @@ export const NMI_INTRQ_BIT = 0x80;
 
 // Mode register (port 0xEC write) bits
 export const MODE_32COL_BIT = 0x04; // 32-character display mode
+export const MODE_FAST_BIT = 0x40; // the Model 4's 4 MHz clock (above)
 
 // The Model I's port 0xFF output latch (Z59), D0-D3: "D0 and D1 ... are used
 // to output data that is recorded on tape during a CSAVE function. D2 ...
@@ -135,6 +142,9 @@ export class IOSystem {
     // The Model 4's port 0x84 sink, wired by TRS80System to the memory (Model4Memory).
     /** @type {((value: number) => void) | null} */
     this.onMapWrite = null;
+    // The Model 4's clock switch, port 0xEC bit 6 (above), wired by TRS80System.
+    /** @type {((fast: boolean) => void) | null} */
+    this.onClockSelect = null;
 
     if (model.id !== 1) {
       this.initializeModelIIIPorts();
@@ -179,6 +189,7 @@ export class IOSystem {
           if (changed && this.onModeWrite) {
             this.onModeWrite(this.modeRegister);
           }
+          if (this.onClockSelect) this.onClockSelect((value & MODE_FAST_BIT) !== 0);
         },
       });
     }
@@ -519,6 +530,7 @@ export class IOSystem {
     this.soundLog = [];
     this.fdc.reset();
     if (this.model.id === 4 && this.onMapWrite) this.onMapWrite(0);
+    if (this.onClockSelect) this.onClockSelect(false);
   }
 
   readKeyboard() {

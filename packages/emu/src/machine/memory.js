@@ -333,8 +333,8 @@ const BANK = 0x8000;
  * 5, which MAME, followed here, takes as no paging). With 64K the page bits do
  * nothing (MAME configures every entry to banks 0 and 1).
  *
- * Bits 2 (80/64 columns) and 3 (inverse video) are kept in `mapRegister` for
- * the video (emu phase 6b, Task 2).
+ * Bits 2 (80/64 columns) and 3 (inverse video) are the video's (`wide`,
+ * `inverse`; devices/video.js reads them).
  */
 export class Model4Memory extends MemorySystem {
   /** @param {{ model: import('./models.js').Model, ram?: number }} opts */
@@ -378,6 +378,16 @@ export class Model4Memory extends MemorySystem {
    */
   get page() {
     return this.ram.length > 2 * BANK ? (this.mapRegister >> 4) & 0x07 : 0;
+  }
+
+  /** True in 80-column mode, 80×24: port 0x84 bit 2 (MAME: "d2 80/64 width"; xtrs: trs_screen_80x24). */
+  get wide() {
+    return (this.mapRegister & 0x04) !== 0;
+  }
+
+  /** True with inverse video on: port 0x84 bit 3 (MAME: "d3 Invert Video"; xtrs: trs_screen_inverse). */
+  get inverse() {
+    return (this.mapRegister & 0x08) !== 0;
   }
 
   /** @param {number} address */

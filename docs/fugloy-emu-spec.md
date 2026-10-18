@@ -83,10 +83,10 @@ m.step(n = 1)              // n whole instructions → { cycles, halted }; break
 m.run({ cycles, until })   // until = 'halt' | predicate(m)
                            //   → { reason: 'cycles' | 'halt' | 'predicate', cycles } | { reason: 'break' | 'watch', id, cycles }
 m.cycles                   // total T-states since reset
-m.clockHz                  // the model's CPU clock in Hz: clockHz(m.model)
+m.clockHz                  // the CPU clock in Hz now: clockHz(m.model), or on the Model 4 4,055,040 while port $EC bit 6 is set
 ```
 
-- T-states are the machine's own model's: `m.cycles`, `run`'s `cycles` budget, and the cycle stamps of `m.sound` events and `m.keyboard` timing count states of `m.clockHz` (1,774,080 Hz on the Model I, 2,027,520 on the Model III), so an emulated second is `m.clockHz` cycles.
+- T-states are the machine's own model's: `m.cycles`, `run`'s `cycles` budget, and the cycle stamps of `m.sound` events and `m.keyboard` timing count states of `m.clockHz` (1,774,080 Hz on the Model I, 2,027,520 on the Model III; on the Model 4 2,027,520 or, while port `EC` bit 6 is set, 4,055,040), so an emulated second is `m.clockHz` cycles. The Model 4's clock can change mid-run (§5): `m.keyboard.type` times its keys in the clock at the time it is queued, and `m.sound` stamps taken across a switch are in the clock of each moment.
 
 - `step` and `run` return the T-states they spent (`cycles`), not the total. An interrupt response counts with the instruction after it.
 - `run` needs `cycles`, `until`, or both; with neither it throws, since it would never stop. It executes at least one instruction (`run({ cycles: 0 })` runs one), with one exception: a breakpoint at its first boundary that it did not just stop at returns `{ reason: 'break', id, cycles: 0 }` (plus the T-states of an interrupt response delivered at that boundary) without executing anything (§7).
@@ -110,9 +110,11 @@ m.system                   // the wrapped TRS80System: an escape hatch to the de
 **Devices (built)**
 
 ```js
-m.video.text()             // 16 lines, string[]: 64 columns, or 32 in 32-column mode (Model III port $EC bit 2; Model I port $FF bit 3)
-m.video.raw                // live Uint8Array view of $3C00..$3FFF
-m.video.columns            // 64 | 32
+m.video.text()             // 16 lines, string[]: 64 columns, or 32 in 32-column mode (Model III port $EC bit 2; Model I port $FF bit 3);
+                           //   on the Model 4 24 lines of 80 (or 40) in 80-column mode (port $84 bit 2)
+m.video.raw                // live Uint8Array view of video RAM: $3C00..$3FFF, or the Model 4's 2K
+m.video.columns            // 64 | 32, and on the Model 4 80 | 40
+m.video.rows               // 16, or 24 on the Model 4 in 80-column mode
 
 m.sound.events(sinceCycle = -1)  // [{ cycle, value }] every port $FF write after that cycle, oldest first
 m.sound.overflowed         // events lost to wrap-around of the 65,536-event ring since the last clear
@@ -233,14 +235,14 @@ Not modeled, and invisible to ZEXALL:
 
 | | Model I | Model III | Model 4 |
 |---|---|---|---|
-| Clock | 1.774 MHz (1,774,080 Hz; unverified, below) | 2.027 MHz | 4.055 MHz (2.027 in III mode) |
+| Clock | 1.774 MHz (1,774,080 Hz; unverified, below) | 2.027 MHz | 2.027 MHz (2,027,520 Hz) at reset; 4.055 MHz (4,055,040 Hz) while port `EC` bit 6 is set (emu phase 6b, below) |
 | ROM | 12 KB Level II at `0000–2FFF` (verified, below) | 14 KB at `0000–37FF` | 14 KB, bankable out |
 | Keyboard | `3800–3BFF` matrix (verified, below) | `3800–3BFF` | `3800–3BFF` in memory maps 0–1, `F400–F7FF` in map 2, absent from map 3 (emu phase 6b, below) |
-| Video | `3C00–3FFF`, 64×16 or 32×16 (port `FF` bit 3), no bit 6 (verified, below); lowercase mod optional | `3C00–3FFF`, lowercase; 64×16, or 32×16 via port `EC` bit 2 (verified on the ROM). Codes `C0–FF`: unverified<sup>1</sup> | 2 KB: one 1 KB page at `3C00–3FFF` in maps 0–1 (port `84` bit 7), all of it at `F800–FFFF` in map 2, none in map 3 (emu phase 6b, below); 64×16 or 80×24 via port `EC` bit 2 and port `84` bit 2 |
+| Video | `3C00–3FFF`, 64×16 or 32×16 (port `FF` bit 3), no bit 6 (verified, below); lowercase mod optional | `3C00–3FFF`, lowercase; 64×16, or 32×16 via port `EC` bit 2 (verified on the ROM). Codes `C0–FF`: unverified<sup>1</sup> | 2 KB: one 1 KB page at `3C00–3FFF` in maps 0–1 (port `84` bit 7), all of it at `F800–FFFF` in map 2, none in map 3 (emu phase 6b, below); 64×16, or 80×24 via port `84` bit 2, either halved to 32 or 40 columns by port `EC` bit 2; inverse video port `84` bit 3 (emu phase 6b, below) |
 | RAM | 4/16/32/48 KB from `4000` (the ROM's probe finds each; the sizes themselves unverified, below) | 16/32/48 KB | 64/128 KB; memory map select port `84` bits 0–1; 128 KB page select bits 4–6 (emu phase 6b, below) |
 | Cassette / sound | Port `FF` bits 0–1 out, bit 2 motor, bit 3 32 columns, bit 7 in; 500 baud (verified, below) | Port `FF`; 500/1500 baud | Port `FF` (Model III mode only) |
 | FDC | WD1771: command/status `37EC`, track `37ED`, sector `37EE`, data `37EF`; drive select `37E1`; INTRQ to the interrupt latch `37E0` bit 6 (expansion interface; verified against the FD1771 data sheet, below) | WD1793 at ports `F0–F3`; drive select/density port `F4`; NMI status `E4` | Same as Model III |
-| Timer | 40 Hz via expansion interface, latch at `37E0` (verified, below) | 30 Hz; interrupt latch port `E0`, mask `E0` | 30 Hz or 60 Hz (port `EC` bit 6) |
+| Timer | 40 Hz via expansion interface, latch at `37E0` (verified, below) | 30 Hz; interrupt latch port `E0`, mask `E0` | 30 Hz at 2 MHz, 60 Hz at 4 MHz (port `EC` bit 6; unverified, below) |
 | Printer | `37E8`, status `30` (verified against the ROM, below) | Port `F8` | Port `F8` |
 
 The Model 4 column is being built in emu phase 6b (its memory maps and banking below; the rest follows in that phase's later tasks): emu phase 6 split the Model 4 off into its own plan (§11); since then a Model 4 ROM is now local (`fixtures/real/model4.rom`, from the cpmarchives TRS32 ROM set, whose `MODEL4P.ROM` is an emulator's stand-in, not Tandy's 4P ROM), and the Model 4 phase is planned next; its native mode still needs an LS-DOS 6 or TRSDOS 6 boot disk. Values above are from memory unless marked, and should be checked against the Model I/III/4 technical reference manuals before implementation; the memory-map and port numbers are the kind of detail that is easy to get one bit wrong. Treat this table as a checklist of what to verify, not as the reference.
@@ -304,6 +306,16 @@ Unverified (chosen by the model, or the WD1793 model's, kept): the 1 MHz control
 - **The ROM keyboard-scan hook** (§6) stands in at `$002B` and `$0049` only in map 0; in maps 1–3 those addresses are RAM.
 
 Unverified (no Model 4 Technical Reference Manual): all of the above against Tandy's own documents; page select settings 1, 4, and 5 (bit 5 clear with bit 4 or 6 set), which MAME takes as no paging and xtrs stops on as unknown; that the Model 4 maps the printer at `37E8` in map 0 as MAME does (the Model III here does not, and the Model 4 keeps the Model III's map 0 so Model III programs run alike); the 128 KB default (the choice is ours).
+
+**The Model 4's video, clock, and timer, and Model III mode (emu phase 6b, Task 2).** `src/devices/video.js`, the port `EC` handler in `src/machine/io.js`, and `TRS80System.selectClock` in `src/machine/trs80-system.js`. Again from secondary sources: MAME's `trs80m3` driver (`trs80m3_m.cpp`, `port_ec_w` and `port_84_w`; `trs80m3_v.cpp`, `screen_update_trs80m3`; `trs80m3.cpp`, the RTC's `set_periodic_int`) and xtrs (`trs_io.c`, ports `84` and `EC`; `trs_interrupt.c`, `trs_timer_speed`). Tested on synthetic ROMs (`test/unit/model4-devices.test.js`, `packages/mcp/test/model4-clock.test.js`) and on the real ROM (`test/integration/model4-boot.test.js`):
+
+- **80×24:** port `84` bit 2 picks 80 columns by 24 rows, each row following the last in the 2 KB of video RAM (row *r* at *r* × 80; bytes 1920–2047 are off screen); clear, 64×16 over the first 1 KB. Port `EC` bit 2 halves either, to 40 or 32 columns of even-address bytes. The screen starts at the 2 KB's first byte in every map, whichever 1 KB page port `84` bit 7 puts at `3C00` (MAME reads `m_p_videoram` from its start; xtrs's display likewise). `m.video.columns` is 80, 64, 40, or 32, `m.video.rows` 24 or 16, and `m.video.diff` rows are 80 bytes long in 80-column mode.
+- **Inverse video,** port `84` bit 3: a byte with bit 7 set is its character (bits 0–6) drawn inverted, not a graphics block (MAME: "if inverse mode, and bit 7 set, invert gfx"); `m.video.text()` shows that character.
+- **The clock:** port `EC` bit 6 set runs the CPU at 4,055,040 Hz, clear at 2,027,520 Hz (MAME: "d6 CPU fast (1=4MHz, 0=2MHz)", the 20.2752 MHz master clock divided by 5 or 10; xtrs: `CLOCK_MHZ_4` 4.05504, `CLOCK_MHZ_3` 2.02752). A reset clears the mode register and so selects 2 MHz. `m.clockHz` follows the switch, and with it everything that counts emulated seconds: `runSeconds`, `m.keyboard.type`'s key timing (in the clock at the time typing is queued), and the MCP server's run budgets, caps, `settled` window, and reported seconds (`clockOf`). The disk controller's times (revolution, step rates, settling, byte times) are T-states of the clock and are retimed at the switch, scaling the disk's angle and the command in flight with them, so nothing moves in real time; a save state restores the clock from its mode register byte without rescaling. The Model III ignores bit 6.
+- **The timer:** 30 Hz at 2 MHz and 60 Hz at 4 MHz, so one tick every 67,584 T-states at either clock (xtrs, port `EC`: "clock speed is on D6; it affects timer HZ too"; `trs_timer_speed`, `TIMER_HZ_3` 30, `TIMER_HZ_4` 60): an interrupt-timed loop counts the same between ticks at either clock, and twice the ticks in an emulated second at 4 MHz.
+- **Model III mode:** the Model 4 ROM (`model4-trs32`) boots to `Cass ?`, `Memory Size?`, "Radio Shack Model III Basic", and `READY` in map 0 at 2 MHz, 64×16 (it writes the 6845's registers through ports `88`–`89` and port `EC` with `20` and `28`, never bit 6). A Model 4 left there runs Sea Dragon exactly as the Model III does: the same screens at every quarter second and the same T-states from `READY` to "1 or 2 Players?"; only the boot to `READY` differs, by 11 T-states, from the ROMs' 727 different bytes.
+
+Unverified: the 60 Hz timer at 4 MHz (xtrs; MAME keeps the RTC at 30 Hz of real time at both clocks, `set_periodic_int` at 20.2752 MHz / 10 / 67584); that the screen starts at the 2 KB's first byte: MAME also honours the 6845's start address (registers 12–13 through ports `88`–`89`), which is not modelled (the Model 4 ROM writes 0 there); that the bytes past 1920 in 80-column mode and the second 1 KB in 64-column mode never show; a tape already playing when the clock switches keeps the clock it was inserted at, a recording that spans a switch decodes in the clock at its end, and the cassette at 4 MHz is untested; nothing native (an LS-DOS 6 or TRSDOS 6 boot) has run, since no such disk is local (Ruling 1 of the phase 6b plan).
 
 **The Model III disk controller (emu phase 5).** The WD1793 model follows the Western Digital FD179X data sheet, read in its FD179X-01 edition (October 1979, bitsavers `components/westernDigital`), whose commands, flags, status bits, and formats the FD179X-02 shares; `src/devices/fdc-wd1793.js` names the sheet's sections where it decides, and `test/unit/fdc-wd1793.test.js` checks each behaviour on synthetic images through the ports. Verified against that sheet:
 
@@ -381,7 +393,7 @@ Built in emu phase 3 (the API is listed in §3). The rulings below, numbered as 
   - Coverage and callers share one switch, `m.debug.coverage.enable()` (Ruling 6); `clear()` empties both.
 - **Callers:** a map of target → `{ from, kind: 'call' | 'jp' | 'jr' | 'rst' | 'ret-to', count }`, where `count` is how many times that edge was taken (Ruling 8), recorded with coverage.
 - **Snapshots:** full machine state (CPU, RAM, device state, cycle count) as a serializable object that survives `JSON.stringify`; restore is exact. Used for differential testing (§10) and for "try this input, rewind." A snapshot does **not** include the trace ring, hit log, coverage, or callers; those are debugger state, not machine state, and survive a restore, as do breakpoints, watches, hooks, and labels. Document this; it will surprise someone. A restore starts a fresh timeline: it clears the key queue (`m.keyboard`) and the sound ring (`m.sound`), whose cycle stamps belong to the old one, the PC where the last run stopped for a breakpoint, and any pending watch stop. The NMI edge latch is serialized (`nmiWasPending`, since phase 5), so a restore is exact while the FDC's INTRQ is up too, and a snapshot taken in the middle of a disk command continues identically (`test/unit/fdc-wd1793.test.js`, `snapshot mid-command`); a snapshot from before phase 5 restores the latch as clear.
-- **Screen diff:** `m.video.diff(snap)` returns the video RAM cells changed since a snapshot, `{ row, col, was, now }` as raw bytes over the 64-column RAM layout (also in 32-column mode, where only even columns show); a cheap way to detect "something printed."
+- **Screen diff:** `m.video.diff(snap)` returns the video RAM cells changed since a snapshot, `{ row, col, was, now }` as raw bytes over the 64-column RAM layout (also in 32-column mode, where only even columns show; on the Model 4 in 80-column mode, rows of 80 bytes); a cheap way to detect "something printed."
 - **Labels and the label file:** `m.debug.label` names addresses (`source: 'user'`), and `m.debug.labelFile` writes the session as the §8 file.
 
 ## 8. Label and coverage file format
