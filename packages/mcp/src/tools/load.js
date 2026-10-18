@@ -5,16 +5,19 @@
  * and .CMD, then ASCII BASIC source by its first line's number, and last a JV1 disk image, which
  * has no header and is known only by its size (the emu `DiskImage` decides all three containers,
  * as `m.fdc.mount` does; emu phase 5 plan, Ruling 4). With `reset` (the default) a fresh Machine
- * boots its ROM to READY first, as the emu integration tests do; a disk image instead goes into
- * drive 0 of a fresh Machine, which the ROM boots from. Coverage is on from the start (Ruling 3).
+ * of the model asked for (`model`, else the config's defaultModel: the Model I or the Model III,
+ * emu phase 6) boots its ROM to READY first, as the emu integration tests do; a disk image instead
+ * goes into drive 0 of a fresh Machine, which the ROM boots from. Coverage is on from the start
+ * (Ruling 3).
  */
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, extname, isAbsolute, relative, resolve } from 'node:path';
 import { detectFormat } from '@fugloy/disasm';
-import { CPU_CLOCK_HZ, DiskImage } from '@fugloy/emu';
+import { DiskImage } from '@fugloy/emu';
 import { z } from 'zod';
-import { hex4, MODELS } from '../args.js';
-import { bootToReady, BOOT_SECONDS, seconds } from '../execute.js';
+import { hex4 } from '../args.js';
+import { bootToReady, BOOT_SECONDS, clockOf, seconds } from '../execute.js';
+import { modelName } from '../session.js';
 import { readSidecar, sidecarLine, sidecarState } from '../sidecar.js';
 
 /**
@@ -72,6 +75,28 @@ export function formatOf(/** @type {Uint8Array} */ bytes) {
 /** Where the Model III ROM puts track 0, sector 1 of drive 0 and jumps (ROM $34D9-$3516). */
 export const BOOT_SECTOR = 0x4300;
 
+/**
+ * Where the Model I Level II ROM puts track 0, sector 0 of drive 0 and jumps (MDL1LEV2.Z80, BOOT
+ * at $069F-$06C9).
+ */
+export const MODEL1_BOOT_SECTOR = 0x4200;
+
+/** The boot sector's address on model `n`. */
+export const bootSectorOf = (/** @type {number} */ n) => (n === 1 ? MODEL1_BOOT_SECTOR : BOOT_SECTOR);
+
+/**
+ * `model` as load takes it: 1 or 3, or undefined for the config's defaultModel. Throws a sentence otherwise.
+ * @param {unknown} model
+ * @returns {1 | 3 | undefined}
+ */
+export function checkModel(model) {
+  if (model === undefined || model === 1 || model === 3) return model;
+  if (model === 4) {
+    throw new Error('There is no Model 4 yet: it needs a Model 4 ROM and boot disk to prove it boots, and comes in its own plan once one is supplied; call load with model 1 (the Model I) or 3 (the Model III).');
+  }
+  throw new Error(`model must be 1 (the Model I) or 3 (the Model III), not ${String(model)}.`);
+}
+
 /** How long `load` lets the ROM take to read a disk's boot sector and jump to it. */
 export const DISK_BOOT_SECONDS = 5;
 
@@ -97,10 +122,10 @@ function locate(/** @type {string} */ given, /** @type {import('../config.js').C
 export default {
   name: 'load',
   description:
-    'Load a .CMD, .BAS (tokenized or ASCII), or .CAS program, or a JV1, JV3, or DMK disk image, detected from its content. By default a fresh Model III boots its ROM to READY first; reset: false loads into the machine as it is. A disk image goes into drive 0 of a fresh machine, and the ROM boots it: load runs until the ROM jumps to the boot sector at 4300h (or 5 s emulated), and the disk\'s own loader then reads the rest as the machine runs, which takes seconds of emulated time (the drive turns at 300 rpm), so follow it with run until "settled", repeated until the program\'s screen appears; with reset: false the disk is only put in drive 0 of the running machine, and reset boots from it. Returns the manifest: format, blocks, entry point, the ROM, the sidecar label file (<program>.fugloy.json beside the program, or failing that in the fixtures folder, whose labels are loaded; writes always go beside the program; one that cannot be used is reported and left alone), and the resolved path. Coverage is recorded from the start.',
+    'Load a .CMD, .BAS (tokenized or ASCII), or .CAS program, or a JV1, JV3, or DMK disk image, detected from its content. By default a fresh machine (model 1, the Model I, or 3, the Model III; the config\'s defaultModel when model is not given) boots its ROM to READY first; reset: false loads into the machine as it is. A disk image goes into drive 0 of a fresh machine, and the ROM boots it: load runs until the ROM jumps to the boot sector (4300h on the Model III, 4200h on the Model I; or 5 s emulated), and the disk\'s own loader then reads the rest as the machine runs, which takes seconds of emulated time (the drive turns at 300 rpm), so follow it with run until "settled", repeated until the program\'s screen appears; with reset: false the disk is only put in drive 0 of the running machine, and reset boots from it. Returns the manifest: format, blocks, entry point, the ROM, the sidecar label file (<program>.fugloy.json beside the program, or failing that in the fixtures folder, whose labels are loaded; writes always go beside the program; one that cannot be used is reported and left alone), and the resolved path. Coverage is recorded from the start.',
   inputSchema: {
     path: z.string().describe('The program file; relative paths resolve against the working folder, then the config\'s fixtures folder'),
-    model: z.number().int().optional().describe('The machine model; only 3 (the Model III) exists until emu phase 6'),
+    model: z.number().int().optional().describe('The machine model: 1 (the Model I, with the Expansion Interface: roms.model1) or 3 (the Model III: roms.model3); default the config\'s defaultModel. A different model than the running machine\'s needs reset'),
     reset: z.boolean().optional().describe('Make a fresh machine and boot it to READY first (default true); false loads into the running machine'),
   },
   /**
@@ -109,9 +134,9 @@ export default {
    */
   handler(session, { path, model, reset = true }) {
     const { config } = session;
-    if (model !== undefined && model !== 3) {
-      if (MODELS[model] === undefined) throw new Error(`model must be 3 (the Model III), not ${model}.`);
-      throw new Error(`There is no Model ${MODELS[model]} yet: only the Model III exists until emu phase 6 adds the Model I and the Model 4; call load with model 3 or without model.`);
+    const asked = checkModel(model);
+    if (!reset && asked !== undefined && session.machine !== null && session.machine.model !== asked) {
+      throw new Error(`The running machine is the ${modelName(session.machine.model)}; reset: false loads into it, so it cannot become the ${modelName(asked)}. Call load with reset: true (the default) for a fresh ${modelName(asked)}.`);
     }
     if (path.trim() === '') throw new Error('path is empty; give the program file to load.');
     const file = locate(path, config);
@@ -127,7 +152,7 @@ export default {
     // A fresh machine is booted and loaded before it replaces the session's, so a load that
     // fails leaves the session as it was.
     const fresh = reset || session.machine === null;
-    const m = fresh ? session.createMachine() : session.requireMachine();
+    const m = fresh ? session.createMachine(undefined, asked ?? config.defaultModel ?? 3) : session.requireMachine();
     let boot;
     let dropped = 0;
     if (fresh) {
@@ -137,7 +162,7 @@ export default {
       else {
         const booted = bootToReady(m);
         boot = booted.ready
-          ? `Boot: READY after ${seconds(booted.cycles)} emulated`
+          ? `Boot: READY after ${seconds(booted.cycles, m)} emulated`
           : `Boot: the ROM showed no READY within ${BOOT_SECONDS} s emulated, so the program was loaded where the ROM had got to`;
       }
     } else boot = 'Boot: none (reset: false loads into the running machine)';
@@ -158,13 +183,15 @@ export default {
     }
     if (format === 'dsk') {
       if (fresh) {
-        // The ROM reads track 0, sector 1 into 4300h and jumps there; reading it takes real
-        // emulated time (a revolution is 0.2 s), so the budget is generous.
+        // The ROM reads the boot sector (track 0, sector 1 into 4300h on the Model III; sector 0
+        // into 4200h on the Model I) and jumps there; reading it takes real emulated time (a
+        // revolution is 0.2 s, and the Model I ROM first waits about a second), so the budget is generous.
         const cpu = m.system.cpu;
-        const r = m.run({ until: () => cpu.registers.PC === BOOT_SECTOR, cycles: DISK_BOOT_SECONDS * CPU_CLOCK_HZ });
+        const sector = bootSectorOf(m.model);
+        const r = m.run({ until: () => cpu.registers.PC === sector, cycles: DISK_BOOT_SECONDS * clockOf(m) });
         boot = r.reason === 'predicate'
-          ? `Boot: the ROM read the boot sector and jumped to ${hex4(BOOT_SECTOR)} after ${seconds(m.cycles)} emulated; the disk's loader reads the rest as the machine runs, so call run with until "settled" (again if the screen is still loading: a disk can take 10 s emulated or more)`
-          : `Boot: the ROM did not reach the boot sector at ${hex4(BOOT_SECTOR)} within ${DISK_BOOT_SECONDS} s emulated (the PC is ${hex4(cpu.registers.PC)}); the disk may not be one the Model III ROM can boot, or it needs longer; call run to go on, and screen to see where it is`;
+          ? `Boot: the ROM read the boot sector and jumped to ${hex4(sector)} after ${seconds(m.cycles, m)} emulated; the disk's loader reads the rest as the machine runs, so call run with until "settled" (again if the screen is still loading: a disk can take 10 s emulated or more)`
+          : `Boot: the ROM did not reach the boot sector at ${hex4(sector)} within ${DISK_BOOT_SECONDS} s emulated (the PC is ${hex4(cpu.registers.PC)}); the disk may not be one the ${modelName(m.model)} ROM can boot, or it needs longer; call run to go on, and screen to see where it is`;
         // The screen diff starts from what the ROM left, now that the disk's own code runs.
         baseline = Uint8Array.from(m.video.raw);
       } else boot = 'Boot: none (reset: false puts the disk in drive 0 of the running machine; call reset to boot from it)';
@@ -194,9 +221,15 @@ export default {
     if (format === 'dsk') lines.push('Blocks: none yet (the ROM and the disk\'s own loader read sectors into memory as the machine runs)');
     else if (manifest.blocks.length === 0) lines.push('Blocks: none yet (ASCII BASIC is typed in through the ROM as the machine runs; call run, then key RUN)');
     else lines.push(`Blocks (${manifest.blocks.length}):`, ...manifest.blocks.map(block));
-    if (format === 'dsk') lines.push(`Entry: none (the ROM boots from drive 0: track 0, sector 1 runs at ${hex4(BOOT_SECTOR)})`);
+    if (format === 'dsk') {
+      lines.push(m.model === 1
+        ? `Entry: none (the ROM boots from drive 0: track 0, sector 0 runs at ${hex4(MODEL1_BOOT_SECTOR)})`
+        : `Entry: none (the ROM boots from drive 0: track 0, sector 1 runs at ${hex4(BOOT_SECTOR)})`);
+    }
     else if (manifest.entry !== undefined && manifest.entry !== null) lines.push(`Entry: ${hex4(manifest.entry)} (the PC is there now)`);
     else lines.push('Entry: none (a BASIC program; key RUN to start it)');
+    // The Model III's manifest is as it was before the Model I came; a Model I's names its model.
+    if (m.model !== 3) lines.push(`Model: ${modelName(m.model)} (48K, with the Expansion Interface)`);
     lines.push(`ROM: ${m.rom.recognized ?? `unrecognised (SHA-256 ${m.rom.sha256.slice(0, 16)}…)`}`);
     lines.push(boot);
     lines.push(sidecarLine(session.sidecar));

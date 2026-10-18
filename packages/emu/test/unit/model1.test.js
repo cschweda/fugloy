@@ -265,3 +265,18 @@ describe('save states across models (Task 1 review)', () => {
     expect((m.mem.read(0x4101, 1)[0] - ticks) & 0xff).toBe(3);
   });
 });
+
+describe('the label file on a Model I (Task 4)', () => {
+  it('records program.model 1, and the Model III keeps 3', () => {
+    // LD SP,7F00H / JR $ at 7000H, loaded as a .CMD named SPIN.
+    const cmd = new Uint8Array([0x05, 0x04, 0x53, 0x50, 0x49, 0x4e, 0x01, 0x07, 0x00, 0x70, 0x31, 0x00, 0x7f, 0x18, 0xfe, 0x02, 0x02, 0x00, 0x70]);
+    const m1 = model1();
+    m1.load.cmd(cmd);
+    expect(m1.debug.labelFile().program).toMatchObject({ name: 'SPIN', model: 1 });
+    const rom3 = new Uint8Array(0x3800);
+    rom3[0] = 0x76;
+    const m3 = new Machine({ roms: { level2: rom3 } });
+    m3.load.cmd(cmd);
+    expect(m3.debug.labelFile().program).toMatchObject({ name: 'SPIN', model: 3 });
+  });
+});

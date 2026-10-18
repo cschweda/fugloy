@@ -1,27 +1,34 @@
 /**
  * `key`: type on the keyboard (docs/fugloy-mcp-spec.md §5, Ruling 8). By default through the
- * matrix at 20 characters a second, then the machine runs until every key is delivered plus
+ * matrix at 20 characters a second (10 on the Model I, whose Level II ROM misses keys at 20: emu
+ * phase 6, Task 2), then the machine runs until every key is delivered plus
  * 0.2 s emulated (capped like `run`); mode "hook" feeds the ROM keyboard-scan hook instead.
  */
-import { CPU_CLOCK_HZ } from '@fugloy/emu';
 import { z } from 'zod';
-import { capCycles, runMachine, seconds, stoppedLine, wallDeadline } from '../execute.js';
+import { capCycles, clockOf, runMachine, seconds, stoppedLine, wallDeadline } from '../execute.js';
 import { screenDiff } from '../format/screen.js';
 
 const NAMES = ['ENTER', 'BREAK', 'CLEAR', 'UP', 'DOWN', 'LEFT', 'RIGHT', 'SHIFT', 'SPACE'];
 /** Named keys the hook can return: those with a character the ROM routine gives back unambiguously. */
 const HOOK_CHARS = { ENTER: '\n', SPACE: ' ' };
-/** Emulated time `run` keeps going after the last key, so the program can react (Ruling 8). */
-const AFTER = Math.round(0.2 * CPU_CLOCK_HZ);
+/** Emulated seconds `run` keeps going after the last key, so the program can react (Ruling 8). */
+const AFTER_SECONDS = 0.2;
+
+/**
+ * The matrix typing rate when none is given: 20 characters a second on the Model III, 10 on the
+ * Model I, whose Level II keyboard routine drops keys typed at 20 (emu phase 6, Task 2).
+ * @param {import('@fugloy/emu').Machine} m
+ */
+export const defaultCps = (m) => (m.model === 1 ? 10 : 20);
 
 export default {
   name: 'key',
   description:
-    'Type keys: text (characters; "\\n" is ENTER), then keys (named keys: ENTER, BREAK, CLEAR, UP, DOWN, LEFT, RIGHT, SHIFT, SPACE). mode "matrix" (default) presses each through the keyboard matrix at cps characters a second (default 20); "hook" hands them to the ROM\'s keyboard routine. With run (default true) the machine runs until every key is delivered and 0.2 s more. Returns the cycles run and the screen diff.',
+    'Type keys: text (characters; "\\n" is ENTER), then keys (named keys: ENTER, BREAK, CLEAR, UP, DOWN, LEFT, RIGHT, SHIFT, SPACE). mode "matrix" (default) presses each through the keyboard matrix at cps characters a second (default 20 on the Model III, 10 on the Model I, whose ROM misses keys at 20); "hook" hands them to the ROM\'s keyboard routine. With run (default true) the machine runs until every key is delivered and 0.2 s more. Returns the cycles run and the screen diff.',
   inputSchema: {
     text: z.string().optional().describe('Characters to type; "\\n" is ENTER'),
     keys: z.array(z.string()).optional().describe('Named keys to press after text: ENTER, BREAK, CLEAR, UP, DOWN, LEFT, RIGHT, SHIFT, SPACE'),
-    cps: z.number().optional().describe('Characters a second in matrix mode (default 20); slow programs may need fewer'),
+    cps: z.number().optional().describe('Characters a second in matrix mode (default 20 on the Model III, 10 on the Model I); slow programs may need fewer'),
     mode: z.enum(['matrix', 'hook']).optional().describe('"matrix" (default) or "hook"'),
     run: z.boolean().optional().describe('Run until the keys are delivered, plus 0.2 s (default true)'),
   },
@@ -29,8 +36,9 @@ export default {
    * @param {import('../session.js').Session} session
    * @param {{ text?: string, keys?: string[], cps?: number, mode?: 'matrix' | 'hook', run?: boolean }} args
    */
-  handler(session, { text = '', keys = [], cps = 20, mode = 'matrix', run = true }) {
+  handler(session, { text = '', keys = [], cps, mode = 'matrix', run = true }) {
     const m = session.requireMachine();
+    if (cps === undefined) cps = defaultCps(m);
     if (text === '' && keys.length === 0) throw new Error('Give text or keys to type.');
     if (!(cps > 0) || !Number.isFinite(cps)) throw new Error(`cps must be a positive number of characters a second, not ${cps}.`);
     const named = keys.map((k) => {
@@ -57,17 +65,17 @@ export default {
     if (!run) return `Queued ${what}; nothing ran yet (call run to deliver them).`;
 
     const before = Uint8Array.from(m.video.raw);
-    const cap = capCycles(session.config);
+    const cap = capCycles(session.config, m);
     // One wall-clock deadline for both runs, so the call as a whole keeps to limits.runSecondsWall.
     const deadline = wallDeadline(session);
     let stop = runMachine(session, { budget: cap, until: 'drained', deadline });
     let ran = stop.cycles;
     if (stop.reason === 'drained' && ran < cap) {
-      const tail = runMachine(session, { budget: Math.min(AFTER, cap - ran), deadline });
+      const tail = runMachine(session, { budget: Math.min(Math.round(AFTER_SECONDS * clockOf(m)), cap - ran), deadline });
       ran += tail.cycles;
       stop = tail.reason === 'cycles' ? { reason: 'drained', cycles: ran } : { ...tail, cycles: ran };
     }
-    const lines = [`Typed ${what}`, `Ran ${ran.toLocaleString('en-US')} cycles (${seconds(ran)} emulated)`];
+    const lines = [`Typed ${what}`, `Ran ${ran.toLocaleString('en-US')} cycles (${seconds(ran, m)} emulated)`];
     if (stop.reason !== 'drained') {
       lines.push(stoppedLine(stop, session, { capped: true }));
       if (m.keyboard.pending > 0) lines.push(`${m.keyboard.pending} key events were still queued; call run to deliver them.`);

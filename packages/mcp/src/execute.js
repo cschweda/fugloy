@@ -5,48 +5,52 @@
  * slices (Ruling 5). Slice ends are fixed by T-states from the start of the call, never by the
  * clock, so the same calls give the same cycles; only a tripped wall-clock cap differs.
  */
-import { CPU_CLOCK_HZ } from '@fugloy/emu';
 import { hex4 } from './args.js';
 
 /** T-states between the run loop's checks of the clock and the screen (Ruling 5). */
 export const SLICE = 2000;
 
+/**
+ * The machine's CPU clock in Hz: 2,027,520 on the Model III, 1,774,080 on the Model I. Every
+ * emulated second the tools count or report is seconds of this clock.
+ */
+export const clockOf = (/** @type {import('@fugloy/emu').Machine} */ m) => m.system.clockHz;
+
 /** T-states video RAM must stay unchanged for `until: "settled"`: 0.5 s emulated. */
-export const SETTLE = Math.round(0.5 * CPU_CLOCK_HZ);
+export const settleCycles = (/** @type {import('@fugloy/emu').Machine} */ m) => Math.round(0.5 * clockOf(m));
 
 /** How long `load` lets a ROM take to reach READY before it loads the program anyway. */
 export const BOOT_SECONDS = 5;
 
-/** Emulated seconds as text, three decimals. */
-export const seconds = (/** @type {number} */ cycles) => `${(cycles / CPU_CLOCK_HZ).toFixed(3)} s`;
+/** Emulated seconds on `m`'s clock as text, three decimals. */
+export const seconds = (/** @type {number} */ cycles, /** @type {import('@fugloy/emu').Machine} */ m) => `${(cycles / clockOf(m)).toFixed(3)} s`;
 
 /** The screen as one string. */
 const screenOf = (/** @type {import('@fugloy/emu').Machine} */ m) => m.video.text().join('\n');
 
 /**
- * Boot a fresh Model III to READY as the emu integration tests do (boot-helpers.js): in
- * quarter-second slices, ENTER at Cass? (1,500 baud) and at Memory Size?, then a quarter second
- * more once READY shows, so the cursor settles. A ROM that never shows READY (a synthetic test
- * ROM, or not a BASIC ROM) is run for `limit` seconds and left there.
+ * Boot a fresh machine to READY as the emu integration tests do (boot-helpers.js,
+ * model1-boot.test.js): in quarter-second slices, ENTER at the ROM's questions (the Model III's
+ * Cass?, at 1,500 baud, then Memory Size?; the Model I's MEMORY SIZE?, MEM SIZE? in Level II 1.3),
+ * then a quarter second more once READY shows, so the cursor settles. A ROM that never shows
+ * READY (a synthetic test ROM, or not a BASIC ROM) is run for `limit` seconds and left there.
  * @param {import('@fugloy/emu').Machine} m
  * @param {number} [limit] emulated seconds
  * @returns {{ ready: boolean, cycles: number }}
  */
 export function bootToReady(m, limit = BOOT_SECONDS) {
-  const quarter = CPU_CLOCK_HZ / 4;
-  let cass = false;
-  let memory = false;
+  const quarter = clockOf(m) / 4;
+  const questions = m.model === 1 ? ['SIZE?'] : ['Cass?', 'Memory Size?'];
+  let answered = 0;
   for (let t = 0; t < limit * 4; t++) {
     const text = screenOf(m);
     if (text.includes('READY')) {
       m.run({ cycles: quarter });
       return { ready: true, cycles: m.cycles };
     }
-    if (!cass && text.includes('Cass?')) {
-      cass = true;
-      m.keyboard.type('\n');
-    } else if (cass && !memory && text.includes('Memory Size?')) {
-      memory = true;
+    const next = questions[answered];
+    if (next !== undefined && text.includes(next)) {
+      answered++;
       m.keyboard.type('\n');
     }
     m.run({ cycles: quarter });
@@ -68,7 +72,7 @@ export function bootToReady(m, limit = BOOT_SECONDS) {
  * wall-clock cap passes. With `settle`, `screenFrom` is where a wait starts instead: after video
  * RAM first differs from it, the run stops when video RAM returns to a state already seen since
  * that first change (an animation or blink cycle has closed: `how: 'cycle'`), or once it has
- * stayed the same for `SETTLE` T-states (`how: 'quiet'`), as seen at slice ends. States are kept
+ * stayed the same for 0.5 s emulated (`settleCycles`; `how: 'quiet'`), as seen at slice ends. States are kept
  * by a hash of the 1,024 bytes and compared exactly on a hash match, so a collision cannot stop
  * the run. When the budget and a condition are met at the same point
  * the condition wins; the wall clock is checked last.
@@ -92,6 +96,7 @@ export function runMachine(session, { budget, until, screenFrom, settle = false,
     emuUntil = () => cpu.registers.PC === pc;
   }
   const video = m.video.raw;
+  const settleFor = settleCycles(m);
   /** @type {Uint8Array | null} Video RAM as last seen while settling, once it first changed. */
   let seen = null;
   let quietSince = 0;
@@ -128,7 +133,7 @@ export function runMachine(session, { budget, until, screenFrom, settle = false,
         seen.set(video);
         quietSince = m.cycles;
         if (recur()) return { reason: 'settled', how: 'cycle', cycles: ran };
-      } else if (m.cycles - quietSince >= SETTLE) return { reason: 'settled', how: 'quiet', cycles: ran };
+      } else if (m.cycles - quietSince >= settleFor) return { reason: 'settled', how: 'quiet', cycles: ran };
     } else if (screenFrom && differs(video, screenFrom)) return { reason: 'screen', cycles: ran };
     if (m.cycles >= target) return { reason: 'cycles', cycles: ran };
     if (performance.now() > deadline) return { reason: 'wallclock', cycles: ran };
@@ -151,8 +156,9 @@ function differs(/** @type {Uint8Array} */ a, /** @type {Uint8Array} */ b) {
   return false;
 }
 
-/** The emulated-time cap in T-states (`limits.runSecondsEmulated`). */
-export const capCycles = (/** @type {import('./config.js').Config} */ config) => Math.round(config.limits.runSecondsEmulated * CPU_CLOCK_HZ);
+/** The emulated-time cap in T-states of `m`'s clock (`limits.runSecondsEmulated`). */
+export const capCycles = (/** @type {import('./config.js').Config} */ config, /** @type {import('@fugloy/emu').Machine} */ m) =>
+  Math.round(config.limits.runSecondsEmulated * clockOf(m));
 
 /**
  * The `stopped:` line for a stop.

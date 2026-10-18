@@ -358,6 +358,7 @@ export class Debugger {
       bits,
       callerMap: this.callerMap(),
       cycles: this.#cpu.cycles,
+      model: this.#machine.model,
     });
   }
 

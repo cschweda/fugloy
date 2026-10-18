@@ -7,8 +7,12 @@
  *
  * The full suite runs its files in parallel, and with the other ROM tests running beside it a
  * measurement can fall well under the figure the same run gives alone (13× once, against 30×
- * alone). So each mode is measured up to five times, two seconds apart, and the best counts: a
- * Machine that can run at 20× shows it once the machine is quiet; one that cannot never does.
+ * alone; 12-15× against 40× in emu phase 6). So the test is opt-in: it runs only with
+ * FUGLOY_BENCH=1, best by itself (`FUGLOY_BENCH=1 pnpm exec vitest run
+ * packages/emu/test/integration/benchmark.test.js`, which `./publish.sh check` runs after the
+ * suite), or use `node packages/emu/scripts/benchmark.mjs`. Each mode is measured up to five
+ * times, two seconds apart, and the best counts: a Machine that can run at 20× shows it once the
+ * machine is quiet; one that cannot never does.
  */
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -30,7 +34,9 @@ async function best(mode, tries = 5) {
   return { ratio: Math.max(...seen), seen };
 }
 
-describe.skipIf(configuredRom('model3') === null)('Sea Dragon speed on the Model III ROM', { timeout: 60_000 }, () => {
+const optedIn = process.env.FUGLOY_BENCH === '1';
+
+describe.skipIf(!optedIn || configuredRom('model3') === null)('Sea Dragon speed on the Model III ROM', { timeout: 60_000 }, () => {
   it.each(['off', 'debug'])('debugging %s runs at least 20× real time', async (mode) => {
     const { ratio, seen } = await best(mode);
     expect(ratio, `measured ${seen.join('×, ')}×`).toBeGreaterThanOrEqual(TARGET);

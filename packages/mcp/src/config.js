@@ -21,7 +21,7 @@ export const DEFAULT_LIMITS = Object.freeze({
 /**
  * @typedef {{
  *   roms: Record<string, string>,
- *   defaultModel: 3,
+ *   defaultModel: 1 | 3,
  *   fixtures?: string,
  *   limits: { runSecondsEmulated: number, runSecondsWall: number, outputBytes: number, traceDepth: number, stepMax: number, peekMax: number, snapshots: number },
  *   source: string | null,
@@ -89,8 +89,11 @@ function parseConfig(text, path) {
     }
   }
 
-  if (raw.defaultModel !== undefined && raw.defaultModel !== 3) {
-    throw fail(`sets defaultModel to ${JSON.stringify(raw.defaultModel)}, and only the Model III (3) exists until emu phase 6 adds the Model I and the Model 4`);
+  if (raw.defaultModel === 4) {
+    throw fail('sets defaultModel to 4, and there is no Model 4 yet: it needs a Model 4 ROM and boot disk to prove it boots, and comes in its own plan; use 1 (the Model I) or 3 (the Model III)');
+  }
+  if (raw.defaultModel !== undefined && raw.defaultModel !== 1 && raw.defaultModel !== 3) {
+    throw fail(`sets defaultModel to ${JSON.stringify(raw.defaultModel)}, and the models are 1 (the Model I) and 3 (the Model III)`);
   }
 
   if (raw.fixtures !== undefined && (typeof raw.fixtures !== 'string' || raw.fixtures === '')) {
@@ -113,7 +116,7 @@ function parseConfig(text, path) {
 
   return {
     roms,
-    defaultModel: 3,
+    defaultModel: raw.defaultModel ?? 3,
     ...(raw.fixtures !== undefined ? { fixtures: resolve(base, raw.fixtures) } : {}),
     limits,
     source: path,

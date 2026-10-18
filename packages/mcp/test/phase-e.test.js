@@ -100,10 +100,14 @@ describe('phase E resources', () => {
     await close();
   });
 
-  it('the ROM symbols resource for another model says only the Model III exists', async () => {
+  it('the ROM symbols resource serves the Model I too, and says the Model 4 is not here', async () => {
     const { client, close } = await server();
-    expect(await read(client, 'fugloy://rom/1/symbols')).toBe('There are no Model I symbols here yet: only the Model III exists until emu phase 6 adds the Model I and the Model 4; read fugloy://rom/3/symbols.');
-    expect(await read(client, 'fugloy://rom/x/symbols')).toBe('"x" is not a model; read fugloy://rom/3/symbols (the Model III).');
+    const text = await read(client, 'fugloy://rom/1/symbols');
+    expect(text.split('\n')[0]).toMatch(/^Model I ROM and hardware symbols \(\d+ entries\)/);
+    expect(text).toMatch(/^3C00h–3FFFh\s+region\s+/m);
+    expect(text).toMatch(/^37E0h\s+/m);
+    expect(await read(client, 'fugloy://rom/4/symbols')).toBe('There are no Model 4 symbols here yet: the Model 4 comes in its own plan once a Model 4 ROM and boot disk are supplied; read fugloy://rom/3/symbols (the Model III) or fugloy://rom/1/symbols (the Model I).');
+    expect(await read(client, 'fugloy://rom/x/symbols')).toBe('"x" is not a model; read fugloy://rom/3/symbols (the Model III) or fugloy://rom/1/symbols (the Model I).');
     await close();
   });
 });

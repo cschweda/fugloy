@@ -208,14 +208,18 @@ describe('phase A tools', () => {
     await close();
   });
 
-  it('load refuses model 1 naming emu phase 6', async () => {
+  it('load takes model 1 or 3 and refuses the Model 4 and other numbers in sentences', async () => {
     const { call, close } = await server();
-    const r = await call('load', { path: at('hello.cmd'), model: 1 });
-    expect(r).toEqual({
-      text: 'There is no Model I yet: only the Model III exists until emu phase 6 adds the Model I and the Model 4; call load with model 3 or without model.',
+    // This config names no Model I ROM: the sentence says which entry to set (emu phase 6, Review Focus 5).
+    expect(await call('load', { path: at('hello.cmd'), model: 1 })).toEqual({
+      text: 'No Model I Level II ROM is configured; set roms.model1 in fugloy.mcp.json (see the MCP spec §3).',
       isError: true,
     });
-    expect((await call('load', { path: at('hello.cmd'), model: 4 })).text).toContain('There is no Model 4 yet');
+    expect(await call('load', { path: at('hello.cmd'), model: 4 })).toEqual({
+      text: 'There is no Model 4 yet: it needs a Model 4 ROM and boot disk to prove it boots, and comes in its own plan once one is supplied; call load with model 1 (the Model I) or 3 (the Model III).',
+      isError: true,
+    });
+    expect(await call('load', { path: at('hello.cmd'), model: 2 })).toEqual({ text: 'model must be 1 (the Model I) or 3 (the Model III), not 2.', isError: true });
     expect((await call('load', { path: at('hello.cmd'), model: 3 })).isError).toBe(false);
     await close();
   });
