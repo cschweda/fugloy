@@ -315,10 +315,14 @@ export class Z80CPU {
   }
 
   /**
-   * Non-maskable interrupt: always taken, saves IFF1 into IFF2 so RETN
-   * can restore it, jumps to 0x0066.
+   * Non-maskable interrupt: saves IFF1 into IFF2 so RETN can restore it,
+   * jumps to 0x0066. Not taken right after a lone DD or FD prefix (one the
+   * next prefix or ED made a no-op), as a maskable interrupt is not (Young
+   * §3.6); the caller keeps the request pending.
+   * @returns {boolean} true when the NMI was taken
    */
   nmi() {
+    if (this.afterPrefix) return false;
     this.halted = false;
     this.IFF2 = this.IFF1;
     this.IFF1 = false;
@@ -332,6 +336,7 @@ export class Z80CPU {
     this.registers.PC = 0x0066;
     this.wz = 0x0066; // MEMPTR, as for CALL
     this.cycles += 11;
+    return true;
   }
 
   // Decode and execute opcode

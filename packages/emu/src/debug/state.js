@@ -126,6 +126,9 @@ export function serializeState(system) {
     printer: { bytes: [...io.printer.bytes] },
     disks: [],
     nextRtcAt: system.nextRtcAt,
+    // The NMI edge latch: true while the INTRQ NMI already fired and its line is still up, so a
+    // restore neither fires it again nor loses one still pending.
+    nmiWasPending: system._nmiWasPending,
   };
   for (const key of CPU_SCALARS) state.cpu[key] = cpu[key];
   for (const key of IO_SCALARS) state.io[key] = io[key];
@@ -214,7 +217,7 @@ export function restoreState(system, state) {
   }
 
   system.nextRtcAt = state.nextRtcAt;
-  system._nmiWasPending = false;
+  system._nmiWasPending = state.nmiWasPending ?? false; // absent before emu phase 5
   system._fdcAhead = 0;
   system.keyboard.reset(); // held keys don't survive a restore
   io.soundLog = [];

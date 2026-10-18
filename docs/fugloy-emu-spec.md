@@ -213,15 +213,14 @@ Target speed: ≥ 20× real time (≈ 40 MHz effective) in Node on a laptop. Tha
 Phase 1 also models:
 
 - **MEMPTR,** the hidden address latch that `BIT n,(HL)` shows in flags 3 and 5, by boo_boo and Vladimir Kladov's rules ("MEMPTR, esoteric register of the ZiLOG Z80 CPU"). Save states keep it.
-- **Lone prefixes.** A `DD` or `FD` before another prefix or `ED` runs as a 4-T-state step, with no maskable interrupt taken after it.
+- **Lone prefixes.** A `DD` or `FD` before another prefix or `ED` runs as a 4-T-state step, with no maskable interrupt taken after it, and (since phase 5) no NMI either: the NMI waits one instruction, as a maskable interrupt does (Young §3.6), and `TRS80System` keeps its edge pending until the CPU takes it (`test/unit/nmi.test.js`).
 - **The block I/O flags** of Young's §4.3.
 
 Not modeled, and invisible to ZEXALL:
 
 - `SCF` and `CCF` taking flags 3 and 5 from the previous instruction's flags (Patrik Rak's z80test);
 - the flags of a repeating block instruction interrupted mid-run;
-- IM 0 with a bus byte other than `FFH` (the Model III's bus reads `FFH`);
-- an NMI held off after a lone prefix, as a maskable interrupt is (Young §3.6). The Model III's NMI is the disk controller's, so this waits for phase 5, which must also keep the NMI edge pending in `TRS80System` until the core accepts it.
+- IM 0 with a bus byte other than `FFH` (the Model III's bus reads `FFH`).
 
 ## 5. Machine models
 
@@ -308,7 +307,7 @@ Built in emu phase 3 (the API is listed in §3). The rulings below, numbered as 
   - Interrupt responses record no edge, and the keyboard hook's stand-in RET marks nothing.
   - Coverage and callers share one switch, `m.debug.coverage.enable()` (Ruling 6); `clear()` empties both.
 - **Callers:** a map of target → `{ from, kind: 'call' | 'jp' | 'jr' | 'rst' | 'ret-to', count }`, where `count` is how many times that edge was taken (Ruling 8), recorded with coverage.
-- **Snapshots:** full machine state (CPU, RAM, device state, cycle count) as a serializable object that survives `JSON.stringify`; restore is exact. Used for differential testing (§10) and for "try this input, rewind." A snapshot does **not** include the trace ring, hit log, coverage, or callers; those are debugger state, not machine state, and survive a restore, as do breakpoints, watches, hooks, and labels. Document this; it will surprise someone. A restore starts a fresh timeline: it clears the key queue (`m.keyboard`) and the sound ring (`m.sound`), whose cycle stamps belong to the old one, the PC where the last run stopped for a breakpoint, and any pending watch stop. Known limit: the NMI edge latch is not serialized, so a restore is exact only while the FDC's INTRQ is idle (phase 5 fixes it).
+- **Snapshots:** full machine state (CPU, RAM, device state, cycle count) as a serializable object that survives `JSON.stringify`; restore is exact. Used for differential testing (§10) and for "try this input, rewind." A snapshot does **not** include the trace ring, hit log, coverage, or callers; those are debugger state, not machine state, and survive a restore, as do breakpoints, watches, hooks, and labels. Document this; it will surprise someone. A restore starts a fresh timeline: it clears the key queue (`m.keyboard`) and the sound ring (`m.sound`), whose cycle stamps belong to the old one, the PC where the last run stopped for a breakpoint, and any pending watch stop. The NMI edge latch is serialized (`nmiWasPending`, since phase 5), so a restore is exact while the FDC's INTRQ is up too, and a snapshot taken in the middle of a disk command continues identically (`test/unit/fdc-wd1793.test.js`, `snapshot mid-command`); a snapshot from before phase 5 restores the latch as clear.
 - **Screen diff:** `m.video.diff(snap)` returns the video RAM cells changed since a snapshot, `{ row, col, was, now }` as raw bytes over the 64-column RAM layout (also in 32-column mode, where only even columns show); a cheap way to detect "something printed."
 - **Labels and the label file:** `m.debug.label` names addresses (`source: 'user'`), and `m.debug.labelFile` writes the session as the §8 file.
 

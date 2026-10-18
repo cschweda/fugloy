@@ -117,12 +117,16 @@ export class TRS80System {
     if (this.io.pendingInterrupt()) {
       this.cpu.interrupt();
     }
-    // FDC INTRQ -> NMI, edge-triggered so one assertion fires one NMI
+    // FDC INTRQ -> NMI, edge-triggered so one assertion fires one NMI. The
+    // CPU holds an NMI off after a lone DD/FD prefix, as it does a maskable
+    // interrupt (Young §3.6); the edge then stays pending for the next
+    // boundary.
     const nmiNow = this.io.nmiPending();
     if (nmiNow && !this._nmiWasPending) {
-      this.cpu.nmi();
+      if (this.cpu.nmi()) this._nmiWasPending = true;
+    } else {
+      this._nmiWasPending = nmiNow;
     }
-    this._nmiWasPending = nmiNow;
 
     // beforeExecute returning true has executed the boundary's instruction itself (the
     // Machine's ROM keyboard-scan hook stands in for a RET), so the CPU does not run one.

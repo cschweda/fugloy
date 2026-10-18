@@ -153,6 +153,15 @@ on the `emu-phase5` branch:
   - `DiskImage.trackIds(track, side)` lists a track's ID fields as the
     controller meets them, and `DiskImage.rawTrack` gives a DMK track's raw
     bytes.
+- The disk NMI (phase 5 plan, Ruling 3): an NMI that arrives right after a
+  lone `DD` or `FD` prefix waits one instruction, as a maskable interrupt
+  does (Young §3.6; `cpu.nmi()` now returns whether it was taken, and
+  `TRS80System` keeps the edge pending until it is); and the NMI edge latch
+  is part of a snapshot (`nmiWasPending`), so a restore while INTRQ is up
+  neither fires the NMI again nor loses one (`test/unit/nmi.test.js`).
+  Snapshots from before restore the latch as clear, as before. A snapshot
+  taken mid-command also restores the controller's new state (the command
+  byte, step direction, head load, idle count, and interrupt conditions).
 
 Emu phase 4 (`@fugloy/mcp` 0.1.0, MCP phases A–C; MCP spec §5, §11):
 
