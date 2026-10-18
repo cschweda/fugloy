@@ -12,16 +12,29 @@
   },
   "files": [
     "bin",
+    "prompts",
     "src"
   ],
   "engines": {
     "node": ">=22"
   },
   "dependencies": {
-    "@fugloy/disasm": "workspace:*",
-    "@fugloy/emu": "workspace:*",
-    "@fugloy/z80": "workspace:*",
+    "@fugloy/disasm": "workspace:^",
+    "@fugloy/emu": "workspace:^",
+    "@fugloy/z80": "workspace:^",
     "@modelcontextprotocol/sdk": "1.32.0",
     "zod": "4.6.5"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cschweda/fugloy.git",
+    "directory": "packages/mcp"
+  },
+  "homepage": "https://github.com/cschweda/fugloy#readme",
+  "bugs": {
+    "url": "https://github.com/cschweda/fugloy/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

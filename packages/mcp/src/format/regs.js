@@ -5,7 +5,7 @@ const pair = (/** @type {number} */ hi, /** @type {number} */ lo) => ((hi & 0xff
 
 /**
  * @param {any} regs `m.cpu.regs`
- * @param {{ s: number, z: number, h: number, pv: number, n: number, c: number }} flags `m.cpu.flags`
+ * @param {{ s: boolean, z: boolean, h: boolean, pv: boolean, n: boolean, c: boolean }} flags `m.cpu.flags` (booleans; shown as 1 or 0)
  * @param {number} cycles
  * @returns {string}
  */

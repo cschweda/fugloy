@@ -106,3 +106,18 @@ export function parseRange(value, labels) {
   }
   throw new Error(`${JSON.stringify(value) ?? String(value)} is not a range; write "5200-52FF" (both ends included) or { addr, len }.`);
 }
+
+/** Bytes from a hex string ("21003C", spaces allowed) or an array of 0-255. */
+export function parseBytes(/** @type {string | number[]} */ value) {
+  if (typeof value === 'string') {
+    const text = value.replace(/\s+/g, '');
+    if (text === '') throw new Error('bytes is empty; give at least one byte.');
+    if (!/^(?:[0-9a-f]{2})+$/i.test(text)) {
+      throw new Error(`bytes ${JSON.stringify(value)} is not hex pairs; write "21003C" (two hex digits a byte) or an array such as [33, 0, 60].`);
+    }
+    return Array.from({ length: text.length / 2 }, (_, k) => Number.parseInt(text.slice(k * 2, k * 2 + 2), 16));
+  }
+  if (value.length === 0) throw new Error('bytes is empty; give at least one byte.');
+  for (const b of value) if (!Number.isInteger(b) || b < 0 || b > 255) throw new Error(`bytes holds ${b}, and every byte must be a whole number from 0 to 255.`);
+  return value;
+}

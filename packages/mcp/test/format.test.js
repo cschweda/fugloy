@@ -156,6 +156,17 @@ describe('cap', () => {
     expect(lines[0]).toBe('line 0');
   });
 
+  it('cap also cuts at a page of lines, after the heading lines', () => {
+    const t = ['head', 'a', 'b', 'c', 'd', 'e'].join('\n');
+    const page = { lines: 2, heading: 1 };
+    expect(cap(t, { limit: 1000, page })).toBe('head\na\nb\n… (3 more lines; use offset=3)');
+    expect(cap(t, { limit: 1000, offset: 3, page })).toBe('c\nd\n… (1 more line; use offset=5)');
+    expect(cap(t, { limit: 1000, offset: 5, page })).toBe('e');
+    expect(cap('head\na\nb', { limit: 1000, page })).toBe('head\na\nb');
+    // The byte cap still applies inside a page.
+    expect(cap(t, { limit: 40, page })).toBe('head\na\n… (4 more lines; use offset=2)');
+  });
+
   it('says "1 more line" in the singular', () => {
     expect(cap(`a\nb\n${'c'.repeat(60)}`, { limit: 60 })).toBe('a\nb\n… (1 more line; use offset=2)');
   });

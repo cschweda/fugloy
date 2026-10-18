@@ -4,18 +4,54 @@ A stdio MCP server that puts a running TRS-80 (`@fugloy/emu`) in front of
 Claude Code or any MCP client: load a program, run it, inspect memory and
 registers, type on its keyboard, read the screen, set breakpoints and
 watches, and record labels and coverage in the file the Fugløy disassembler
-reads. Version 0.1.0, not yet on npm: MCP phases A–C, built as the emulator's
-phase 4 (spec §11), with which an assistant can load a game, find its print
-routine, and label it on its own.
+reads. Version 0.1.0, MCP phases A–F (spec §11): the tools of phases A–C
+(built as the emulator's phase 4), with which an assistant can load a game,
+find its print routine, and label it on its own; snapshots, `diff`, `search`,
+and `callees` (D); resources and prompts (E); and the guardrail tests, golden
+transcripts, and npm package (F). Before release it labelled three
+public-domain games on its own (story 7, below).
 
-- Spec: [`docs/fugloy-mcp-spec.md`](../../docs/fugloy-mcp-spec.md) (the tools in §5, phases A–F in §11, the stories in §13)
-- Companion core spec: [`docs/fugloy-emu-spec.md`](../../docs/fugloy-emu-spec.md)
-- Label and coverage file it reads and writes: [`docs/label-format.md`](../../docs/label-format.md)
-- Story prompts: [`prompts/story-01.md`](../../prompts/story-01.md), [`prompts/story-07.md`](../../prompts/story-07.md)
+- Spec: [`docs/fugloy-mcp-spec.md`](https://github.com/cschweda/fugloy/blob/main/docs/fugloy-mcp-spec.md) (the tools in §5, phases A–F in §11, the stories in §13)
+- Companion core spec: [`docs/fugloy-emu-spec.md`](https://github.com/cschweda/fugloy/blob/main/docs/fugloy-emu-spec.md)
+- Label and coverage file it reads and writes: [`docs/label-format.md`](https://github.com/cschweda/fugloy/blob/main/docs/label-format.md)
+- Prompts, shipped in the package: [`prompts/`](https://github.com/cschweda/fugloy/tree/main/packages/mcp/prompts) (story 1 in `story-01.md`; story 7 is `label-pass.md`)
 
 ## Set up
 
-From a clone of the monorepo, with Node 22 and pnpm 10:
+Once `@fugloy/mcp` is published (its first npm release is pending; until
+then, use the clone setup below, `node packages/mcp/bin/fugloy-mcp.js`), run
+it from npm with Node 22 or later. Write a `fugloy.mcp.json` that names
+your Model III ROM (paths in it are relative to the file):
+
+```json
+{ "roms": { "model3": "./roms/model3.rom" } }
+```
+
+and give Claude Code the server, in `.mcp.json` in the folder you start it
+in, or with `claude mcp add`:
+
+```json
+{
+  "mcpServers": {
+    "trs80": {
+      "command": "npx",
+      "args": ["-y", "@fugloy/mcp"],
+      "env": { "FUGLOY_CONFIG": "./fugloy.mcp.json" }
+    }
+  }
+}
+```
+
+```sh
+claude mcp add trs80 -e FUGLOY_CONFIG="$PWD/fugloy.mcp.json" -- npx -y @fugloy/mcp
+```
+
+`npx @fugloy/mcp` (or `npm i -g @fugloy/mcp`, then `fugloy-mcp`) starts the
+server on stdio; it installs `@fugloy/emu`, `@fugloy/disasm`, and
+`@fugloy/z80` with it, and the MCP SDK and zod at exact versions.
+
+From a clone of the monorepo, with Node 22 and pnpm 10, run the working tree
+instead:
 
 ```sh
 pnpm install
@@ -49,7 +85,7 @@ failed. Copy the example config first. The server reads
 `fugloy.mcp.json` from `$FUGLOY_CONFIG`, else the working directory, else
 `~/.config/fugloy/` (spec §3); paths in it are relative to the file, and its
 `limits` override the guardrails of spec §7. You bring the ROM: see "Getting
-ROMs and programs" in the [main README](../../README.md). stdout carries
+ROMs and programs" in the [main README](https://github.com/cschweda/fugloy/blob/main/README.md). stdout carries
 JSON-RPC only; console output and the emulator's log go to stderr.
 
 Any other MCP client works the same way: run `node packages/mcp/bin/fugloy-mcp.js`
@@ -70,9 +106,10 @@ does take, never ignored.
 | --- | --- |
 | Lifecycle | `load` (`.CMD`, `.BAS`, `.CAS`, detected by content; boots the ROM to `READY` first), `reset`, `status` |
 | Execution | `run` (`cycles`, `seconds`, or `until`: `break`, `halt`, `screen`, `settled`, `pc:<addr>`; `trace`), `step`, `key` (text and named keys, through the keyboard matrix or the ROM's keyboard routine) |
-| Inspection | `regs`, `peek`, `poke`, `disasm` (with coverage marks and names), `screen` (or its diff) |
-| Debugging | `break` (with `<reg> <op> <value>` conditions), `unbreak`, `watch`, `unwatch`, `hits` (with the routine each writing PC is in), `trace`, `callers` |
+| Inspection | `regs`, `peek`, `poke`, `disasm` (with coverage marks and names), `screen` (or its diff since the last call or a snapshot), `search` (bytes or text, `fold` for either case and the screen's `00h`–`1Fh` forms; at most 256 addresses) |
+| Debugging | `break` (with `<reg> <op> <value>` conditions), `unbreak`, `watch`, `unwatch`, `hits` (with the routine each writing PC is in), `trace`, `callers`, `callees` (the routines a routine called, as a tree up to 4 levels deep) |
 | Knowledge | `label`, `unlabel`, `labels`, `coverage` (summary, ranges, export), `suggest` (the call targets worth naming next, with what they were seen doing) |
+| Snapshots | `snapshot`, `restore` (`clearDebug` also clears coverage, callers, and the hit log; a snapshot of another program is refused), `snapshots`, `diff` (two snapshots, or one and `now`: changed bytes in runs) |
 
 The full table, with every argument and output, is spec §5. Coverage and
 callers are recorded from the load, so `suggest` and `coverage` need no
@@ -83,7 +120,7 @@ title).
 
 Labels live in `<program>.fugloy.json` beside the program (`SEADRG01.CMD` →
 `SEADRG01.fugloy.json`), in the format of
-[`docs/label-format.md`](../../docs/label-format.md). `load` reads it,
+[`docs/label-format.md`](https://github.com/cschweda/fugloy/blob/main/docs/label-format.md). `load` reads it,
 `label` and `unlabel` rewrite it at once, and `coverage mode: "export"`
 merges this session's coverage and callers into it. Those are the only files
 the server writes; it refuses to overwrite a sidecar that is broken, was
@@ -91,15 +128,53 @@ written for another program, is a link, or was edited by hand since it last
 read it, and an export `path` that holds anything but a label file unless
 `overwrite: true`. Sidecars beside the committed examples are gitignored
 (`examples/**/*.fugloy.json`), so running the story prompts leaves the tree
-clean. The disassembler reads the same file:
+clean. The disassembler reads the same file (a label's `note` is shown as
+its comment from core 1.2.0, the next core release; `@fugloy/disasm` 1.1.0 on
+npm reads the file but ignores `note`):
 
 ```sh
 pnpm fugloy SEADRG01.CMD --labels SEADRG01.fugloy.json
 ```
 
+## Resources and prompts
+
+Resources give a client context without a tool call. Each is plain text,
+reading one changes nothing (reading `fugloy://screen` does not move the
+baseline `screen diff: true` compares with), and one that needs a program
+reads as the tool's sentence (`No program loaded; call load first.`) until
+there is one.
+
+| URI | Content |
+| --- | --- |
+| `fugloy://status` | What `status` shows |
+| `fugloy://screen` | The screen, as `screen` shows it |
+| `fugloy://labels` | The label table, as `labels` shows it |
+| `fugloy://program/manifest` | The manifest `load` returned |
+| `fugloy://rom/{model}/symbols` | The Model III ROM's entry points and variables, its memory-mapped regions, and its ports, one line each (`0033h  routine  $VDCHAR  display the character in A at the cursor`), from `@fugloy/disasm`'s cited symbol tables (167 entries); only `fugloy://rom/3/symbols` exists until emu phase 6 |
+
+Prompts are where the method lives; the tools stay plain. Each prompt's
+text is a Markdown file in [`prompts/`](https://github.com/cschweda/fugloy/tree/main/packages/mcp/prompts), shipped in the package
+and read when the server starts; the server sends its `## Prompt` section
+with the arguments filled in. The same file is what you paste into Claude
+Code by hand, so the two never drift apart.
+
+| Prompt | Arguments | What it asks for |
+| --- | --- | --- |
+| `orient` | `path` | Load, run to the first screen, list the ROM routines it called (`callers` on the common ones, names from the symbols resource), `suggest` and `coverage`; a short report, no labels |
+| `find-writer` | `path`, `range` (`"3C00-3FFF"`) | A write watch on the range (the `watch` arguments worked out), one input if needed, then `hits`, `callers`, and `disasm` on the writing routine, labelled with evidence |
+| `label-pass` | `path`, `minCalls` (default 5) | Story 7: play a minute, then go down `suggest`'s list and label what can be justified, with notes; export the file |
+| `explain` | `addr` (any address spelling or a label) | Break there, step through, watch what it writes, and answer in prose with the trace as evidence |
+
+Prompt arguments are strings, as the protocol has them, and are checked like
+tool arguments: a missing or unknown one, a range or address the tools would
+not take, or a `minCalls` that is not a decimal count is refused with a
+sentence. `path` is passed on as given; `load` resolves it. A prompt file
+that is missing does not stop the server: the prompt is still listed, and
+asking for it says which file is missing.
+
 ## Story 1: find the print routine
 
-The prompt ([`prompts/story-01.md`](../../prompts/story-01.md)):
+The prompt ([`prompts/story-01.md`](https://github.com/cschweda/fugloy/blob/main/packages/mcp/prompts/story-01.md)):
 
 > Load examples/sea-dragon/seadrg01.cmd (a TRS-80 Model III game) and find the
 > routine that writes text to the screen. Label it.
@@ -131,7 +206,7 @@ Its answer named the routine at `6140h`, explained its arguments (HL the
 string, DE the screen address, B the length) and its read-back for machines
 without lowercase, and said how it knew: the credits were written by the
 instruction at `6141h`. That is the routine the hand-annotated
-[`seadrg01.hints`](../../examples/sea-dragon/seadrg01.hints) calls
+[`seadrg01.hints`](https://github.com/cschweda/fugloy/blob/main/examples/sea-dragon/seadrg01.hints) calls
 `PRINT_TEXT`. (One aside in its answer was wrong: it said `4B5Eh` fills the
 screen with blanks; `4B5Eh` copies the title's off-screen buffer to the
 screen, and `4B9Eh` is the one that clears it.)
@@ -142,7 +217,8 @@ synthetic program and byte-compares `test/golden/story-01.txt`, and
 
 ## Story 7: label a whole program
 
-The prompt ([`prompts/story-07.md`](../../prompts/story-07.md)) asks the
+The prompt, which the server also offers as its `label-pass` prompt
+([`prompts/label-pass.md`](https://github.com/cschweda/fugloy/blob/main/packages/mcp/prompts/label-pass.md)), asks the
 agent to play for a minute, take `suggest`'s list, investigate each routine,
 label what it can justify with notes, and export the file. The scripted form
 is `test/story-7-rom.test.js`, run where a ROM is configured:
@@ -164,8 +240,32 @@ coverage  mode=export               → the sidecar gains this session's coverag
 
 Then `@fugloy/disasm` reads the exported file and its listing of
 `seadrg01.cmd` (relocated to `$497F`, where the game runs) shows `PRINT:`,
-the note, and `CALL PRINT`. Story 7 on three games with no human help is the
-release check for npm (spec §10, phase F).
+the note, and `CALL PRINT`.
+
+Unaided, it is the release check (spec §10). On 2026-10-18, before 0.1.0, a
+headless Claude Code session (`claude -p`, this server from the working
+tree, the MCP tools its only tools) got the prompt with `minCalls` 5 for each
+of the three public-domain games in `examples/` that run under the emulator,
+each on a scratch copy:
+
+| Game | Turns, time | Labelled | Checked |
+| --- | --- | --- | --- |
+| Sea Dragon (`seadrg01.cmd`) | 90, 5 min | 18 of 22 listed; left 4 whose object tables stayed empty, so their code never ran | 18 checked, all agree; 0 unchecked. Twelve are routines the hand-made [`seadrg01.hints`](https://github.com/cschweda/fugloy/blob/main/examples/sea-dragon/seadrg01.hints) names, with the same meaning (`PrintText` for `PRINT_TEXT`, `BlitSprite` for `DRAW_SHAPE`, `SurfaceAndAir` for `AIR_SUPPLY`, `UnpackLevelObjects` for `SETUP_OBJECTS`, …); three are title routines the hints describe in notes; three were read in the disassembly |
+| Eliminator (`elimin8c.cmd`) | 119, 4 min | All 17 listed (`RenderFrame`, confirmed by a trace; `DrawObject`, 12,234 calls; `HitTestPlayerShip`; `SpawnWave`; …) | 4 checked against the disassembly, all agree; 13 unchecked. The agent marked three as weaker readings (`InitHumanoids`, `ShotMoveUp`, `ShotMoveDown`) |
+| Rear Guard (`reargrd5.cmd`) | 93, 5 min | All 24 listed (`PlayTone`, `SoundUpdate`, `PrintToScreen`, `UpdateEnemies`, `SpawnEnemyBombs`, …), mostly from reading the code, as it said | 4 checked against the disassembly, all agree; 20 unchecked. The agent said it guessed which terrain layer scrolls faster |
+
+Each session played, went down `suggest`'s list with `disasm` and `callers`
+(and watches, breakpoints, or a trace where reading was not enough), wrote
+a note with the evidence for every label, exported the file, and said which
+names were guesses. Every label carries the agent's evidence note. What was checked: all 18 of Sea Dragon's (12 against the hint file's names, 3 against its notes, 3 in the disassembly), 4 of Eliminator's 17, and 4 of Rear Guard's 24 (in the disassembly); every one checked agreed, and the rest are unchecked. Rear Guard's
+build writes the Model I's keyboard driver address (`03E3h`) into the
+keyboard vector at `4016h`, so the Model III ROM's key wait hung at
+"1 or 2 Players?"; the agent worked that out and poked `4016h` to the Model
+III's driver (`3024h`) in the running machine. Two of the answers noted that
+`coverage` counts only the loaded blocks: these games copy themselves
+elsewhere before running, so the export reports a small share executed
+(0.1% for Eliminator and Rear Guard) though the labels sit where the code
+ran.
 
 ## Tests
 
@@ -173,14 +273,29 @@ release check for npm (spec §10, phase F).
 14K ROM and synthetic programs; `test/phase-a-rom.test.js` and
 `test/story-7-rom.test.js` need the Model III ROM named in `fugloy.mcp.json`
 and skip without it. Golden transcripts are committed only for sessions on
-the synthetic ROM, since a real ROM's screen text would be in them. To
-rewrite `test/golden/story-01.txt` after a deliberate change to a tool's
-output: `FUGLOY_UPDATE_GOLDEN=1 pnpm vitest run packages/mcp/test/story-1.test.js`,
+the synthetic ROM, since a real ROM's screen text would be in them: stories
+1, 2, and 3 (`test/golden/story-0N.txt`, scripts in `test/stories.js`;
+story 3 is coverage telling code, data, and never-seen bytes apart), each
+also replayed twice by `test/golden.test.js` to show the output is the same
+byte for byte. `test/guardrails.test.js` trips every limit of spec §7 and
+checks the text, checks that a session calling every tool writes only the
+sidecar and an explicit export path, and does the label round trip across
+two real child processes of the bin. To rewrite the transcripts after a
+deliberate change to a tool's output:
+`FUGLOY_UPDATE_GOLDEN=1 pnpm vitest run packages/mcp/test/golden.test.js`,
 then review the diff.
+
+## Releasing
+
+`./publish.sh check mcp` on `main` packs the package (pnpm turns the
+`workspace:^` dependencies into `^` ranges: `@fugloy/emu` `^0.2.0`,
+`@fugloy/disasm` and `@fugloy/z80` `^1.2.0`), checks the tarball, installs it
+in a scratch project, and checks that `npx fugloy-mcp` answers `initialize`
+and `tools/list` over a pipe. It needs those `@fugloy` versions on npm, so
+`@fugloy/emu` is published first; with emu only staged, the check is a
+rehearsal that stages nothing.
 
 ## Not yet
 
-Snapshots, `diff`, `search`, and `callees` (phase D); resources and prompts
-over the protocol (E); guardrail hardening and the npm release (F). The
-dependencies on `@fugloy/emu`, `@fugloy/disasm`, and `@fugloy/z80` are
-`workspace:*`; `pnpm pack` rewrites them to the local versions.
+Only the Model III (the Model I and 4 wait for emu phase 6), no disk images
+(emu phase 5), and stdio only (Streamable HTTP is an open question, spec §12).

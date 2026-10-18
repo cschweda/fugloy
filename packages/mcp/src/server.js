@@ -21,17 +21,32 @@
  * result (and whether it was an error) in `session.lastOutput`, keyed by tool name and arguments
  * without `offset`; a call with `offset` > 0 pages from that cache and never runs the handler, so
  * side effects happen once.
- * Output is `cap`ped to `limits.outputBytes`, ending `… (N more lines; use offset=K)`.
+ * Output is `cap`ped to `limits.outputBytes`, ending `… (N more lines; use offset=K)`. A tool
+ * that declares `page: { lines, heading? }` is also cut at that many lines a page (after its
+ * heading lines); `trace` shows at most 100 trace lines a page (spec §7).
+ *
+ * Resources and prompts (spec §6): `resources.js` and `prompts.js` hold them; they are registered
+ * here with the SDK's `registerResource` and `registerPrompt`. The prompt texts are read from
+ * `prompts/*.md` once, when the server is built. The SDK would answer a bad prompt argument with
+ * its own `Invalid arguments for prompt …` text, so after registering, `createServer` replaces
+ * the SDK's `prompts/get` handler (through the public `server.server.setRequestHandler`; the SDK
+ * installs its own once, guarded, so it is not put back) with one that parses the arguments
+ * strictly and answers in the same sentences as a tool argument (test/phase-e.test.js pins it).
  */
 import { readFileSync } from 'node:fs';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { GetPromptRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { decimalFor, parseCount } from './args.js';
 import { cap } from './format/cap.js';
+import { fillTemplate, PROMPTS, PROMPTS_DIR, readPromptTexts } from './prompts.js';
+import { RESOURCES, ROM_SYMBOLS } from './resources.js';
 import { Session } from './session.js';
 import breakTool from './tools/break.js';
+import callees from './tools/callees.js';
 import callers from './tools/callers.js';
 import coverage from './tools/coverage.js';
+import diff from './tools/diff.js';
 import disasm from './tools/disasm.js';
 import hits from './tools/hits.js';
 import key from './tools/key.js';
@@ -42,8 +57,12 @@ import peek from './tools/peek.js';
 import poke from './tools/poke.js';
 import regs from './tools/regs.js';
 import reset from './tools/reset.js';
+import restore from './tools/restore.js';
 import run from './tools/run.js';
 import screen from './tools/screen.js';
+import search from './tools/search.js';
+import snapshot from './tools/snapshot.js';
+import snapshots from './tools/snapshots.js';
 import status from './tools/status.js';
 import step from './tools/step.js';
 import suggest from './tools/suggest.js';
@@ -54,7 +73,7 @@ import unwatch from './tools/unwatch.js';
 import watch from './tools/watch.js';
 
 /** Every tool the server offers, in listing order (the spec §5 tables). */
-export const TOOLS = [load, reset, status, run, step, key, regs, peek, poke, disasm, screen, breakTool, unbreak, watch, unwatch, hits, trace, callers, label, unlabel, labels, coverage, suggest];
+export const TOOLS = [load, reset, status, run, step, key, regs, peek, poke, disasm, screen, search, breakTool, unbreak, watch, unwatch, hits, trace, callers, callees, label, unlabel, labels, coverage, suggest, snapshot, restore, snapshots, diff];
 
 const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 
@@ -63,6 +82,7 @@ const { version } = JSON.parse(readFileSync(new URL('../package.json', import.me
  *   name: string,
  *   description: string,
  *   inputSchema?: import('zod').ZodRawShape,
+ *   page?: { lines: number, heading?: number },
  *   handler: (session: Session, args: any) => string | { text: string, isError?: boolean } | Promise<string | { text: string, isError?: boolean }>,
  * }} Tool
  */
@@ -143,12 +163,53 @@ class FugloyMcpServer extends McpServer {
   }
 }
 
+/** A resource read's one text block. */
+const textResource = (/** @type {URL} */ uri, /** @type {string} */ text) => ({ contents: [{ uri: uri.href, mimeType: 'text/plain', text }] });
+
 /**
- * @param {{ config: import('./config.js').Config, session?: Session, tools?: Tool[], maxToolInputElements?: number }} opts
- *   `maxToolInputElements` is passed to the SDK (no ceiling when left out)
+ * Register the resources and prompts of spec §6 on `server`.
+ * @param {FugloyMcpServer} server
+ * @param {Session} session
+ * @param {URL | string} promptsDir
+ */
+function registerContext(server, session, promptsDir) {
+  for (const r of RESOURCES) {
+    server.registerResource(r.name, r.uri, { description: r.description, mimeType: 'text/plain' }, (uri) => textResource(uri, r.read(session)));
+  }
+  const template = new ResourceTemplate(ROM_SYMBOLS.uriTemplate, {
+    list: () => ({ resources: [{ uri: 'fugloy://rom/3/symbols', name: 'rom-3-symbols', description: 'The Model III ROM and hardware symbols.', mimeType: 'text/plain' }] }),
+  });
+  server.registerResource(ROM_SYMBOLS.name, template, { description: ROM_SYMBOLS.description, mimeType: 'text/plain' }, (uri, vars) =>
+    textResource(uri, ROM_SYMBOLS.read(String(Array.isArray(vars.model) ? vars.model[0] : vars.model))));
+
+  const texts = readPromptTexts(promptsDir);
+  /** @type {Map<string, { def: import('./prompts.js').PromptDef, schema: z.ZodType, takes: string[] }>} */
+  const prompts = new Map();
+  for (const def of PROMPTS) {
+    prompts.set(def.name, { def, schema: z.strictObject(def.argsSchema), takes: Object.keys(def.argsSchema) });
+    // The callback never runs: prompts/get is answered by the handler below.
+    server.registerPrompt(def.name, { description: def.description, argsSchema: def.argsSchema }, () => ({ messages: [] }));
+  }
+  server.server.setRequestHandler(GetPromptRequestSchema, (request) => {
+    const { name, arguments: raw = {} } = request.params;
+    const entry = prompts.get(name);
+    if (entry === undefined) throw new Error(`There is no prompt named ${name}; the prompts are ${andList(PROMPTS.map((p) => p.name))}.`);
+    const parsed = entry.schema.safeParse(raw);
+    if (!parsed.success) throw new Error(argumentSentence(parsed.error, raw, `the ${name} prompt`, entry.takes));
+    const text = /** @type {{ text?: string, problem?: string }} */ (texts.get(name));
+    if (text.text === undefined) throw new Error(text.problem);
+    const filled = fillTemplate(text.text, entry.def.fill(/** @type {any} */ (parsed.data), session));
+    return { description: entry.def.description, messages: [{ role: 'user', content: { type: 'text', text: filled } }] };
+  });
+}
+
+/**
+ * @param {{ config: import('./config.js').Config, session?: Session, tools?: Tool[], maxToolInputElements?: number, promptsDir?: URL | string }} opts
+ *   `maxToolInputElements` is passed to the SDK (no ceiling when left out); `promptsDir` is where
+ *   the prompt texts are read from (default: the package's `prompts/`)
  * @returns {McpServer}
  */
-export function createServer({ config, session = new Session(config), tools = TOOLS, maxToolInputElements }) {
+export function createServer({ config, session = new Session(config), tools = TOOLS, maxToolInputElements, promptsDir = PROMPTS_DIR }) {
   const server = new FugloyMcpServer({ name: 'fugloy-mcp', version }, maxToolInputElements === undefined ? undefined : { maxToolInputElements });
   for (const tool of tools) {
     if (tool.inputSchema && Object.hasOwn(tool.inputSchema, 'offset')) {
@@ -181,9 +242,10 @@ export function createServer({ config, session = new Session(config), tools = TO
         text ??= '';
         session.lastOutput = { key, text, isError };
       }
-      const shown = cap(text, { limit: config.limits.outputBytes, offset: start });
+      const shown = cap(text, { limit: config.limits.outputBytes, offset: start, ...(tool.page && !isError ? { page: tool.page } : {}) });
       return { content: [{ type: /** @type {const} */ ('text'), text: shown }], ...(isError ? { isError: true } : {}) };
     });
   }
+  registerContext(server, session, promptsDir);
   return server;
 }

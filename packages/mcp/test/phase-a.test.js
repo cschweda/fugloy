@@ -514,5 +514,6 @@ describe('phase A tools', () => {
     const a = await once();
     const b = await once();
     expect(b).toEqual(a);
-  });
+    // Two whole sessions: about 1 s alone, but over the default 5 s under a loaded full suite.
+  }, 30_000);
 });

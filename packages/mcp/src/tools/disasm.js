@@ -31,6 +31,15 @@ function sessionName(labels, addr) {
   return undefined;
 }
 
+/**
+ * The name of a routine starting at `addr`: a session label there, else a Model III ROM routine's
+ * name (used by `callees`).
+ * @param {Map<number, import('../session.js').Label>} labels
+ * @param {number} addr
+ * @returns {string | undefined}
+ */
+export const routineName = (labels, addr) => labels.get(addr)?.name ?? model3().code(addr)?.name;
+
 /** A ROM or hardware data name covering `addr`: a variable, vector, or region. */
 function dataOnlyName(/** @type {number} */ addr) {
   const covering = model3().data(addr);

@@ -134,6 +134,8 @@ export default {
     lines.push(sidecarLine(session.sidecar));
     const outside = config.fixtures !== undefined && relative(config.fixtures, file).startsWith('..') ? ' (outside the fixtures folder)' : '';
     lines.push(`Path: ${file}${outside}`);
-    return lines.join('\n');
+    // Kept for the fugloy://program/manifest resource.
+    session.program.manifestText = lines.join('\n');
+    return session.program.manifestText;
   },
 };
