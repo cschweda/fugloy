@@ -36,7 +36,7 @@ Claude Code ──stdio/JSON-RPC──▶ @fugloy/mcp ──in-process──▶ 
 |---|---|---|
 | `Machine` | Process | Created on first `load` or `reset`, with model from config or the `load` call |
 | Breakpoints, watches | Process | Survive `reset` unless `clear: true` |
-| Snapshots | Process | Named; capped at 16; LRU eviction with a notice |
+| Snapshots | Process | Named; capped at 16 (`limits.snapshots`); LRU eviction with a notice (taking, restoring, or diffing a snapshot counts as a use); each records the program it belongs to and outlives a `load`, but `restore` refuses a snapshot of another program |
 | Labels | Process + disk | Loaded from `<program>.fugloy.json` beside the program if present; `label` writes back on every change; `coverage export` writes the full §8 file |
 | Trace ring | Process | Cleared on `reset` |
 | Hit log | Process | Cleared on `reset` or `hits clear` |
@@ -151,10 +151,10 @@ Schemas are JSON Schema in the SDK; shown here abbreviated. Required fields mark
 
 | Tool | Input | Output |
 |---|---|---|
-| `snapshot` | `name*` | Confirmation, size |
-| `restore` | `name*` | Register block |
-| `snapshots` | — | List with cycle counts |
-| `diff` | `a*`, `b*` (snapshot names or `"now"`), `range?` | Changed bytes as `addr old→new`, grouped into runs |
+| `snapshot` | `name*` (up to 64 characters; `now` is reserved) | `snapshot "before" at cycle 10,137,610 (67 KB)`; a second snapshot of one name replaces the first and says so; past the cap, a line naming the snapshot evicted. The machine state of the emu spec §7 (not coverage, callers, the hit log, the trace, breakpoints, watches, or labels) |
+| `restore` | `name*`, `clearDebug?` (default false) | `Restored "before" (cycle N, PROGRAM).`, what was kept or cleared, and the register block. Coverage, callers, the hit log, and the trace are kept, as in the emu spec §7; `clearDebug: true` clears coverage, callers, and the hit log (not the trace), so a branch explored and abandoned does not count as covered. A snapshot taken with another program loaded (or with none) is refused with a sentence naming the program to load first, since its memory would sit under this program's labels and sidecar |
+| `snapshots` | — | `name cycle program`, least recently used first (the first is evicted next), with the count and cap |
+| `diff` | `a*`, `b*` (snapshot names or `"now"`, the running machine), `range?` (inside `3C00-FFFF`, the default: video RAM and RAM) | A count line (`2 runs, 3 bytes changed`), then each run of adjacent changed bytes as `7E10h–7E11h (2 bytes)  64 00 → C8 00`, eight bytes a line under a header for longer runs, with any label inside a run after `;` |
 
 ## 6. Resources and prompts
 
@@ -188,7 +188,7 @@ Prompts are where the reverse-engineering method lives. The tools are deliberate
 | `run` wall-clock | 5 s | Backstop if emulation is slow |
 | `trace` depth | 2000 entries | Ring buffer memory; a `trace` call returns at most 100 lines per page |
 | `step` | 100 | Beyond that, use `run` with a break |
-| Snapshots | 16 | Each is ~64–128 KB |
+| Snapshots | 16 (`limits.snapshots`) | Each is ~64–128 KB (about 67 KB of state plus the 49 KB `diff` reads) |
 | `poke` into ROM | Refused unless `force: true` | Catches agent mistakes |
 | `load` outside `fixtures` dir | Allowed, but the path is echoed back | Transparency about what ran |
 | Filesystem writes | Only the sidecar label file and explicit `coverage export` paths; an existing file at such a path that is not a label file only with `overwrite: true` | The server never writes elsewhere |
@@ -263,7 +263,7 @@ The MCP Inspector (`npx @modelcontextprotocol/inspector`) is the manual test har
 | A | `load`, `reset`, `status`, `run`, `step`, `regs`, `peek`, `poke`, `screen`, `key` | Agent can load a game and reach its title screen. **Met** (2026-10-18): `test/phase-a-rom.test.js` loads Sea Dragon from `examples/`, and two `run until: "settled"` calls (the intro animation's cycle, then the title's) leave the title and copyright on `screen`; ENTER then reaches `1 or 2 Players?`. An ASCII `.BAS` program is typed in through the ROM and runs. The phase A tools run on a synthetic ROM in CI (`test/phase-a.test.js`) |
 | B | `break`, `watch`, `hits`, `trace`, `callers`, `disasm` | Story 1 (find the print routine) works. **Met** for a synthetic program (2026-10-18): `test/story-1.test.js` replays load, run until screen, a video RAM watch, ENTER, hits, callers, and disasm, which name the routine at `7030h` and its three call sites, and byte-compares the committed `test/golden/story-01.txt`; and for a real game (see C) |
 | C | `label`, `labels`, `coverage`, `suggest`, sidecar file | Story 3 and 7 work; Fugløy reads the output. **Met** (2026-10-18), which is emu phase 4's done-criterion (emu spec §11). Story 7 in scripted form, `test/story-7-rom.test.js` on Sea Dragon and the Model III ROM: load, two settled runs, ENTER, one player, Novice, a scripted minute of arrow keys and SPACE; `suggest minCalls=5` lists `6140h` (700 calls from 6 sites) among the routines that write video RAM; a watch on the screen line that holds text shows every write there made at `6141h`, in the routine called at `6140h`, and every value printable; `label` names it `PRINT` with a note, `coverage export` writes the sidecar, and `@fugloy/disasm` reads that file and lists `PRINT:`, the note, and `CALL PRINT`. Story 3 on a synthetic program, `test/phase-c.test.js`: coverage separates code from data and the exported file is read by the disassembler. Unaided, a headless Claude Code session given story 1's prompt on Sea Dragon loaded it, watched video RAM, ran until settled, read `hits`, `suggest`, `callers`, and `disasm`, and labelled `6140h` `PRINT_TEXT` with a correct note, in 15 turns (2026-10-18; `packages/mcp/README.md`). Story 7 on three games unaided, §10's agent acceptance, is the release check for F |
-| D | Snapshots, `diff`, `search`, `callees` | Story 2 (locate variables) works |
+| D | Snapshots, `diff`, `search`, `callees` | Story 2 (locate variables) works. Snapshots and `diff` are in (2026-10-18): `test/phase-d-snapshots.test.js` replays story 2 on a synthetic program (snapshot, `key` A, run, `diff` names the score byte at `7E10h` and a press counter, peek, a second press, label `SCORE`) and byte-compares the committed `test/golden/story-02.txt`; `search` and `callees` follow |
 | E | Resources, prompts, ROM symbol tables | `orient` prompt gives a useful first report unaided |
 | F | Guardrail hardening, golden transcripts, npm publish | v0.1.0 on npm under `@fugloy` |
 
@@ -278,7 +278,7 @@ Phase A can begin the day `@fugloy/emu` boots to `READY` in Node (emu Phase 0), 
 - [ ] One server per machine model, or a `model` switch at `load`? (Current spec: switch at `load`, which forces a reset.) Emu phase 4 has the `model` argument; only 3 exists, and 1 or 4 is refused naming emu phase 6.
 - [ ] Publish ROM symbol tables as a separate `@fugloy/rom-symbols` package so the disassembler and workbench share them?
 - [x] Fixture programs are copyrighted games in a gitignored folder. Golden transcripts (§10) embed their screen text and bytes. Are those transcripts committable, or do they need to live outside the public repo too? Settled in emu phase 4: a golden transcript is committed only for a session on a synthetic ROM and a synthetic program (`test/golden/story-01.txt`); a session on the real Model III ROM, even with a public-domain game, asserts properties instead, since its output would carry ROM screen text.
-- [ ] `restore` resets machine state but not coverage or the hit log (emu spec §7). Should the MCP layer offer `restore clearDebug: true` so an agent exploring alternatives doesn't pollute coverage with abandoned branches?
+- [x] `restore` resets machine state but not coverage or the hit log (emu spec §7). Should the MCP layer offer `restore clearDebug: true` so an agent exploring alternatives doesn't pollute coverage with abandoned branches? Settled in MCP phase D: yes. `restore` keeps coverage, callers, the hit log, and the trace by default; `clearDebug: true` clears coverage, callers, and the hit log (and the per-address facts `suggest` reads), keeping the trace (§5 `restore`).
 
 ## 13. User stories and how to use them
 

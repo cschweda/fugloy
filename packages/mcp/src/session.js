@@ -48,6 +48,19 @@ export function makeMachine(config, rom = readRom(config)) {
  *   A label as the §8 file holds it; `kind` defaults to code and `source` to user.
  */
 
+/**
+ * @typedef {{ name: string, path: string, sha256: string }} ProgramId The program a snapshot belongs to.
+ * @typedef {{ name: string, state: any, cycles: number, kb: number, memory: Uint8Array, program: ProgramId | null }} Snapshot
+ *   `state` is `m.debug.snapshot()`; `memory` is video RAM and RAM ($3C00-$FFFF, 50,176 bytes) for `diff`;
+ *   `program` is null for a machine with no program loaded (powered on by `reset`).
+ */
+
+/** The bytes a snapshot keeps for `diff`: video RAM then RAM, $3C00-$FFFF. */
+export const DIFF_START = 0x3c00;
+
+/** `limits.snapshots` as a cap: a whole number, at least 1. */
+export const snapshotCap = (/** @type {import('./config.js').Config} */ config) => Math.max(1, Math.floor(config.limits.snapshots ?? 16));
+
 /** `limits.traceDepth` as the emulator takes it: a whole number from 1 to 1,000,000. */
 export const traceDepth = (/** @type {import('./config.js').Config} */ config) => Math.min(1_000_000, Math.max(1, Math.round(config.limits.traceDepth)));
 
@@ -64,6 +77,11 @@ export class Session {
   facts = new Uint8Array(0x10000);
   /** @type {Uint8Array | null} Video RAM as the last `screen` call saw it. */
   screenBaseline = null;
+  /**
+   * @type {Map<string, Snapshot>} Named snapshots, least recently used first (a use moves one to
+   * the end); they outlive a `load`, and `restore` refuses one that belongs to another program.
+   */
+  snapshots = new Map();
   /** @type {{ key: string, text: string, isError: boolean } | null} The last full tool result, for `offset` paging. */
   lastOutput = null;
 
@@ -106,5 +124,46 @@ export class Session {
     const m = this.requireMachine();
     if (this.program === null || this.sidecar === null) throw new Error(NO_MACHINE);
     return { m, program: this.program, sidecar: this.sidecar };
+  }
+
+  /**
+   * Save the machine as `name`, replacing a snapshot of that name, and evict the least recently
+   * used one when the cap would be passed (MCP spec §3, §7).
+   * @param {string} name
+   * @returns {{ snap: Snapshot, replaced: boolean, evicted: string | null }}
+   */
+  takeSnapshot(name) {
+    const m = this.requireMachine();
+    const state = m.debug.snapshot();
+    const memory = new Uint8Array(0x10000 - DIFF_START);
+    memory.set(m.video.raw, 0);
+    memory.set(m.mem.ram, 0x4000 - DIFF_START);
+    const p = this.program;
+    /** @type {Snapshot} */
+    const snap = { name, state, cycles: m.cycles, kb: Math.ceil(JSON.stringify(state).length / 1024), memory, program: p === null ? null : { name: p.name, path: p.path, sha256: p.sha256 } };
+    const replaced = this.snapshots.delete(name);
+    let evicted = null;
+    if (this.snapshots.size >= snapshotCap(this.config)) {
+      evicted = /** @type {string} */ (this.snapshots.keys().next().value);
+      this.snapshots.delete(evicted);
+    }
+    this.snapshots.set(name, snap);
+    return { snap, replaced, evicted };
+  }
+
+  /**
+   * The snapshot named `name`, marked as used now (so the cap evicts it last), or a throw naming those there are.
+   * @param {string} name
+   * @param {string} [extra] appended to the names in the throw
+   */
+  useSnapshot(name, extra = '') {
+    const snap = this.snapshots.get(name);
+    if (snap === undefined) {
+      const names = [...this.snapshots.keys()];
+      throw new Error(`There is no snapshot named ${JSON.stringify(name)}; ${names.length === 0 ? 'none has been taken yet' : `the snapshots are ${names.join(', ')}`}${extra}.`);
+    }
+    this.snapshots.delete(name);
+    this.snapshots.set(name, snap);
+    return snap;
   }
 }

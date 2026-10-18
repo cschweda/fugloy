@@ -73,6 +73,7 @@ does take, never ignored.
 | Inspection | `regs`, `peek`, `poke`, `disasm` (with coverage marks and names), `screen` (or its diff) |
 | Debugging | `break` (with `<reg> <op> <value>` conditions), `unbreak`, `watch`, `unwatch`, `hits` (with the routine each writing PC is in), `trace`, `callers` |
 | Knowledge | `label`, `unlabel`, `labels`, `coverage` (summary, ranges, export), `suggest` (the call targets worth naming next, with what they were seen doing) |
+| Snapshots | `snapshot`, `restore` (`clearDebug` also clears coverage, callers, and the hit log; a snapshot of another program is refused), `snapshots`, `diff` (two snapshots, or one and `now`: changed bytes in runs) |
 
 The full table, with every argument and output, is spec §5. Coverage and
 callers are recorded from the load, so `suggest` and `coverage` need no
@@ -174,13 +175,13 @@ release check for npm (spec §10, phase F).
 `test/story-7-rom.test.js` need the Model III ROM named in `fugloy.mcp.json`
 and skip without it. Golden transcripts are committed only for sessions on
 the synthetic ROM, since a real ROM's screen text would be in them. To
-rewrite `test/golden/story-01.txt` after a deliberate change to a tool's
-output: `FUGLOY_UPDATE_GOLDEN=1 pnpm vitest run packages/mcp/test/story-1.test.js`,
-then review the diff.
+rewrite `test/golden/story-01.txt` or `story-02.txt` after a deliberate change
+to a tool's output: `FUGLOY_UPDATE_GOLDEN=1 pnpm vitest run packages/mcp/test/story-1.test.js`
+(or `phase-d-snapshots.test.js`), then review the diff.
 
 ## Not yet
 
-Snapshots, `diff`, `search`, and `callees` (phase D); resources and prompts
+`search` and `callees` (the rest of phase D); resources and prompts
 over the protocol (E); guardrail hardening and the npm release (F). The
 dependencies on `@fugloy/emu`, `@fugloy/disasm`, and `@fugloy/z80` are
 `workspace:*`; `pnpm pack` rewrites them to the local versions.

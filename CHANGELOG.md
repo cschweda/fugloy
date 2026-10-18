@@ -68,6 +68,31 @@ the Model III ROM to `READY` in Node.
 
 ### Added
 
+MCP phase D, snapshots and `diff` (`@fugloy/mcp`; MCP spec §3, §5 Snapshots):
+
+- `snapshot {name}` saves the machine (`m.debug.snapshot()`, emu spec §7) as
+  `snapshot "before" at cycle N (K KB)`; a second snapshot of one name
+  replaces the first. At most 16 are kept (`limits.snapshots`, a new limit in
+  `fugloy.mcp.json`); past that the least recently used (taken, restored, or
+  diffed longest ago) is evicted, and the result names it. `snapshots` lists
+  name, cycle, and program, least recently used first; `status` counts them.
+- `restore {name, clearDebug?}` puts the machine back exactly and returns the
+  register block. Coverage, callers, the hit log, and the trace are kept, as
+  in the emu spec; `clearDebug: true` clears coverage, callers, the hit log,
+  and the facts `suggest` reads, so an abandoned branch does not count as
+  covered (MCP spec §12's last question, settled). Each snapshot records the
+  program it belongs to and outlives a `load`, but restoring one of another
+  program (or one taken before any load over a program) is refused with a
+  sentence naming the program to load first, never mixing one program's
+  memory with another's labels and sidecar.
+- `diff {a, b, range?}` compares two snapshots, or one and `now`, over video
+  RAM and RAM (`$3C00–$FFFF`, or `range` inside it): a count of runs and
+  bytes, then each run of adjacent changed bytes as `addr old → new`, eight
+  bytes a line, with any label inside a run named. Story 2 ("locate game
+  variables") runs on a synthetic program, SCORER, and is byte-compared with
+  the committed `test/golden/story-02.txt`: the diff after one press of A
+  shows the score byte at `$7E10` and the press counter at `$7E20`.
+
 Emu phase 4 (`@fugloy/mcp` 0.1.0, MCP phases A–C; MCP spec §5, §11):
 
 - The stdio server (`bin/fugloy-mcp.js`, MCP SDK 1.32.0, zod 4.6.5, plain

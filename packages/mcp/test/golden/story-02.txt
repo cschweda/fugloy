@@ -1,0 +1,51 @@
+> snapshot {"name":"before"}
+snapshot "before" at cycle 10,137,610 (67 KB)
+
+> key {"text":"A"}
+Typed 1 key (matrix, 20 cps)
+Ran 456,214 cycles (0.225 s emulated)
+0 cells changed
+
+> run {"seconds":1}
+stopped: cycles (the 1 s asked for)
+Ran 2,027,520 cycles (1.000 s emulated)
+PC 7003  SP 7F00  AF 0054  BC 0000  DE 0064  HL 7E20  IX 0000  IY 0000
+AF' 0000 BC' 0000 DE' 0000 HL' 0000  I 00  R 13  IFF1 0  IFF2 0  IM 0
+Flags: S0 Z1 H1 PV1 N0 C0     Cycles: 12,621,344
+
+> diff {"a":"before","b":"now","range":"4000-7FFF"}
+diff before → now over 4000h–7FFFh: 2 runs, 2 bytes changed
+7E10h (1 byte)  00 → 64
+7E20h (1 byte)  00 → 01
+
+> peek {"addr":"7E10","len":2}
+7E10  64 00                                             d.
+
+> key {"text":"A"}
+Typed 1 key (matrix, 20 cps)
+Ran 456,217 cycles (0.225 s emulated)
+0 cells changed
+
+> run {"seconds":1}
+stopped: cycles (the 1 s asked for)
+Ran 2,027,520 cycles (1.000 s emulated)
+PC 7006  SP 7F00  AF 0054  BC 0000  DE 0064  HL 7E20  IX 0000  IY 0000
+AF' 0000 BC' 0000 DE' 0000 HL' 0000  I 00  R 25  IFF1 0  IFF2 0  IM 0
+Flags: S0 Z1 H1 PV1 N0 C0     Cycles: 15,105,081
+
+> peek {"addr":"7E10","len":2}
+7E10  C8 00                                             ..
+
+> label {"addr":"7E10","name":"SCORE","kind":"data","size":2,"note":"increments by 100 per press of A; little-endian"}
+Labelled 7E10h SCORE (data, 2 bytes).
+Wrote <dir>/scorer.fugloy.json.
+
+> diff {"a":"before","b":"now","range":"4000-7FFF"}
+diff before → now over 4000h–7FFFh: 2 runs, 2 bytes changed
+7E10h (1 byte)  00 → C8  ; SCORE
+7E20h (1 byte)  00 → 02
+
+> snapshots {}
+1 of 16 snapshots, least recently used first (the first goes when a new one would pass the cap):
+name         cycle  program
+before  10,137,610  SCORER

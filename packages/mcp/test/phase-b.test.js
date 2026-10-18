@@ -63,6 +63,7 @@ describe('phase B tools', () => {
       'load', 'reset', 'status', 'run', 'step', 'key', 'regs', 'peek', 'poke', 'disasm', 'screen',
       'break', 'unbreak', 'watch', 'unwatch', 'hits', 'trace', 'callers',
       'label', 'unlabel', 'labels', 'coverage', 'suggest',
+      'snapshot', 'restore', 'snapshots', 'diff',
     ]);
     await close();
   });
