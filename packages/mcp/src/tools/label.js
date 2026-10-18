@@ -60,7 +60,7 @@ export default {
     const replaced = old !== undefined && old.name !== name ? `, replacing ${old.name}` : '';
     if (sidecar.ignored !== null) {
       return {
-        text: `${done}${replaced} for this session only: the sidecar ${sidecar.path} was ignored at load (${sidecar.ignored}), so it was not overwritten; fix or remove it and load again, or save with coverage mode "export" and a path.`,
+        text: `${done}${replaced} for this session only: the sidecar ${sidecar.readFrom} was ignored at load (${sidecar.ignored}), so it was not overwritten; fix or remove it and load again, or save with coverage mode "export" and a path.`,
         isError: true,
       };
     }

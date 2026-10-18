@@ -42,7 +42,8 @@ export function makeMachine(config, rom = readRom(config)) {
 }
 
 /**
- * @typedef {{ path: string, name: string, bytes: number, manifest: unknown, sha256: string }} Program
+ * @typedef {{ path: string, name: string, bytes: number, manifest: unknown, sha256: string, sharesCoverageWith?: string }} Program
+ *   `sharesCoverageWith` names an earlier program loaded into the same machine (load with reset: false), whose coverage is mixed in
  * @typedef {{ addr: number, name: string, kind?: 'code' | 'data', size?: number, source?: 'loader' | 'observed' | 'user' | 'disasm', evidence?: string, note?: string }} Label
  *   A label as the §8 file holds it; `kind` defaults to code and `source` to user.
  */

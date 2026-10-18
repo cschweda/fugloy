@@ -3,7 +3,7 @@
  * programs, so CI runs them: label, unlabel, labels, coverage, suggest, and the exported file
  * the disassembler reads.
  */
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openProgram, parseLabelFile as disasmParse, renderSession, withLabelFile } from '@fugloy/disasm';
@@ -258,5 +258,50 @@ describe('phase C tools', () => {
     expect(listing).toContain('; copies DE to video RAM at HL');
     expect(listing).toMatch(/^BANNER:/m);
     expect(listing).toMatch(/CALL +PRINT/);
+  });
+
+  it('coverage export compares files by identity: case variants, links, the program, the ROM', async () => {
+    const insensitive = existsSync(at('RAIDERS.CMD'));
+    symlinkSync(at('raiders.cmd'), at('link.cmd'));
+    symlinkSync(dir, at('dirlink'));
+    try {
+      const { call, close } = await raidersPlayed();
+      const refused = async (path) => (await call('coverage', { mode: 'export', path })).text;
+      if (insensitive) expect(await refused(at('RAIDERS.CMD'))).toBe(`${at('RAIDERS.CMD')} is the program itself; give another path to export to.`);
+      expect(await refused(join(at('dirlink'), 'raiders.cmd'))).toBe(`${join(at('dirlink'), 'raiders.cmd')} is the program itself; give another path to export to.`);
+      expect(await refused(at('link.cmd'))).toBe(`${at('link.cmd')} is a symbolic link; the server does not write through links (replace it with a file, or remove it).`);
+      expect(await refused(at('synthetic.rom'))).toBe(`${at('synthetic.rom')} is the ROM; give another path to export to.`);
+      expect(readFileSync(at('raiders.cmd'))).toEqual(Buffer.from(RAIDERS));
+      await close();
+
+      // An ignored sidecar is protected under any spelling.
+      writeFileSync(at('raiders.fugloy.json'), 'broken');
+      const again = await server();
+      await ok(again.call, 'load', { path: at('raiders.cmd') });
+      const variants = [join(at('dirlink'), 'raiders.fugloy.json'), ...(insensitive ? [at('RAIDERS.FUGLOY.JSON')] : [])];
+      for (const path of variants) expect((await again.call('coverage', { mode: 'export', path })).text).toMatch(/^The sidecar .* was ignored at load/);
+      expect(readFileSync(at('raiders.fugloy.json'), 'utf8')).toBe('broken');
+      await again.close();
+    } finally {
+      rmSync(at('link.cmd'));
+      rmSync(at('dirlink'));
+    }
+  });
+
+  it('after load with reset: false of another program, export refuses and suggest says why', async () => {
+    const { call, close } = await raidersPlayed();
+    await ok(call, 'load', { path: at('chores.cmd'), reset: false });
+    await ok(call, 'run', { until: 'halt' });
+    expect((await call('coverage', { mode: 'export' })).text).toBe(
+      "The coverage on this machine includes RAIDERS, loaded before CHORES with reset: false, so it is not CHORES's to export; load CHORES again with reset (the default), run it, then export.",
+    );
+    expect(existsSync(at('chores.fugloy.json'))).toBe(false);
+    const note = "Note: CHORES was loaded with reset: false after RAIDERS, so the coverage since load includes RAIDERS's.";
+    expect((await ok(call, 'suggest', {})).split('\n').at(-1)).toBe(note);
+    expect(await ok(call, 'coverage', {})).toContain(note);
+    // A fresh load clears it.
+    await ok(call, 'load', { path: at('chores.cmd') });
+    expect(await ok(call, 'suggest', {})).not.toContain('Note:');
+    await close();
   });
 });

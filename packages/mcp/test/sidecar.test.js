@@ -3,7 +3,7 @@
  * beside the program, read on load, rewritten at once by label and unlabel. A broken sidecar, or
  * one written for another program, is reported and never overwritten.
  */
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseLabelFile } from '@fugloy/emu';
@@ -112,5 +112,69 @@ describe('the sidecar file', () => {
       ['Labels (1 of 2, source observed):', 'addr   kind  size   source    name', '7030h  code         observed  SUB_7030  ; called 3× from 3 sites'].join('\n'),
     );
     await again.close();
+  });
+
+  it('hand edits made after load are never overwritten', async () => {
+    const { call, close } = await server();
+    await ok(call, 'load', { path: at('raiders.cmd') });
+    await ok(call, 'label', { addr: '7030', name: 'PRINT' });
+    const edited = JSON.parse(readFileSync(SIDECAR(), 'utf8'));
+    edited.labels.push({ addr: 0x7040, name: 'BANNER', kind: 'data', source: 'user' });
+    writeFileSync(SIDECAR(), JSON.stringify(edited));
+    const r = await call('label', { addr: '7050', name: 'PLAYER' });
+    expect(r).toEqual({
+      text: `Labelled 7050h PLAYER (code) in this session, but the sidecar ${SIDECAR()} changed on disk since the server last read or wrote it, so it was not overwritten; load the program again to pick up the edits`,
+      isError: true,
+    });
+    expect(JSON.parse(readFileSync(SIDECAR(), 'utf8'))).toEqual(edited);
+    // An edit that breaks the file is named; coverage export to the sidecar is refused the same way.
+    writeFileSync(SIDECAR(), '{');
+    expect((await call('unlabel', { name: 'PRINT' })).text).toMatch(/^Removed PRINT at 7030h in this session, but the sidecar \S+ changed, and it is not JSON \(.+\) on disk since the server last read or wrote it/);
+    expect((await call('coverage', { mode: 'export' })).text).toMatch(/^The sidecar \S+ changed, and it is not JSON/);
+    expect(readFileSync(SIDECAR(), 'utf8')).toBe('{');
+    await close();
+
+    // A sidecar that appears after a load that found none is not overwritten either.
+    rmSync(SIDECAR());
+    const again = await server();
+    await ok(again.call, 'load', { path: at('raiders.cmd') });
+    writeFileSync(SIDECAR(), 'by hand');
+    expect((await again.call('label', { addr: '7030', name: 'PRINT' })).text).toMatch(/but the sidecar \S+ appeared on disk since the server last read or wrote it/);
+    expect(readFileSync(SIDECAR(), 'utf8')).toBe('by hand');
+    await again.close();
+  });
+
+  it('a symbolic link at the sidecar path is reported and never written through', async () => {
+    symlinkSync(at('nowhere.json'), SIDECAR());
+    const { call, close } = await server();
+    expect(await ok(call, 'load', { path: at('raiders.cmd') })).toContain(
+      `Sidecar: ${SIDECAR()} ignored: it is a symbolic link (the server neither reads nor writes through links; replace it with a file); label and coverage export leave it as it is`,
+    );
+    expect((await call('label', { addr: '7030', name: 'PRINT' })).isError).toBe(true);
+    expect((await call('coverage', { mode: 'export' })).isError).toBe(true);
+    expect(lstatSync(SIDECAR()).isSymbolicLink()).toBe(true);
+    expect(existsSync(at('nowhere.json'))).toBe(false);
+    await close();
+  });
+
+  it('a sidecar found only in the fixtures folder is read, and writes go beside the program', async () => {
+    const fixtures = at('fixtures');
+    mkdirSync(fixtures, { recursive: true });
+    const first = await server();
+    await ok(first.call, 'load', { path: at('raiders.cmd') });
+    await ok(first.call, 'label', { addr: '7030', name: 'PRINT' });
+    await first.close();
+    const kept = readFileSync(SIDECAR(), 'utf8');
+    writeFileSync(join(fixtures, 'raiders.fugloy.json'), kept);
+    rmSync(SIDECAR());
+
+    const { call, close } = await connect({ config: testConfig({ roms: { model3: at('synthetic.rom') }, fixtures }) });
+    expect(await ok(call, 'load', { path: at('raiders.cmd') })).toContain(
+      `Sidecar: ${join(fixtures, 'raiders.fugloy.json')}: 1 label, no recorded sessions; writes go to ${SIDECAR()}, beside the program`,
+    );
+    expect(await ok(call, 'label', { addr: '7040', name: 'BANNER', kind: 'data' })).toBe(`Labelled 7040h BANNER (data).\nWrote ${SIDECAR()}.`);
+    expect(parseLabelFile(readFileSync(SIDECAR(), 'utf8')).file.labels.map((l) => l.name)).toEqual(['PRINT', 'BANNER']);
+    expect(readFileSync(join(fixtures, 'raiders.fugloy.json'), 'utf8')).toBe(kept);
+    await close();
   });
 });

@@ -10,7 +10,7 @@ import { resolve } from 'node:path';
 import { COVERAGE, decodeRle } from '@fugloy/emu';
 import { z } from 'zod';
 import { hex4 } from '../args.js';
-import { adoptExport, exportFile, writeLabelJson } from '../sidecar.js';
+import { adoptExport, exportFile, refuseLink, sameFile, sidecarRefusal, writeLabelJson, writeSidecarFile } from '../sidecar.js';
 
 const CODE = COVERAGE.EXEC | COVERAGE.OPERAND;
 const DATA = COVERAGE.READ | COVERAGE.WRITE;
@@ -59,6 +59,10 @@ function classify(mask, isCode, isData) {
   }
   return { ...n, ranges, codeRanges: ranges.filter((r) => r.kind === 'code').length, dataRanges: ranges.filter((r) => r.kind === 'data').length };
 }
+
+/** The line that says the coverage is mixed with an earlier program's. */
+export const sharedNote = (/** @type {import('../session.js').Program} */ p) =>
+  `Note: ${p.name} was loaded with reset: false after ${p.sharesCoverageWith}, so the coverage since load includes ${p.sharesCoverageWith}'s.`;
 
 const pct = (/** @type {number} */ part, /** @type {number} */ whole) => `${((part / whole) * 100).toFixed(1)}%`;
 const span = (/** @type {{ addr: number, len: number }} */ b) => `${hex4(b.addr)}–${hex4((b.addr + b.len - 1) & 0xffff)}`;
@@ -119,10 +123,11 @@ export default {
       );
     }
     lines.push(`Outside the loaded blocks: ${bytes(c.outside.executed)} executed, ${c.outside.data.toLocaleString('en-US')} read or written`);
-    if (sidecar.ignored !== null) lines.push(`Sidecar: ${sidecar.path} was ignored at load (${sidecar.ignored})`);
-    else if (sidecar.file === null) lines.push(`Sidecar: none yet (coverage mode "export" writes ${sidecar.path})`);
+    if (program.sharesCoverageWith !== undefined) lines.push(sharedNote(program));
+    if (sidecar.ignored !== null) lines.push(`Sidecar: ${sidecar.readFrom} was ignored at load (${sidecar.ignored})`);
+    else if (sidecar.file === null && sidecar.base === null) lines.push(`Sidecar: none yet (coverage mode "export" writes ${sidecar.path})`);
     else {
-      const k = sidecar.file.sessions.length;
+      const k = (sidecar.file ?? sidecar.base).sessions.length;
       lines.push(`Sidecar: ${sidecar.path}, ${k === 0 ? 'no recorded sessions' : plural(k, 'recorded session', 'recorded sessions')} (coverage mode "export" merges this one in)`);
     }
     return lines.join('\n');
@@ -137,18 +142,33 @@ export default {
  */
 function exportTo(session, path, mask) {
   const { program, sidecar } = session.requireProgram();
-  const target = path === undefined ? sidecar.path : resolve(process.cwd(), path);
+  if (program.sharesCoverageWith !== undefined) {
+    throw new Error(`The coverage on this machine includes ${program.sharesCoverageWith}, loaded before ${program.name} with reset: false, so it is not ${program.name}'s to export; load ${program.name} again with reset (the default), run it, then export.`);
+  }
   if (path !== undefined && path.trim() === '') throw new Error('path is empty; give the file to export to, or leave path out to write the sidecar.');
+  const target = path === undefined ? sidecar.path : resolve(process.cwd(), path);
+  refuseLink(target);
   if (existsSync(target) && statSync(target).isDirectory()) throw new Error(`${target} is a folder; give a file path to export to.`);
-  if (target === program.path) throw new Error(`${target} is the program itself; give another path to export to.`);
-  const toSidecar = target === sidecar.path;
-  if (toSidecar && sidecar.ignored !== null) {
-    throw new Error(`The sidecar ${sidecar.path} was ignored at load (${sidecar.ignored}), so it is not overwritten; give path to export elsewhere, or fix or remove it and load again.`);
+  // By identity, not spelling: a case variant on a case-insensitive volume, or a path through a
+  // linked folder, names the same file.
+  if (sameFile(target, program.path)) throw new Error(`${target} is the program itself; give another path to export to.`);
+  if (sameFile(target, session.config.roms.model3)) throw new Error(`${target} is the ROM; give another path to export to.`);
+  const toSidecar = target === sidecar.path || sameFile(target, sidecar.path);
+  const refusal = sidecarRefusal(sidecar);
+  if (refusal !== null && (toSidecar || sameFile(target, sidecar.readFrom))) {
+    throw new Error(`The ${refusal.replace(/^the /, '')}, so it is not overwritten; give path to export elsewhere, or fix or remove it and load again.`);
   }
   const file = exportFile(session);
   const replaced = !toSidecar && existsSync(target);
-  writeLabelJson(target, file);
-  if (toSidecar) adoptExport(session, file);
+  if (toSidecar) {
+    try {
+      writeSidecarFile(session, file);
+    } catch (err) {
+      const text = err instanceof Error ? err.message : String(err);
+      throw new Error(`${text[0].toUpperCase()}${text.slice(1)}.`);
+    }
+    adoptExport(session, file);
+  } else writeLabelJson(target, file);
 
   const earlier = file.sessions.length - 1;
   const cov = file.coverage['0:0'];

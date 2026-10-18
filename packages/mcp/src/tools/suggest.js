@@ -8,6 +8,7 @@ import { SYNTH_NAME } from '@fugloy/disasm';
 import { z } from 'zod';
 import { hex4, parseCount } from '../args.js';
 import { routineNotes } from '../attribution.js';
+import { sharedNote } from './coverage.js';
 
 /** Below this address is the ROM. */
 const RAM = 0x3800;
@@ -24,7 +25,8 @@ export default {
    * @param {{ minCalls?: number }} args
    */
   handler(session, { minCalls = 5 }) {
-    const { m } = session.requireProgram();
+    const { m, program } = session.requireProgram();
+    const shared = program.sharesCoverageWith === undefined ? '' : `\n${sharedNote(program)}`;
     const least = parseCount(minCalls, { name: 'minCalls', min: 1 });
     const callerMap = m.debug.callerMap();
     /** @type {{ addr: number, calls: number, sites: number }[]} */
@@ -46,7 +48,7 @@ export default {
     const listed = targets.filter((t) => t.calls >= least);
     if (listed.length === 0) {
       const top = targets[0];
-      return `No unlabelled call target has ${least.toLocaleString('en-US')} or more calls since load${top === undefined ? '' : ` (the most is ${hex4(top.addr)}, with ${top.calls.toLocaleString('en-US')}); lower minCalls to see more`}.`;
+      return `No unlabelled call target has ${least.toLocaleString('en-US')} or more calls since load${top === undefined ? '' : ` (the most is ${hex4(top.addr)}, with ${top.calls.toLocaleString('en-US')}); lower minCalls to see more`}.${shared}`;
     }
     const width = Math.max(5, ...listed.map((t) => t.calls.toLocaleString('en-US').length));
     const lines = [
@@ -57,6 +59,6 @@ export default {
       const notes = routineNotes(m, session.facts, t.addr, t.calls, callerMap);
       lines.push(`${hex4(t.addr)}  ${t.calls.toLocaleString('en-US').padStart(width)}  ${String(t.sites).padStart(7)}  ${notes.join(', ')}`.trimEnd());
     }
-    return lines.join('\n');
+    return lines.join('\n') + shared;
   },
 };

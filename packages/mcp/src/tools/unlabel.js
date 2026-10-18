@@ -30,7 +30,7 @@ export default {
     session.labels.delete(label.addr);
     const done = `Removed ${label.name} at ${hex4(label.addr)}`;
     if (sidecar.ignored !== null) {
-      return { text: `${done} for this session only: the sidecar ${sidecar.path} was ignored at load (${sidecar.ignored}), so it was not overwritten.`, isError: true };
+      return { text: `${done} for this session only: the sidecar ${sidecar.readFrom} was ignored at load (${sidecar.ignored}), so it was not overwritten.`, isError: true };
     }
     try {
       return `${done}.\nWrote ${writeSidecar(session)}.`;

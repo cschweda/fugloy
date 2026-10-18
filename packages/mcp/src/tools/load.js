@@ -11,7 +11,7 @@ import { detectFormat } from '@fugloy/disasm';
 import { z } from 'zod';
 import { hex4 } from '../args.js';
 import { bootToReady, BOOT_SECONDS, seconds } from '../execute.js';
-import { readSidecar, sidecarLine, sidecarPath } from '../sidecar.js';
+import { readSidecar, sidecarLine, sidecarState } from '../sidecar.js';
 
 const MODEL_NAMES = { 1: 'Model I', 4: 'Model 4' };
 
@@ -58,7 +58,7 @@ function locate(/** @type {string} */ given, /** @type {import('../config.js').C
 export default {
   name: 'load',
   description:
-    'Load a .CMD, .BAS (tokenized or ASCII), or .CAS program, detected from its content. By default a fresh Model III boots its ROM to READY first; reset: false loads into the machine as it is. Returns the manifest: format, blocks, entry point, the ROM, the sidecar label file (<program>.fugloy.json beside the program, whose labels are loaded; one that cannot be used is reported and left alone), and the resolved path. Coverage is recorded from the start.',
+    'Load a .CMD, .BAS (tokenized or ASCII), or .CAS program, detected from its content. By default a fresh Model III boots its ROM to READY first; reset: false loads into the machine as it is. Returns the manifest: format, blocks, entry point, the ROM, the sidecar label file (<program>.fugloy.json beside the program, or failing that in the fixtures folder, whose labels are loaded; writes always go beside the program; one that cannot be used is reported and left alone), and the resolved path. Coverage is recorded from the start.',
   inputSchema: {
     path: z.string().describe('The program file; relative paths resolve against the working folder, then the config\'s fixtures folder'),
     model: z.number().int().optional().describe('The machine model; only 3 (the Model III) exists until emu phase 6'),
@@ -115,15 +115,15 @@ export default {
     if (fresh) session.install(m);
     session.screenBaseline = baseline;
     const name = manifest.name || basename(file, extname(file)).toUpperCase();
-    session.program = { path: file, name, bytes: bytes.length, manifest, sha256: m.debug.loaded?.sha256 ?? '' };
+    const earlier = session.program;
+    const sha256 = m.debug.loaded?.sha256 ?? '';
+    // Loaded into a running machine after another program: the coverage since that machine's
+    // install covers both, so it is not this program's alone (export refuses; suggest says so).
+    const sharesCoverageWith = fresh || earlier === null ? undefined : earlier.sha256 !== sha256 ? earlier.name : earlier.sharesCoverageWith;
+    session.program = { path: file, name, bytes: bytes.length, manifest, sha256, ...(sharesCoverageWith === undefined ? {} : { sharesCoverageWith }) };
     // The program's labels are its sidecar's (Ruling 6); a sidecar that cannot be used is reported, not fatal.
     const found = readSidecar(file, session.program.sha256, { fixtures: config.fixtures });
-    session.sidecar = {
-      path: found?.path ?? sidecarPath(file),
-      base: found !== null && 'file' in found ? found.file : null,
-      file: found !== null && 'file' in found ? found.file : null,
-      ignored: found !== null && 'ignored' in found ? found.ignored : null,
-    };
+    session.sidecar = sidecarState(file, found);
     session.labels = new Map(found !== null && 'labels' in found ? found.labels.map((l) => [l.addr, l]) : []);
 
     const kind = format === 'cmd' ? '.CMD (load module)' : format === 'bas' ? `.BAS (${manifest.kind})` : `.CAS (${manifest.kind}, loaded at once)`;
