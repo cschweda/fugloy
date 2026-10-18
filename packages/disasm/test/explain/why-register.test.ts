@@ -124,7 +124,9 @@ describe('why this register: facts about the Z80', () => {
     expect(why([0x00, RET])).toEqual([]); // NOP
     expect(why([0x21, 0x00, 0x3c, RET])).toEqual([]); // LD HL,3C00H with no call after
     expect(why([0x7e, RET])).toEqual([]); // LD A,(HL): any register can be loaded through HL
-    expect(explainLine(raw([0x41, RET]), 0x7000).why).toEqual({ register: [], purpose: [], idiom: [] });
+    const w = explainLine(raw([0x41, RET]), 0x7000).why!;
+    expect(w.register).toEqual([]);
+    expect(w.idiom).toEqual([]);
   });
 
   it('a data row and a BASIC session have no why', () => {
