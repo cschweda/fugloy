@@ -62,46 +62,86 @@ fugloy/
 
 Phase 0 kept upstream's file names inside these folders (`cpu/z80cpu.js`, `machine/{memory,io,trs80-system}.js`, `devices/…`, `loaders/{cas-format,cmd-format}.js`, `debug/state.js`); phase 1 may split the CPU into the files named above.
 
-### Public API (sketch)
+### Public API
+
+Emu phase 2 built the part below marked **built**; the rest (marked **phase 3 and later**) is still the sketch, and nothing in it is promised to the letter until it is built.
 
 ```js
-import { Machine } from '@fugloy/emu'
+import { Machine, ROM_HASHES } from '@fugloy/emu'                     // built
 
-const m = new Machine({ model: 3, ram: 48, roms: { level2: romBytes } })
+const m = new Machine({ model: 3, ram: 48, roms: { level2: romBytes }, log })   // built
+```
 
-// execution
-m.reset()
-m.step(n = 1)            // n instructions → { cycles, stopped? }
-m.run({ cycles, until })  // until = 'break' | 'halt' | predicate(m)
-                          // → { reason: 'cycles'|'break'|'halt'|'watch'|'predicate', cycles, id? }
-m.cycles                  // total cycles since reset
-m.sound.events(sinceCycle) // [{ cycle, value }] port FF writes, see §2.4
+`model` is 3 and `ram` is 48: anything else throws, naming the phase that will add it. `roms.level2` is the ROM image as a `Uint8Array`. `log` is an optional `(level, text) => void`; without it the core is silent. The caller supplies the ROM; nothing is bundled.
 
-// state
-m.cpu.regs                // { a, f, b, c, d, e, h, l, a2, f2, ..., ix, iy, sp, pc, i, r, iff1, iff2, im }
-m.cpu.flags               // { s, z, h, pv, n, c } decoded
-m.mem.read(addr, len)     // Uint8Array copy
+**Execution (built)**
+
+```js
+m.reset()                  // CPU to $0000 and cycles to 0; RAM kept; clears m.sound and m.keyboard
+m.step(n = 1)              // n whole instructions → { cycles, halted }
+m.run({ cycles, until })   // until = 'halt' | predicate(m) → { reason: 'cycles' | 'halt' | 'predicate', cycles }
+m.cycles                   // total T-states since reset
+```
+
+- `step` and `run` return the T-states they spent (`cycles`), not the total. An interrupt response counts with the instruction after it.
+- `run` needs `cycles`, `until`, or both; with neither it throws, since it would never stop. It always executes at least one instruction: `run({ cycles: 0 })` runs one.
+- Both limits are checked after each instruction, so `until` is not checked before the first one. When the `until` condition (`'halt'` or the predicate) and the cycle budget are both met at the same boundary, the condition wins and `reason` is `'halt'` or `'predicate'`.
+- `reason` has no `'break'` or `'watch'` yet: they arrive with the debugger (§7, phase 3).
+- `m.rom` is `{ bytes, sha256, recognized }`: the image's length, its SHA-256 as hex, and the name of the known ROM it matches or `null`. `ROM_HASHES` is the table behind it, `{ sha256: name }`. It includes the FreHD-patched Model III Rev C image, labelled as patched.
+
+**State (built)**
+
+```js
+m.cpu.regs                 // { a, f, b, c, d, e, h, l, a2, f2, b2, c2, d2, e2, h2, l2, ix, iy, sp, pc, i, r, iff1, iff2, im }
+m.cpu.flags                // { s, z, h, pv, n, c } decoded from F
+m.mem.read(addr, len)      // Uint8Array copy; addresses wrap at 64K
 m.mem.write(addr, bytes)
-m.mem.ram                 // live Uint8Array (for fast paths)
+m.mem.ram                  // live Uint8Array
 m.io.in(port) / m.io.out(port, val)
+m.system                   // the wrapped TRS80System: an escape hatch to the devices, outside the stable API
+```
 
-// devices
-m.video.text()            // 16 lines of 64 chars, string[]
-m.video.raw               // Uint8Array view of 0x3C00..0x3FFF
-m.keyboard.type(str, { cps, mode })   // cycle-timed matrix typing ('matrix') or the §6 hook ('hook')
-m.keyboard.feed(str)      // characters for the ROM keyboard-scan hook (§6); '\n' = ENTER
-m.keyboard.press(key) / release(key)   // a character or ENTER CLEAR BREAK UP DOWN LEFT RIGHT SHIFT SPACE
-m.keyboard.pending        // queued events not yet delivered
-m.cassette.load(bytes) / m.cassette.motor
-m.fdc.mount(drive, image) / unmount(drive)
+**Devices (built)**
 
-// loaders
-m.load.cmd(bytes)         // → { entry, blocks: [{ addr, len }] }
-m.load.bas(bytes)         // tokenized or ASCII; → { start, end }
-m.load.cas(bytes)
-m.load.dsk(bytes)         // → mounted image handle
+```js
+m.video.text()             // 16 lines, string[]: 64 columns, or 32 in 32-column mode (port $EC bit 2)
+m.video.raw                // live Uint8Array view of $3C00..$3FFF
+m.video.columns            // 64 | 32
 
-// debug
+m.sound.events(sinceCycle = -1)  // [{ cycle, value }] every port $FF write after that cycle, oldest first
+m.sound.overflowed         // events lost to wrap-around of the 65,536-event ring since the last clear
+m.sound.clear()            // also done by m.reset() and by restoring a saved state
+
+m.keyboard.press(key) / release(key)   // hold a key now / let it go
+m.keyboard.type(str, { cps = 10, mode = 'matrix' })  // cycle-timed typing through the matrix, or the §6 hook ('hook')
+m.keyboard.feed(str)       // characters for the ROM keyboard-scan hook (§6); '\n' = ENTER; all-or-nothing
+m.keyboard.pending         // queued events not yet delivered
+m.cassette.insert(bytes, { baud }) / rewind() / motor
+```
+
+- `video.text()` shows bytes below `$20` as `+$40` (the character generator folds them), and `$80`–`$FF` (graphics and the special set) as `.`; see footnote 1 in §5.
+- `sound.events` returns a copy and allocates one object per event, up to 65,536 per call: fine for a tool call, not for a per-frame loop. The ring keeps the newest events.
+- Keys are a character (`'A'`, `'1'`, `' '`) or a name: `ENTER CLEAR BREAK UP DOWN LEFT RIGHT SHIFT SPACE`. On the Model III an unshifted letter key types the capital, so `'A'` presses the bare A key and `'a'` presses SHIFT+A. `press` and `release` must use the same name; a mismatch leaves the key down.
+- In matrix mode `type` presses each character for half of a `1/cps`-second window and releases it for the other half, starting now or when the typing already queued ends. A program that reads the keyboard slowly can miss a short tap: **Rear Guard needs ENTER held about 0.5 s** (`type('\n', { cps: 1 })`). A high `cps` shortens the hold and can drop keys, and typing at the ROM's line editor with no pause for ENTER can lose characters.
+- The key queue is not machine state: `serializeState` does not carry it. A restore (§7, phase 3) must clear it with `m.keyboard.clear()`.
+
+**Loaders (built)**
+
+```js
+m.load.cmd(bytes)          // → { format: 'cmd', name, entry, blocks: [{ addr, len, why }] }; PC at the entry (§6)
+m.load.bas(bytes)          // tokenized or ASCII (§6) → { format: 'bas', kind, start, end, blocks }
+m.load.cas(bytes, { baud = 500, via = 'rom' })   // → { format: 'cas', kind, name, entry?, blocks, baud, via } (§6)
+```
+
+Every loader returns a manifest of where the bytes landed and why (§6). `m.load.bas`: for a tokenized program, `start` and `end` are the program area (`$40A4`) and its end, and `blocks` holds one `{ addr: start, len, why: 'BASIC program' }`; for ASCII, `start` is the current `$40A4` pointer, `end` is `null`, and `blocks` is empty, because the text is typed by BASIC as the machine runs. `m.load.cas` with `via: 'rom'` marks every block `predicted: true`: nothing has landed yet. `m.load.dsk` is phase 5.
+
+**Phase 3 and later (the sketch)**
+
+```js
+m.fdc.mount(drive, image) / unmount(drive)    // phase 5
+m.load.dsk(bytes)                              // phase 5
+
+// debug (phase 3)
 m.debug.break(addr, { once })
 m.debug.watch(addr, len, { read, write })
 m.debug.trace.enable({ depth })
@@ -114,7 +154,7 @@ m.debug.hooks.onMemWrite = (addr, val, prev) => {}
 m.debug.hooks.onPort = (port, val, dir) => {}
 ```
 
-Everything on `m.debug` is optional and costs nothing when unused.
+Everything on `m.debug` is optional and costs nothing when unused. The debugger features (§7) are phase 3. `serializeState` and `restoreState` are exported from the package now, as the base for `snapshot` and `restore`.
 
 ## 4. CPU
 
@@ -150,14 +190,25 @@ Not modeled, and invisible to ZEXALL:
 | Clock | 1.774 MHz | 2.027 MHz | 4.055 MHz (2.027 in III mode) |
 | ROM | 12 KB Level II at `0000–2FFF` | 14 KB at `0000–37FF` | 14 KB, bankable out |
 | Keyboard | `3800–3BFF` matrix | `3800–3BFF` | `3800–3BFF` in memory maps 0–1; absent from maps 2–3 |
-| Video | `3C00–3FFF`, 64×16, lowercase mod optional | `3C00–3FFF`, lowercase. Character set: codes `C0–FF` show the special set (or Kana, via ENALTSET, port `EC` bit 3) per the Model III manuals, but the glyphs are pictures only, so `m.video.text()` keeps `.` for `80–FF`: unverified as text | `3C00–3FFF` (maps 0–1) or `F800–FFFF` (maps 2–3); 64×16 or 80×24 via port `EC` bit 2 and port `84` bit 2 |
+| Video | `3C00–3FFF`, 64×16, lowercase mod optional | `3C00–3FFF`, lowercase; 64×16, or 32×16 via port `EC` bit 2 (verified on the ROM). Codes `C0–FF`: unverified<sup>1</sup> | `3C00–3FFF` (maps 0–1) or `F800–FFFF` (maps 2–3); 64×16 or 80×24 via port `EC` bit 2 and port `84` bit 2 |
 | RAM | 4/16/32/48 KB from `4000` | 16/32/48 KB | 64/128 KB; memory map select port `84` bits 0–1; 128 KB page select bits 4–5 |
 | Cassette / sound | Port `FF` bits 0–1 out, bit 7 in; 500 baud | Port `FF`; 500/1500 baud | Port `FF` (Model III mode only) |
 | FDC | WD1771: command/status `37EC`, track `37ED`, sector `37EE`, data `37EF`; drive select `37E1`; interrupt latch `37E0` (expansion interface) | WD1793 at ports `F0–F3`; drive select/density port `F4`; NMI status `E4` | Same as Model III |
 | Timer | 40 Hz via expansion interface, status at `37E0` | 30 Hz; interrupt latch port `E0`, mask `E0` | 30 Hz or 60 Hz (port `EC` bit 6) |
 | Printer | `37E8` | Port `F8` | Port `F8` |
 
-Values above are from memory and should be checked against the Model I/III/4 technical reference manuals before implementation; the memory-map and port numbers are the kind of detail that is easy to get one bit wrong. Treat this table as a checklist of what to verify, not as the reference.
+Values above are from memory unless marked, and should be checked against the Model I/III/4 technical reference manuals before implementation; the memory-map and port numbers are the kind of detail that is easy to get one bit wrong. Treat this table as a checklist of what to verify, not as the reference.
+
+Verified in emu phase 2, on the Model III (the rest of the table is not yet):
+
+- **Video RAM `3C00–3FFF`, 64×16:** the screens of three real programs and the ROM's READY screen read back through `m.video.text()` (`test/integration/programs.test.js`).
+- **32-column mode, port `EC` bit 2:** by probing the Model III ROM (kiwisincebirth Model3-RevC-2EF8): `PRINT CHR$(23)` raises bit 2 of the port `EC` mode register (`28H` to `2CH` at boot defaults) and re-lays the screen with characters at even video addresses, shown double-wide, 32 a row; `CLS` clears the bit (`test/integration/32col.test.js`).
+- **Keyboard `3800–3BFF` matrix, and the ROM's scan entries `$002B` and `$0049`:** against the commented ROM disassembly and the Model III manual (§6, "Keyboard-scan hook").
+- **Port `FF` as the sound port:** recorded, not verified. `m.sound` keeps every write with its T-state stamp, raw (`test/unit/sound.test.js`, on synthetic ROMs); which bits a given game toggles is the game's business, and the port's bit layout stays as listed in the table.
+
+Unverified: **ENALTSET, port `EC` bit 3,** which selects the alternate character set, and all of the Model I and Model 4 columns.
+
+<sup>1</sup> Model III character set: codes `C0–FF` show the special set (or Kana, via ENALTSET, port `EC` bit 3) per the Model III manuals (the Tandy Model 3/4 manual says codes 192–255 are space-compression codes or special characters, switched by `PRINT CHR$(21)`), but the glyph tables exist only as images, so the mapping could not be checked as text. `m.video.text()` therefore keeps `.` for `80–FF` and invents nothing: unverified as text.
 
 Phase 1 targets Model III. Model I follows (mostly address-mapped I/O instead of ports). Model 4 last (four memory maps, 80-column mode, Model III compatibility mode).
 
@@ -168,7 +219,7 @@ ROMs are not bundled. The caller supplies bytes; the core validates by length an
 | Format | Notes |
 |---|---|
 | `.CMD` | TRSDOS load module: records `01` (data: len, addr, bytes; the length counts the address and 0, 1, 2 mean 256, 257, 258), `02` (transfer address; ends the load), `05` (name). Every other record is skipped by its length byte. Verified in emu phase 2 against the LDOS 5.1 manual (Tech Info: File Formats p. 1) and Soltoff's *Programmer's Guide to LDOS/TRSDOS Version 6* (p. A-149, figure A-1): `07` is a patch *name* header whose patch code follows as ordinary `01` blocks, so skipping it is its whole handling; `10` is a yanked (removed) patch block, ignored; `1F` is a copyright comment. `m.load.cmd(bytes)` → `{ format: 'cmd', name, entry, blocks: [{ addr, len, why: 'record 01' }] }`, with the PC at the entry; blocks become coverage seeds. A load while halted or mid-run (`fastLoadCmd`, and `fastLoadSystem` alike) leaves HALT, lets an `EI` still in flight take effect (IFF1 and IFF2 set, as one instruction later), drops a pending `DD`/`FD` prefix, and clears latched interrupt requests; otherwise IFF1/IFF2 and the mode are kept. |
-| `.BAS` | Detect tokenized (first byte `FF`) vs ASCII. Tokenized: copy to the BASIC program area and fix the start/end pointers (`40A4`/`40F9`). ASCII: do **not** type it through the keyboard — a 10 KB listing at a ROM-safe rate takes minutes of emulated time and the ROM's line editor may mangle it. Instead, hook the ROM's keyboard-scan entry (`002B`/`0049`) and feed characters directly from a buffer, bypassing the matrix. Same mechanism serves the MCP `key` tool. |
+| `.BAS` | Detect tokenized (first byte `FF`) vs ASCII, from content. Tokenized: per line a 2-byte next pointer, a 2-byte line number, the body, `00`; two zero bytes end the program. The pointers are rebuilt for the load address and the program is written at TXTTAB with the start/end pointers (`40A4`/`40F9`) fixed. A file without the `FF` header is not tokenized as far as the loader can tell: it holds NULs, so it is rejected with an error that says it looks like tokenized BASIC without the `$FF` header and to add a leading `$FF` byte. ASCII: do **not** type it through the keyboard matrix — a 10 KB listing at a ROM-safe rate takes minutes of emulated time and the ROM's line editor may mangle it. Instead the loader feeds the text (`\r\n` and `\r` become `\n`, with one added at the end) through `m.keyboard.feed`, which the keyboard-scan hook (below) hands to the ROM's own scan entries (`002B`/`0049`), bypassing the matrix; BASIC takes the lines as the machine runs. The same mechanism serves the MCP `key` tool. Bytes that are neither text nor `FF`-first, and a tokenized file cut short, throw. |
 | `.CAS` | Raw cassette image: `A5` sync, SYSTEM header (`55` + name) or BASIC header (`D3 D3 D3`). Deliver via the cassette device so the ROM loader runs for real. `m.load.cas(bytes, { baud = 500, via = 'rom' })`: via `'rom'` puts the tape in the deck as pulses at 500 or 1500 baud (its leader and sync rewritten for that rate: `00`s and `A5`, or `55`s and `7F`) and the caller types `CLOAD`, or `SYSTEM`, the name at the `*?` prompt, then `/`; the baud must match the Cass? answer at boot (L = 500, ENTER = 1500). Via `'fast'` the blocks are written at once (`fastLoadBasic`, `fastLoadSystem`, which jumps to the entry). Either way → `{ format: 'cas', kind: 'system' \| 'basic', name, entry?, blocks, baud, via }`; `blocks` are `{ addr, len, why: 'block 3C' }` for SYSTEM and one `{ addr: TXTTAB, len, why: 'BASIC program' }` for BASIC. Via `'rom'` nothing has landed yet, so every block carries `predicted: true`, and the BASIC block's `why` is `'BASIC program (predicted from TXTTAB; CLOAD not yet run)'` (TXTTAB read at load time). `baud` is `null` via `'fast'`. `m.cassette.insert(bytes, { baud })`, `rewind()`, and `motor` drive the deck directly. |
 | `.DSK` / JV1 / JV3 / DMK | Mount into FDC. JV1 = raw 10-sector tracks; JV3 = sector header table; DMK = raw track with IDAM pointers. Read all three; write DMK only. |
 
@@ -178,12 +229,14 @@ Each loader returns a manifest the debugger records: where bytes landed and why.
 
 ## 7. Debugger interface
 
+Phase 3; none of this is built in phase 2.
+
 - **Breakpoints:** by PC; optional `once`; optional condition `(m) => bool`. Hit returns control from `run()` with reason `'break'` and the breakpoint id.
 - **Watchpoints:** address range, read and/or write; hit log records `{ cycle, pc, addr, value, prev }`. Watches do not stop execution unless `stop: true`.
 - **Trace:** ring buffer of the last N executed instructions `{ pc, opcode bytes, mnemonic, cycles }`; optional register snapshot per entry. Loop collapsing: consecutive identical PC sequences are reported once with a repeat count. A `run()` with trace on and no depth limit is refused.
 - **Coverage:** per-byte bitfield across 64 KB (and per bank on Model 4): `EXEC` (fetched as opcode), `OPERAND` (fetched as instruction operand), `READ`, `WRITE`, `JUMP_TARGET`, `CALL_TARGET`. This is the single most valuable output for Fugløy — it separates code from data by observation.
 - **Callers:** map of target → set of `{ fromPc, kind: 'call' | 'jp' | 'jr' | 'rst' | 'ret-to' }` built from the trace hook.
-- **Snapshots:** full machine state (CPU, RAM, device state, cycle count) as a serializable object; restore is exact. Used for differential testing (§10) and for "try this input, rewind." A snapshot does **not** include the trace ring, hit log, or coverage; those are debugger state, not machine state, and survive a restore. Document this; it will surprise someone.
+- **Snapshots:** full machine state (CPU, RAM, device state, cycle count) as a serializable object; restore is exact. Used for differential testing (§10) and for "try this input, rewind." A snapshot does **not** include the trace ring, hit log, or coverage; those are debugger state, not machine state, and survive a restore. Document this; it will surprise someone. The key queue (`m.keyboard`) is not machine state either, and a snapshot does not carry it, so `restore` must call `m.keyboard.clear()`; likewise `m.sound` is cleared on restore.
 - **Screen diff:** `m.video.diff(sinceSnapshot)` returns changed cells; cheap way to detect "something printed."
 
 ## 8. Label and coverage file format
@@ -262,7 +315,7 @@ The exercisers are GPL-2.0 and never committed. `pnpm zex:install` fetches them,
 |---|---|---|
 | 0 | Extract `cschweda/trs80-emulator` into `packages/emu`; strip DOM; ESM; test runner | Boots to `READY` in Node with no DOM stubs |
 | 1 | Z80 core hardened | ZEXALL passes |
-| 2 | Model III devices + `.CMD`/`.BAS`/`.CAS` loaders | Three real programs run to a recognizable screen |
+| 2 | Model III devices + `.CMD`/`.BAS`/`.CAS` loaders | Three real programs run to a recognizable screen. **Met** (2026-10-17): through `Machine`, Sea Dragon, Eliminator (`elimin8c`), and Rear Guard (`reargrd5`) load with `m.load.cmd` and reach their title screens on the Model III ROM, each differing from the READY screen in more than 256 cells and answering a key. Armored Patrol was tried and rejected (its screen differs in only 152 cells). Determinism: one scripted session run twice ends byte-identical in `serializeState`, every port `FF` event, and the cycle count: on a synthetic ROM in CI, and on Sea Dragon locally (`test/integration/determinism.test.js`). |
 | 3 | Debugger API + coverage + §8 file format | A scripted session produces a label file Fugløy's disassembler consumes |
 | 4 | `@fugloy/mcp` v0.1 | Claude Code can load a game, find its print routine, and label it unaided |
 | 5 | FDC + disk images | TRSDOS boots; a disk-based game runs |

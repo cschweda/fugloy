@@ -11,7 +11,7 @@ phase 2 onward and the MCP server follow, in the Roadmap's order. The recompiler
 bundler stay in Part 2 until the plan's kill criteria have been reviewed. If a
 task seems to need machinery from a later step, stop and say so.
 
-Current phase: **v1 released as 1.0.0 (2026-10-17); next is emu phase 2.**
+Current phase: **v1 released as 1.0.0 (2026-10-17); emu phase 2 done on branch `emu-phase2`, not yet merged; after the merge, emu phase 3 is next.**
 v1 is disassembler phases 1–4: the core decoder and loaders (v0.1.0), Pass 1
 and Pass 2 (v0.2.0), the cited symbol tables (phase 3: eight JSON tables, 634
 entries, in `packages/disasm/data/symbols/`, compiled by `pnpm symbols`), and
@@ -27,9 +27,16 @@ fugloy.netlify.app from `main`; the custom domains `app.fugloy.dev`,
 `fugloy.dev`, and `www.fugloy.dev` wait on DNS (ask the user before any DNS
 change). Emu phase 1 is done: the Z80 core in `packages/emu` passes ZEXDOC and
 ZEXALL, all 67 groups each (`pnpm zex:install`, then `FUGLOY_ZEX=1`), and its
-T-states match `@fugloy/z80` for every opcode. Next: emu phase 2 (Model III
-devices and `.CMD`/`.BAS`/`.CAS` loaders, `docs/fugloy-emu-spec.md` §11),
-then emu phase 3 and the MCP server.
+T-states match `@fugloy/z80` for every opcode. Emu phase 2 is done: the
+`Machine` facade (`step`, `run`, registers, memory), `m.video.text()`, the
+`m.sound` ring, the cycle-timed `m.keyboard` queue with the ROM keyboard-scan
+hook, and the `.CMD`, `.BAS`, and `.CAS` loaders with manifests
+(`docs/fugloy-emu-spec.md` §3, §6, §11; plan
+`docs/superpowers/plans/2026-10-17-emu-phase2.md`). Sea Dragon, Eliminator, and
+Rear Guard reach their title screens through `Machine` (Armored Patrol was
+rejected), and a scripted session repeats byte for byte. Next: merge
+`emu-phase2`, then emu phase 3 (debugger API, coverage, the label file) and the
+MCP server.
 
 ## Stack and layout
 
@@ -77,8 +84,8 @@ then emu phase 3 and the MCP server.
    `cschweda/trs80-emulator`, strip DOM, boot to `READY` in Node. 1: Z80 core
    passes ZEXALL. 2: Model III devices and `.CMD`/`.BAS`/`.CAS` loaders.
    3: debugger API, coverage, the label file. 4: `@fugloy/mcp` v0.1. 5: FDC
-   and disk images. 6: Model I, then Model 4. 7: differential harness. Phases 0
-   and 1 are done; phase 2 resumes after v1 (item 2).
+   and disk images. 6: Model I, then Model 4. 7: differential harness. Phases 0,
+   1, and 2 are done (phase 2 on `emu-phase2`, unmerged); phase 3 is next.
 4. **mcp — phases A–F** (`docs/fugloy-mcp-spec.md` §11). A: lifecycle,
    execution, and inspection tools. B: break, watch, trace, callers, disasm.
    C: labels, coverage, sidecar file. D: snapshots, diff, search, callees.
