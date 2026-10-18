@@ -1,7 +1,8 @@
 /**
  * MCP phase D, part 1 (docs/fugloy-mcp-spec.md §3, §5 Snapshots, §13 story 2) on a synthetic ROM
  * and synthetic programs, so CI runs them: snapshot, restore, snapshots, diff, and story 2
- * ("locate game variables") byte-compared with test/golden/story-02.txt.
+ * ("locate game variables") byte-compared with test/golden/story-02.txt; then the screen's
+ * snapshot diff, the screen baseline after restore, and diff naming a sized label over a run.
  *
  * To rewrite the transcript after a deliberate change to a tool's output, run
  * `FUGLOY_UPDATE_GOLDEN=1 pnpm vitest run packages/mcp/test/phase-d-snapshots.test.js` and review the diff.
@@ -266,5 +267,44 @@ describe('phase D snapshots', () => {
     }
     if (!existsSync(GOLDEN)) throw new Error(`${GOLDEN} is missing; run with FUGLOY_UPDATE_GOLDEN=1 to write it, then review it.`);
     expect(transcript).toBe(readFileSync(GOLDEN, 'utf8'));
+  });
+});
+
+describe('phase D screen and diff follow-ups', () => {
+  it('screen diff against a snapshot name', async () => {
+    const { call, close } = await loaded('raiders.cmd');
+    await ok(call, 'snapshot', { name: 'blank' });
+    await ok(call, 'run', { until: 'screen' });
+    await ok(call, 'screen', {});
+    const since = (await ok(call, 'screen', { diff: 'blank' })).split('\n');
+    expect(since[0]).toBe('12 cells changed'); // SPACE RAIDERS, less the space
+    expect(since[1]).toBe("(0,0) ' '→'S'");
+    expect(await ok(call, 'screen', { diff: true })).toBe('0 cells changed');
+    expect(await call('screen', { diff: 'nope' })).toEqual({ text: 'There is no snapshot named "nope"; the snapshots are blank.', isError: true });
+    await close();
+  });
+
+  it('restore makes the restored screen the baseline for screen diff', async () => {
+    const { call, close } = await loaded('raiders.cmd');
+    await ok(call, 'snapshot', { name: 'blank' });
+    await ok(call, 'run', { until: 'screen' });
+    await ok(call, 'screen', {});
+    await ok(call, 'restore', { name: 'blank' });
+    expect(await ok(call, 'screen', { diff: true })).toBe('0 cells changed');
+    await close();
+  });
+
+  it('diff names a sized label that starts before a run and covers it', async () => {
+    writeFileSync(at('raiders-diff.cmd'), RAIDERS); // its own sidecar, so these labels stay out of the other tests
+    const { call, close } = await loaded('raiders-diff.cmd');
+    await ok(call, 'snapshot', { name: 'a' });
+    await ok(call, 'poke', { addr: '7E12', bytes: '01' });
+    await ok(call, 'poke', { addr: '7E20', bytes: '01' });
+    await ok(call, 'label', { addr: '7E10', name: 'BUFFER', kind: 'data', size: 4 });
+    await ok(call, 'label', { addr: '7E1F', name: 'FLAG', kind: 'data' });
+    expect(await ok(call, 'diff', { a: 'a', b: 'now', range: '7E00-7EFF' })).toBe(
+      ['diff a → now over 7E00h–7EFFh: 2 runs, 2 bytes changed', '7E12h (1 byte)  00 → 01  ; BUFFER', '7E20h (1 byte)  00 → 01'].join('\n'),
+    );
+    await close();
   });
 });

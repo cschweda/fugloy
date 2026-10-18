@@ -11,7 +11,7 @@ import { regsBlock } from '../format/regs.js';
 export default {
   name: 'restore',
   description:
-    'Restore a snapshot: the CPU, memory, devices, and cycle count return exactly; the key queue and sound are emptied. Coverage, callers, the hit log, the trace, breakpoints, watches, and labels are kept; clearDebug: true clears coverage, callers, and the hit log (not the trace), so a branch explored and abandoned does not count as covered. A snapshot of a program other than the loaded one is refused (load that program first). Returns the register block.',
+    'Restore a snapshot: the CPU, memory, devices, and cycle count return exactly; the key queue and sound are emptied. Coverage, callers, the hit log, the trace, breakpoints, watches, and labels are kept; clearDebug: true clears coverage, callers, and the hit log (not the trace), so a branch explored and abandoned does not count as covered. A snapshot of a program other than the loaded one is refused (load that program first). The next screen diff compares with the restored screen. Returns the register block.',
   inputSchema: {
     name: z.string().describe('The snapshot to restore'),
     clearDebug: z.boolean().optional().describe('Also clear coverage, callers, and the hit log (default false)'),
@@ -32,6 +32,8 @@ export default {
     }
     const used = session.useSnapshot(name);
     m.debug.restore(used.state);
+    // The next `screen diff` compares with the restored screen, not one from the abandoned branch.
+    session.screenBaseline = Uint8Array.from(m.video.raw);
     let kept = 'Kept coverage, callers, the hit log, and the trace (clearDebug: true clears all but the trace).';
     if (clearDebug) {
       m.debug.coverage.clear();

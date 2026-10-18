@@ -109,6 +109,10 @@ MCP phase D, `search` and `callees` (`@fugloy/mcp`; MCP spec §5):
   edges from inside the routine's extent, which runs to its first executed
   RET as `suggest` defines it. Routines already expanded and calls back into
   the path are marked rather than drawn again.
+- `screen diff: "<snapshot>"` shows the cells changed since a snapshot (the
+  spec §5 form that was missing), and `restore` makes the restored screen the
+  baseline for the next `screen diff: true`.
+- `diff` also names a sized label that starts before a run and covers it.
 - `poke`'s byte parsing moved to `args.js` for `search`; an empty hex string
   now says `bytes is empty` rather than `not hex pairs`.
 

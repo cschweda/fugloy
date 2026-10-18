@@ -2,7 +2,8 @@
  * `diff`: the bytes that differ between two snapshots, or a snapshot and the running machine
  * (docs/fugloy-mcp-spec.md §5 Snapshots, §13 story 2; Ruling 2 of the MCP phases D–F plan).
  * Video RAM and RAM ($3C00-$FFFF) by default, `range` narrowing it; changed bytes are grouped
- * into runs of adjacent addresses, eight bytes a line, with any label inside a run named.
+ * into runs of adjacent addresses, eight bytes a line, with any label inside a run, or a sized
+ * label covering its start, named.
  */
 import { z } from 'zod';
 import { hex4, parseRange } from '../args.js';
@@ -68,11 +69,11 @@ export default {
     else lines.push(`${over}: ${runs.length} ${runs.length === 1 ? 'run' : 'runs'}, ${changed.toLocaleString('en-US')} ${changed === 1 ? 'byte' : 'bytes'} changed`);
     if (A.program !== B.program) lines.push(`Note: ${a} belongs to ${A.program} and ${b} to ${B.program}.`);
     for (const [start, n] of runs) {
-      const names = [];
-      for (let k = start; k < start + n; k++) {
-        const l = session.labels.get(k);
-        if (l) names.push(l.name);
-      }
+      // Labels inside the run, and sized labels that start before it and cover its first byte.
+      const names = [...session.labels.values()]
+        .filter((l) => (l.addr >= start && l.addr < start + n) || (l.size !== undefined && l.addr < start && l.addr + l.size > start))
+        .sort((x, y) => x.addr - y.addr)
+        .map((l) => l.name);
       const label = names.length > 0 ? `  ; ${names.join(', ')}` : '';
       const head = `${n === 1 ? hex4(start) : `${hex4(start)}–${hex4(start + n - 1)}`} (${n.toLocaleString('en-US')} ${n === 1 ? 'byte' : 'bytes'})`;
       if (n <= PER_LINE) {

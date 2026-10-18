@@ -70,7 +70,7 @@ does take, never ignored.
 | --- | --- |
 | Lifecycle | `load` (`.CMD`, `.BAS`, `.CAS`, detected by content; boots the ROM to `READY` first), `reset`, `status` |
 | Execution | `run` (`cycles`, `seconds`, or `until`: `break`, `halt`, `screen`, `settled`, `pc:<addr>`; `trace`), `step`, `key` (text and named keys, through the keyboard matrix or the ROM's keyboard routine) |
-| Inspection | `regs`, `peek`, `poke`, `disasm` (with coverage marks and names), `screen` (or its diff), `search` (bytes or text, `fold` for either case and the screen's `00h`–`1Fh` forms; at most 256 addresses) |
+| Inspection | `regs`, `peek`, `poke`, `disasm` (with coverage marks and names), `screen` (or its diff since the last call or a snapshot), `search` (bytes or text, `fold` for either case and the screen's `00h`–`1Fh` forms; at most 256 addresses) |
 | Debugging | `break` (with `<reg> <op> <value>` conditions), `unbreak`, `watch`, `unwatch`, `hits` (with the routine each writing PC is in), `trace`, `callers`, `callees` (the routines a routine called, as a tree up to 4 levels deep) |
 | Knowledge | `label`, `unlabel`, `labels`, `coverage` (summary, ranges, export), `suggest` (the call targets worth naming next, with what they were seen doing) |
 | Snapshots | `snapshot`, `restore` (`clearDebug` also clears coverage, callers, and the hit log; a snapshot of another program is refused), `snapshots`, `diff` (two snapshots, or one and `now`: changed bytes in runs) |
