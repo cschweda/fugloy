@@ -5,7 +5,7 @@
  * 0.2 s emulated (capped like `run`); mode "hook" feeds the ROM keyboard-scan hook instead.
  */
 import { z } from 'zod';
-import { capCycles, clockOf, runMachine, seconds, stoppedLine, wallDeadline } from '../execute.js';
+import { runMachine, secondsText, stoppedLine, wallDeadline } from '../execute.js';
 import { geometryOf, screenDiff } from '../format/screen.js';
 
 const NAMES = ['ENTER', 'BREAK', 'CLEAR', 'UP', 'DOWN', 'LEFT', 'RIGHT', 'SHIFT', 'SPACE'];
@@ -65,17 +65,21 @@ export default {
     if (!run) return `Queued ${what}; nothing ran yet (call run to deliver them).`;
 
     const before = Uint8Array.from(m.video.raw);
-    const cap = capCycles(session.config, m);
+    // The emulated cap counts emulated seconds, as the run loop does (a Model 4 can switch its clock mid-run).
+    const cap = session.config.limits.runSecondsEmulated;
     // One wall-clock deadline for both runs, so the call as a whole keeps to limits.runSecondsWall.
     const deadline = wallDeadline(session);
-    let stop = runMachine(session, { budget: cap, until: 'drained', deadline });
+    /** @type {import('../execute.js').Stop} */
+    let stop = runMachine(session, { seconds: cap, until: 'drained', deadline });
     let ran = stop.cycles;
-    if (stop.reason === 'drained' && ran < cap) {
-      const tail = runMachine(session, { budget: Math.min(Math.round(AFTER_SECONDS * clockOf(m)), cap - ran), deadline });
+    let ranSeconds = stop.seconds;
+    if (stop.reason === 'drained' && ranSeconds < cap) {
+      const tail = runMachine(session, { seconds: Math.min(AFTER_SECONDS, cap - ranSeconds), deadline });
       ran += tail.cycles;
-      stop = tail.reason === 'cycles' ? { reason: 'drained', cycles: ran } : { ...tail, cycles: ran };
+      ranSeconds += tail.seconds;
+      stop = tail.reason === 'cycles' ? { reason: 'drained', cycles: ran, seconds: ranSeconds } : { ...tail, cycles: ran, seconds: ranSeconds };
     }
-    const lines = [`Typed ${what}`, `Ran ${ran.toLocaleString('en-US')} cycles (${seconds(ran, m)} emulated)`];
+    const lines = [`Typed ${what}`, `Ran ${ran.toLocaleString('en-US')} cycles (${secondsText(ranSeconds)} emulated)`];
     if (stop.reason !== 'drained') {
       lines.push(stoppedLine(stop, session, { capped: true }));
       if (m.keyboard.pending > 0) lines.push(`${m.keyboard.pending} key events were still queued; call run to deliver them.`);

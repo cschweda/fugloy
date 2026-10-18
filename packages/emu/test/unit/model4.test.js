@@ -86,6 +86,21 @@ describe('port $84', () => {
     expect(m.mem.ram[0x0100]).toBe(0x55);
   });
 
+  it('m.mem.map reads the map, the page, and the register (a copy), and is null off the Model 4', () => {
+    const m = model4();
+    expect(m.mem.map).toEqual({ map: 0, page: 0, register: 0 });
+    m.io.out(0x84, 0xb3); // video page 1, page select on (bit 5) with bit 4: page 3, map 3
+    expect(m.mem.map).toEqual({ map: 3, page: 3, register: 0xb3 });
+    const copy = /** @type {any} */ (m.mem.map);
+    copy.map = 0;
+    expect(m.mem.map?.map).toBe(3); // writing the copy changes nothing
+    // With 64K the page bits do nothing, so the page reads 0; the register keeps them.
+    const small = model4({ ram: 64 });
+    small.io.out(0x84, 0x32);
+    expect(small.mem.map).toEqual({ map: 2, page: 0, register: 0x32 });
+    expect(new Machine({ model: 3, roms: { level2: rom14() } }).mem.map).toBeNull();
+  });
+
   it('leaves the Model III without the port', () => {
     const m = new Machine({ model: 3, roms: { level2: rom14() } });
     m.io.out(0x84, 0x03);

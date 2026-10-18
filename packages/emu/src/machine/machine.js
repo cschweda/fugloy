@@ -31,7 +31,10 @@ export class Machine {
   rom;
   /** @type {{ readonly regs: Regs, readonly flags: Flags }} */
   cpu;
-  /** @type {{ read(addr: number, len: number): Uint8Array, write(addr: number, bytes: ArrayLike<number>): void, readonly ram: Uint8Array }} */
+  /**
+   * @type {{ read(addr: number, len: number): Uint8Array, write(addr: number, bytes: ArrayLike<number>): void, readonly ram: Uint8Array,
+   *   readonly map: { map: number, page: number, register: number } | null }}
+   */
   mem;
   /** @type {{ in(port: number): number, out(port: number, value: number): void }} */
   io;
@@ -126,6 +129,14 @@ export class Machine {
       // map 0's CPU address A at ram[A] (memory.js, Model4Memory).
       get ram() {
         return sys.memory.ram;
+      },
+      // The Model 4's memory map now: `map` (0-3, port $84 bits 0-1), `page` (the 128K page select,
+      // port $84 bits 4-6; 0 with 64K), and `register` (the last byte written to port $84); null on
+      // the Model III and Model I, which have one map. A fresh object each read.
+      get map() {
+        if (sys.model.id !== 4) return null;
+        const mm = /** @type {import('./memory.js').Model4Memory} */ (sys.memory);
+        return { map: mm.map, page: mm.page, register: mm.mapRegister };
       },
     };
     this.video = new Video(sys);

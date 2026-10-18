@@ -145,10 +145,9 @@ export function writeLabelFile({ name, started, input, loaded, userLabels, bits,
   for (const l of userLabels) labels.set(l.addr, { ...l });
 
   const byKey = bits instanceof Map ? bits : new Map([['0:0', bits]]);
-  const keyOrder = (/** @type {string} */ k) => k.split(':').map(Number);
   const keys = [...byKey.keys()]
     .filter((k) => k === '0:0' || /** @type {Uint8Array} */ (byKey.get(k)).some((v) => v !== 0))
-    .sort((x, y) => (x === '0:0' ? -1 : y === '0:0' ? 1 : keyOrder(x)[0] - keyOrder(y)[0] || keyOrder(x)[1] - keyOrder(y)[1]));
+    .sort(coverageKeyOrder);
   /** @type {Record<string, CoverageObject>} */
   const coverage = {};
   for (const key of ['0:0', ...keys.filter((k) => k !== '0:0')]) {
@@ -336,6 +335,20 @@ function labelKey(l) {
 }
 
 /**
+ * The order of coverage keys in a label file: `"0:0"` first, then ascending map, then page (spec §8).
+ * @param {string} x
+ * @param {string} y
+ */
+function coverageKeyOrder(x, y) {
+  if (x === y) return 0;
+  if (x === '0:0') return -1;
+  if (y === '0:0') return 1;
+  const [mx, px] = x.split(':').map(Number);
+  const [my, py] = y.split(':').map(Number);
+  return /** @type {number} */ (mx) - /** @type {number} */ (my) || /** @type {number} */ (px) - /** @type {number} */ (py);
+}
+
+/**
  * Merge two label files by the §8 rule (refused when both name a `program.sha256` and they differ,
  * or their `program.model`s differ): coverage unioned per key; labels by address with `user`
  * over `observed` over `disasm` over `loader` (`b` wins a tie); `load` unioned without duplicates;
@@ -393,6 +406,9 @@ export function mergeLabelFiles(a, b) {
     }
   }
 
+  // The keys in the order writeLabelFile writes them ("0:0" first, then by map, then page), not first seen.
+  const sortedCoverage = /** @type {Record<string, CoverageObject>} */ (Object.fromEntries(Object.keys(coverage).sort(coverageKeyOrder).map((k) => [k, coverage[k]])));
+
   /** @type {Map<number, Map<string, CallerEdge>>} */
   const edges = new Map();
   for (const [key, list] of [...Object.entries(fa.callers), ...Object.entries(fb.callers)]) {
@@ -419,7 +435,7 @@ export function mergeLabelFiles(a, b) {
     load,
     entry: fa.entry ?? fb.entry,
     labels: [...labels.values()].sort((x, y) => x.addr - y.addr || (x.map ?? 0) - (y.map ?? 0) || (x.page ?? 0) - (y.page ?? 0)),
-    coverage,
+    coverage: sortedCoverage,
     callers,
     sessions: [...fa.sessions, ...fb.sessions].map((s) => ({ ...s })),
   };

@@ -1,5 +1,5 @@
 /**
- * @fugloy/emu — headless, deterministic TRS-80 Model III and Model I emulator core.
+ * @fugloy/emu — headless, deterministic TRS-80 Model I, Model III, and Model 4 emulator core.
  * Extracted in emu phase 0 from cschweda/trs80-emulator at 11612849 (v1.6.0); see NOTICE.md.
  */
 export { Machine } from './machine/machine.js';

@@ -30,6 +30,10 @@ export default {
       if (snap.program === null) throw new Error(`Snapshot ${JSON.stringify(name)} was taken before any program was loaded, and ${loaded}; ${mix}.`);
       throw new Error(`Snapshot ${JSON.stringify(name)} belongs to ${snap.program.name} (${snap.program.path}), and ${loaded}; ${mix}. Load ${snap.program.path} first, then restore.`);
     }
+    const MODEL = { 1: 'Model I', 3: 'Model III', 4: 'Model 4' };
+    if (snap !== undefined && snap.model !== m.model) {
+      throw new Error(`Snapshot ${JSON.stringify(name)} was taken on a ${MODEL[snap.model]}, and the machine is a ${MODEL[m.model]}; a save state restores only into the model that saved it. Load the program with model: ${snap.model} first, then restore.`);
+    }
     const used = session.useSnapshot(name);
     m.debug.restore(used.state);
     // The next `screen diff` compares with the restored screen, not one from the abandoned branch.

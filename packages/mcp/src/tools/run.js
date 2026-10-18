@@ -4,7 +4,7 @@
  */
 import { z } from 'zod';
 import { parseAddr, parseCount } from '../args.js';
-import { capCycles, clockOf, runMachine, seconds, stoppedLine, withTrace } from '../execute.js';
+import { capCycles, runMachine, secondsText, stoppedLine, withTrace } from '../execute.js';
 import { regsBlock } from '../format/regs.js';
 import { geometryOf, screenDiff } from '../format/screen.js';
 
@@ -40,7 +40,9 @@ export default {
     const { limits } = session.config;
     const cap = capCycles(session.config, m);
     if (args.cycles !== undefined && args.seconds !== undefined) throw new Error('Give cycles or seconds, not both.');
-    let budget = cap;
+    // The emulated cap always applies, counted in emulated seconds (a Model 4 can switch its clock mid-run).
+    let budget;
+    let secondsBudget = limits.runSecondsEmulated;
     let asked;
     if (args.cycles !== undefined) {
       budget = parseCount(args.cycles, { name: 'cycles', min: 1, max: cap });
@@ -49,21 +51,22 @@ export default {
       if (!(args.seconds > 0) || args.seconds > limits.runSecondsEmulated) {
         throw new Error(`seconds must be more than 0 and at most ${limits.runSecondsEmulated} (limits.runSecondsEmulated), not ${args.seconds}.`);
       }
-      budget = Math.max(1, Math.round(args.seconds * clockOf(m)));
-      asked = `${args.seconds} s`;
+      secondsBudget = args.seconds;
+      if (args.seconds < limits.runSecondsEmulated) asked = `${args.seconds} s`;
     }
     const until = args.until === undefined ? undefined : parseUntil(args.until, session);
     const before = Uint8Array.from(m.video.raw);
     const stop = withTrace(session, args.trace === true, () =>
       runMachine(session, {
-        budget,
+        ...(budget === undefined ? {} : { budget }),
+        seconds: secondsBudget,
         ...(until?.kind === 'halt' ? { until: 'halt' } : until?.kind === 'pc' ? { until: { pc: until.pc } } : {}),
         ...(until?.kind === 'screen' || until?.kind === 'settled' ? { screenFrom: before, settle: until.kind === 'settled' } : {}),
       }),
     );
     const lines = [
-      stoppedLine(stop, session, { capped: asked === undefined || budget === cap, ...(asked ? { asked } : {}), ...(until?.kind === 'pc' ? { pc: until.pc } : {}) }),
-      `Ran ${stop.cycles.toLocaleString('en-US')} cycles (${seconds(stop.cycles, m)} emulated)`,
+      stoppedLine(stop, session, { capped: asked === undefined || budget === cap || (stop.reason === 'cycles' && stop.by === 'seconds' && args.seconds === undefined), ...(asked ? { asked } : {}), ...(until?.kind === 'pc' ? { pc: until.pc } : {}) }),
+      `Ran ${stop.cycles.toLocaleString('en-US')} cycles (${secondsText(stop.seconds)} emulated)`,
     ];
     if (until?.kind === 'break' && m.debug.breaks.length === 0) lines.push('(no breakpoints are set, so only a stop watch or a cap could stop it)');
     if (args.trace) lines.push(`Trace: recorded while running (the last ${limits.traceDepth.toLocaleString('en-US')} instructions are kept)`);

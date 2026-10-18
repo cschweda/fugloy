@@ -112,6 +112,19 @@ describe('the label file carries each (map, page) as its own key', () => {
     expect(merged.coverage['3:2'].exec).toBe(file.coverage['3:2'].exec);
   });
 
+  it('a merge writes the keys in the stated order ("0:0", then map, then page), not first seen', () => {
+    const m = switcher();
+    m.debug.coverage.enable();
+    m.run({ until: 'halt', cycles: 1000 });
+    const a = JSON.parse(JSON.stringify(m.debug.labelFile({ name: 'SWITCHER' })));
+    expect(Object.keys(a.coverage)).toEqual(['0:0', '3:2']);
+    // b: the same program with map 2, page 0 and map 1, page 5 visited instead.
+    const b = JSON.parse(JSON.stringify(a));
+    b.coverage = { '0:0': a.coverage['0:0'], '2:0': a.coverage['3:2'], '1:5': a.coverage['3:2'] };
+    expect(Object.keys(mergeLabelFiles(a, b).coverage)).toEqual(['0:0', '1:5', '2:0', '3:2']);
+    expect(Object.keys(mergeLabelFiles(b, a).coverage)).toEqual(['0:0', '1:5', '2:0', '3:2']);
+  });
+
   it('a loaded byte is compared in the map it was loaded in, so another map adds no false write', () => {
     const rom = new Uint8Array(0x3800).fill(0xc9);
     rom[0] = 0x76;

@@ -110,12 +110,13 @@ describe('screen', () => {
     const after = ram.slice();
     after[80 * 23 + 79] = 0x5a; // the last cell
     after[1920] = 0x01; // past 80 by 24
-    after[2047] = 0x01;
-    expect(screenDiff(ram, after, { width: 80, rows: 24, step: 1 })).toBe(["1 cell changed", "(23,79) ' '→'Z'", '(2 bytes of video RAM off screen also changed, at offsets 1920–2047; not shown)'].join('\n'));
+    after[2000] = 0x01;
+    // The line names the off-screen region, then the first and last bytes in it that changed.
+    expect(screenDiff(ram, after, { width: 80, rows: 24, step: 1 })).toBe(["1 cell changed", "(23,79) ' '→'Z'", '(2 bytes of video RAM off screen (offsets 1920–2047) also changed, between offsets 1920 and 2000; not shown)'].join('\n'));
     // At 64 by 16 the second 1K is off screen.
     const low = ram.slice();
-    low[1024] = 0x41;
-    expect(screenDiff(ram, low)).toBe('0 cells changed\n(1 byte of video RAM off screen also changed, at offsets 1024–2047; not shown)');
+    low[1030] = 0x41;
+    expect(screenDiff(ram, low)).toBe('0 cells changed\n(1 byte of video RAM off screen (offsets 1024–2047) also changed, at offset 1030; not shown)');
   });
 
   it('screenDiff lists changed cells under a count line', () => {

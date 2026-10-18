@@ -19,7 +19,8 @@ const geometry = (g) => (typeof g === 'object' ? g : { width: 64, rows: 16, step
 export function geometryOf(m) {
   const columns = m.video.columns;
   const width = columns === 80 || columns === 40 ? 80 : 64;
-  const inverse = /** @type {any} */ (m.system.memory).inverse === true;
+  // Inverse video: a Model 4's port $84 bit 3 (m.mem.map is null on the other models).
+  const inverse = ((m.mem.map?.register ?? 0) & 0x08) !== 0;
   return { width, rows: m.video.rows, step: columns === width ? 1 : 2, ...(inverse ? { inverse } : {}) };
 }
 
@@ -70,7 +71,8 @@ const cell = (/** @type {number} */ b) => (b >= 0x20 && b <= 0x7e ? `'${String.f
  * Cells that differ between two copies of video RAM, a count line first. Positions are screen
  * positions: in the 32- and 40-column modes only even-address bytes show, so odd ones are ignored
  * and the column is halved. Bytes past the screen (a Model 4's 2K holds more than 64 by 16 or 80
- * by 24 shows) are not cells; when any of them changed, a last line counts them as off screen.
+ * by 24 shows) are not cells; when any of them changed, a last line counts them as off screen and
+ * names the first and last that changed.
  * @param {ArrayLike<number>} before
  * @param {ArrayLike<number>} after
  * @param {boolean | Geometry} [layout] a geometry, or true for the Model III's 32 columns
@@ -89,7 +91,16 @@ export function screenDiff(before, after, layout = false) {
     if (a !== b) rows.push(`(${Math.floor(i / width)},${ramCol / step}) ${cell(a)}→${cell(b)}`);
   }
   let off = 0;
-  for (let i = onScreen; i < n; i++) if ((before[i] ?? 0x20) !== (after[i] ?? 0x20)) off++;
-  const tail = off === 0 ? [] : [`(${off.toLocaleString('en-US')} ${off === 1 ? 'byte' : 'bytes'} of video RAM off screen also changed, at offsets ${onScreen}–${n - 1}; not shown)`];
+  let first = -1;
+  let last = -1;
+  for (let i = onScreen; i < n; i++) {
+    if ((before[i] ?? 0x20) === (after[i] ?? 0x20)) continue;
+    off++;
+    if (first < 0) first = i;
+    last = i;
+  }
+  // The offsets named are the changed bytes' (the first and last), not the whole off-screen region.
+  const where = first === last ? `at offset ${first}` : `between offsets ${first} and ${last}`;
+  const tail = off === 0 ? [] : [`(${off.toLocaleString('en-US')} ${off === 1 ? 'byte' : 'bytes'} of video RAM off screen (offsets ${onScreen}–${n - 1}) also changed, ${where}; not shown)`];
   return [`${rows.length} ${rows.length === 1 ? 'cell' : 'cells'} changed`, ...rows, ...tail].join('\n');
 }

@@ -132,7 +132,7 @@ export default {
     // The Model 4 keeps coverage per memory map and page (emu spec §8); `bits` is the one in force.
     const keys = m.debug.coverage.keys;
     if (keys.length > 1) {
-      const mem = /** @type {any} */ (m.system.memory);
+      const mem = /** @type {{ map: number, page: number }} */ (m.mem.map);
       lines.push(`Maps: coverage is kept per memory map and page (${keys.join(', ')}); these counts are of map ${mem.map}, page ${mem.page}, the one in force, and coverage mode "export" writes each`);
     }
     if (program.sharesCoverageWith !== undefined) lines.push(sharedNote(program));

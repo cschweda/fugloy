@@ -92,9 +92,10 @@ export function makeMachine(config, rom, model = config.defaultModel ?? 3) {
  *   What `diff` compares: `memory` is $3C00-$FFFF (50,176 bytes) as the CPU sees it, video RAM
  *   and RAM (on the Model 4, in the memory map and page in force); `mapRegister` the Model 4's
  *   port $84 byte then (null on the other models); `geometry` the screen's layout then.
- * @typedef {DiffView & { name: string, state: any, cycles: number, kb: number, video: Uint8Array, program: ProgramId | null }} Snapshot
+ * @typedef {DiffView & { name: string, state: any, cycles: number, kb: number, video: Uint8Array, program: ProgramId | null, model: 1 | 3 | 4 }} Snapshot
  *   `state` is `m.debug.snapshot()`; `video` all of video RAM (1K, or the Model 4's 2K) for
- *   `screen diff` against it; `program` is null for a machine with no program loaded (powered on by `reset`).
+ *   `screen diff` against it; `program` is null for a machine with no program loaded (powered on by `reset`);
+ *   `model` the model it was taken on, which `restore` checks before the emulator does.
  */
 
 /** The first address a snapshot keeps for `diff`: video RAM then RAM, $3C00-$FFFF. */
@@ -103,20 +104,20 @@ export const DIFF_START = 0x3c00;
 /**
  * The machine's $3C00-$FFFF as `diff` compares it. On the Model III and Model I that is video
  * RAM and `m.mem.ram` (from $4000) as stored; on the Model 4, whose `m.mem.ram` is its 32K banks
- * in physical order, it is what the CPU reads in the map and page in force (peeked: the
- * keyboard, in map 2 at $F400-$F7FF, reads as the matrix does with no key down).
+ * in physical order, it is what the CPU reads in the map and page in force (peeked, which has no
+ * side effect: in map 2 the keyboard at $F400-$F7FF reads the live matrix, so a key held at the
+ * time shows there).
  * @param {Machine} m
  * @returns {DiffView}
  */
 export function diffView(m) {
   const memory = new Uint8Array(0x10000 - DIFF_START);
-  const mem = /** @type {any} */ (m.system.memory);
   if (m.model === 4) memory.set(m.mem.read(DIFF_START, memory.length));
   else {
     memory.set(m.video.raw, 0);
     memory.set(m.mem.ram, 0x4000 - DIFF_START);
   }
-  return { memory, mapRegister: m.model === 4 ? mem.mapRegister : null, geometry: geometryOf(m) };
+  return { memory, mapRegister: m.mem.map?.register ?? null, geometry: geometryOf(m) };
 }
 
 /**
@@ -216,7 +217,7 @@ export class Session {
     const state = m.debug.snapshot();
     const p = this.program;
     /** @type {Snapshot} */
-    const snap = { name, state, cycles: m.cycles, kb: Math.ceil(JSON.stringify(state).length / 1024), ...diffView(m), video: Uint8Array.from(m.video.raw), program: p === null ? null : { name: p.name, path: p.path, sha256: p.sha256 } };
+    const snap = { name, state, cycles: m.cycles, kb: Math.ceil(JSON.stringify(state).length / 1024), ...diffView(m), video: Uint8Array.from(m.video.raw), model: m.model, program: p === null ? null : { name: p.name, path: p.path, sha256: p.sha256 } };
     const replaced = this.snapshots.delete(name);
     let evicted = null;
     if (this.snapshots.size >= snapshotCap(this.config)) {

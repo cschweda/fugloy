@@ -1,7 +1,8 @@
 /**
  * What `suggest` says about a routine (Ruling 4). While coverage is on (from the load, Ruling 3)
  * the memory and port hooks record, per instruction address, whether the instruction wrote video
- * RAM ($3C00–$3FFF), read the keyboard ($3800–$3BFF), or wrote port $FF (sound). A call target
+ * RAM ($3C00–$3FFF), read the keyboard ($3800–$3BFF), or wrote port $FF (sound); on a Model 4
+ * the memory map in force at the access decides where video RAM and the keyboard are. A call target
  * is credited with the facts of the executed instructions from the target to its routine's end
  * (`routineEnd`). Facts are attributed by address, so code shared by two routines, or a routine
  * that jumps elsewhere, is credited by where the bytes are, not by who ran them: a heuristic.
@@ -23,12 +24,27 @@ export const LONG_LOOP = 1000;
  * @param {Uint8Array} facts
  */
 export function recordFacts(m, facts) {
-  m.debug.hooks.onMemWrite = (addr, _value, _prev, pc) => {
-    if ((addr & 0xfc00) === 0x3c00) facts[pc] |= FACT.VIDEO;
-  };
-  m.debug.hooks.onMemRead = (addr, _value, pc) => {
-    if ((addr & 0xfc00) === 0x3800) facts[pc] |= FACT.KEYBOARD;
-  };
+  if (m.model === 4) {
+    // The Model 4's memory map decides where video RAM and the keyboard are (emu memory.js,
+    // Model4Memory): $3C00-$3FFF and $3800-$3BFF in maps 0-1, $F800-$FFFF and $F400-$F7FF in
+    // map 2, neither in map 3. The map is read only for an address in one of those ranges.
+    const mapNow = () => /** @type {{ map: number }} */ (m.mem.map).map;
+    m.debug.hooks.onMemWrite = (addr, _value, _prev, pc) => {
+      const page = addr & 0xfc00;
+      if (page === 0x3c00 ? mapNow() < 2 : addr >= 0xf800 && mapNow() === 2) facts[pc] |= FACT.VIDEO;
+    };
+    m.debug.hooks.onMemRead = (addr, _value, pc) => {
+      const page = addr & 0xfc00;
+      if (page === 0x3800 ? mapNow() < 2 : page === 0xf400 && mapNow() === 2) facts[pc] |= FACT.KEYBOARD;
+    };
+  } else {
+    m.debug.hooks.onMemWrite = (addr, _value, _prev, pc) => {
+      if ((addr & 0xfc00) === 0x3c00) facts[pc] |= FACT.VIDEO;
+    };
+    m.debug.hooks.onMemRead = (addr, _value, pc) => {
+      if ((addr & 0xfc00) === 0x3800) facts[pc] |= FACT.KEYBOARD;
+    };
+  }
   m.debug.hooks.onPort = (port, _value, dir, pc) => {
     if (dir === 'out' && (port & 0xff) === 0xff) facts[pc] |= FACT.SOUND;
   };
