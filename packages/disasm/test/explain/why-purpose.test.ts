@@ -31,8 +31,9 @@ describe('what it does here: proven flow', () => {
     const bytes = [0x3e, 0x61, 0x32, 0x45, 0x3c, RET];
     expect(why(bytes)[0]).toMatch(/, where it shows as "a"\.$/); // Model III
     const m1 = openProgram(new Uint8Array(bytes), { base: 0x7000, selection: { machine: 1, dos: 'none' } });
-    expect(sentenceText(explainLine(m1, 0x7000).why!.purpose[0]!)).toMatch(/, where it shows as "A" \(a stock Model I has no lowercase\)\.$/);
-    expect(sentenceText(explainLine(m1, 0x7002).why!.purpose[0]!)).toMatch(/, where it shows as "A" \(a stock Model I has no lowercase\)\.$/);
+    // A stock Model I has no bit 6 in video RAM ($61 shows as "!"), so nothing is named there.
+    expect(sentenceText(explainLine(m1, 0x7000).why!.purpose[0]!)).not.toMatch(/shows as/);
+    expect(sentenceText(explainLine(m1, 0x7002).why!.purpose[0]!)).not.toMatch(/shows as/);
     // No machine selected: $60-$7F are not named.
     const none = openProgram(new Uint8Array(bytes), { base: 0x7000 });
     expect(sentenceText(explainLine(none, 0x7000).why!.purpose[0]!)).not.toMatch(/shows as/);
@@ -92,8 +93,29 @@ describe('what it does here: proven flow', () => {
     // 7000 LD A,(7008H); 7003 INC A; 7004 LD (7008H),A; 7007 RET; 7008 DEFB 05H
     const bytes = [0x3a, 0x08, 0x70, 0x3c, 0x32, 0x08, 0x70, RET, 0x05];
     const s = why(bytes);
-    expect(s).toEqual(['A holds the byte read from $7008 (DATA_7008), which the program also writes, at $7004; its next use is the INC A at $7003.']);
+    expect(s).toEqual(['A holds the byte read from $7008 (DATA_7008; the program also writes it at $7004); its next use is the INC A at $7003.']);
     expect(s.join(' ')).not.toMatch(/\$05\b/);
+    // The stores stay inside the parentheses, so ", set at" cannot be read as one of them.
+    // 7000 LD A,(8000H); 7003 LD (3C00H),A; 7006 LD (8000H),A; 7009 RET
+    const out = [0x3a, 0x00, 0x80, 0x32, 0x00, 0x3c, 0x32, 0x00, 0x80, RET];
+    expect(why(out, 0x7003)).toEqual(['A carries the byte read from $8000 (the program also writes it at $7006), set at $7000, to the screen here, at row 0, column 0.']);
+  });
+
+  it('a bare result whose next use is not certain says nothing', () => {
+    // 7000 INC A; 7001 JR Z,7004H; 7003 RET; 7004 RET
+    expect(why([0x3c, 0x28, 0x01, RET, RET])).toEqual([]);
+    // A proven value still speaks: 7000 XOR A; 7001 JR Z,7004H; 7003 RET; 7004 RET
+    expect(why([0xaf, 0x28, 0x01, RET, RET])).toEqual(['A holds the result ($00); its next use is not certain: the code branches at $7001.']);
+  });
+
+  it('OR A and AND A leave A as it was: no new value, and the store names the load before them', () => {
+    // 7000 LD A,58H; 7002 OR A; 7003 LD (3C00H),A; 7006 RET
+    for (const op of [0xb7, 0xa7]) {
+      const bytes = [0x3e, 0x58, op, 0x32, 0x00, 0x3c, RET];
+      expect(why(bytes, 0x7002)).toEqual([]);
+      // The tracker does not carry A's value across the OR, so no character is named.
+      expect(why(bytes, 0x7003)).toEqual(['A carries $58, set at $7000, to the screen here, at row 0, column 0.']);
+    }
   });
 
   it('a ROM routine that takes the register gets the value, not a second copy of its purpose', () => {

@@ -140,6 +140,9 @@ function destOf(c: LineCtx): string | undefined {
   const [o0] = ins.operands;
   const reg = (o: Operand | undefined): string | undefined => ((o?.kind === 'reg' || o?.kind === 'reg16') && tracked(o.reg) ? o.reg : undefined);
   if (m === 'LD' || m === 'IN' || m === 'POP' || m === 'INC' || m === 'DEC') return reg(o0);
+  // OR A and AND A leave A as it was (they set the flags), so like CP they write no new value.
+  const self = ins.operands.length === 1 ? o0 : ins.operands[1];
+  if ((m === 'OR' || m === 'AND') && self?.kind === 'reg' && self.reg === 'A') return undefined;
   if (ALU.has(m)) return m === 'CP' ? undefined : o0?.kind === 'reg16' ? reg(o0) : 'A';
   if (SHIFTS.has(m)) return ins.operands.length === 1 ? reg(o0) : undefined;
   if (['RLCA', 'RRCA', 'RLA', 'RRA', 'CPL', 'NEG', 'DAA'].includes(m)) return 'A';
@@ -153,19 +156,29 @@ function destOf(c: LineCtx): string | undefined {
 const KEYS_LO = 0x3800;
 const KEYS_HI = 0x3bff;
 
-/** `, which the program also writes, at $7004`: the stores into a byte read, so it is not a constant. */
+/** `the program also writes it at $7004`: the stores into a byte read, so it is not a constant. */
 function writtenNote(c: Ctx, addrs: readonly number[], self: number): Piece[] {
   const w = [...new Set(addrs.flatMap((x) => storesInto(c.a, x)))].filter((x) => x !== self).sort((p, q) => p - q);
   if (w.length === 0) return [];
   const items = w.length <= 4 ? w.map((x) => [addrPiece(c, x)]) : [...w.slice(0, 3).map((x) => [addrPiece(c, x)]), [{ text: `${w.length - 3} more` }]];
-  return [{ text: ', which the program also writes, at ' }, ...andList(items, (p) => p)];
+  return [{ text: 'the program also writes it at ' }, ...andList(items, (p) => p)];
 }
 
-/** What an address read means: `$3801 (KEYBOARD+0001H), the keyboard matrix, …`, with the stores that make it a variable. */
+/**
+ * What an address read means: `$3801 (KEYBOARD+0001H), the keyboard matrix, …`,
+ * with the stores that make it a variable inside the parentheses, so a clause
+ * that follows (`, set at $7000`) cannot be read as one of them:
+ * `$65FB (DATA_65FB; the program also writes it at $4984)`.
+ */
 function readFrom(c: Ctx, addr: number, width: 1 | 2, self: number): Piece[] {
   const out: Piece[] = [...addrPhrase(c, addr)];
-  if (addr >= KEYS_LO && addr <= KEYS_HI) out.push({ text: ', the keyboard matrix, where a set bit is a key held down' });
-  out.push(...writtenNote(c, width === 2 ? [addr, addr + 1] : [addr], self));
+  const keys = addr >= KEYS_LO && addr <= KEYS_HI;
+  if (keys) out.push({ text: ', the keyboard matrix, where a set bit is a key held down' });
+  const note = writtenNote(c, width === 2 ? [addr, addr + 1] : [addr], self);
+  if (note.length === 0) return out;
+  const last = out[out.length - 1]!;
+  if (!keys && out.length > 1 && last.text === ')' && last.addr === undefined && last.entry === undefined) out.splice(out.length - 1, 0, { text: '; ' }, ...note);
+  else out.push({ text: ' (' }, ...note, { text: ')' });
   return out;
 }
 
@@ -219,18 +232,16 @@ function sourceOf(c: LineCtx, at: number, ins: Instruction, regs: RegState, r: s
 }
 
 /**
- * `, where it shows as "X"`: what a byte put in screen memory draws as. A
- * stock Model I has no lowercase: it shows $60-$7F as $40-$5F, so there the
- * uppercase form is named; with no machine selected, $60-$7F are not named.
+ * `, where it shows as "X"`: what a byte put in screen memory draws as. Only
+ * the Model III and 4 show $60-$7F as lowercase. A stock Model I has no bit 6
+ * in video RAM (the hardware makes it from bits 5 and 7, so $61 shows as
+ * "!"), and making capitals is the ROM driver's job, not the screen's; there,
+ * as with no machine selected, $60-$7F are not named.
  */
 function shows(c: Ctx, v: number | null): string {
   if (v === null) return '';
   const machine = c.s.selection?.machine;
-  if (v >= 0x60 && v <= 0x7f && machine !== 3 && machine !== 4) {
-    if (machine !== 1) return '';
-    const up = trsGlyph(v - 0x20);
-    return up.kind === 'text' ? `, where it shows as "${up.char}" (a stock Model I has no lowercase)` : '';
-  }
+  if (v >= 0x60 && v <= 0x7f && machine !== 3 && machine !== 4) return '';
   const g = trsGlyph(v);
   if (g.kind === 'text') return `, where it shows as "${g.char}"`;
   if (g.kind === 'block') return ', where it shows as a block graphic';
@@ -328,9 +339,11 @@ function forward(c: LineCtx, r: string): Sentence[] {
     const v = straightFrom(a, next) === c.addr && !opcodeRewritten(a, next) ? valueIn(knownBefore(a, next).regs, r) : null;
     return v === null ? '' : ` (${show(r, v)})`;
   };
-  const noun: Piece[] = src ?? [{ text: `the result${after()}` }];
+  const value = src === null ? after() : '';
+  const noun: Piece[] = src ?? [{ text: `the result${value}` }];
   const subject = (verb: string): Piece[] => [{ text: `${r} ${verb} ` }, ...noun];
-  const unsure = (...why: Piece[]): Sentence[] => [say(subject('holds'), '; its next use is not certain: ', why, '.')];
+  // A bare "the result" with no proven value and no proven next use says nothing.
+  const unsure = (...why: Piece[]): Sentence[] => (src === null && value === '' ? [] : [say(subject('holds'), '; its next use is not certain: ', why, '.')]);
   let cur = c.addr;
   let ins = c.ins;
   for (let k = 0; k < SCAN; k++) {
@@ -411,6 +424,8 @@ function producer(c: LineCtx, r: string): { src: Piece[]; at: number; call?: Non
     if (opcodeRewritten(a, link.at)) return undefined;
     const wr = written(link.ins);
     if (!meets(wr, mine)) continue;
+    // OR A and AND A leave A's value as it was: its producer is further back.
+    if (r === 'A' && destOf({ ...c, addr: link.at, ins: link.ins }) === undefined && (link.ins.mnemonic === 'OR' || link.ins.mnemonic === 'AND')) continue;
     // A pair built from two loads, or a write the line does not name: no single producer.
     if (!mine.every((h) => wr.includes(h)) || destOf({ ...c, addr: link.at, ins: link.ins }) !== r) return undefined;
     const src = sourceOf(c, link.at, link.ins, knownBefore(a, link.at).regs, r);

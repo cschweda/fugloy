@@ -83,6 +83,22 @@ describe('why on Sea Dragon', () => {
     expect(quoted).toBeGreaterThan(50);
   });
 
+  it('says nothing of a bare result whose next use is not certain, and OR A and AND A write no new A', () => {
+    const empty = /^[A-Z]+ holds the result; its next use is not certain/;
+    let orAnd = 0;
+    let all = 0;
+    for (const [at, ins] of a.pass1.instructions) {
+      const purpose = texts(why(at).purpose);
+      all += purpose.filter((t) => empty.test(t)).length;
+      if (listed(at) === 'OR A' || listed(at) === 'AND A') {
+        orAnd++;
+        for (const t of purpose) expect(t, `${ins.mnemonic} at ${at.toString(16)}`).not.toMatch(/^A holds the result; its next use is not certain/);
+      }
+    }
+    expect(orAnd).toBeGreaterThan(100);
+    expect(all).toBe(0);
+  });
+
   it('names the register the "why this register" sentences speak of', () => {
     expect(why(0x4983).registerName).toBe('A'); // XOR A
     expect(why(0x49ca).registerName).toBe('B'); // DJNZ
