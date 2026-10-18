@@ -91,6 +91,19 @@ test('a click on a label row explains the label line', async ({ page }) => {
   await expect(page.getByTestId('explain-pattern')).toContainText('64 times');
 });
 
+test('a click on a label row shows who reaches the label, as links; a code row does not', async ({ page }) => {
+  await open(page);
+  await page.evaluate(() => window.__fugloyTest!.scrollToAddr(0x54b4));
+  await page.locator(`.fg-row-label[data-addr="${0x54b4}"]`).click();
+  const label = page.getByTestId('explain-label');
+  await expect(label).toContainText('L54B4');
+  await expect(label).toContainText('Jumped to from $54BC.');
+  await expect(page.getByTestId('explain-pattern')).toContainText('at most 20 times, leaving early at $54B8');
+  await label.getByRole('button', { name: '$54BC' }).click();
+  await cursorAt(page, 0x54bc);
+  await expect(page.getByTestId('explain-label')).toHaveCount(0);
+});
+
 test('a click on a block-comment row says it is your block comment', async ({ page }) => {
   await open(page);
   const ex = (f: string): string => fileURLToPath(new URL(`../../../../examples/sea-dragon/${f}`, import.meta.url));

@@ -4,7 +4,8 @@
 // so stepping back and forth through lines costs a map lookup. A new session
 // (a hint edit, another symbol table) gets fresh entries: its analysis differs.
 import { explainLine, explainRow, sentenceText, summarizeRoutine } from '@fugloy/disasm';
-import type { Details, Explanation, Row, RoutineSummary, Sentence, Session } from '@fugloy/disasm';
+import type { Details, Explanation, Piece, Row, RoutineSummary, Sentence, Session } from '@fugloy/disasm';
+import { hex4 } from '@fugloy/z80';
 
 const lines = new WeakMap<Session, Map<number, Explanation>>();
 /** Rows that are not lines of the program (ORG, notes, header), by kind, address and text. */
@@ -169,4 +170,45 @@ export function patternSentences(e: Explanation): Sentence[] | null {
   if (p.name !== 'copy' || e.addr !== p.to) return p.sentences;
   const rest = p.sentences.filter((x) => !sentenceText(x).startsWith('Copies '));
   return rest.length === 0 ? null : rest;
+}
+
+/** The most addresses a label sentence names before "and N more". */
+const LABEL_LIST = 8;
+
+/** `$A`, `$A and $B`, `$A, $B, … and 3 more`, each a link. */
+function linkList(addrs: readonly number[]): Piece[] {
+  const shown = addrs.length <= LABEL_LIST ? addrs : addrs.slice(0, LABEL_LIST - 1);
+  const items: Piece[][] = shown.map((x) => [{ text: `$${hex4(x)}`, addr: x }]);
+  if (shown.length < addrs.length) items.push([{ text: `${addrs.length - shown.length} more` }]);
+  const out: Piece[] = [];
+  items.forEach((item, i) => {
+    if (i > 0) out.push({ text: i === items.length - 1 ? ' and ' : ', ' });
+    out.push(...item);
+  });
+  return out;
+}
+
+/**
+ * What a label row says about its label: who calls it and jumps to it (links;
+ * a jump-table entry is "reached from the table entry at"), and whether it is
+ * the entry point. Null when the explanation carries no label.
+ */
+export function labelSentences(s: Session, e: Explanation): Sentence[] | null {
+  const l = e.label;
+  if (l === undefined) return null;
+  const ins = s.analysis.pass1.instructions;
+  const jumps = l.jumpers.filter((j) => ins.has(j));
+  const table = l.jumpers.filter((j) => !ins.has(j));
+  const parts: Piece[][] = [];
+  if (l.callers.length > 0) parts.push([{ text: 'called from ' }, ...linkList(l.callers)]);
+  if (jumps.length > 0) parts.push([{ text: 'jumped to from ' }, ...linkList(jumps)]);
+  if (table.length > 0) parts.push([{ text: table.length === 1 ? 'reached from the table entry at ' : 'reached from the table entries at ' }, ...linkList(table)]);
+  const out: Sentence[] = [];
+  if (parts.length > 0) {
+    const joined = parts.flatMap((p, i) => (i === 0 ? p : [{ text: '; ' }, ...p]));
+    const first = joined[0]!;
+    out.push([{ ...first, text: first.text[0]!.toUpperCase() + first.text.slice(1) }, ...joined.slice(1), { text: '.' }]);
+  } else out.push([{ text: 'No call or jump to it was found.' }]);
+  if (l.entry) out.push([{ text: e.addr === s.analysis.entry ? 'This is where the program starts (its entry point).' : 'This is an entry point the analysis starts from.' }]);
+  return out;
 }

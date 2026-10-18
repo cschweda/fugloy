@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { openProgram, sentenceText, withHintText } from '@fugloy/disasm';
 import type { Row } from '@fugloy/disasm';
-import { detailsText, explainAt, explainRowAt, patternSentences, pictureBytes, PICTURE_MAX, summaryAt, summaryParts, thinLinks, warmExplain } from '../app/utils/explain-view';
+import { detailsText, explainAt, explainRowAt, labelSentences, patternSentences, pictureBytes, PICTURE_MAX, summaryAt, summaryParts, thinLinks, warmExplain } from '../app/utils/explain-view';
 
 const ex = (p: string): string => fileURLToPath(new URL(`../../../examples/${p}`, import.meta.url));
 const open = () =>
@@ -110,5 +110,18 @@ describe('explain-view helpers', () => {
     ]);
     expect(more.length).toBe(summaryAt(s, 0x49a7)!.sentences.length - 4);
     expect(more.map(sentenceText)[0]).toContain('MODEPORT');
+  });
+
+  it('labelSentences: who jumps to or calls a label, as links, and whether it is the entry point', () => {
+    const s = open();
+    const at54b4 = labelSentences(s, explainAt(s, 0x54b4))!;
+    expect(at54b4.map(sentenceText)).toEqual(['Jumped to from $54BC.']);
+    expect(at54b4[0]!.find((p) => p.text === '$54BC')?.addr).toBe(0x54bc);
+    const tone = labelSentences(s, explainAt(s, 0x6212))!.map(sentenceText);
+    expect(tone[0]).toMatch(/^Called from \$[0-9A-F]{4}/);
+    // 7000 NOP; 7001 JR 7000: the entry point is a label.
+    const r = openProgram(new Uint8Array([0x00, 0x18, 0xfd]), { base: 0x7000 });
+    expect(labelSentences(r, explainAt(r, 0x7000))!.map(sentenceText)).toEqual(['Jumped to from $7001.', 'This is where the program starts (its entry point).']);
+    expect(labelSentences(s, explainAt(s, 0x49a7))).toBeNull();
   });
 });

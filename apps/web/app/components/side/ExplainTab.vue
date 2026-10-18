@@ -1,17 +1,18 @@
 <script setup lang="ts">
 // The Explain tab: a plain-English tutor for the line at the cursor. The lead
 // sentence first, then a quiet details strip, what a group of lines does (a
-// pattern), the routine around the line, the data region a data row belongs
-// to (with its picture), and "what's at" previews of each address it uses.
+// pattern), on a label row who reaches the label, the routine around the line,
+// the data region a data row belongs to (with its picture), and "what's at"
+// previews of each address it uses.
 // Every address is a link into the listing (go); every table name opens the
 // Symbol tab (table). The engine is @fugloy/disasm's explain; the cache is
 // utils/explain-view.
-import { computed } from 'vue';
+import { shallowRef, watch } from 'vue';
 import type { Explanation, Preview, Row, RoutineSummary, Sentence, TableEntry } from '@fugloy/disasm';
 import { hex4 } from '@fugloy/z80';
 import ExplainText from './ExplainText.vue';
 import RegionPicture from './RegionPicture.vue';
-import { detailsText, explainAt, explainRowAt, patternSentences, pictureBytes, summaryAt, summaryParts } from '../../utils/explain-view';
+import { detailsText, explainAt, explainRowAt, labelSentences, patternSentences, pictureBytes, summaryAt, summaryParts } from '../../utils/explain-view';
 
 /** What to explain: the clicked row when the cursor is still on it, otherwise the cursor's line. */
 export interface ExplainTarget {
@@ -32,19 +33,28 @@ interface View {
   parts: { head: Sentence[]; more: Sentence[] } | null;
   pattern: Sentence[] | null;
   picture: Uint8Array | null;
+  /** On a label row (or a label inside an instruction): who calls or jumps to the label, and whether it is the entry point. */
+  label: Sentence[] | null;
 }
 
-let last: View | null = null;
-const view = computed<View | null>(() => {
-  const s = wb.session.value;
-  const t = props.target;
-  if (!props.active) return last;
-  if (s === null || t === null) return (last = null);
-  const e = t.row === undefined ? explainAt(s, t.addr) : explainRowAt(s, t.row);
-  const summary = e.kind === 'code' && e.addr !== null ? summaryAt(s, e.addr) : null;
-  const picture = e.region === undefined ? null : pictureBytes(s, e.region);
-  return (last = { e, summary, parts: summary === null ? null : summaryParts(summary), pattern: patternSentences(e), picture });
-});
+// Recomputed only while the tab shows; while it does not, the last view stays as it was.
+const view = shallowRef<View | null>(null);
+watch(
+  [() => wb.session.value, () => props.target, () => props.active] as const,
+  ([s, t, active]) => {
+    if (!active) return;
+    if (s === null || t === null) {
+      view.value = null;
+      return;
+    }
+    const e = t.row === undefined ? explainAt(s, t.addr) : explainRowAt(s, t.row);
+    const summary = e.kind === 'code' && e.addr !== null ? summaryAt(s, e.addr) : null;
+    const picture = e.region === undefined ? null : pictureBytes(s, e.region);
+    const onLabel = t.row?.kind === 'label' || e.kind === 'label';
+    view.value = { e, summary, parts: summary === null ? null : summaryParts(summary), pattern: patternSentences(e), picture, label: onLabel ? labelSentences(s, e) : null };
+  },
+  { immediate: true },
+);
 
 const $ = (n: number): string => `$${hex4(n)}`;
 const range = (from: number, to: number): string => (from === to ? $(from) : `${$(from)}–${$(to)}`);
@@ -66,6 +76,11 @@ function openPreview(p: Preview): void {
         <ExplainText :sentences="view.e.sentences" lead @go="emit('go', $event)" @table="emit('table', $event)" />
       </div>
       <p v-if="view.e.details" class="fg-explain-details" data-testid="explain-details">{{ detailsText(view.e.details) }}</p>
+
+      <section v-if="view.label && view.e.label" data-testid="explain-label">
+        <h3 class="fg-sec">The label <span class="fg-explain-range fg-mono">{{ view.e.label.name }}</span></h3>
+        <ExplainText :sentences="view.label" @go="emit('go', $event)" @table="emit('table', $event)" />
+      </section>
 
       <section v-if="view.e.pattern && view.pattern" data-testid="explain-pattern">
         <h3 class="fg-sec">What these lines do <span class="fg-explain-range fg-mono">{{ range(view.e.pattern.from, view.e.pattern.to) }}</span></h3>
