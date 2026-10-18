@@ -14,11 +14,11 @@ The repository holds parts that are versioned and released separately:
   published as GitHub releases only.
 - **The emulator**, `@fugloy/emu`, is versioned 0.x on its own. Its
   releases have `## [emu X.Y.Z]` headings and are tagged `emu-vX.Y.Z`; 0.2.0,
-  emu phases 0–4, is its first npm release (pending).
+  emu phases 0–4, is its first npm release (published 2026-10-18).
 - **The MCP server**, `@fugloy/mcp`, is versioned 0.x on its own. Its
   releases have `## [mcp X.Y.Z]` headings and are tagged `mcp-vX.Y.Z`; 0.1.0,
-  MCP phases A–F, is its first npm release (pending, after emu's). It depends on `@fugloy/emu`, so emu
-  is published first.
+  MCP phases A–F, is its first npm release (published 2026-10-18, after emu's). It depends on `@fugloy/emu`, so emu
+  was published first.
 - **The web workbench**, `apps/web`, is not on npm and has no version of its
   own: Netlify builds it from `main` and serves it at app.fugloy.dev
   (live since 2026-10-18; `fugloy.dev` and `www.fugloy.dev` redirect to it). Its changes are listed under the core release
@@ -99,10 +99,10 @@ Core, Explain's "why" layer (design in
 
 ## [mcp 0.1.0] - 2026-10-18
 
-`@fugloy/mcp` 0.1.0, the MCP server's first npm release (pending): MCP phases A–F
+`@fugloy/mcp` 0.1.0, the MCP server's first npm release (published 2026-10-18): MCP phases A–F
 (MCP spec §11), 29 tools, four prompts, and five resources over
-`@fugloy/emu` 0.2.0. Once published, install it with `npx -y @fugloy/mcp` as a Claude Code
-MCP server; until then, run `node packages/mcp/bin/fugloy-mcp.js` from a clone (`packages/mcp/README.md`). It depends on `@fugloy/emu` `^0.2.0`,
+`@fugloy/emu` 0.2.0. Install it with `npx -y @fugloy/mcp` as a Claude Code
+MCP server (or run `node packages/mcp/bin/fugloy-mcp.js` from a clone for development; `packages/mcp/README.md`). It depends on `@fugloy/emu` `^0.2.0`,
 `@fugloy/disasm` and `@fugloy/z80` `^1.2.0`, the MCP SDK 1.32.0, and zod
 4.6.5.
 
@@ -186,8 +186,8 @@ MCP phase F, part 2: the release (`@fugloy/mcp`; MCP spec §9–§11):
   an mcp release whose `@fugloy` dependencies are not on npm. Tags are
   `mcp-vX.Y.Z`. The core and emu sets are unchanged.
 - The README's setup describes the npm install (`npx -y @fugloy/mcp` in
-  `.mcp.json` or `claude mcp add`) for once the package is published, and
-  the clone setup to use until then.
+  `.mcp.json` or `claude mcp add`), and the clone setup as an
+  alternative for development.
 - `screen diff: "<snapshot>"` against a snapshot of another program adds the
   line `diff` gives in that case (`Note: title belongs to RAIDERS and now to
   SCORER.`), after its count line.
@@ -440,7 +440,7 @@ MCP phases A–C, built as emu phase 4 (MCP spec §5, §11):
 
 ## [emu 0.2.0] - 2026-10-18
 
-`@fugloy/emu` 0.2.0, the emulator's first npm release (pending): phases 0–4 of the
+`@fugloy/emu` 0.2.0, the emulator's first npm release (published 2026-10-18): phases 0–4 of the
 eight in the emu spec (§11). It goes from 0.1.0 to 0.2.0 because phases 2–4
 changed its API (the `Machine` facade, `m.debug`, the hooks' `pc` argument).
 It has no dependencies. Phases 0 and 1 were merged while core 1.0.0 was being
@@ -1217,6 +1217,8 @@ listing of any `.BAS`. `@fugloy/z80`, `@fugloy/disasm`, and `@fugloy/cli` are
 
 [Unreleased]: https://github.com/cschweda/fugloy/compare/v1.2.0...HEAD
 [1.2.0]: https://github.com/cschweda/fugloy/releases/tag/v1.2.0
+[emu 0.2.0]: https://github.com/cschweda/fugloy/releases/tag/emu-v0.2.0
+[mcp 0.1.0]: https://github.com/cschweda/fugloy/releases/tag/mcp-v0.1.0
 [1.1.0]: https://github.com/cschweda/fugloy/releases/tag/v1.1.0
 [1.0.0]: https://github.com/cschweda/fugloy/releases/tag/v1.0.0
 [0.2.0]: https://github.com/cschweda/fugloy/releases/tag/v0.2.0

@@ -11,7 +11,7 @@ phase 2 onward and the MCP server follow, in the Roadmap's order. The recompiler
 bundler stay in Part 2 until the plan's kill criteria have been reviewed. If a
 task seems to need machinery from a later step, stop and say so.
 
-Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.1.0 on npm and 1.2.0 ready (2026-10-18); emu phases 2 and 3 merged to `main` (2026-10-18); emu phase 4 (`@fugloy/mcp` v0.1, MCP phases A–C) merged to `main` (2026-10-18); MCP phases D–F merged (2026-10-18), with `@fugloy/emu` 0.2.0 and `@fugloy/mcp` 0.1.0 ready for their first npm release (emu first); then emu phase 5.**
+Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.2.0, `@fugloy/emu` 0.2.0, and `@fugloy/mcp` 0.1.0 on npm (2026-10-18); emu phases 2 and 3 merged to `main` (2026-10-18); emu phase 4 (`@fugloy/mcp` v0.1, MCP phases A–C) merged to `main` (2026-10-18); MCP phases A–F done; emu phase 5 in progress on branch `emu-phase5`.**
 v1 is disassembler phases 1–4: the core decoder and loaders (v0.1.0), Pass 1
 and Pass 2 (v0.2.0), the cited symbol tables (phase 3: eight JSON tables, 634
 entries, in `packages/disasm/data/symbols/`, compiled by `pnpm symbols`), and
@@ -54,8 +54,9 @@ D–F are done (plan
 the ROM symbols resource (E); guardrail tests, golden transcripts for stories
 1–3, and the `publish.sh` `mcp` set (F), 29 tools in all. Story 7 ran
 unaided on Sea Dragon, Eliminator, and Rear Guard (the release check, MCP
-spec §10; results in the CHANGELOG and `packages/mcp/README.md`). Next:
-publish emu 0.2.0, then mcp 0.1.0, then emu phase 5.
+spec §10; results in the CHANGELOG and `packages/mcp/README.md`). Published
+(2026-10-18): core 1.2.0 (`v1.2.0`), emu 0.2.0 (`emu-v0.2.0`), mcp 0.1.0
+(`mcp-v0.1.0`). Next: emu phase 5, in progress on `emu-phase5`.
 
 ## Stack and layout
 
@@ -117,14 +118,15 @@ publish emu 0.2.0, then mcp 0.1.0, then emu phase 5.
    3: debugger API, coverage, the label file. 4: `@fugloy/mcp` v0.1. 5: FDC
    and disk images. 6: Model I, then Model 4. 7: differential harness. Phases 0,
    1, 2, and 3 are done and merged; phase 4, `@fugloy/mcp` v0.1, is done and
-   merged; phase 5 follows the npm release of emu 0.2.0 and mcp 0.1.0.
+   merged; emu 0.2.0 and mcp 0.1.0 are on npm (2026-10-18); phase 5 is in
+   progress on `emu-phase5`.
 4. **mcp — phases A–F** (`docs/fugloy-mcp-spec.md` §11). A: lifecycle,
    execution, and inspection tools. B: break, watch, trace, callers, disasm.
    C: labels, coverage, sidecar file. D: snapshots, diff, search, callees.
    E: resources, prompts, ROM symbols. F: guardrails, golden transcripts, npm
    publish. A starts after emu phase 0; B and C need emu phase 3. A, B, and
-   C are done (emu phase 4, merged); D, E, and F are done and merged, the
-   publish itself waiting on the merge and npm's two-factor code.
+   C are done (emu phase 4, merged); D, E, and F are done and merged, and
+   `@fugloy/mcp` 0.1.0 is on npm (2026-10-18).
 
 The plan's phase 5 (assembler and IDE) is not placed in this sequence: it comes
 after v1 and needs phases 3 and 4 and emu phases 2–3. Phase 6, **Learn assembly

@@ -2,8 +2,7 @@
 
 The prompts moved into the MCP package, so that the server's MCP prompts
 (`docs/fugloy-mcp-spec.md` §6) and the texts you paste into Claude Code are
-one copy, to ship in the `@fugloy/mcp` npm package (its first release is
-pending). They are in
+one copy, to ship in the `@fugloy/mcp` npm package (published as 0.1.0, 2026-10-18). They are in
 [`packages/mcp/prompts/`](../packages/mcp/prompts/):
 
 - [`story-01.md`](../packages/mcp/prompts/story-01.md): story 1, find the print routine

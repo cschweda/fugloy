@@ -31,10 +31,10 @@ and an MCP server that lets an AI assistant drive the emulator.
 
 | Part | What it does | Status | Where |
 | --- | --- | --- | --- |
-| **Disassembler** | Loads `.CMD`, `.BAS`, and raw files by content; recursive descent; labels; cited ROM, hardware, and DOS names; hint files; hidden code in BASIC; rebasing and relocation; zmac source that reassembles byte for byte; JSON IR; reads the emulator's label files | Released, 1.1.0 on npm | `@fugloy/disasm`, the `fugloy` command in `@fugloy/cli`, opcode tables in `@fugloy/z80` |
+| **Disassembler** | Loads `.CMD`, `.BAS`, and raw files by content; recursive descent; labels; cited ROM, hardware, and DOS names; hint files; hidden code in BASIC; rebasing and relocation; zmac source that reassembles byte for byte; JSON IR; reads the emulator's label files | Released, 1.2.0 on npm | `@fugloy/disasm`, the `fugloy` command in `@fugloy/cli`, opcode tables in `@fugloy/z80` |
 | **Web workbench** | The disassembler in the browser: facing pages, the four public-domain games one click away, editing by keyboard, the **Explain** tab, block comments, exports | Live | [app.fugloy.dev](https://app.fugloy.dev/), source in `apps/web` |
-| **Emulator** | A headless, deterministic Model III that passes ZEXDOC and ZEXALL, runs `.CMD`, `.BAS`, and `.CAS` programs, and has a debugger that writes label and coverage files | 0.2.0 (first npm release pending), phases 0–4 of 8 done | `packages/emu` (`@fugloy/emu`) |
-| **MCP server** | Lets an AI assistant such as Claude Code load a program, run it, set breakpoints and watches, read the screen, and name what it finds in the same label file | 0.1.0 (first npm release pending, after emu), MCP phases A–F | `packages/mcp` (`@fugloy/mcp`) |
+| **Emulator** | A headless, deterministic Model III that passes ZEXDOC and ZEXALL, runs `.CMD`, `.BAS`, and `.CAS` programs, and has a debugger that writes label and coverage files | 0.2.0 on npm, phases 0–4 of 8 done | `packages/emu` (`@fugloy/emu`) |
+| **MCP server** | Lets an AI assistant such as Claude Code load a program, run it, set breakpoints and watches, read the screen, and name what it finds in the same label file | 0.1.0 on npm, MCP phases A–F | `packages/mcp` (`@fugloy/mcp`) |
 | **Ahead** | An assembler and IDE in the workbench, a course in assembly for non-programmers, and, later, recompiling games to TypeScript | Planned | [Roadmap](#whats-ahead) |
 
 Its core libraries have no runtime dependencies and use no Node or browser
@@ -129,8 +129,8 @@ in Sea Dragon (twelve of them routines the hand-made hint file names, with
 the same meaning), all 17 that `suggest` listed in Eliminator, and all 24 in
 Rear Guard, each with a note saying how it knew.
 
-Once published, install it with `npx -y @fugloy/mcp` as an MCP server
-(until then, run `node packages/mcp/bin/fugloy-mcp.js` from a clone), with a
+Install it with `npx -y @fugloy/mcp` as an MCP server
+(or run `node packages/mcp/bin/fugloy-mcp.js` from a clone, for development), with a
 `fugloy.mcp.json` that names your Model III ROM; the setup (from npm or from
 a clone), the tools, and those sessions are in its
 [README](packages/mcp/README.md), and the design is in
@@ -289,8 +289,8 @@ What people come to Fugløy for, and how each one is done today.
 
 - **As someone working with an AI assistant,** I want it to run the program,
   set breakpoints, and read the screen for me, so that it can find and name
-  routines as I would. *Today:* the MCP server (`npx -y @fugloy/mcp` once
-  published; until then `node packages/mcp/bin/fugloy-mcp.js` from a clone);
+  routines as I would. *Today:* the MCP server (`npx -y @fugloy/mcp`, or
+  `node packages/mcp/bin/fugloy-mcp.js` from a clone);
   Claude Code found and labelled Sea Dragon's print routine with it unaided,
   and labelled 18 to 24 routines in each of Sea Dragon, Eliminator, and Rear
   Guard from the `label-pass` prompt.
@@ -302,10 +302,10 @@ Planned, per the roadmap:
 
 ## Status
 
-**Current release: [1.1.0](https://github.com/cschweda/fugloy/releases/tag/v1.1.0)**
-(2026-10-18), the first published to npm as `@fugloy/z80`, `@fugloy/disasm`,
-and `@fugloy/cli`, which share one version. It adds `--labels`, which reads
-the emulator's label and coverage file. It follows
+**Current release: [1.2.0](https://github.com/cschweda/fugloy/releases/tag/v1.2.0)**
+(2026-10-18), published to npm as `@fugloy/z80`, `@fugloy/disasm`,
+and `@fugloy/cli`, which share one version. It follows 1.1.0 (the first on npm, which added `--labels`, reading
+the emulator's label and coverage file) and
 [v1.0.0](https://github.com/cschweda/fugloy/releases/tag/v1.0.0), v1: phases
 1–4 of the plan. Phase 3 names ROM, hardware, and DOS addresses from cited
 symbol tables, with `--machine` and `--dos` choosing them. Phase 4 is the web workbench, live at
@@ -318,7 +318,7 @@ releases: phase 2, Pass 1 and Pass 2, as
 core decoder and loaders, as
 [v0.1.0](https://github.com/cschweda/fugloy/releases/tag/v0.1.0).
 
-The emulator, `@fugloy/emu` 0.2.0 (its first npm release pending), has phases 0–4 of eight
+The emulator, `@fugloy/emu` 0.2.0 (on npm since 2026-10-18), has phases 0–4 of eight
 done: the core of [trs80-emulator](https://github.com/cschweda/trs80-emulator)
 booting the Model III ROM to `READY` in Node (0); a Z80 core that passes
 ZEXDOC and ZEXALL (1); the Model III as a `Machine`, with video, sound,
@@ -362,11 +362,10 @@ fugloy GAME.CMD --format zmac -o game.z
 The libraries are `@fugloy/disasm` (loaders, analysis, emitters; runs in a
 browser) and `@fugloy/z80` (the opcode table and decoder). The examples below
 use `pnpm fugloy` from a clone, which runs the same CLI; with the package
-installed, write `fugloy` instead. The emulator and the MCP server await
-their first npm release: once published, `npm i @fugloy/emu` (its
+installed, write `fugloy` instead. The emulator and the MCP server are on npm too: `npm i @fugloy/emu` (its
 [README](packages/emu/README.md) shows the API) and `npx -y @fugloy/mcp` (its
-[README](packages/mcp/README.md) shows the Claude Code setup); until then,
-use them from a clone (`pnpm install && pnpm build`, then
+[README](packages/mcp/README.md) shows the Claude Code setup); for
+development, use them from a clone (`pnpm install && pnpm build`, then
 `node packages/mcp/bin/fugloy-mcp.js`). The workbench needs no install.
 
 ## Requirements

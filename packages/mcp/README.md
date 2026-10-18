@@ -18,9 +18,9 @@ public-domain games on its own (story 7, below).
 
 ## Set up
 
-Once `@fugloy/mcp` is published (its first npm release is pending; until
-then, use the clone setup below, `node packages/mcp/bin/fugloy-mcp.js`), run
-it from npm with Node 22 or later. Write a `fugloy.mcp.json` that names
+`@fugloy/mcp` is on npm (0.1.0, 2026-10-18): run it from npm with Node 22 or later
+(`npx -y @fugloy/mcp`; for development, use the clone setup below,
+`node packages/mcp/bin/fugloy-mcp.js`). Write a `fugloy.mcp.json` that names
 your Model III ROM (paths in it are relative to the file):
 
 ```json
