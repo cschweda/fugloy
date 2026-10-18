@@ -29,11 +29,11 @@ const SOURCES = ['loader', 'observed', 'user', 'disasm'];
 const RANK = { loader: 0, disasm: 1, observed: 2, user: 3 };
 const KINDS = ['call', 'jp', 'jr', 'rst', 'ret-to'];
 const SPACE = 0x10000;
-/** C0 controls and DEL: a CR or LF in a name or evidence would start a new line in a listing or zmac source. */
+/** C0 controls and DEL: a CR or LF in a name, evidence, or note would start a new line in a listing or zmac source. */
 const CONTROL = /[\u0000-\u001f\u007f]/;
 
 /**
- * @typedef {{ addr: number, name: string, kind: 'code' | 'data', size?: number, source: 'loader' | 'observed' | 'user' | 'disasm', evidence?: string, map?: number, page?: number }} Label
+ * @typedef {{ addr: number, name: string, kind: 'code' | 'data', size?: number, source: 'loader' | 'observed' | 'user' | 'disasm', evidence?: string, note?: string, map?: number, page?: number }} Label
  * @typedef {{ from: number, kind: 'call' | 'jp' | 'jr' | 'rst' | 'ret-to', count: number }} CallerEdge
  * @typedef {{ encoding: 'rle-hex', exec: string, operand: string, read: string, write: string, jump: string, call: string }} CoverageObject
  * @typedef {{ cycles: number, started?: string, input?: string }} Session
@@ -239,6 +239,8 @@ export function parseLabelFile(value) {
         if (l.evidence !== undefined && typeof l.evidence !== 'string') err(`${at}.evidence: must be a string`);
         else if (l.evidence !== undefined && CONTROL.test(l.evidence)) err(`${at}.evidence: must not contain a control character`);
         else if (l.source === 'observed' && (l.evidence === undefined || l.evidence === '')) err(`${at}.evidence: an observed label must carry its evidence`);
+        if (l.note !== undefined && typeof l.note !== 'string') err(`${at}.note: must be a string`);
+        else if (l.note !== undefined && CONTROL.test(l.note)) err(`${at}.note: must not contain a control character`);
         mapPage(l, at);
         if (isAddr(l.addr)) {
           const key = labelKey(l);

@@ -234,6 +234,17 @@ describe('m.debug.label', () => {
     expect(m.debug.labels[0].name).toBe('START');
   });
 
+  it('a note is kept on the label and written to the file', () => {
+    const m = sampleMachine();
+    m.debug.label(0x7020, 'SHOW', { note: 'prints the score; DE points at the text' });
+    expect(m.debug.labels.find((l) => l.addr === 0x7020)).toEqual({ addr: 0x7020, name: 'SHOW', kind: 'code', source: 'user', note: 'prints the score; DE points at the text' });
+    const file = m.debug.labelFile();
+    expect(file.labels.find((l) => l.addr === 0x7020)).toEqual({ addr: 0x7020, name: 'SHOW', kind: 'code', source: 'user', note: 'prints the score; DE points at the text' });
+    expect(parseLabelFile(file).errors).toEqual([]);
+    expect(() => m.debug.label(0x7020, 'SHOW', { note: 'two\nlines' })).toThrow(/note/);
+    expect(() => m.debug.label(0x7020, 'SHOW', { note: 7 })).toThrow(/note/);
+  });
+
   it('refuses a bad address, name, kind, or size', () => {
     const m = new Machine({ roms: { level2: sampleRom() } });
     expect(() => m.debug.label(0x10000, 'X')).toThrow(/address/);
@@ -282,6 +293,10 @@ describe('parseLabelFile', () => {
     expect(parseLabelFile({ ...good, labels: [...good.labels, { ...good.labels[0], page: 1 }] }).errors).toEqual([]);
     expect(broken((f) => (f.labels[3].name = 'BU\nMP'))).toEqual(['labels[3].name: must not contain a control character']);
     expect(broken((f) => (f.labels[1].evidence = 'called\u007f'))).toEqual(['labels[1].evidence: must not contain a control character']);
+    // A note is a remark on a label of any source, with evidence's character rule.
+    expect(parseLabelFile({ ...good, labels: good.labels.map((l) => ({ ...l, note: 'checked by hand' })) }).errors).toEqual([]);
+    expect(broken((f) => (f.labels[0].note = 3))).toEqual(['labels[0].note: must be a string']);
+    expect(broken((f) => (f.labels[2].note = 'a\rb'))).toEqual(['labels[2].note: must not contain a control character']);
     expect(broken((f) => (f.coverage['0:0'].encoding = 'rle'))).toEqual(['coverage["0:0"].encoding: must be "rle-hex"']);
     expect(broken((f) => delete f.coverage['0:0'].jump)).toEqual(['coverage["0:0"].jump: missing']);
     expect(broken((f) => (f.coverage['0:0'].read = 'FFFF'))).toEqual(['coverage["0:0"].read: the runs sum to 65535, not 65536']);
@@ -387,6 +402,12 @@ describe('mergeLabelFiles', () => {
     expect(parseLabelFile(merged).errors).toEqual([]);
     // a's entry stands when it has one.
     expect(mergeLabelFiles({ ...b, entry: 0x8000 }, a).entry).toBe(0x8000);
+  });
+
+  it('merge keeps a label\'s note', () => {
+    const a = { ...base(), labels: [{ addr: 0x7000, name: 'MAIN', kind: 'code', source: 'user', note: 'the game loop' }] };
+    const b = { ...base(), labels: [{ addr: 0x7010, name: 'SUB_7010', kind: 'code', source: 'observed', evidence: 'called 1× from 1 site', note: 'a delay?' }] };
+    expect(mergeLabelFiles(a, b).labels).toEqual([...a.labels, ...b.labels]);
   });
 
   it('merge refuses two programs', () => {

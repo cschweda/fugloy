@@ -9,6 +9,11 @@ packages/emu/roms/
 docs/reference/
 # Local ROM paths for the emulator and the MCP server (fugloy.mcp.example.json shows the format).
 fugloy.mcp.json
+# Sidecar label files the MCP server writes beside a program (prompts/story-0*.md load the
+# committed examples, so a session would otherwise leave one in examples/).
+examples/**/*.fugloy.json
+# Your Claude Code MCP config, copied from .mcp.json.example (a committed one would start the server for everyone).
+/.mcp.json
 
 # Dependencies and build output
 node_modules/
@@ -45,7 +50,7 @@ test-results/
 .superpowers/
 
 # Pinned zmac built by scripts/install-zmac.sh
-tools/
+/tools/
 
 # Web workbench (phase 4): Nuxt output and the examples copied in by prepare-assets
 apps/web/.nuxt

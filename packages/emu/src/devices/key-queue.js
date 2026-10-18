@@ -162,7 +162,11 @@ export class KeyQueue {
    * about half a second (`{ cps: 1 }`). A high `cps` shortens the hold and can drop keys, and
    * typing at the ROM's line editor with no pause for the ENTER can lose characters. For
    * `press` and `release`, use the same name for both: a mismatch leaves the key down.
-   * @param {string} str '\n' is ENTER
+   *
+   * `str` is a string of characters, or an array whose every element is one key: a character or
+   * a key name (`['A', 'ENTER', 'UP']`), so named keys can be typed in sequence; in hook mode
+   * every element must be a character the ROM routine returns.
+   * @param {string | string[]} str '\n' is ENTER
    * @param {{ cps?: number, mode?: 'matrix' | 'hook' }} [opts]
    */
   type(str, { cps = 10, mode = 'matrix' } = {}) {
@@ -187,7 +191,7 @@ export class KeyQueue {
    * Queue characters for the ROM keyboard-scan hook: each is returned once by the next call to
    * $002B or $0049. The matrix is not touched.
    * All characters are checked first, so a bad one throws and queues nothing.
-   * @param {string} str '\n' is ENTER
+   * @param {string | string[]} str '\n' is ENTER; an array holds one character an element
    */
   feed(str) {
     const codes = Array.from(str, romCode);

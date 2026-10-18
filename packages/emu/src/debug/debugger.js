@@ -37,12 +37,12 @@ const { EXEC, OPERAND, READ, WRITE, JUMP_TARGET, CALL_TARGET } = COVERAGE;
  * @typedef {{ id: number, addr: number, once: boolean, hits: number, when?: (m: any) => boolean }} BreakEntry
  * @typedef {{ id: number, addr: number, len: number, read: boolean, write: boolean, stop: boolean, hits: number }} WatchEntry
  * @typedef {{ id: number, kind: 'read' | 'write', cycle: number, pc: number, addr: number, value: number, prev: number }} Hit
- * @typedef {((addr: number, value: number) => void) | null} ReadHook
- * @typedef {((addr: number, value: number, prev: number) => void) | null} WriteHook
- * @typedef {((port: number, value: number, dir: 'in' | 'out') => void) | null} PortHook
+ * @typedef {((addr: number, value: number, pc: number) => void) | null} ReadHook
+ * @typedef {((addr: number, value: number, prev: number, pc: number) => void) | null} WriteHook
+ * @typedef {((port: number, value: number, dir: 'in' | 'out', pc: number) => void) | null} PortHook
  * @typedef {{ pc: number, bytes: number[], cycles: number, regs?: any }} TraceEntry
  * @typedef {{ from: number, kind: 'call' | 'jp' | 'jr' | 'rst' | 'ret-to', count: number }} CallerEdge
- * @typedef {{ addr: number, name: string, kind: 'code' | 'data', size?: number, source: 'user' }} UserLabel
+ * @typedef {{ addr: number, name: string, kind: 'code' | 'data', size?: number, source: 'user', note?: string }} UserLabel
  */
 
 /** A label name: an identifier of up to 32 characters, as the disassembler's hint file takes. */
@@ -62,7 +62,9 @@ export class Debugger {
   /**
    * @type {{ onMemRead: ReadHook, onMemWrite: WriteHook, onPort: PortHook }}
    * Called on every data read (fetches excluded), every memory write (with the byte it replaced),
-   * and every port access. Setting one to a function or null re-instruments the CPU.
+   * and every port access. The last argument, `pc`, is the start of the instruction making the
+   * access, as a hit's `pc` (the CPU's PC outside one, or for a port access while no memory
+   * access is instrumented). Setting one to a function or null re-instruments the CPU.
    */
   hooks;
   /**
@@ -273,15 +275,17 @@ export class Debugger {
    * there). A second label at the same address replaces the first.
    * @param {number} addr 0..$FFFF
    * @param {string} name an identifier: a letter or `_`, then letters, digits, or `_`, up to 32 characters
-   * @param {{ kind?: 'code' | 'data', size?: number }} [opts] `size` is how many bytes the label covers (1..65536)
+   * @param {{ kind?: 'code' | 'data', size?: number, note?: string }} [opts] `size` is how many bytes the label covers (1..65536); `note` is a remark for a human, with no control character
    */
-  label(addr, name, { kind = 'code', size } = {}) {
+  label(addr, name, { kind = 'code', size, note } = {}) {
     if (!Number.isInteger(addr) || addr < 0 || addr > 0xffff) throw new Error(`label: address must be an integer 0..65535 ($0000..$FFFF), not ${String(addr)}`);
     if (typeof name !== 'string' || !LABEL_NAME.test(name)) throw new Error(`label: name must be an identifier (a letter or _, then letters, digits, or _, up to 32 characters), not ${JSON.stringify(name)}`);
     if (kind !== 'code' && kind !== 'data') throw new Error(`label: kind must be 'code' or 'data', not ${String(kind)}`);
     if (size !== undefined && (!Number.isInteger(size) || size < 1 || size > 0x10000)) throw new Error(`label: size must be an integer 1..65536, not ${String(size)}`);
+    if (note !== undefined && (typeof note !== 'string' || /[\u0000-\u001f\u007f]/.test(note))) throw new Error(`label: note must be a string with no control character, not ${JSON.stringify(note)}`);
     /** @type {UserLabel} */
     const l = size === undefined ? { addr, name, kind, source: 'user' } : { addr, name, kind, size, source: 'user' };
+    if (note !== undefined) l.note = note;
     this.#labels.set(addr, l);
   }
 
@@ -617,7 +621,7 @@ export class Debugger {
     addr &= 0xffff;
     if (this.#marking) this.#bits[addr] |= READ;
     if (this.#watchMask[addr] & 1) this.#hit('read', addr, value, value);
-    if (this.#onMemRead !== null) this.#onMemRead(addr, value);
+    if (this.#onMemRead !== null) this.#onMemRead(addr, value, this.#accessPc());
     return value;
   };
 
@@ -630,21 +634,26 @@ export class Debugger {
     this.#plain.writeMemory(addr, value);
     if (this.#marking) this.#bits[addr] |= WRITE;
     if (watched) this.#hit('write', addr, value, prev);
-    if (this.#onMemWrite !== null) this.#onMemWrite(addr, value, prev);
+    if (this.#onMemWrite !== null) this.#onMemWrite(addr, value, prev, this.#accessPc());
   };
 
   /** The instrumented `readPort`. */
   #readPort = (/** @type {number} */ port) => {
     const value = this.#plain.readPort(port);
-    if (this.#onPort !== null) this.#onPort(port, value & 0xff, 'in');
+    if (this.#onPort !== null) this.#onPort(port, value & 0xff, 'in', this.#accessPc());
     return value;
   };
 
   /** The instrumented `writePort`. */
   #writePort = (/** @type {number} */ port, /** @type {number} */ value) => {
     this.#plain.writePort(port, value);
-    if (this.#onPort !== null) this.#onPort(port, value & 0xff, 'out');
+    if (this.#onPort !== null) this.#onPort(port, value & 0xff, 'out', this.#accessPc());
   };
+
+  /** The instruction making the current access: its start inside one, else the CPU's PC. */
+  #accessPc() {
+    return this.#inInstr ? this.#pc : this.#cpu.registers.PC;
+  }
 
   /**
    * Log an access every matching watch sees, in id order.
@@ -654,9 +663,8 @@ export class Debugger {
    * @param {number} prev
    */
   #hit(kind, addr, value, prev) {
-    const cpu = this.#cpu;
-    const pc = this.#inInstr ? this.#pc : cpu.registers.PC;
-    const cycle = cpu.cycles;
+    const pc = this.#accessPc();
+    const cycle = this.#cpu.cycles;
     for (const w of this.#watches.values()) {
       if (!(kind === 'read' ? w.read : w.write) || ((addr - w.addr) & 0xffff) >= w.len) continue;
       w.hits++;

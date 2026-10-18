@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "trs80": {
+      "command": "node",
+      "args": ["packages/mcp/bin/fugloy-mcp.js"],
+      "env": { "FUGLOY_CONFIG": "./fugloy.mcp.json" }
+    }
+  }
+}

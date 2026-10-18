@@ -56,12 +56,12 @@ Config file `fugloy.mcp.json` in cwd or `~/.config/fugloy/`:
 
 **Addresses.** Accept `"5200"`, `"0x5200"`, `"$5200"`, `20992`, or a known label name. Always echo back as `5200h`. Ranges as `"5200-52FF"` or `{ addr, len }`.
 
-**Lengths and counts are decimal.** `len`, `n`, `cycles`, `seconds` are plain integers, never hex. A bare string `"400"` as an address means `0400h`; as a length it is refused with a message saying so. This is the single most likely agent mistake, so the error text is explicit.
+**Lengths and counts are decimal.** `len`, `n`, `cycles`, `seconds` are plain integers, never hex. A bare string `"400"` as an address means `0400h`; as a length it is refused with a message saying so, which echoes what was probably meant (`write 400, not "400"`; `write 1024, not "0x400"`). This is the single most likely agent mistake, so the error text is explicit.
 
 **Bytes out.** Hex dump, 16 per line, with ASCII gutter, labels interleaved on their own line when a labeled address falls in range:
 
 ```
-5200  21 00 3C 11 01 3C 01 FF  03 36 20 ED B0 C9 00 00  !.<..<...6 ....
+5200  21 00 3C 11 01 3C 01 FF  03 36 20 ED B0 C9 00 00  !.<..<...6 .....
       ; CLS
 5210  3E 0D CD 33 00 C9 ...
 ```
@@ -79,13 +79,13 @@ Flags: S0 Z1 H0 PV1 N0 C0     Cycles: 48,201,339
 **Screen.** 16 lines of 64 characters inside a fence, with a ruler, non-printables as `·`:
 
 ```
-          1111111111222222222233333333334444444444555555555566666
-01234567890123456789012345678901234567890123456789012345678901234
+          111111111122222222223333333333444444444455555555556666
+0123456789012345678901234567890123456789012345678901234567890123
 READY
 >_
 ```
 
-**Trace lines.** `PC  bytes      mnemonic          ; label/comment  [cycles]`, loops collapsed as `  ×212 (5214–521A)`.
+**Trace lines.** `PC  bytes      mnemonic          ; label/comment  [cycles]`, loops collapsed as `  ×212 (5214h–521Ah)`.
 
 **Errors.** Plain sentences, never stack traces. `"No program loaded; call load first."` The agent should be able to act on every error without reading source.
 
@@ -95,21 +95,23 @@ Every tool result is text (`type: "text"`) in v0.1. Structured JSON is offered a
 
 Schemas are JSON Schema in the SDK; shown here abbreviated. Required fields marked `*`.
 
+**Arguments are strict.** Each schema is listed with `additionalProperties: false`, and an argument a tool does not declare is refused, never dropped: `run { untill: "screen" }` answers `The argument "untill" is not one run takes; it takes cycles, seconds, until, trace.` instead of running 5,000 cycles without it. Every tool also takes `offset` (§7, paging), which the list leaves out. A misspelled name is reported before a required argument it leaves missing. When the server is built with the SDK's `maxToolInputElements`, that ceiling is kept and refused in a sentence too.
+
 ### Lifecycle
 
 | Tool | Input | Output |
 |---|---|---|
-| `load` | `path*`, `model?` (1/3/4), `format?` (auto from extension), `reset?` (default true) | Manifest: format, blocks loaded (addr/len), entry point, which ROM was recognized, whether a sidecar label file was found |
-| `reset` | `keepRam?`, `clear?` (also drop breaks/watches) | Register block after reset |
-| `status` | — | Model, program name, cycles, PC, counts of breaks/watches/snapshots/labels, trace on/off |
+| `load` | `path*`, `model?` (only 3 until emu phase 6), `reset?` (default true: a fresh machine boots its ROM to READY first) | Manifest: format (from the content, never the extension: `.CMD`, `.BAS` tokenized or ASCII, `.CAS` by its leader and sync), blocks loaded (`addr–end (len)`), entry point, which ROM was recognized, whether a sidecar label file was found, the resolved path |
+| `reset` | `keepRam?` (default true; false zeroes `4000h–FFFFh`), `clear?` (also drop breaks/watches) | Register block after reset. Before any `load` it powers on a machine with no program |
+| `status` | — | Model, program name, cycles, PC, counts of breaks/watches/snapshots/labels, how many traced instructions are kept |
 
 ### Execution
 
 | Tool | Input | Output |
 |---|---|---|
-| `run` | `cycles?`, `seconds?` (emulated, ≤ limit), `until?` = `"break" \| "halt" \| "screen" \| "pc:<addr>"`, `trace?` (bool) | Stop reason, cycles consumed, register block, and if `until:"screen"` the screen diff |
+| `run` | `cycles?`, `seconds?` (emulated, ≤ limit), `until?` = `"break" \| "halt" \| "screen" \| "settled" \| "pc:<addr>"`, `trace?` (bool) | `stopped: <reason>` (`break`, `watch`, `halt`, `screen`, `settled`, `pc`, `cycles`, `wallclock`), cycles consumed, register block, and if `until` is `"screen"` or `"settled"` the screen diff. `screen` stops at the first check (every 2,000 T-states) where video RAM differs from the call's start; `settled` waits for that first change, then stops when video RAM returns to a state already seen since it (an animation or blink cycle has closed; full 1K states, kept by hash and compared exactly) or has stayed the same for 0.5 s emulated (1,013,760 T-states), whichever comes first, checked every 2,000 T-states; it reaches a title screen drawn in pieces, even one that animates |
 | `step` | `n?` (1–100) | Trace of the executed instructions plus final register block |
-| `key` | `text?`, `keys?` (array of named keys: `ENTER`, `BREAK`, `CLEAR`, `UP` …), `cps?` (default 20), `run?` (default true: run until the keyboard queue drains) | Cycles consumed; screen diff |
+| `key` | `text?`, `keys?` (array of named keys: `ENTER`, `BREAK`, `CLEAR`, `UP`, `DOWN`, `LEFT`, `RIGHT`, `SHIFT`, `SPACE`), `cps?` (default 20), `mode?` (`"matrix"`, the default, or `"hook"`: the ROM keyboard routine, which takes only characters, `ENTER`, and `SPACE`), `run?` (default true: run until the keyboard queue drains, then 0.2 s) | Cycles consumed; screen diff |
 
 ### Inspection
 
@@ -117,8 +119,8 @@ Schemas are JSON Schema in the SDK; shown here abbreviated. Required fields mark
 |---|---|---|
 | `regs` | `format?` | Register block |
 | `peek` | `addr*`, `len?` (default 64, max 1024) | Hex dump with labels; 1024 bytes is 64 lines, inside the output cap |
-| `poke` | `addr*`, `bytes*` | Bytes written and previous values |
-| `disasm` | `addr*`, `n?` (instructions, default 32), `labels?` (default true) | Listing with labels and coverage marks (`*` executed, `?` never seen, `d` read as data) |
+| `poke` | `addr*`, `bytes*`, `force?` (needed for ROM, `0000h–37FFh`) | Bytes written and previous values, `old → new` |
+| `disasm` | `addr*`, `n?` (instructions, default 32, at most 512), `labels?` (default true) | Linear listing (`@fugloy/z80`) with coverage marks (`*` executed, as an instruction or as another instruction's operand, `d` read or written as data, `?` never seen; when a line starts on a byte executed only as an operand, a closing note names the first such address, since the listing is out of step with the code there) and, after `;`, the names an instruction's targets and operands refer to: session labels first, then the Model III ROM and hardware tables of `@fugloy/disasm` (`VIDEO`, `KEYBOARD+40h`); a labelled address gets a `NAME:` line |
 | `screen` | `diff?` (since last `screen` call or a snapshot name) | Full screen or changed cells as `(row,col) old→new` |
 | `search` | `bytes*` or `text*`, `range?` | Addresses of every match |
 
@@ -126,24 +128,24 @@ Schemas are JSON Schema in the SDK; shown here abbreviated. Required fields mark
 
 | Tool | Input | Output |
 |---|---|---|
-| `break` | `addr*`, `once?`, `condition?` (small expression over regs, e.g. `"A == 0x0D"`) | Breakpoint id |
-| `unbreak` | `id?` or `addr?` or `all?` | Confirmation |
-| `watch` | `addr*`, `len?`, `on?` = `"read" \| "write" \| "both"`, `stop?` | Watch id |
-| `unwatch` | `id?` / `all?` | Confirmation |
-| `hits` | `id?`, `n?` (default 50), `clear?` | Hit log: `cycle pc addr value prev` |
-| `trace` | `n?` (default 100, ≤ depth limit), `since?` (cycle), `regs?` | Trace lines |
-| `callers` | `addr*` | `from kind count` rows |
+| `break` | `addr*`, `once?`, `condition?` (`<reg> <op> <value>` clauses joined by `&&`, nothing else: `reg` is `A F B C D E H L I R`, `AF BC DE HL IX IY SP PC`, or a flag `ZF CF SF PVF HF NF`, with `Z S PV N` also accepted bare; `C` and `H` are the registers, as in Z80 assembly; `op` is `== != < <= > >=`; `value` is a number written like an address, so bare digits are hex, or is a label; a value spelled like a register or flag, as in `HL == DE` or `A == B`, is refused rather than read as hex (`DE` would be `00DEh`): comparing one register with another is not supported, and the refusal says to write `0xDE` for the hex constant) | `breakpoint #N at 5200h`, plus `(once)` and `when A == 0Dh`: the condition as it was read, values in hex |
+| `unbreak` | `id?` or `addr?` (every breakpoint there) or `all?` | What was removed |
+| `watch` | `addr*`, `len?` (default 1), `on?` = `"read" \| "write" \| "both"` (default `"write"`), `stop?` | `watch #N on 3C00h–3FFFh (write)` |
+| `unwatch` | `id?` / `all?` | What was removed; its hits stay in the log |
+| `hits` | `id?`, `n?` (default 50), `clear?`, `format?` | Hit log, newest last: `cycle pc addr value prev` and the watch; first a `By pc:` line counting every hit by the PC that made it, each with the routine it is in (the nearest call target at or below it, within 256 bytes, since load: a heuristic) |
+| `trace` | `n?` (default 100, ≤ depth limit), `regs?` | Trace lines, oldest first, loops collapsed (uncollapsed with `regs`, which adds the registers before each instruction). The rule: `run` with `trace: true` and every `step` record, and nothing else does, since tracing slows emulation about fourfold. Each enables a fresh emulator ring for its own length; the server keeps the newest `limits.traceDepth` instructions across all of them, so a `step` never erases a traced run, and only `load` and `reset` empty it. `… (N cycles ran untraced)` marks execution that was not recorded between two stretches. (`since?` is deferred.) |
+| `callers` | `addr*`, `format?` | `from kind count` rows (`call`, `jp`, `jr`, `rst`, `ret-to`), recorded with coverage from the load; for an address nothing reached, the nearest call target at or below it |
 | `callees` | `addr*`, `depth?` | Addresses this routine calls, as a tree |
 
 ### Knowledge
 
 | Tool | Input | Output |
 |---|---|---|
-| `label` | `addr*`, `name*`, `kind?` = `"code" \| "data"`, `size?`, `note?` | Confirmation; writes sidecar file |
-| `unlabel` | `addr*` or `name*` | Confirmation |
-| `labels` | `range?`, `source?` | Table of labels |
-| `coverage` | `mode?` = `"summary" \| "ranges" \| "export"`, `path?` | Summary: % of loaded bytes executed, number of code/data ranges; ranges as a table; export writes the §8 file |
-| `suggest` | `minCalls?` (default 5) | Unlabeled addresses that are call targets, with caller count and a one-line heuristic (`writes video RAM`, `reads keyboard`, `loops ≥ 1000×`) — the agent's starting list for story 7 |
+| `label` | `addr*`, `name*` (an identifier the disassembler accepts: `nameProblem` of `@fugloy/disasm`, so no mnemonic, register, or generated `SUB_hhhh` shape, and not a name another address has), `kind?` = `"code" \| "data"`, `size?`, `note?` (a remark for a human: §8's `note`) | `Labelled 7030h PRINT (code).` and the sidecar path written; a second label at one address replaces the first and says so. A name of hex digits only (`CAFE`) is accepted with a `Note:` line, since address arguments refuse it as ambiguous and the label must be referred to by its decimal address |
+| `unlabel` | `addr*` or `name*` | `Removed PRINT at 7030h.` and the sidecar path; removes a label of any source |
+| `labels` | `range?`, `source?` | Table of labels by address: kind, size, source, name, and after `;` the note and evidence |
+| `coverage` | `mode?` = `"summary" \| "ranges" \| "export"`, `path?` (export only), `overwrite?` (export only), `format?` (summary and ranges) | Summary: % of loaded bytes executed (an instruction or its operand), counts of code ranges and data ranges (read or written, never executed), bytes never seen, and what ran outside the loaded blocks; ranges: the loaded blocks as a table of code, data, and never-seen ranges; export: the §8 file merged with the sidecar's earlier coverage, this session appended, written to `path` or the sidecar. An existing file at `path` that is not a §8 label file (not JSON, or not the format: a `.hints` file, notes, anything else) is refused unless `overwrite: true`; a label file there is replaced, and the result says it replaced a file. A case variant of the sidecar's path on a case-insensitive volume is the sidecar, even before it exists |
+| `suggest` | `minCalls?` (default 5) | Call targets with no name yet (no label, or only a generated `SUB_hhhh`) outside the ROM, reached by `CALL` or `RST` at least `minCalls` times, most calls first: calls, callers (distinct sites), and notes by address, heuristic (Ruling 4 of the emu phase 4 plan): `writes video RAM`, `reads the keyboard`, `writes port FFh (sound)`, `loops ≥ 1000× a call`. The routine runs from the target to its first executed unconditional `RET`, `RETN`, or `RETI`, ending early before a byte never executed or at another call target, within 256 bytes. The agent's starting list for story 7 |
 
 ### Snapshots
 
@@ -189,13 +191,13 @@ Prompts are where the reverse-engineering method lives. The tools are deliberate
 | Snapshots | 16 | Each is ~64–128 KB |
 | `poke` into ROM | Refused unless `force: true` | Catches agent mistakes |
 | `load` outside `fixtures` dir | Allowed, but the path is echoed back | Transparency about what ran |
-| Filesystem writes | Only the sidecar label file and explicit `coverage export` paths | The server never writes elsewhere |
+| Filesystem writes | Only the sidecar label file and explicit `coverage export` paths; an existing file at such a path that is not a label file only with `overwrite: true` | The server never writes elsewhere |
 
 No tool is destructive beyond the emulated machine's RAM and the label sidecar. There is no `delete` of program files.
 
 ## 8. Label file round-trip
 
-On `load`, the server looks for `<program>.fugloy.json` beside the program (or in `fixtures`). If found, labels and prior coverage are merged in; the `disasm` tool shows them immediately. Every `label`/`unlabel` rewrites the file. `coverage export` merges the current session's coverage with any prior coverage (union of bitfields) and appends a session record. Fugløy's disassembler reads the same file; `user` labels are never overwritten by either side.
+On `load`, the server looks for `<program>.fugloy.json` beside the program (the program's file name without its extension: `SEADRG01.CMD` → `SEADRG01.fugloy.json`), or in `fixtures` when there is none beside it; writes always go beside the program, and `load` says so when the file it read was in `fixtures`. If found, its labels (every source) become the session's, and the `disasm` tool and every address argument use them immediately; its coverage is kept as the base `coverage export` merges into (the live coverage marks still count from this load). Every `label`/`unlabel` rewrites the file at once: the file as it stands (or a skeleton naming the program and its blocks) with the session's labels in place of its own, its coverage, callers, and sessions untouched. `coverage export` merges the current session's coverage with the prior coverage read at load (union of bitfields, callers counts summed) and appends a session record; exporting again in one session replaces that record and its counts rather than adding them twice, and an export to the sidecar makes its labels (the newly observed `SUB_hhhh` call targets) the session's. A sidecar that is not JSON, breaks a rule of §8, was written for another program (its `sha256` differs), or is a symbolic link is reported by `load` and ignored, and neither `label` nor `coverage export` overwrites it (an export to another `path` still works). Before every write the server checks that the sidecar on disk is still what it last read or wrote there (absent, if neither), and refuses with a sentence when it was edited, removed, or created by hand since; it never writes through a symbolic link. `coverage export` compares files by identity (device and inode), not by spelling, so a case variant or a path through a linked folder can never name the program, the ROM, or an ignored sidecar. After `load` with `reset: false` of a different program, the machine's coverage covers both programs: `coverage export` refuses, and `coverage` and `suggest` say so. Fugløy's disassembler reads the same file; `user` labels are never overwritten by either side.
 
 ## 9. Install and use
 
@@ -217,13 +219,29 @@ Claude Code config (`.mcp.json` in the Fugløy repo so it's project-scoped):
 }
 ```
 
-Inside the monorepo during development, point `command` at `node packages/mcp/bin/fugloy-mcp.js` instead so you're testing the working tree, not the published package.
+Until phase F publishes the package, and inside the monorepo during development, run the working tree instead. The repository commits that config as `.mcp.json.example` rather than `.mcp.json`, because a committed `.mcp.json` would start the server in every contributor's Claude Code session; copy it to `.mcp.json` (gitignored) to use it:
 
-Dependency declaration in `packages/mcp/package.json` uses a normal semver range, `"@fugloy/emu": "^0.1.0"`; npm workspaces resolve it to the local package automatically. (`workspace:*` is pnpm syntax and npm will try to fetch it from the registry.)
+```json
+{
+  "mcpServers": {
+    "trs80": {
+      "command": "node",
+      "args": ["packages/mcp/bin/fugloy-mcp.js"],
+      "env": { "FUGLOY_CONFIG": "./fugloy.mcp.json" }
+    }
+  }
+}
+```
+
+The bin imports `@fugloy/disasm` and `@fugloy/z80` from their `dist/` folders, so run `pnpm build` (or `pnpm typecheck`, which builds them) once after cloning. `fugloy.mcp.json` names your ROM (copy `fugloy.mcp.example.json`). For a headless check, `claude -p "<prompt>" --mcp-config <file> --allowedTools "mcp__trs80__*"` runs one session non-interactively.
+
+Dependency declaration in `packages/mcp/package.json` uses pnpm's `workspace:*` for `@fugloy/emu`, `@fugloy/disasm`, and `@fugloy/z80`, since the monorepo is a pnpm workspace; `pnpm pack` and `pnpm publish` rewrite each to the exact version of the local package, so the published package carries ordinary semver ranges. (Publish with pnpm, not npm: npm would leave `workspace:*` in place and fail to fetch it.)
 
 First session, verbatim:
 
 > load fixtures/real/DEFENDER.CMD, run until the screen settles, and tell me what ROM routines it called.
+
+The prompts for stories 1 and 7 are kept in `prompts/story-01.md` and `prompts/story-07.md` (§13, "How to use the stories").
 
 ## 10. Testing
 
@@ -242,9 +260,9 @@ The MCP Inspector (`npx @modelcontextprotocol/inspector`) is the manual test har
 
 | Phase | Scope | Done when |
 |---|---|---|
-| A | `load`, `reset`, `status`, `run`, `step`, `regs`, `peek`, `poke`, `screen`, `key` | Agent can load a game and reach its title screen |
-| B | `break`, `watch`, `hits`, `trace`, `callers`, `disasm` | Story 1 (find the print routine) works |
-| C | `label`, `labels`, `coverage`, `suggest`, sidecar file | Story 3 and 7 work; Fugløy reads the output |
+| A | `load`, `reset`, `status`, `run`, `step`, `regs`, `peek`, `poke`, `screen`, `key` | Agent can load a game and reach its title screen. **Met** (2026-10-18): `test/phase-a-rom.test.js` loads Sea Dragon from `examples/`, and two `run until: "settled"` calls (the intro animation's cycle, then the title's) leave the title and copyright on `screen`; ENTER then reaches `1 or 2 Players?`. An ASCII `.BAS` program is typed in through the ROM and runs. The phase A tools run on a synthetic ROM in CI (`test/phase-a.test.js`) |
+| B | `break`, `watch`, `hits`, `trace`, `callers`, `disasm` | Story 1 (find the print routine) works. **Met** for a synthetic program (2026-10-18): `test/story-1.test.js` replays load, run until screen, a video RAM watch, ENTER, hits, callers, and disasm, which name the routine at `7030h` and its three call sites, and byte-compares the committed `test/golden/story-01.txt`; and for a real game (see C) |
+| C | `label`, `labels`, `coverage`, `suggest`, sidecar file | Story 3 and 7 work; Fugløy reads the output. **Met** (2026-10-18), which is emu phase 4's done-criterion (emu spec §11). Story 7 in scripted form, `test/story-7-rom.test.js` on Sea Dragon and the Model III ROM: load, two settled runs, ENTER, one player, Novice, a scripted minute of arrow keys and SPACE; `suggest minCalls=5` lists `6140h` (700 calls from 6 sites) among the routines that write video RAM; a watch on the screen line that holds text shows every write there made at `6141h`, in the routine called at `6140h`, and every value printable; `label` names it `PRINT` with a note, `coverage export` writes the sidecar, and `@fugloy/disasm` reads that file and lists `PRINT:`, the note, and `CALL PRINT`. Story 3 on a synthetic program, `test/phase-c.test.js`: coverage separates code from data and the exported file is read by the disassembler. Unaided, a headless Claude Code session given story 1's prompt on Sea Dragon loaded it, watched video RAM, ran until settled, read `hits`, `suggest`, `callers`, and `disasm`, and labelled `6140h` `PRINT_TEXT` with a correct note, in 15 turns (2026-10-18; `packages/mcp/README.md`). Story 7 on three games unaided, §10's agent acceptance, is the release check for F |
 | D | Snapshots, `diff`, `search`, `callees` | Story 2 (locate variables) works |
 | E | Resources, prompts, ROM symbol tables | `orient` prompt gives a useful first report unaided |
 | F | Guardrail hardening, golden transcripts, npm publish | v0.1.0 on npm under `@fugloy` |
@@ -253,13 +271,13 @@ Phase A can begin the day `@fugloy/emu` boots to `READY` in Node (emu Phase 0), 
 
 ## 12. Open questions
 
-- [ ] Condition expressions on `break`: a tiny custom evaluator, or accept only `reg == value` forms? (A real expression language is a security surface, even in-process.)
-- [ ] Should `key` understand BASIC line injection (`10 PRINT "HI"`) as a special case, or is `cps` pacing enough?
-- [ ] Is `suggest`'s heuristic list worth hard-coding, or should it just emit raw counts and leave judgment to the agent?
+- [x] Condition expressions on `break`: a tiny custom evaluator, or accept only `reg == value` forms? (A real expression language is a security surface, even in-process.) Settled in emu phase 4: only `<reg> <op> <value>` clauses joined by `&&` (§5 `break`).
+- [x] Should `key` understand BASIC line injection (`10 PRINT "HI"`) as a special case, or is `cps` pacing enough? Settled in emu phase 4: no special case. `key` types through the matrix at `cps` (default 20) or, with `mode: "hook"`, hands characters to the ROM's keyboard routine, which takes BASIC lines at any speed; and `load` of an ASCII `.BAS` file types the program in through the hook.
+- [x] Is `suggest`'s heuristic list worth hard-coding, or should it just emit raw counts and leave judgment to the agent? Settled in emu phase 4: both. Raw counts come first (calls, distinct call sites), then four notes attributed by instruction address and labelled "by address, heuristic": `writes video RAM`, `reads the keyboard`, `writes port FFh (sound)`, `loops ≥ 1000× a call` (§5 `suggest`). On Sea Dragon the notes single out the drawing, printing, and sound routines among twenty targets; the agent still decides which one prints text, with `hits`.
 - [ ] Streamable HTTP for workbench sharing: in scope for 1.0 or never?
-- [ ] One server per machine model, or a `model` switch at `load`? (Current spec: switch at `load`, which forces a reset.)
+- [ ] One server per machine model, or a `model` switch at `load`? (Current spec: switch at `load`, which forces a reset.) Emu phase 4 has the `model` argument; only 3 exists, and 1 or 4 is refused naming emu phase 6.
 - [ ] Publish ROM symbol tables as a separate `@fugloy/rom-symbols` package so the disassembler and workbench share them?
-- [ ] Fixture programs are copyrighted games in a gitignored folder. Golden transcripts (§10) embed their screen text and bytes. Are those transcripts committable, or do they need to live outside the public repo too?
+- [x] Fixture programs are copyrighted games in a gitignored folder. Golden transcripts (§10) embed their screen text and bytes. Are those transcripts committable, or do they need to live outside the public repo too? Settled in emu phase 4: a golden transcript is committed only for a session on a synthetic ROM and a synthetic program (`test/golden/story-01.txt`); a session on the real Model III ROM, even with a public-domain game, asserts properties instead, since its output would carry ROM screen text.
 - [ ] `restore` resets machine state but not coverage or the hit log (emu spec §7). Should the MCP layer offer `restore clearDebug: true` so an agent exploring alternatives doesn't pollute coverage with abandoned branches?
 
 ## 13. User stories and how to use them

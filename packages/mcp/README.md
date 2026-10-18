@@ -2,12 +2,185 @@
 
 A stdio MCP server that puts a running TRS-80 (`@fugloy/emu`) in front of
 Claude Code or any MCP client: load a program, run it, inspect memory and
-registers, inject input, read the screen, and record labels and coverage the
-Fugløy disassembler consumes. **Stub:** `src/index.js` is empty; phase A
-starts once `@fugloy/emu` boots to `READY` in Node.
+registers, type on its keyboard, read the screen, set breakpoints and
+watches, and record labels and coverage in the file the Fugløy disassembler
+reads. Version 0.1.0, not yet on npm: MCP phases A–C, built as the emulator's
+phase 4 (spec §11), with which an assistant can load a game, find its print
+routine, and label it on its own.
 
-- Spec: [`docs/fugloy-mcp-spec.md`](../../docs/fugloy-mcp-spec.md) (phases A–F in §11)
+- Spec: [`docs/fugloy-mcp-spec.md`](../../docs/fugloy-mcp-spec.md) (the tools in §5, phases A–F in §11, the stories in §13)
 - Companion core spec: [`docs/fugloy-emu-spec.md`](../../docs/fugloy-emu-spec.md)
 - Label and coverage file it reads and writes: [`docs/label-format.md`](../../docs/label-format.md)
-- Depends on `@fugloy/emu` by semver range (`^0.1.0`); inside the monorepo the
-  range resolves to the local package.
+- Story prompts: [`prompts/story-01.md`](../../prompts/story-01.md), [`prompts/story-07.md`](../../prompts/story-07.md)
+
+## Set up
+
+From a clone of the monorepo, with Node 22 and pnpm 10:
+
+```sh
+pnpm install
+pnpm build                                  # the bin imports @fugloy/disasm and @fugloy/z80 from dist/
+cp fugloy.mcp.example.json fugloy.mcp.json  # then point roms.model3 at your Model III ROM
+cp .mcp.json.example .mcp.json              # Claude Code starts the server for this folder
+```
+
+`.mcp.json.example` runs the working tree:
+
+```json
+{
+  "mcpServers": {
+    "trs80": {
+      "command": "node",
+      "args": ["packages/mcp/bin/fugloy-mcp.js"],
+      "env": { "FUGLOY_CONFIG": "./fugloy.mcp.json" }
+    }
+  }
+}
+```
+
+It is committed as an example, not as `.mcp.json`, so the server starts only
+for those who copy it (`.mcp.json` is gitignored). Start Claude Code at the
+repository root: the paths in it (`packages/mcp/bin/fugloy-mcp.js`,
+`./fugloy.mcp.json`) are relative to the server's working directory, which is
+the folder Claude Code was started in. Because it sets `FUGLOY_CONFIG`, the
+server exits at startup, with one line on stderr naming the path, when
+`fugloy.mcp.json` is missing; Claude Code then shows the `trs80` server as
+failed. Copy the example config first. The server reads
+`fugloy.mcp.json` from `$FUGLOY_CONFIG`, else the working directory, else
+`~/.config/fugloy/` (spec §3); paths in it are relative to the file, and its
+`limits` override the guardrails of spec §7. You bring the ROM: see "Getting
+ROMs and programs" in the [main README](../../README.md). stdout carries
+JSON-RPC only; console output and the emulator's log go to stderr.
+
+Any other MCP client works the same way: run `node packages/mcp/bin/fugloy-mcp.js`
+over stdio with `FUGLOY_CONFIG` set. The MCP Inspector
+(`npx @modelcontextprotocol/inspector node packages/mcp/bin/fugloy-mcp.js`)
+lists the tools and calls them by hand.
+
+## The tools
+
+One machine per server process, a Model III; nothing runs between calls.
+Every result is text, and every error is a sentence the agent can act on.
+Addresses are hex (`5200`, `0x5200`, `$5200`, `5200h`), a JSON number
+(decimal), or a label name; lengths and counts are decimal. Arguments are
+strict: a name a tool does not take (`untill`) is refused with the names it
+does take, never ignored.
+
+| Group | Tools |
+| --- | --- |
+| Lifecycle | `load` (`.CMD`, `.BAS`, `.CAS`, detected by content; boots the ROM to `READY` first), `reset`, `status` |
+| Execution | `run` (`cycles`, `seconds`, or `until`: `break`, `halt`, `screen`, `settled`, `pc:<addr>`; `trace`), `step`, `key` (text and named keys, through the keyboard matrix or the ROM's keyboard routine) |
+| Inspection | `regs`, `peek`, `poke`, `disasm` (with coverage marks and names), `screen` (or its diff) |
+| Debugging | `break` (with `<reg> <op> <value>` conditions), `unbreak`, `watch`, `unwatch`, `hits` (with the routine each writing PC is in), `trace`, `callers` |
+| Knowledge | `label`, `unlabel`, `labels`, `coverage` (summary, ranges, export), `suggest` (the call targets worth naming next, with what they were seen doing) |
+
+The full table, with every argument and output, is spec §5. Coverage and
+callers are recorded from the load, so `suggest` and `coverage` need no
+setup. `run until: "settled"` stops once the screen has changed and then
+either closes an animation or blink cycle or stays still for 0.5 s; a title
+screen that animates takes one call per phase (Sea Dragon's intro, then its
+title).
+
+Labels live in `<program>.fugloy.json` beside the program (`SEADRG01.CMD` →
+`SEADRG01.fugloy.json`), in the format of
+[`docs/label-format.md`](../../docs/label-format.md). `load` reads it,
+`label` and `unlabel` rewrite it at once, and `coverage mode: "export"`
+merges this session's coverage and callers into it. Those are the only files
+the server writes; it refuses to overwrite a sidecar that is broken, was
+written for another program, is a link, or was edited by hand since it last
+read it, and an export `path` that holds anything but a label file unless
+`overwrite: true`. Sidecars beside the committed examples are gitignored
+(`examples/**/*.fugloy.json`), so running the story prompts leaves the tree
+clean. The disassembler reads the same file:
+
+```sh
+pnpm fugloy SEADRG01.CMD --labels SEADRG01.fugloy.json
+```
+
+## Story 1: find the print routine
+
+The prompt ([`prompts/story-01.md`](../../prompts/story-01.md)):
+
+> Load examples/sea-dragon/seadrg01.cmd (a TRS-80 Model III game) and find the
+> routine that writes text to the screen. Label it.
+
+On 2026-10-18 a headless Claude Code session (`claude -p` with this server
+from the working tree, the MCP tools as its only tools, run on a copy of
+`seadrg01.cmd`) did it unaided, in 15 turns and 47 seconds:
+
+```
+load     seadrg01.cmd                → .CMD, 56 blocks (5200h–888Fh), boots to READY
+watch    addr=0x3C00 len=1024        → watch #1 on 3C00h–3FFFh (write)
+run      until=settled               → stopped: settled after 1.619 s (the intro animation)
+screen, hits n=5                     → graphics only so far
+run      seconds=5; screen           → the credits are on screen
+hits     n=5                         → By pc: 4B69h ×64,701 (in the routine called at 4B5Eh),
+                                       6141h ×835 (in the routine called at 6140h);
+                                       the newest rows write "Begin" at 3F24h
+suggest                              → 514Eh, 4A0Ah, 4AA5h, 4B1Fh, 4B5Eh, 6212h, …
+disasm   addr=0x6130 n=20            → 6140 LD A,(HL) / LD (DE),A / LD A,(DE) / CP (HL) / … / DJNZ 6140H / RET
+callers  addr=0x6140                 → 4A96h call 1, 4AA1h call 1, 4B8Bh call 39
+disasm   addr=0x4A8C n=8             → LD HL,6651H / LD DE,3E8DH ; VIDEO+28Dh / LD B,25H / CALL 6140H
+label    addr=0x6140 name=PRINT_TEXT size=15
+         note="Copy B chars from (HL) to video RAM at DE; if readback differs
+               (no lowercase mod) store with bit 5 cleared (uppercase)"
+         → Labelled 6140h PRINT_TEXT (code, 15 bytes). Wrote …/seadrg01.fugloy.json.
+```
+
+Its answer named the routine at `6140h`, explained its arguments (HL the
+string, DE the screen address, B the length) and its read-back for machines
+without lowercase, and said how it knew: the credits were written by the
+instruction at `6141h`. That is the routine the hand-annotated
+[`seadrg01.hints`](../../examples/sea-dragon/seadrg01.hints) calls
+`PRINT_TEXT`. (One aside in its answer was wrong: it said `4B5Eh` fills the
+screen with blanks; `4B5Eh` copies the title's off-screen buffer to the
+screen, and `4B9Eh` is the one that clears it.)
+
+The suite tells the same story twice: `test/story-1.test.js` replays it on a
+synthetic program and byte-compares `test/golden/story-01.txt`, and
+`test/story-7-rom.test.js` (below) does it on Sea Dragon.
+
+## Story 7: label a whole program
+
+The prompt ([`prompts/story-07.md`](../../prompts/story-07.md)) asks the
+agent to play for a minute, take `suggest`'s list, investigate each routine,
+label what it can justify with notes, and export the file. The scripted form
+is `test/story-7-rom.test.js`, run where a ROM is configured:
+
+```
+load      seadrg01.cmd (a copy, so the sidecar lands beside the copy)
+run       until=settled, twice      → the title
+key       ENTER, then 1, then 0     → one player, Novice; SHIPS 4 on the status line
+key/run   ×12                       → a minute of arrow keys and SPACE
+suggest   minCalls=5                → 514Eh 2,063 calls (writes video RAM), …,
+                                      4B5Eh 907 (writes video RAM, reads the keyboard),
+                                      6140h 700 from 6 sites (writes video RAM), …
+watch     the screen line holding "Hit <ENTER> to Begin"; run 1 s
+hits      n=20                      → By pc: 6141h ×N (in the routine called at 6140h); every value printable
+callers, disasm 6140
+label     6140 PRINT, with a note   → the sidecar is written
+coverage  mode=export               → the sidecar gains this session's coverage and callers
+```
+
+Then `@fugloy/disasm` reads the exported file and its listing of
+`seadrg01.cmd` (relocated to `$497F`, where the game runs) shows `PRINT:`,
+the note, and `CALL PRINT`. Story 7 on three games with no human help is the
+release check for npm (spec §10, phase F).
+
+## Tests
+
+`pnpm test` runs them with the rest of the monorepo. CI uses a synthetic
+14K ROM and synthetic programs; `test/phase-a-rom.test.js` and
+`test/story-7-rom.test.js` need the Model III ROM named in `fugloy.mcp.json`
+and skip without it. Golden transcripts are committed only for sessions on
+the synthetic ROM, since a real ROM's screen text would be in them. To
+rewrite `test/golden/story-01.txt` after a deliberate change to a tool's
+output: `FUGLOY_UPDATE_GOLDEN=1 pnpm vitest run packages/mcp/test/story-1.test.js`,
+then review the diff.
+
+## Not yet
+
+Snapshots, `diff`, `search`, and `callees` (phase D); resources and prompts
+over the protocol (E); guardrail hardening and the npm release (F). The
+dependencies on `@fugloy/emu`, `@fugloy/disasm`, and `@fugloy/z80` are
+`workspace:*`; `pnpm pack` rewrites them to the local versions.

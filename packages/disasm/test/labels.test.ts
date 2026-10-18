@@ -84,6 +84,10 @@ describe('the label file in the disassembler', () => {
     expect(errorsOf(edited((o) => { Object.assign(o['labels'][4], { addr: 0x7034, page: 1 }); o['labels'][3].page = 1; }))).toEqual(['labels[4]: $7034 (map 0, page 1) already has a label']);
     expect(parseLabelFile(edited((o) => { Object.assign(o['labels'][4], { addr: 0x7034, page: 1 }); })).errors).toEqual([]);
     expect(errorsOf(edited((o) => { o['labels'][4].map = -1; }))).toEqual(['labels[4].map must be a non-negative integer']);
+    // A note, on a label of any source, is a string with no control character.
+    expect(parseLabelFile(edited((o) => { o['labels'][1].note = 'a delay?'; o['labels'][3].note = 'adds one'; })).errors).toEqual([]);
+    expect(errorsOf(edited((o) => { o['labels'][3].note = 5; }))).toEqual(['labels[3].note must be a string']);
+    expect(errorsOf(edited((o) => { o['labels'][3].note = 'adds\none'; }))).toEqual(['labels[3].note contains a control character']);
     // Either case, and zero-length runs anywhere, are fine.
     expect(parseLabelFile(edited((o) => { o['coverage']['0:0'].read = '0,0,7040,1,ebd,0,0,2,8100'; })).errors).toEqual([]);
   });
@@ -122,6 +126,20 @@ describe('the label file in the disassembler', () => {
     const { annotations } = labelAnnotations(parsed(), open().module.image, hash);
     expect([...annotations.comments]).toEqual([[0x7020, 'observed: called 3× from 1 site'], [0x7030, 'observed: called 2× from 2 sites']]);
     expect(renderSession(withLabelFile(open(), parsed()), 'listing')).toContain('; observed: called 2× from 2 sites');
+  });
+
+  it('a note becomes the comment, ahead of any evidence, and a hint comment wins', () => {
+    const noted = parseLabelFile(edited((o) => {
+      o['labels'][3].note = 'adds one to the score';
+      o['labels'][2].note = 'the tick';
+    })).file!;
+    const { annotations } = labelAnnotations(noted, open().module.image, hash);
+    expect(annotations.comments.get(0x7034)).toBe('adds one to the score');
+    expect(annotations.comments.get(0x7030)).toBe('the tick; observed: called 2× from 2 sites');
+    expect(renderSession(withLabelFile(open(), noted), 'listing')).toContain('; adds one to the score');
+    const s = open();
+    const hints = `${writeHints(skeletonHints(s.module, bytes))}block 0:$0034 comment bumps it\n`;
+    expect(withLabelFile(withHintText(s, hints, 'sample.hints'), noted).analysis.annotations.comments.get(0x7034)).toBe('bumps it');
   });
 
   it('hint names win over label names', () => {

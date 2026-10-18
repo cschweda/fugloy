@@ -1,17 +1,27 @@
 {
   "name": "@fugloy/mcp",
   "version": "0.1.0",
-  "description": "stdio MCP server that exposes a running TRS-80 via @fugloy/emu (stub; see docs/fugloy-mcp-spec.md)",
+  "description": "stdio MCP server that exposes a running TRS-80 via @fugloy/emu (see docs/fugloy-mcp-spec.md)",
   "license": "MIT",
   "type": "module",
   "exports": {
     ".": "./src/index.js"
   },
-  "files": ["src"],
+  "bin": {
+    "fugloy-mcp": "./bin/fugloy-mcp.js"
+  },
+  "files": [
+    "bin",
+    "src"
+  ],
   "engines": {
     "node": ">=22"
   },
   "dependencies": {
-    "@fugloy/emu": "^0.1.0"
+    "@fugloy/disasm": "workspace:*",
+    "@fugloy/emu": "workspace:*",
+    "@fugloy/z80": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.32.0",
+    "zod": "4.6.5"
   }
 }

@@ -2,8 +2,8 @@ packages:
   - 'packages/*'
   - 'apps/*'
 
-# "@fugloy/emu": "^0.1.0" in packages/mcp resolves to the local package, as npm
-# workspaces would; when published, the same range resolves from the registry.
+# A semver range naming a workspace package resolves to the local package, as npm
+# workspaces would. (packages/mcp now names its siblings as workspace:*.)
 linkWorkspacePackages: true
 
 # Build scripts nobody needs: pdf.js's optional Node canvas (the site renders in
