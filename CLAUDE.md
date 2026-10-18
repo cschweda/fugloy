@@ -11,7 +11,7 @@ phase 2 onward and the MCP server follow, in the Roadmap's order. The recompiler
 bundler stay in Part 2 until the plan's kill criteria have been reviewed. If a
 task seems to need machinery from a later step, stop and say so.
 
-Current phase: **v1 released as 1.0.0 (2026-10-17); emu phase 2 merged to `main` (2026-10-18); emu phase 3 done on branch `emu-phase3`, not yet merged; next is emu phase 4 (`@fugloy/mcp` v0.1).**
+Current phase: **v1 released as 1.0.0 (2026-10-17); emu phase 2 merged to `main` (2026-10-18); emu phase 3 merged to `main` (2026-10-18); next is emu phase 4 (`@fugloy/mcp` v0.1).**
 v1 is disassembler phases 1–4: the core decoder and loaders (v0.1.0), Pass 1
 and Pass 2 (v0.2.0), the cited symbol tables (phase 3: eight JSON tables, 634
 entries, in `packages/disasm/data/symbols/`, compiled by `pnpm symbols`), and
@@ -35,7 +35,7 @@ hook, and the `.CMD`, `.BAS`, and `.CAS` loaders with manifests
 `docs/superpowers/plans/2026-10-17-emu-phase2.md`). Sea Dragon, Eliminator, and
 Rear Guard reach their title screens through `Machine` (Armored Patrol was
 rejected), and a scripted session repeats byte for byte. Emu phase 3 is done
-on branch `emu-phase3`, not yet merged: `m.debug` (breakpoints, watches,
+(merged 2026-10-18): `m.debug` (breakpoints, watches,
 hooks, coverage, callers, trace, snapshots, labels) and `m.debug.labelFile()`,
 read by the disassembler and the CLI's `--labels`; a scripted session's label
 file feeds the disassembler (plan
@@ -90,7 +90,7 @@ committed as `examples/sea-dragon/seadrg01.labels.json`. Next: emu phase 4
    passes ZEXALL. 2: Model III devices and `.CMD`/`.BAS`/`.CAS` loaders.
    3: debugger API, coverage, the label file. 4: `@fugloy/mcp` v0.1. 5: FDC
    and disk images. 6: Model I, then Model 4. 7: differential harness. Phases 0,
-   1, 2, and 3 are done (phase 3 on `emu-phase3`, not yet merged); phase 4,
+   1, 2, and 3 are done; phase 4,
    `@fugloy/mcp` v0.1, is next.
 4. **mcp — phases A–F** (`docs/fugloy-mcp-spec.md` §11). A: lifecycle,
    execution, and inspection tools. B: break, watch, trace, callers, disasm.
