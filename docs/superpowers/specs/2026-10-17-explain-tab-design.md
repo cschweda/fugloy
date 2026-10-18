@@ -178,7 +178,7 @@ More patterns can be added later as one entry each.
 Added the same day. The user pointed at Sea Dragon's long run of data
 rows and asked what they are. They are one region, DATA_7399, which runs
 from $7399 to $7FFF at the address the game runs at (3,175 bytes, 795
-listing rows; $7C1A–$8880 in the file, which loads it $2881 higher).
+listing rows; $7C1A–$8880 in the file, which loads it $881 higher).
 Corrected after the build: this paragraph first said $7399–$8880 and
 1,988 rows, mixing the runtime start with the file's end. Its address is
 loaded at $4C42 and stored in DATA_624A, which serves as a pointer, and
@@ -227,7 +227,7 @@ games follow later.
 
 Done 2026-10-17: the hint file names 19 routines and labels and 22
 variables and tables (TITLE_LOOP, MAIN_LOOP, DRAW_CAVERN, AIR_SUPPLY, TONE, CAVERN_MAP,
-MAP_PTR, RESTARTS and others) and has block comments on 47 addresses: the
+MAP_PTR, RESTARTS and others) and has block comments on 46 addresses: the
 loader, the title screen, the main loop and the routines it calls, sound,
 scoring, and the data. Generated names that many tests pin (L497F,
 SUB_4B9E, L49B1, L5FB9) are kept and explained in notes. One finding came from the data itself: leftover text

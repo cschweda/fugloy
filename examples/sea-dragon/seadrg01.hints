@@ -103,10 +103,10 @@ block 0:$0551 note (1,110 bytes from $4529: 15 rows of 74), then reads 64 column
 block 0:$0551 note CAVERN_MAP from MAP_PTR and puts each byte's character on its row,
 block 0:$0551 note using ROW_OFFSETS for where each row starts.
 block 0:$0551 note
-block 0:$0551 note On the way it notes where the water surface starts and ends (DATA_624C
-block 0:$0551 note and DATA_624E) for AIR_SUPPLY. Then it moves MAP_PTR on one column
-block 0:$0551 note (most frames), adds 1 to DISTANCE, and lights the bottom pixels of
-block 0:$0551 note buffer row 14 (OR $B0 in the loop at L4FB3): the sea floor.
+block 0:$0551 note On the way it notes where the water surface probably starts and ends
+block 0:$0551 note (DATA_624C and DATA_624E) for AIR_SUPPLY. Then it moves MAP_PTR on one
+block 0:$0551 note column (most frames), adds 1 to DISTANCE, and lights the bottom pixels
+block 0:$0551 note of buffer row 14 (OR $B0 in the loop at L4FB3): the sea floor.
 block 0:$066B name AIR_SUPPLY
 block 0:$066B note Probably the water surface and the air supply. It draws the surface
 block 0:$066B note ($8C, every other column) on the row the map gives (DATA_6250), from
@@ -167,8 +167,8 @@ block 0:$0895 note probably live objects first, exploding ones second.
 block 0:$1141 name NEXT_NOTE
 block 0:$1141 note Plays the next note of the current sound. SOUND holds it as pairs of
 block 0:$1141 note bytes, a pitch and a length for TONE, ended by 0. NOTE_INDEX is how
-block 0:$1141 note far it has got; it is written into the offsets of the two LD r,(IX+n)
-block 0:$1141 note instructions ($5AD0 and $5ADD) before they run.
+block 0:$1141 note far it has got; it is written into the offsets ($5AD0 and $5ADD) of
+block 0:$1141 note the two LD r,(IX+n) instructions before they run.
 block 0:$11C3 note Probably the fire keys and the shots. SPACE (or the joystick's button)
 block 0:$11C3 note fires one kind of shot, probably forward; ENTER fires another, at most
 block 0:$11C3 note two at once (DATA_6263 counts them), probably the kind that climbs.

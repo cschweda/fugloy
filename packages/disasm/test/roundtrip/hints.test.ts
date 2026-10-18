@@ -68,7 +68,9 @@ test('a note at the relocated Sea Dragon routine reassembles to the same image',
   const key = addressKey(base, 0x497f)!;
   const noted = withHintText(base, `${hints}\nblock ${key.block}:$${key.offset.toString(16).toUpperCase().padStart(4, '0')} note The relocated routine.\nblock ${key.block}:$${key.offset.toString(16).toUpperCase().padStart(4, '0')} note\n`);
   const source = renderSession(noted, 'zmac');
-  // The committed hints already note L497F; the new note follows theirs, in file order.
-  expect(source).toContain("; and the title animation's counters reset.\n; The relocated routine.\n;\nL497F:\n");
+  expect(source).toContain('; The relocated routine.\n;\nL497F:\n');
+  // The committed hints may already note L497F; the added note follows theirs, in file order.
+  const existing = base.analysis.annotations.notes.get(0x497f) ?? [];
+  if (existing.length > 0) expect(source).toContain(`; ${existing.at(-1)}\n; The relocated routine.\n`);
   expectSameImage(assemble(source).module.image, base.module.image);
 });

@@ -838,10 +838,10 @@ L4E9D:
 ; CAVERN_MAP from MAP_PTR and puts each byte's character on its row,
 ; using ROW_OFFSETS for where each row starts.
 ;
-; On the way it notes where the water surface starts and ends (DATA_624C
-; and DATA_624E) for AIR_SUPPLY. Then it moves MAP_PTR on one column
-; (most frames), adds 1 to DISTANCE, and lights the bottom pixels of
-; buffer row 14 (OR $B0 in the loop at L4FB3): the sea floor.
+; On the way it notes where the water surface probably starts and ends
+; (DATA_624C and DATA_624E) for AIR_SUPPLY. Then it moves MAP_PTR on one
+; column (most frames), adds 1 to DISTANCE, and lights the bottom pixels
+; of buffer row 14 (OR $B0 in the loop at L4FB3): the sea floor.
 DRAW_CAVERN:
 4ED0  21 29 45      LD HL,4529H
 4ED3  11 2A 45      LD DE,452AH
@@ -2468,8 +2468,8 @@ L5AAD:
 
 ; Plays the next note of the current sound. SOUND holds it as pairs of
 ; bytes, a pitch and a length for TONE, ended by 0. NOTE_INDEX is how
-; far it has got; it is written into the offsets of the two LD r,(IX+n)
-; instructions ($5AD0 and $5ADD) before they run.
+; far it has got; it is written into the offsets ($5AD0 and $5ADD) of
+; the two LD r,(IX+n) instructions before they run.
 NEXT_NOTE:
 5AC0  DD 21 55 64   LD IX,SOUND
 5AC4  3A 64 62      LD A,(NOTE_INDEX)

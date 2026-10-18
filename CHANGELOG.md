@@ -46,7 +46,7 @@ Releases are tagged `vX.Y.Z` on `main`.
   notes already there, for the user to rewrite before saving.
 - An annotated Sea Dragon: `examples/sea-dragon/seadrg01.hints` now names 19
   routines and labels and 22 variables and tables, and carries block comments
-  on 47 addresses: the loader, the title screen, the main loop (`MAIN_LOOP`)
+  on 46 addresses: the loader, the title screen, the main loop (`MAIN_LOOP`)
   and what it calls (`DRAW_CAVERN`, `DRAW_PLAYER`, `MOVE_PLAYER`,
   `AIR_SUPPLY`, `UPDATE_OBJECTS`), sound (`TONE`, `NEXT_NOTE`), scoring, lost
   ships and restarts, and the data (`CAVERN_MAP`, `MAP_PTR`, `RESTARTS`,
