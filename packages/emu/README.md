@@ -16,7 +16,7 @@ Phases 0–7 of the spec's eight are done (6 for the Model I, 7 for the Model II
 ZEXALL, the `Machine` below runs real programs, `m.debug` writes the label
 and coverage file, and phase 4, the MCP server
 [`@fugloy/mcp`](https://github.com/cschweda/fugloy/blob/main/packages/mcp/README.md),
-drives it for an AI assistant. Version 0.3.0 (first released 2026-10-18; 0.2.0 is the version on npm until it is published)
+drives it for an AI assistant. Version 0.3.0 (on npm since 2026-10-18)
 (`npm i @fugloy/emu`; or use it from a clone for development; Node 22 or later, or any browser bundler: it has no
 dependencies).
 

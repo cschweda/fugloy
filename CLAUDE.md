@@ -11,7 +11,7 @@ later phases follow, in the Roadmap's order. The recompiler and
 bundler stay in Part 2 until the plan's kill criteria have been reviewed. If a
 task seems to need machinery from a later step, stop and say so.
 
-Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.2.0, `@fugloy/emu` 0.2.0, and `@fugloy/mcp` 0.1.0 on npm (2026-10-18); emu phases 2 and 3 merged to `main` (2026-10-18); emu phase 4 (`@fugloy/mcp` v0.1, MCP phases A–C) merged to `main` (2026-10-18); MCP phases A–F done; emu phases 5 (disk controller and images) and 6 (Model I) merged (2026-10-18), unreleased, with the Model 4 split off into its own plan, planned next now that a Model 4 ROM is local (native mode still needs an LS-DOS 6 / TRSDOS 6 disk); emu phase 7 (the differential harness against trsjs) done for the Model III and merged (2026-10-18); emu 0.3.0 and mcp 0.1.1 prepared 2026-10-18 (versions bumped, CHANGELOG sections written; not on npm until `publish.sh` runs); next: publish them, then the Model 4.**
+Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.2.0, `@fugloy/emu` 0.3.0, and `@fugloy/mcp` 0.1.1 on npm (2026-10-18); emu phases 5–7 merged and released in emu 0.3.0; the Model 4 (emu phase 6b) in progress on branch `emu-phase6b` (native mode still needs an LS-DOS 6 / TRSDOS 6 disk).**
 v1 is disassembler phases 1–4: the core decoder and loaders (v0.1.0), Pass 1
 and Pass 2 (v0.2.0), the cited symbol tables (phase 3: eight JSON tables, 634
 entries, in `packages/disasm/data/symbols/`, compiled by `pnpm symbols`), and
@@ -56,7 +56,7 @@ the ROM symbols resource (E); guardrail tests, golden transcripts for stories
 unaided on Sea Dragon, Eliminator, and Rear Guard (the release check, MCP
 spec §10; results in the CHANGELOG and `packages/mcp/README.md`). Published
 (2026-10-18): core 1.2.0 (`v1.2.0`), emu 0.2.0 (`emu-v0.2.0`), mcp 0.1.0
-(`mcp-v0.1.0`). Emu phase 5 is done and merged (unreleased;
+(`mcp-v0.1.0`); then emu 0.3.0 (`emu-v0.3.0`) and mcp 0.1.1 (`mcp-v0.1.1`). Emu phase 5 is done and merged (released in emu 0.3.0;
 plan `docs/superpowers/plans/2026-10-18-emu-phase5.md`): `m.fdc` (mount,
 unmount, drives, export as DMK) and `m.load.dsk`; the WD1793 follows the
 FD179X data sheet item by item, with what is unverified listed in emu spec
@@ -68,8 +68,8 @@ TRSDOS 1.3 image is present, so the emu spec §10 TRSDOS row stays open.
 Disk images stay in the gitignored `fixtures/real/`; synthetic ones are in
 `fixtures/synthetic/disk/`. Release coupling: the MCP server now needs emu's
 `m.fdc`, `m.load.dsk`, `DiskImage`, `JV1_MODEL1_SD_TRACKS`, and `m.clockHz`, which emu 0.2.0 lacks,
-so emu 0.3.0 (versions bumped 2026-10-18, first released then, not on npm until
-published) must be on npm before `@fugloy/mcp` 0.1.1. Emu phase 6 is done for the Model I and merged (plan
+so emu 0.3.0 had to be on npm before `@fugloy/mcp` 0.1.1; both are published
+(2026-10-18). Emu phase 6 is done for the Model I and merged (plan
 `docs/superpowers/plans/2026-10-18-emu-phase6-model1.md`): `new Machine({
 model: 1, ram, expansion, lowercase })` (models described in
 `src/machine/models.js`; the Model III's save state is byte-identical to
@@ -86,7 +86,7 @@ is now local (`fixtures/real/model4.rom`, from the cpmarchives TRS32 ROM set;
 its `MODEL4P.ROM` is an emulator's stand-in, not Tandy's 4P ROM), and the
 Model 4 phase is planned next; its native mode still needs an LS-DOS 6 or
 TRSDOS 6 boot disk. The emu 0.3.0
-release also carries the Model I, which the next mcp needs. The Sea Dragon
+release also carries the Model I, which mcp 0.1.1 needs. The Sea Dragon
 speed test runs only with `FUGLOY_BENCH=1` (it flaked beside the parallel
 suite); `./publish.sh check` runs it alone after the suite. Emu phase 7 is
 done for the Model III and merged (plan
@@ -161,7 +161,7 @@ The Model I waits for a Model I reference (MAME or xtrs, ask the user first).
    3: debugger API, coverage, the label file. 4: `@fugloy/mcp` v0.1. 5: FDC
    and disk images. 6: Model I, then Model 4. 7: differential harness. Phases 0,
    1, 2, and 3 are done and merged; phase 4, `@fugloy/mcp` v0.1, is done and
-   merged; emu 0.2.0 and mcp 0.1.0 are on npm (2026-10-18); phase 5 is done
+   merged; emu 0.3.0 and mcp 0.1.1 are on npm (2026-10-18); phase 5 is done
    and merged; phase 6 is done for the Model I and merged. The
    Model 4 half of phase 6 is split off (2026-10-18) into its own plan, now
    planned next: a Model 4 ROM is local (`fixtures/real/model4.rom`; the
@@ -174,7 +174,7 @@ The Model I waits for a Model I reference (MAME or xtrs, ask the user first).
    E: resources, prompts, ROM symbols. F: guardrails, golden transcripts, npm
    publish. A starts after emu phase 0; B and C need emu phase 3. A, B, and
    C are done (emu phase 4, merged); D, E, and F are done and merged, and
-   `@fugloy/mcp` 0.1.0 is on npm (2026-10-18).
+   `@fugloy/mcp` 0.1.1 is on npm (2026-10-18).
 
 The plan's phase 5 (assembler and IDE) is not placed in this sequence: it comes
 after v1 and needs phases 3 and 4 and emu phases 2–3. Phase 6, **Learn assembly
