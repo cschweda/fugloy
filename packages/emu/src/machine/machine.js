@@ -47,7 +47,7 @@ export class Machine {
   load;
   /** @type {ReturnType<typeof cassetteDeck>} The cassette deck: insert a .CAS at a baud, rewind, read the motor relay. */
   cassette;
-  /** @type {Debugger} Breakpoints now; watchpoints, coverage, and trace follow (spec §7). */
+  /** @type {Debugger} Breakpoints, watchpoints, and memory and port hooks; coverage and trace follow (spec §7). */
   debug;
 
   /** True inside `run`, false inside `step`, which ignores breakpoints. */
@@ -144,7 +144,10 @@ export class Machine {
    * would (spec §6, "Keyboard-scan hook"). That return stands in for the boundary's instruction,
    * as one RET (10 T-states); a halted CPU idles instead, as it does for any instruction, so the next boundary is at the caller's return address.
    * Between draining and the keyboard hook, a breakpoint hit (only while `debug.active`, and
-   * never in `step`) stops the boundary: nothing executes.
+   * never in `step`) stops the boundary: nothing executes. Last, with memory accesses watched or
+   * hooked, the debugger is told an instruction starts at PC, so its fetches are not taken for
+   * reads and its accesses carry its PC; the keyboard hook's stand-in and a halted CPU's idle
+   * start none (the idle reads nothing; the stand-in's stack reads carry the CPU's PC).
    * @returns {boolean | 'stop'} true when the hook stood in for the instruction, 'stop' when a breakpoint holds the boundary
    */
   #beforeInstruction() {
@@ -162,13 +165,12 @@ export class Machine {
       this.#resumePc = pc;
       return 'stop';
     }
-    if (kb.hasFeed && !cpu.halted) {
-      const pc = cpu.registers.PC;
-      if (pc === 0x002b || pc === 0x0049) {
-        romKeyReturn(cpu, pc, kb.takeFeed());
-        return true;
-      }
+    if (cpu.halted) return false;
+    if (kb.hasFeed && (pc === 0x002b || pc === 0x0049)) {
+      romKeyReturn(cpu, pc, kb.takeFeed());
+      return true;
     }
+    if (this.debug.tracksAccess) this.debug.startInstruction(pc);
     return false;
   }
 
@@ -194,6 +196,8 @@ export class Machine {
       }
     } finally {
       this.#busy = false;
+      // A hook or callback that threw leaves no instruction open and no stop pending for the next call.
+      if (debug.active) debug.afterInstruction();
     }
     return { cycles: sys.cpu.cycles - start, halted: sys.cpu.halted };
   }
@@ -205,6 +209,8 @@ export class Machine {
    * (only at that PC, so hit counts do not depend on how a session is split into runs). A
    * breakpoint at a run's first boundary that it did not just stop at stops with `cycles: 0`
    * (an interrupt response at that boundary counts). Breakpoints are not checked while halted.
+   * A watch with `stop` returns after the instruction whose access hit it; after an instruction
+   * the order is watch stop, then `until`, then the budget. `step` logs watch hits but never stops.
    * @param {{ cycles?: number, until?: Until }} opts
    * @returns {{ reason: 'cycles' | 'halt' | 'predicate', cycles: number } | { reason: 'break' | 'watch', id: number, cycles: number }}
    */
@@ -227,6 +233,7 @@ export class Machine {
         sys.stepInstruction(this.#hook);
         if (this.#stopped) {
           this.#stopped = false;
+          debug.afterInstruction(); // a break wins: a watch stop from this boundary's interrupt response is dropped (its hit stays logged)
           const id = /** @type {number} */ (debug.stopId);
           debug.stopId = null;
           return { reason: 'break', id, cycles: cpu.cycles - start };
@@ -244,6 +251,8 @@ export class Machine {
       }
     } finally {
       this.#busy = false;
+      // A hook or callback that threw leaves no instruction open and no stop pending for the next call.
+      if (debug.active) debug.afterInstruction();
     }
   }
 }

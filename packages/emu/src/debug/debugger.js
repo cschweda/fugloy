@@ -2,10 +2,26 @@
  * The spec §7 debugger, over a Machine. Task by task it grows breakpoints, watchpoints, coverage,
  * and a trace; the Machine consults it at each instruction boundary only while `active` is true,
  * so a machine with nothing set pays one boolean check per instruction.
+ *
+ * Memory and port accesses are seen by swapping the CPU's accessor functions (`readMemory`,
+ * `writeMemory`, `readPort`, `writePort`) for instrumented ones only while something listens,
+ * and putting the original function objects back when nothing does. An instruction fetch is not
+ * a read (phase 3 Ruling 2): `startInstruction` records the instruction's start and length, and
+ * read k of the instruction is a fetch when k < len and its address is pc + k (the core fetches
+ * every instruction's bytes first, in order; a test checks that for every opcode).
  */
+import { instructionInfo } from './instr.js';
+
+/** The hit log keeps the newest this many hits. */
+const RING = 65536;
 
 /**
  * @typedef {{ id: number, addr: number, once: boolean, hits: number, when?: (m: any) => boolean }} BreakEntry
+ * @typedef {{ id: number, addr: number, len: number, read: boolean, write: boolean, stop: boolean, hits: number }} WatchEntry
+ * @typedef {{ id: number, kind: 'read' | 'write', cycle: number, pc: number, addr: number, value: number, prev: number }} Hit
+ * @typedef {((addr: number, value: number) => void) | null} ReadHook
+ * @typedef {((addr: number, value: number, prev: number) => void) | null} WriteHook
+ * @typedef {((port: number, value: number, dir: 'in' | 'out') => void) | null} PortHook
  */
 
 export class Debugger {
@@ -13,15 +29,89 @@ export class Debugger {
   active = false;
   /** @type {number | null} The id of the breakpoint that made the last `beforeInstruction` stop. */
   stopId = null;
+  /** @type {boolean} True while memory accesses are instrumented, so the Machine calls `startInstruction` before each instruction. */
+  tracksAccess = false;
+  /** @type {boolean} True when the hit log dropped its oldest hits to stay at 65,536. */
+  hitsOverflowed = false;
+  /**
+   * @type {{ onMemRead: ReadHook, onMemWrite: WriteHook, onPort: PortHook }}
+   * Called on every data read (fetches excluded), every memory write (with the byte it replaced),
+   * and every port access. Setting one to a function or null re-instruments the CPU.
+   */
+  hooks;
 
   #machine;
+  /** @type {any} The Z80CPU whose accessors are swapped. */
+  #cpu;
+  /** @type {{ readMemory: (a: number) => number, writeMemory: (a: number, v: number) => void, readPort: (p: number) => number, writePort: (p: number, v: number) => void }} The CPU's own accessors, restored when nothing listens. */
+  #plain;
   /** @type {Map<number, BreakEntry[]>} */
   #breaks = new Map();
+  /** @type {Map<number, WatchEntry>} In id order. */
+  #watches = new Map();
+  /** Per address: bit 0 set when a read watch covers it, bit 1 for a write watch. */
+  #watchMask = new Uint8Array(0x10000);
   #nextId = 1;
+  /** @type {ReadHook} */
+  #onMemRead = null;
+  /** @type {WriteHook} */
+  #onMemWrite = null;
+  /** @type {PortHook} */
+  #onPort = null;
+
+  /** True between `startInstruction` and `afterInstruction`: accesses then belong to the instruction at `#pc`. */
+  #inInstr = false;
+  #pc = 0;
+  /** Bytes the current instruction fetches (0 when reads are not instrumented). */
+  #len = 0;
+  /** Reads the current instruction has made so far. */
+  #reads = 0;
+  /** True while `readMemory` is instrumented, so `startInstruction` needs the length. */
+  #readsOn = false;
+  /** @type {number | null} The lowest id of a stop watch hit since the last `afterInstruction`. */
+  #stopHit = null;
+
+  /** @type {Hit[]} The hit log, a ring once full: `#ringHead` is the oldest entry. */
+  #ring = [];
+  #ringHead = 0;
 
   /** @param {any} machine */
   constructor(machine) {
     this.#machine = machine;
+    const cpu = machine.system.cpu;
+    this.#cpu = cpu;
+    this.#plain = { readMemory: cpu.readMemory, writeMemory: cpu.writeMemory, readPort: cpu.readPort, writePort: cpu.writePort };
+    const dbg = this;
+    /** @param {string} name @param {unknown} f */
+    const check = (name, f) => {
+      if (f !== null && typeof f !== 'function') throw new Error(`hooks.${name} must be a function or null, not ${String(f)}`);
+    };
+    this.hooks = {
+      get onMemRead() {
+        return dbg.#onMemRead;
+      },
+      set onMemRead(f) {
+        check('onMemRead', f);
+        dbg.#onMemRead = f;
+        dbg.#refresh();
+      },
+      get onMemWrite() {
+        return dbg.#onMemWrite;
+      },
+      set onMemWrite(f) {
+        check('onMemWrite', f);
+        dbg.#onMemWrite = f;
+        dbg.#refresh();
+      },
+      get onPort() {
+        return dbg.#onPort;
+      },
+      set onPort(f) {
+        check('onPort', f);
+        dbg.#onPort = f;
+        dbg.#refresh();
+      },
+    };
   }
 
   /**
@@ -67,6 +157,64 @@ export class Debugger {
   }
 
   /**
+   * Watch memory accesses to `len` bytes from `addr` (wrapping at $FFFF). Each matching access is
+   * logged (`hits`); with `stop`, `run` returns `{ reason: 'watch', id }` after the instruction
+   * that made it. Instruction fetches are not reads.
+   * @param {number} addr 0..$FFFF
+   * @param {number} len 1..65536
+   * @param {{ read?: boolean, write?: boolean, stop?: boolean }} [opts] at least one of `read` and `write`
+   * @returns {number} the watch id (ids count up from 1 across breakpoints and watches)
+   */
+  watch(addr, len, { read = false, write = true, stop = false } = {}) {
+    if (!Number.isInteger(addr) || addr < 0 || addr > 0xffff) throw new Error(`watch: address must be an integer 0..65535 ($0000..$FFFF), not ${String(addr)}`);
+    if (!Number.isInteger(len) || len < 1 || len > 0x10000) throw new Error(`watch: len must be an integer 1..65536, not ${String(len)}`);
+    if (!read && !write) throw new Error('watch: it must watch read or write (or both); with neither it would never hit');
+    const id = this.#nextId++;
+    this.#watches.set(id, { id, addr, len, read: !!read, write: !!write, stop: !!stop, hits: 0 });
+    this.#rebuildMask();
+    this.#refresh();
+    return id;
+  }
+
+  /**
+   * Remove a watchpoint. Its hits stay in the log.
+   * @param {number} id
+   * @returns {boolean} false when no watch has that id
+   */
+  unwatch(id) {
+    if (!this.#watches.delete(id)) return false;
+    this.#rebuildMask();
+    this.#refresh();
+    return true;
+  }
+
+  /** @returns {WatchEntry[]} the watchpoints, in id order */
+  get watches() {
+    return [...this.#watches.values()].map((w) => ({ ...w }));
+  }
+
+  /**
+   * The hit log, oldest first: the newest 65,536 hits (`hitsOverflowed` tells whether older ones
+   * were dropped). `pc` is the start of the instruction making the access, or the CPU's PC for an
+   * access outside one (an interrupt response, the keyboard hook's stand-in RET); `cycle` is
+   * `m.cycles` at the access; `prev` is the byte a write replaced, and equals `value` for a read.
+   * @param {number} [id] only this watch's hits
+   * @returns {Hit[]}
+   */
+  hits(id) {
+    const ring = this.#ring;
+    const out = ring.length < RING ? ring.slice() : [...ring.slice(this.#ringHead), ...ring.slice(0, this.#ringHead)];
+    return id === undefined ? out : out.filter((h) => h.id === id);
+  }
+
+  /** Empty the hit log and clear `hitsOverflowed`. */
+  clearHits() {
+    this.#ring = [];
+    this.#ringHead = 0;
+    this.hitsOverflowed = false;
+  }
+
+  /**
    * Internal: called at an instruction boundary before the instruction runs.
    * @param {number} pc
    * @param {boolean} first true for a run's first boundary, which never stops, so a run resumes past the breakpoint it stopped at
@@ -88,15 +236,125 @@ export class Debugger {
   }
 
   /**
-   * Internal: called after each executed instruction while `active`. Later tasks (watchpoints,
-   * coverage, trace) fill it in.
-   * @returns {number | null} the id of a watchpoint to stop on, or null
+   * Internal: called while `tracksAccess`, once the boundary is certain to execute an instruction
+   * at `pc` (not for a breakpoint stop, a halted CPU's idle, or the keyboard hook's stand-in RET).
+   * @param {number} pc
+   */
+  startInstruction(pc) {
+    this.#pc = pc;
+    this.#reads = 0;
+    this.#len = this.#readsOn ? instructionInfo(this.#plain.readMemory, pc).len : 0;
+    this.#inInstr = true;
+  }
+
+  /**
+   * Internal: called after each boundary while `active` (and on a breakpoint stop, to drop what
+   * the boundary's interrupt response left). Ends the instruction `startInstruction` began.
+   * @returns {number | null} the lowest id of a stop watch hit since the last call, or null
    */
   afterInstruction() {
-    return null;
+    this.#inInstr = false;
+    const id = this.#stopHit;
+    this.#stopHit = null;
+    return id;
+  }
+
+  /** The instrumented `readMemory`: fetches pass straight through. */
+  #read = (/** @type {number} */ addr) => {
+    const value = this.#plain.readMemory(addr);
+    if (this.#inInstr) {
+      const k = this.#reads++;
+      if (k < this.#len && addr === ((this.#pc + k) & 0xffff)) return value;
+    }
+    addr &= 0xffff;
+    if (this.#watchMask[addr] & 1) this.#hit('read', addr, value, value);
+    if (this.#onMemRead !== null) this.#onMemRead(addr, value);
+    return value;
+  };
+
+  /** The instrumented `writeMemory`. */
+  #write = (/** @type {number} */ addr, /** @type {number} */ value) => {
+    addr &= 0xffff;
+    value &= 0xff;
+    const watched = (this.#watchMask[addr] & 2) !== 0;
+    const prev = watched || this.#onMemWrite !== null ? this.#plain.readMemory(addr) : 0;
+    this.#plain.writeMemory(addr, value);
+    if (watched) this.#hit('write', addr, value, prev);
+    if (this.#onMemWrite !== null) this.#onMemWrite(addr, value, prev);
+  };
+
+  /** The instrumented `readPort`. */
+  #readPort = (/** @type {number} */ port) => {
+    const value = this.#plain.readPort(port);
+    if (this.#onPort !== null) this.#onPort(port, value, 'in');
+    return value;
+  };
+
+  /** The instrumented `writePort`. */
+  #writePort = (/** @type {number} */ port, /** @type {number} */ value) => {
+    this.#plain.writePort(port, value);
+    if (this.#onPort !== null) this.#onPort(port, value & 0xff, 'out');
+  };
+
+  /**
+   * Log an access every matching watch sees, in id order.
+   * @param {'read' | 'write'} kind
+   * @param {number} addr
+   * @param {number} value
+   * @param {number} prev
+   */
+  #hit(kind, addr, value, prev) {
+    const cpu = this.#cpu;
+    const pc = this.#inInstr ? this.#pc : cpu.registers.PC;
+    const cycle = cpu.cycles;
+    for (const w of this.#watches.values()) {
+      if (!(kind === 'read' ? w.read : w.write) || ((addr - w.addr) & 0xffff) >= w.len) continue;
+      w.hits++;
+      const h = { id: w.id, kind, cycle, pc, addr, value, prev };
+      if (this.#ring.length < RING) this.#ring.push(h);
+      else {
+        this.#ring[this.#ringHead] = h;
+        this.#ringHead = (this.#ringHead + 1) % RING;
+        this.hitsOverflowed = true;
+      }
+      if (w.stop && (this.#stopHit === null || w.id < this.#stopHit)) this.#stopHit = w.id;
+    }
+  }
+
+  #rebuildMask() {
+    const mask = this.#watchMask;
+    mask.fill(0);
+    for (const w of this.#watches.values()) {
+      const bits = (w.read ? 1 : 0) | (w.write ? 2 : 0);
+      for (let k = 0; k < w.len; k++) mask[(w.addr + k) & 0xffff] |= bits;
+    }
+  }
+
+  /**
+   * Install the instrumented CPU accessors that something listens to, and the plain ones for
+   * the rest. Coverage (Task 4) will also need the instrumented reads and writes.
+   */
+  #instrument() {
+    let reads = this.#onMemRead !== null;
+    let writes = this.#onMemWrite !== null;
+    for (const w of this.#watches.values()) {
+      reads ||= w.read;
+      writes ||= w.write;
+    }
+    const ports = this.#onPort !== null;
+    const cpu = this.#cpu;
+    const plain = this.#plain;
+    cpu.readMemory = reads ? this.#read : plain.readMemory;
+    cpu.writeMemory = writes ? this.#write : plain.writeMemory;
+    cpu.readPort = ports ? this.#readPort : plain.readPort;
+    cpu.writePort = ports ? this.#writePort : plain.writePort;
+    this.#readsOn = reads;
+    this.tracksAccess = reads || writes;
+    if (!this.tracksAccess) this.#inInstr = false;
   }
 
   #refresh() {
-    this.active = this.#breaks.size > 0;
+    this.#instrument();
+    this.active = this.#breaks.size > 0 || this.#watches.size > 0 || this.#onMemRead !== null || this.#onMemWrite !== null || this.#onPort !== null;
   }
 }
