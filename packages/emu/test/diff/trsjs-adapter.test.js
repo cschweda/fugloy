@@ -130,6 +130,20 @@ describe.skipIf(trsjsSkip !== null)(`trsjs adapter against @fugloy/emu${trsjsSki
     expect(ref.peek(0x3c00, 1)[0]).toBe(0x5a); // video RAM takes it
   });
 
+  it('stores a byte, not the 12 bits trsjs\'s RLD and RRD shift into it', () => {
+    const ref = loadTrsjs();
+    const r = ref.z.reg;
+    ref.poke(0x5000, [0xed, 0x6f, 0xed, 0x67]); // RLD / RRD
+    ref.poke(0x6000, [0x9a]);
+    r.PC = 0x5000; r.HL = 0x6000; r.A = 0x35;
+    ref.step(); // RLD: (HL) = $A5, A = $39
+    expect(ref.writes()).toEqual([{ addr: 0x6000, value: 0xa5 }]);
+    expect([ref.z.mem[0x6000], r.A]).toEqual([0xa5, 0x39]);
+    ref.step(); // RRD: (HL) = $9A, A = $35
+    expect(ref.writes()).toEqual([{ addr: 0x6000, value: 0x9a }]);
+    expect([ref.z.mem[0x6000], r.A]).toEqual([0x9a, 0x35]);
+  });
+
   it('wraps PC and (IX+d) at 16 bits, as the Z80 does', () => {
     const ref = loadTrsjs();
     const r = ref.z.reg;
