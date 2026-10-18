@@ -2,7 +2,7 @@
 // the image is the social card (docs/images/og-image.png, copied to public/ by prepare-assets).
 export const SITE_ORIGIN = 'https://app.fugloy.dev';
 export const HOME_TITLE = 'Fugløy — TRS-80 disassembler workbench';
-export const CARD_ALT = 'Fugløy: a Z80 disassembler for the TRS-80. Disassemble, label, reassemble, byte for byte, beside a listing whose ROM, video, and DOS addresses are named.';
+export const CARD_ALT = 'Fugløy: a Z80 toolkit for the TRS-80. Disassemble, explain, emulate, label: a disassembler, a web workbench with the Explain tutor, an emulator, and an MCP server, beside a listing whose ROM, video, and DOS addresses are named.';
 
 export interface PageSeo {
   title: string;

@@ -16,7 +16,8 @@
     "test:seo": "pnpm run generate && FUGLOY_REQUIRE_SEO=1 vitest run test/seo.test.ts",
     "test:e2e": "playwright test",
     "render-brand": "tsx scripts/render-brand.ts",
-    "outline-card-text": "tsx scripts/outline-card-text.ts"
+    "outline-card-text": "tsx scripts/outline-card-text.ts",
+    "outline-card-words": "tsx scripts/outline-card-words.ts"
   },
   "dependencies": {
     "@fontsource/jetbrains-mono": "^5.3.0",
@@ -31,6 +32,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
+    "@fontsource/inter": "^5.3.0",
     "@fugloy/cli": "workspace:*",
     "@fugloy/emu": "workspace:*",
     "@nuxt/test-utils": "^4.3.4",
