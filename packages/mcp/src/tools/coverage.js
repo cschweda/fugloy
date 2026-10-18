@@ -129,6 +129,12 @@ export default {
       );
     }
     lines.push(`Outside the loaded blocks: ${bytes(c.outside.executed)} executed, ${c.outside.data.toLocaleString('en-US')} read or written`);
+    // The Model 4 keeps coverage per memory map and page (emu spec §8); `bits` is the one in force.
+    const keys = m.debug.coverage.keys;
+    if (keys.length > 1) {
+      const mem = /** @type {any} */ (m.system.memory);
+      lines.push(`Maps: coverage is kept per memory map and page (${keys.join(', ')}); these counts are of map ${mem.map}, page ${mem.page}, the one in force, and coverage mode "export" writes each`);
+    }
     if (program.sharesCoverageWith !== undefined) lines.push(sharedNote(program));
     if (sidecar.ignored !== null) lines.push(`Sidecar: ${sidecar.readFrom} was ignored at load (${sidecar.ignored})`);
     else if (sidecar.file === null && sidecar.base === null) lines.push(`Sidecar: none yet (coverage mode "export" writes ${sidecar.path})`);

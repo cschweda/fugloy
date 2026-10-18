@@ -14,6 +14,9 @@
   "engines": {
     "node": ">=22"
   },
+  "scripts": {
+    "test": "vitest run --root ../.. packages/emu/"
+  },
   "devDependencies": {
     "@fugloy/disasm": "workspace:*",
     "@fugloy/z80": "workspace:*"

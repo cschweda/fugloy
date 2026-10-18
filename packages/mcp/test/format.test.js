@@ -97,6 +97,27 @@ describe('screen', () => {
     expect(screenDiff(before, after, true)).toBe(["1 cell changed", "(1,3) ' '→'B'"].join('\n'));
   });
 
+  it('screenText and screenDiff take a Model 4 geometry: 80 by 24, 40 columns, inverse video, and off-screen bytes', () => {
+    const ram = new Uint8Array(2048).fill(0x20);
+    ram[80] = 0x41; // row 1, column 0 at 80 bytes a row
+    ram[81] = 0xc2; // B with bit 7: a graphics block, or B with inverse video
+    const wide = screenText(ram, { width: 80, rows: 24, step: 1 }).split('\n');
+    expect(wide).toHaveLength(2 + 24 + 2);
+    expect(wide[2]).toBe('0123456789'.repeat(8));
+    expect(wide[4]).toBe('A·'.padEnd(80));
+    expect(screenText(ram, { width: 80, rows: 24, step: 1, inverse: true }).split('\n')[4]).toBe('AB'.padEnd(80));
+    expect(screenText(ram, { width: 80, rows: 24, step: 2 }).split('\n')[4]).toBe('A'.padEnd(40));
+    const after = ram.slice();
+    after[80 * 23 + 79] = 0x5a; // the last cell
+    after[1920] = 0x01; // past 80 by 24
+    after[2047] = 0x01;
+    expect(screenDiff(ram, after, { width: 80, rows: 24, step: 1 })).toBe(["1 cell changed", "(23,79) ' '→'Z'", '(2 bytes of video RAM off screen also changed, at offsets 1920–2047; not shown)'].join('\n'));
+    // At 64 by 16 the second 1K is off screen.
+    const low = ram.slice();
+    low[1024] = 0x41;
+    expect(screenDiff(ram, low)).toBe('0 cells changed\n(1 byte of video RAM off screen also changed, at offsets 1024–2047; not shown)');
+  });
+
   it('screenDiff lists changed cells under a count line', () => {
     const before = new Uint8Array(1024).fill(0x20);
     const after = before.slice();

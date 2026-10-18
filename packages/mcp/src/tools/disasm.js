@@ -15,8 +15,8 @@ import { h2, h4 } from '../format/hex.js';
 /** @type {Map<number, import('@fugloy/disasm').SymbolSet>} */
 const symbols = new Map();
 /**
- * The ROM and hardware names of model `n` (1 or 3; no DOS: a DOS the machine boots is not known
- * to the server), built once each.
+ * The ROM and hardware names of model `n` (1, or 3; the Model 4, booted in Model III mode, takes
+ * the Model III's; no DOS: a DOS the machine boots is not known to the server), built once each.
  * @param {number} n
  */
 export function symbolsFor(n) {
@@ -93,7 +93,7 @@ function operandNames(ins, labels, sym) {
 export default {
   name: 'disasm',
   description:
-    'Disassemble n instructions (a decimal count, default 32, at most 512) linearly from addr. Each line: a mark (* executed, as an instruction or as part of one, d read or written as data, ? never seen, from coverage since load), the address, the bytes, the instruction, and after ; the names its targets and operands refer to: your labels first, then the ROM and hardware tables of the machine\'s model (Model III or Model I). A labelled address gets a NAME: line. labels: false leaves names out. Linear decoding can start mid-instruction or run into data; the marks show where it has, and a closing note names the first line that starts on a byte executed only as another instruction\'s operand.',
+    'Disassemble n instructions (a decimal count, default 32, at most 512) linearly from addr. Each line: a mark (* executed, as an instruction or as part of one, d read or written as data, ? never seen, from coverage since load), the address, the bytes, the instruction, and after ; the names its targets and operands refer to: your labels first, then the ROM and hardware tables of the machine\'s model (Model III or Model I; a Model 4, in Model III mode, takes the Model III\'s). A labelled address gets a NAME: line. labels: false leaves names out. Linear decoding can start mid-instruction or run into data; the marks show where it has, and a closing note names the first line that starts on a byte executed only as another instruction\'s operand.',
   inputSchema: {
     addr: z.union([z.string(), z.number()]).describe('Start address: 5200, 0x5200, $5200, 5200h, a decimal number, or a label name'),
     n: z.number().int().optional().describe('Instructions to list, a decimal count (default 32)'),

@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { parseAddr, parseCount } from '../args.js';
 import { capCycles, clockOf, runMachine, seconds, stoppedLine, withTrace } from '../execute.js';
 import { regsBlock } from '../format/regs.js';
-import { screenDiff } from '../format/screen.js';
+import { geometryOf, screenDiff } from '../format/screen.js';
 
 /**
  * `until` as the run loop takes it.
@@ -68,7 +68,7 @@ export default {
     if (until?.kind === 'break' && m.debug.breaks.length === 0) lines.push('(no breakpoints are set, so only a stop watch or a cap could stop it)');
     if (args.trace) lines.push(`Trace: recorded while running (the last ${limits.traceDepth.toLocaleString('en-US')} instructions are kept)`);
     lines.push(regsBlock(m.cpu.regs, m.cpu.flags, m.cycles));
-    if (until?.kind === 'screen' || until?.kind === 'settled') lines.push(screenDiff(before, m.video.raw, m.video.columns === 32));
+    if (until?.kind === 'screen' || until?.kind === 'settled') lines.push(screenDiff(before, m.video.raw, geometryOf(m)));
     return lines.join('\n');
   },
 };

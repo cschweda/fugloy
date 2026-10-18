@@ -208,7 +208,7 @@ describe('phase A tools', () => {
     await close();
   });
 
-  it('load takes model 1 or 3 and refuses the Model 4 and other numbers in sentences', async () => {
+  it('load takes model 1, 3, or 4 and refuses other numbers in sentences', async () => {
     const { call, close } = await server();
     // This config names no Model I ROM: the sentence says which entry to set (emu phase 6, Review Focus 5).
     expect(await call('load', { path: at('hello.cmd'), model: 1 })).toEqual({
@@ -216,10 +216,10 @@ describe('phase A tools', () => {
       isError: true,
     });
     expect(await call('load', { path: at('hello.cmd'), model: 4 })).toEqual({
-      text: 'There is no Model 4 yet: it needs a Model 4 ROM and boot disk to prove it boots, and comes in its own plan once one is supplied; call load with model 1 (the Model I) or 3 (the Model III).',
+      text: 'No Model 4 ROM is configured; set roms.model4 in fugloy.mcp.json (see the MCP spec §3).',
       isError: true,
     });
-    expect(await call('load', { path: at('hello.cmd'), model: 2 })).toEqual({ text: 'model must be 1 (the Model I) or 3 (the Model III), not 2.', isError: true });
+    expect(await call('load', { path: at('hello.cmd'), model: 2 })).toEqual({ text: 'model must be 1 (the Model I), 3 (the Model III), or 4 (the Model 4), not 2.', isError: true });
     expect((await call('load', { path: at('hello.cmd'), model: 3 })).isError).toBe(false);
     await close();
   });

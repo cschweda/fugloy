@@ -6,7 +6,7 @@
  */
 import { z } from 'zod';
 import { capCycles, clockOf, runMachine, seconds, stoppedLine, wallDeadline } from '../execute.js';
-import { screenDiff } from '../format/screen.js';
+import { geometryOf, screenDiff } from '../format/screen.js';
 
 const NAMES = ['ENTER', 'BREAK', 'CLEAR', 'UP', 'DOWN', 'LEFT', 'RIGHT', 'SHIFT', 'SPACE'];
 /** Named keys the hook can return: those with a character the ROM routine gives back unambiguously. */
@@ -80,7 +80,7 @@ export default {
       lines.push(stoppedLine(stop, session, { capped: true }));
       if (m.keyboard.pending > 0) lines.push(`${m.keyboard.pending} key events were still queued; call run to deliver them.`);
     }
-    lines.push(screenDiff(before, m.video.raw, m.video.columns === 32));
+    lines.push(screenDiff(before, m.video.raw, geometryOf(m)));
     return lines.join('\n');
   },
 };
