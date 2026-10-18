@@ -11,7 +11,7 @@
 import type { Instruction } from '@fugloy/z80';
 import { endsPath, isRst08 } from '../analysis/descent.js';
 import { dataReference } from '../analysis/symbols.js';
-import { stepRegs, unknownRegs } from '../analysis/regs.js';
+import { pair, stepRegs, unknownRegs } from '../analysis/regs.js';
 import type { Reg8Name, RegState } from '../analysis/regs.js';
 import type { Analysis } from '../pipeline.js';
 
@@ -35,11 +35,17 @@ interface Index {
   dataRefs: Set<number>;
   /** Address → the instructions that hold it as a number (`dataReference` with no (nn) operand): a pointer that may be jumped or called through. */
   pointerUses: Map<number, number[]>;
-  /** Addresses an instruction provably stores into: the (nn) of LD (nn),r, and nn and nn+1 of LD (nn),rr. */
-  stores: Set<number>;
+  /** Addresses an instruction provably stores into by its own bytes: the (nn) of LD (nn),r, and nn and nn+1 of LD (nn),rr; address → the stores. */
+  stores: Map<number, number[]>;
 }
 
 const cache = new WeakMap<Analysis, Index>();
+
+function addStore(m: Map<number, number[]>, addr: number, at: number): void {
+  const list = m.get(addr & 0xffff);
+  if (list === undefined) m.set(addr & 0xffff, [at]);
+  else if (list.at(-1) !== at) list.push(at);
+}
 
 function index(a: Analysis): Index {
   const hit = cache.get(a);
@@ -66,7 +72,7 @@ function index(a: Analysis): Index {
   if (a.entry !== null) roots.add(a.entry);
   const dataRefs = new Set<number>(a.annotations.tables.map((t) => t.addr & 0xffff));
   const pointerUses = new Map<number, number[]>();
-  const stores = new Set<number>();
+  const stores = new Map<number, number[]>();
   for (const [at, ins] of a.pass1.instructions) {
     const ref = dataReference(ins);
     if (ref !== null) dataRefs.add(ref & 0xffff);
@@ -78,8 +84,8 @@ function index(a: Analysis): Index {
     }
     const [d, v] = ins.operands;
     if (ins.mnemonic === 'LD' && d?.kind === 'mem') {
-      stores.add(d.addr & 0xffff);
-      if (v?.kind === 'reg16') stores.add((d.addr + 1) & 0xffff);
+      addStore(stores, d.addr, at);
+      if (v?.kind === 'reg16') addStore(stores, d.addr + 1, at);
     }
   }
   for (const list of pointerUses.values()) list.sort((p, q) => p - q);
@@ -139,12 +145,57 @@ export function walkBack(a: Analysis, addr: number): Walk {
     if (ix.roots.has(cur)) return done('root');
     if (a.symbols.has(cur)) return done('label');
     if (chain.length >= CAP) return done('cap');
-    const pred = fallThrough(a, ix, cur);
-    if (pred === null) return done('none');
-    // A CALL or RST, conditional or not, leaves everything unknown after it.
-    if (pred.ins.flow.kind === 'call') return done('call');
+    const stop = stopAt(a, ix, cur);
+    if (stop !== null) return done(stop);
+    const pred = fallThrough(a, ix, cur)!;
     chain.push(pred);
     cur = pred.at;
+  }
+}
+
+/**
+ * Whether the backward walk stops at `cur` (other than at the cap), and why;
+ * null when exactly one instruction, not a CALL or RST, falls into it and
+ * nothing else may reach it. The one rule walkBack and the forward sweep share.
+ */
+function stopAt(a: Analysis, ix: Index, cur: number): Exclude<WalkStop, 'cap'> | null {
+  if (ix.into.has(cur)) return 'merge';
+  // Any other label (a data reference, a table, a user name) may be entered by JP (HL) or a pushed RET.
+  if (ix.roots.has(cur)) return 'root';
+  if (a.symbols.has(cur)) return 'label';
+  const pred = fallThrough(a, ix, cur);
+  if (pred === null) return 'none';
+  // A CALL or RST, conditional or not, leaves everything unknown after it.
+  if (pred.ins.flow.kind === 'call') return 'call';
+  return null;
+}
+
+/**
+ * One forward pass over the instructions in address order, calling `visit`
+ * with what is proven just before each: unknown where the backward walk would
+ * stop (stopAt), else the state after the single instruction that falls into
+ * it. This is knownBefore without its 32-instruction cap (the cap only bounds
+ * one walk's cost; it is not a rule about what may reach a line), so it proves
+ * at least what knownBefore proves, for every line at once.
+ */
+export function sweep(a: Analysis, visit: (at: number, ins: Instruction, before: Readonly<RegState>) => void): void {
+  const ix = index(a);
+  const starts = [...a.pass1.instructions.keys()].sort((p, q) => p - q);
+  let last = -1;
+  let after = unknownRegs();
+  for (const at of starts) {
+    const ins = a.pass1.instructions.get(at)!;
+    let before: RegState;
+    if (stopAt(a, ix, at) !== null) before = unknownRegs();
+    else {
+      const pred = fallThrough(a, ix, at)!;
+      // Overlapping decodes can put another instruction between the two; then ask the walk.
+      before = pred.at === last ? after : knownBefore(a, at).regs;
+    }
+    visit(at, ins, before);
+    after = { ...before };
+    step(a, at, ins, after);
+    last = at;
   }
 }
 
@@ -181,26 +232,164 @@ export function pointerUses(a: Analysis, addr: number): number[] {
   return [...(index(a).pointerUses.get(addr & 0xffff) ?? [])];
 }
 
+/** The memory writes that go through a register: the register-addressed operand of these, when it is (HL), (BC), (DE) or (IX/IY+d). */
+const WRITES_OPERAND = new Set(['INC', 'DEC', 'RLC', 'RRC', 'RL', 'RR', 'SLA', 'SRA', 'SLL', 'SRL', 'SET', 'RES']);
+
 /**
- * True when some instruction provably stores into the first byte of the
- * instruction at `at` (LD (nn),r with nn = at, or LD (nn),rr covering it):
- * at run time it may be a different instruction altogether. A mere data
- * reference to an instruction start (a pointer the program loads) is not enough.
+ * The address an instruction stores one byte into through a register, given
+ * what the registers hold before it: LD (rr),x and LD (IX+d),x; INC, DEC, the
+ * rotates, shifts, SET and RES on (HL) or (IX+d); RLD and RRD; LDI, LDD, INI
+ * and IND. Null when it stores through a register whose value is not proven;
+ * [] when it stores nothing that way. The repeating block moves (LDIR, LDDR,
+ * INIR, INDR) are left out: a loader's LDIR copies the whole program to where
+ * it runs (Sea Dragon's at $888B), which would mark every instruction.
  */
-export function opcodeRewritten(a: Analysis, at: number): boolean {
-  return index(a).stores.has(at & 0xffff) && a.pass1.instructions.has(at & 0xffff);
+function storesThroughRegs(ins: Instruction, regs: RegState): number[] | null {
+  const m = ins.mnemonic;
+  const one = (x: number | null): number[] | null => (x === null ? null : [x & 0xffff]);
+  switch (m) {
+    case 'LDI':
+    case 'LDD':
+      return one(pair(regs, 'DE'));
+    case 'INI':
+    case 'IND':
+    case 'RLD':
+    case 'RRD':
+      return one(pair(regs, 'HL'));
+  }
+  const o = m === 'LD' ? ins.operands[0] : WRITES_OPERAND.has(m) ? ins.operands.find((x) => x.kind === 'ind' || x.kind === 'idx') : undefined;
+  if (o?.kind === 'ind' && (o.reg === 'HL' || o.reg === 'DE' || o.reg === 'BC')) return one(pair(regs, o.reg));
+  if (o?.kind === 'idx') {
+    const base = pair(regs, o.reg);
+    return one(base === null ? null : base + o.disp);
+  }
+  return [];
+}
+
+/** The per-Analysis set of addresses stored into through a register (address → the stores), built on first need. */
+const viaRegsCache = new WeakMap<Analysis, Map<number, number[]>>();
+/** The analyses whose register-store set is being built: while it is, the rules below consult only the direct stores. */
+const building = new WeakSet<Analysis>();
+
+/**
+ * The addresses some instruction provably stores into through a register
+ * (`storesThroughRegs`, with the registers from one forward `sweep`, which
+ * proves at least what knownBefore proves at each store, in one pass instead
+ * of one walk per store). Built once per Analysis, lazily, and cached. While
+ * it is built, the replay sees only the direct stores, so there is no
+ * recursion; marking an instruction rewritten only ever removes knowledge, so
+ * one pass suffices.
+ * A store that may itself be rewritten (its opcode, or the displacement of
+ * (IX+d)) proves no address and is skipped. Null while building.
+ */
+function viaRegs(a: Analysis): Map<number, number[]> | null {
+  const hit = viaRegsCache.get(a);
+  if (hit !== undefined) return hit;
+  if (building.has(a)) return null;
+  building.add(a);
+  const out = new Map<number, number[]>();
+  try {
+    sweep(a, (at, ins, before) => {
+      // Cheap first: does it write through a register at all?
+      if (storesThroughRegs(ins, FULL)?.length === 0 || anyPatched(a, at, ins)) return;
+      const addrs = storesThroughRegs(ins, before);
+      if (addrs !== null) for (const x of addrs) addStore(out, x, at);
+    });
+  } finally {
+    building.delete(a);
+  }
+  viaRegsCache.set(a, out);
+  return out;
+}
+
+/** A register state with every register known: used only to ask whether an instruction stores through a register. */
+const FULL: RegState = (() => {
+  const r = unknownRegs();
+  for (const n of Object.keys(r) as Reg8Name[]) r[n] = 1;
+  return r;
+})();
+
+/** True when some instruction provably stores into `addr`, by its own operand or through a register. */
+function storedInto(a: Analysis, addr: number): boolean {
+  return index(a).stores.has(addr & 0xffff) || (viaRegs(a)?.has(addr & 0xffff) ?? false);
+}
+
+/** The instructions that provably store into `addr`: LD (nn) by its operand, or through a register whose value is proven; ascending. */
+export function storesInto(a: Analysis, addr: number): number[] {
+  const set = new Set([...(index(a).stores.get(addr & 0xffff) ?? []), ...(viaRegs(a)?.get(addr & 0xffff) ?? [])]);
+  return [...set].sort((p, q) => p - q);
 }
 
 /**
- * The bytes of an instruction the program may rewrite as it runs: its first
- * byte when an instruction stores into it (`opcodeRewritten`), and the
- * labelled addresses among its other bytes (at+1..at+len-1), which the program
- * refers to. Either way the decoded numbers are only where they start.
+ * The offsets of an instruction's opcode bytes: its first byte; for a CB, ED,
+ * DD or FD prefix also the second (the real opcode, or the CB after DD/FD);
+ * and for DD CB d op and FD CB d op also the fourth.
+ */
+export function opcodeOffsets(ins: Instruction): readonly number[] {
+  const [b0, b1] = ins.bytes;
+  if (b0 === 0xcb || b0 === 0xed) return OPS_01;
+  if (b0 === 0xdd || b0 === 0xfd) return b1 === 0xcb && ins.length >= 4 ? OPS_013 : ins.length >= 2 ? OPS_01 : OPS_0;
+  return OPS_0;
+}
+const OPS_0: readonly number[] = [0];
+const OPS_01: readonly number[] = [0, 1];
+const OPS_013: readonly number[] = [0, 1, 3];
+
+/** The opcode bytes (`opcodeOffsets`) of the instruction at `at` that some instruction provably stores into; ascending addresses. */
+export function rewrittenOpcodeBytes(a: Analysis, at: number): number[] {
+  const ins = a.pass1.instructions.get(at & 0xffff);
+  if (ins === undefined) return [];
+  const out: number[] = [];
+  for (const o of opcodeOffsets(ins)) if (storedInto(a, at + o)) out.push((at + o) & 0xffff);
+  return out;
+}
+
+/**
+ * True when some instruction provably stores into an opcode byte of the
+ * instruction at `at` (`opcodeOffsets`): by LD (nn),r or LD (nn),rr, or
+ * through a register whose value knownBefore proves at that store. At run
+ * time it may be a different instruction altogether. A mere data reference
+ * to an instruction start (a pointer the program loads) is not enough.
+ */
+export function opcodeRewritten(a: Analysis, at: number): boolean {
+  const ins = a.pass1.instructions.get(at & 0xffff);
+  if (ins === undefined) return false;
+  for (const o of opcodeOffsets(ins)) if (storedInto(a, at + o)) return true;
+  return false;
+}
+
+/** True when `patchedBytes` would find a byte: the same rule, without building the list (the replay asks this at every step). */
+function anyPatched(a: Analysis, at: number, ins: Instruction): boolean {
+  if (opcodeRewritten(a, at)) return true;
+  const ops = opcodeOffsets(ins);
+  for (let i = 1; i < ins.length; i++) {
+    const p = (at + i) & 0xffff;
+    if (a.symbols.has(p) || (!ops.includes(i) && storedInto(a, p))) return true;
+  }
+  return false;
+}
+
+/**
+ * The bytes of an instruction the program may rewrite as it runs: its opcode
+ * bytes that an instruction stores into (`opcodeRewritten`), and among its
+ * other bytes the ones the program refers to (a label) or provably stores
+ * into. Either way the decoded numbers are only where they start.
  */
 export function patchedBytes(a: Analysis, at: number, ins: Instruction): number[] {
-  const out: number[] = opcodeRewritten(a, at) ? [at & 0xffff] : [];
-  for (let i = 1; i < ins.length; i++) if (a.symbols.has((at + i) & 0xffff)) out.push((at + i) & 0xffff);
-  return out;
+  const out = rewrittenOpcodeBytes(a, at);
+  const ops = opcodeOffsets(ins);
+  for (let i = 1; i < ins.length; i++) {
+    const p = (at + i) & 0xffff;
+    if (out.includes(p)) continue;
+    if (a.symbols.has(p) || (!ops.includes(i) && storedInto(a, p))) out.push(p);
+  }
+  return out.sort((p, q) => p - q);
+}
+
+/** True when the instruction at `from` (an xref's source) may be rewritten, so where it leads is not proven: `patchedBytes` finds a byte. A jump-table entry (not an instruction) is not. */
+export function sourceRewritten(a: Analysis, from: number): boolean {
+  const ins = a.pass1.instructions.get(from & 0xffff);
+  return ins !== undefined && anyPatched(a, from, ins);
 }
 
 /**
@@ -215,7 +404,7 @@ function step(a: Analysis, at: number, ins: Instruction, regs: RegState): void {
     for (const n of Object.keys(regs) as Reg8Name[]) regs[n] = null;
     return;
   }
-  if (patchedBytes(a, at, ins).length === 0) return stepRegs(ins, regs);
+  if (!anyPatched(a, at, ins)) return stepRegs(ins, regs);
   stepRegs(ins, regs);
   for (const n of written(ins)) regs[n] = null;
 }

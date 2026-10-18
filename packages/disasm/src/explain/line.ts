@@ -13,7 +13,7 @@ import type { ListRow, Rows } from './listing.js';
 import { dataRegion } from './region.js';
 import type { Analysis } from '../pipeline.js';
 import type { Session } from '../session.js';
-import { knownBefore, opcodeRewritten, patchedBytes, pointerUses, walkBack, written } from './track.js';
+import { knownBefore, opcodeRewritten, patchedBytes, pointerUses, rewrittenOpcodeBytes, storesInto, walkBack, written } from './track.js';
 import { dataReference } from '../analysis/symbols.js';
 import { addrPiece, andList, loaded, say, screenText, tableName, word$ } from './machine.js';
 import type { Ctx } from './machine.js';
@@ -129,22 +129,12 @@ function fromSentences(c: LineCtx, isRoot: boolean): { sentences: Sentence[]; en
   return { sentences: out, entry: w.stop === 'root' && w.at === c.addr && isRoot };
 }
 
-/** The instructions that store into `b` ((nn) operands of LD, a 16-bit store covering it), and the ones that only refer to it. */
+/** The instructions that provably store into `b` (`storesInto`: LD (nn), or through a register whose value is proven), and the others that only refer to it. */
 function usersOf(a: Analysis, b: number): { writers: number[]; refs: number[] } {
-  const writers: number[] = [];
+  const writers = storesInto(a, b);
   const refs: number[] = [];
-  for (const [at, ins] of a.pass1.instructions) {
-    const [d] = ins.operands;
-    if (ins.mnemonic === 'LD' && d?.kind === 'mem') {
-      const wide = ins.operands[1]?.kind === 'reg16';
-      if (d.addr === b || (wide && ((d.addr + 1) & 0xffff) === b)) {
-        writers.push(at);
-        continue;
-      }
-    }
-    if (dataReference(ins) === b) refs.push(at);
-  }
-  return { writers: writers.sort((p, q) => p - q), refs: refs.sort((p, q) => p - q) };
+  for (const [at, ins] of a.pass1.instructions) if (!writers.includes(at) && dataReference(ins) === b) refs.push(at);
+  return { writers, refs: refs.sort((p, q) => p - q) };
 }
 
 /** Who stores into or refers to the bytes `bytes`: their writers, else the instructions that refer to them. */
@@ -162,25 +152,28 @@ function usersOfAll(a: Analysis, bytes: readonly number[]): { writers: number[];
 
 /**
  * The caveats for an instruction the program may rewrite: when it stores into
- * the first byte, the instruction itself may be a different one at run time;
- * when a label lies in its other bytes, its numbers are only where they start.
+ * an opcode byte (the first, or the one after a CB, ED, DD or FD prefix), the
+ * instruction itself may be a different one at run time; when a label lies in
+ * its other bytes, or it stores into them, its numbers are only where they start.
  */
 function patchedSentences(c: LineCtx): Sentence[] {
   const out: Sentence[] = [];
   const name = (b: number): Piece[] => [{ text: c.a.symbols.get(b)?.name ?? word$(b), addr: b }];
-  if (opcodeRewritten(c.a, c.addr)) {
-    const u = usersOfAll(c.a, [c.addr]);
+  const ops = rewrittenOpcodeBytes(c.a, c.addr);
+  if (ops.length > 0) {
+    const u = usersOfAll(c.a, ops);
+    const which = ops.length === 1 && ops[0] === c.addr ? 'the first byte' : ops.length === 1 ? 'an opcode byte' : 'the opcode bytes';
     out.push(
       say(
-        'The program stores into the first byte of this instruction as it runs (',
-        name(c.addr),
+        `The program stores into ${which} of this instruction as it runs (`,
+        andList(ops, name),
         ', written at ',
         addrList(c, u.writers),
         '), so at run time it may be a different instruction; this line shows only what it starts as.',
       ),
     );
   }
-  const operand = c.patched.filter((b) => b !== c.addr);
+  const operand = c.patched.filter((b) => !ops.includes(b));
   if (operand.length === 0) return out;
   const names = andList(operand, name);
   const u = usersOfAll(c.a, operand);

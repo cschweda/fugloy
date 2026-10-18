@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { pair } from '../../src/analysis/regs.js';
 import { decodeAt } from '@fugloy/z80';
-import { djnzLoop, knownBefore, written } from '../../src/explain/track.js';
+import { djnzLoop, knownBefore, opcodeRewritten, sweep, written } from '../../src/explain/track.js';
 import { emptyAnnotations } from '../../src/hints/apply.js';
 import { analyze } from '../../src/pipeline.js';
 import { loadRaw } from '../../src/raw.js';
@@ -246,6 +246,31 @@ describe('Sea Dragon, with hints', () => {
     const k = knownBefore(sea, 0x5fc4);
     expect(pair(k.regs, 'HL')).toBeNull();
     expect(k.from?.jumpers).toEqual(expect.arrayContaining([0x5fd6, 0x5fde]));
+  });
+
+  it('the loader\'s LDIR, which copies the program to where it runs, does not mark its instructions rewritten', () => {
+    expect(opcodeRewritten(sea, 0x497f)).toBe(false);
+    expect(opcodeRewritten(sea, 0x49a7)).toBe(false);
+  });
+
+  it('the forward sweep proves at least what knownBefore proves, at every instruction', () => {
+    let checked = 0;
+    sweep(sea, (at, _ins, before) => {
+      const k = knownBefore(sea, at).regs;
+      for (const [n, v] of Object.entries(k)) if (v !== null) expect([at, n, before[n as keyof typeof before]]).toEqual([at, n, v]);
+      checked++;
+    });
+    expect(checked).toBe(sea.pass1.instructions.size);
+  });
+});
+
+describe('opcode rewrites found by the sweep', () => {
+  it('a store through HL set more than 32 instructions earlier on straight code still marks its target', () => {
+    // 7000 LD HL,7035H; 7003-7031 47 NOPs; 7032 LD (HL),0C9H (49 lines in: past knownBefore's cap); 7034 NOP; 7035 NOP (becomes RET); 7036 NOP; 7037 RET
+    const body = [0x21, 0x35, 0x70, ...new Array(47).fill(0x00), 0x36, 0xc9, 0x00, 0x00, 0x00, 0xc9];
+    const a = prog(body);
+    expect(knownBefore(a, 0x7032).regs.H).toBeNull();
+    expect(opcodeRewritten(a, 0x7035)).toBe(true);
   });
 });
 
