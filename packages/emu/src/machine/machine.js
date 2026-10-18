@@ -194,10 +194,12 @@ export class Machine {
         sys.stepInstruction(this.#hook);
         if (debug.active) debug.afterInstruction();
       }
-    } finally {
-      this.#busy = false;
+    } catch (e) {
       // A hook or callback that threw leaves no instruction open and no stop pending for the next call.
       if (debug.active) debug.afterInstruction();
+      throw e;
+    } finally {
+      this.#busy = false;
     }
     return { cycles: sys.cpu.cycles - start, halted: sys.cpu.halted };
   }
@@ -211,6 +213,8 @@ export class Machine {
    * (an interrupt response at that boundary counts). Breakpoints are not checked while halted.
    * A watch with `stop` returns after the instruction whose access hit it; after an instruction
    * the order is watch stop, then `until`, then the budget. `step` logs watch hits but never stops.
+   * A stop watch hit by an interrupt response at a boundary a breakpoint then holds stays pending:
+   * the next run returns `'watch'` after the held instruction (a `step` in between drops it).
    * @param {{ cycles?: number, until?: Until }} opts
    * @returns {{ reason: 'cycles' | 'halt' | 'predicate', cycles: number } | { reason: 'break' | 'watch', id: number, cycles: number }}
    */
@@ -233,7 +237,8 @@ export class Machine {
         sys.stepInstruction(this.#hook);
         if (this.#stopped) {
           this.#stopped = false;
-          debug.afterInstruction(); // a break wins: a watch stop from this boundary's interrupt response is dropped (its hit stays logged)
+          // A watch stop from this boundary's interrupt response stays pending: the next run returns it after the held instruction.
+          debug.endInstruction();
           const id = /** @type {number} */ (debug.stopId);
           debug.stopId = null;
           return { reason: 'break', id, cycles: cpu.cycles - start };
@@ -249,10 +254,12 @@ export class Machine {
         }
         if (cpu.cycles >= target) return { reason: 'cycles', cycles: cpu.cycles - start };
       }
-    } finally {
-      this.#busy = false;
+    } catch (e) {
       // A hook or callback that threw leaves no instruction open and no stop pending for the next call.
       if (debug.active) debug.afterInstruction();
+      throw e;
+    } finally {
+      this.#busy = false;
     }
   }
 }

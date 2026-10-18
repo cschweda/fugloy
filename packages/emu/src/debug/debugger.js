@@ -243,13 +243,22 @@ export class Debugger {
   startInstruction(pc) {
     this.#pc = pc;
     this.#reads = 0;
+    // The look-ahead assumes reads have no side effects: true on the Model III; the Model I's $37E0
+    // interrupt latch (phase 6) clears on read and will need a side-effect-free peek.
     this.#len = this.#readsOn ? instructionInfo(this.#plain.readMemory, pc).len : 0;
     this.#inInstr = true;
   }
 
   /**
-   * Internal: called after each boundary while `active` (and on a breakpoint stop, to drop what
-   * the boundary's interrupt response left). Ends the instruction `startInstruction` began.
+   * Internal: on a breakpoint stop, close any open instruction but keep a pending watch stop (one
+   * the boundary's interrupt response hit), so the next run returns it after the held instruction.
+   */
+  endInstruction() {
+    this.#inInstr = false;
+  }
+
+  /**
+   * Internal: called after each boundary while `active`. Ends the instruction `startInstruction` began.
    * @returns {number | null} the lowest id of a stop watch hit since the last call, or null
    */
   afterInstruction() {
@@ -286,7 +295,7 @@ export class Debugger {
   /** The instrumented `readPort`. */
   #readPort = (/** @type {number} */ port) => {
     const value = this.#plain.readPort(port);
-    if (this.#onPort !== null) this.#onPort(port, value, 'in');
+    if (this.#onPort !== null) this.#onPort(port, value & 0xff, 'in');
     return value;
   };
 
@@ -310,7 +319,7 @@ export class Debugger {
     for (const w of this.#watches.values()) {
       if (!(kind === 'read' ? w.read : w.write) || ((addr - w.addr) & 0xffff) >= w.len) continue;
       w.hits++;
-      const h = { id: w.id, kind, cycle, pc, addr, value, prev };
+      const h = Object.freeze({ id: w.id, kind, cycle, pc, addr, value, prev });
       if (this.#ring.length < RING) this.#ring.push(h);
       else {
         this.#ring[this.#ringHead] = h;

@@ -139,6 +139,21 @@ describe('watchpoints', () => {
     expect(hi.cycle).toBeGreaterThanOrEqual(RTC_INTERVAL_TSTATES);
   });
 
+  it('a stop watch hit by the interrupt push survives a break at the same boundary', () => {
+    const rom = new Uint8Array(0x40);
+    rom.set([0x3e, 0x04, 0xd3, 0xe0, 0xed, 0x56, 0x31, 0x00, 0x80, 0xfb, 0x0c, 0x18, 0xfd], 0);
+    rom.set([0xf5, 0xdb, 0xec, 0xf1, 0xfb, 0xc9], 0x38);
+    const m = machine(rom);
+    const b = m.debug.break(0x0038);
+    const w = m.debug.watch(0x7ffe, 2, { stop: true });
+    expect(m.run({ cycles: 1e7 })).toMatchObject({ reason: 'break', id: b });
+    expect(m.cpu.regs.pc).toBe(0x0038);
+    expect(m.debug.hits()).toHaveLength(2);
+    expect(m.run({ cycles: 1e7 })).toEqual({ reason: 'watch', id: w, cycles: 11 }); // PUSH AF, then the pending stop
+    expect(m.cpu.regs.pc).toBe(0x0039);
+    expect(m.run({ cycles: 1000 }).reason).toBe('cycles');
+  });
+
   it('the keyboard hook\'s stand-in RET reads the stack with the CPU\'s pc', () => {
     // LD SP,8000H / CALL 002BH / HALT: the hook returns from $002B with the fed key.
     const m = machine([0x31, 0x00, 0x80, 0xcd, 0x2b, 0x00, 0x76]);
@@ -193,6 +208,7 @@ describe('watchpoints', () => {
     expect(hits[0].value).toBe(10);
     expect(hits[65535].value).toBe((65536 + 9) & 0xff);
     expect(hits[1].cycle - hits[0].cycle).toBe(7 + 4 + 12);
+    expect(Object.isFrozen(hits[0])).toBe(true);
     m.debug.clearHits();
     expect(m.debug.hits()).toEqual([]);
     expect(m.debug.hitsOverflowed).toBe(false);
