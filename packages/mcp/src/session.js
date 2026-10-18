@@ -51,8 +51,9 @@ export function makeMachine(config, rom = readRom(config)) {
 
 /**
  * @typedef {{ name: string, path: string, sha256: string }} ProgramId The program a snapshot belongs to.
- * @typedef {{ name: string, state: any, cycles: number, kb: number, memory: Uint8Array, program: ProgramId | null }} Snapshot
+ * @typedef {{ name: string, state: any, cycles: number, kb: number, memory: Uint8Array, columns32: boolean, program: ProgramId | null }} Snapshot
  *   `state` is `m.debug.snapshot()`; `memory` is video RAM and RAM ($3C00-$FFFF, 50,176 bytes) for `diff`;
+ *   `columns32` is whether the screen was in 32-column mode, for `screen diff` against it;
  *   `program` is null for a machine with no program loaded (powered on by `reset`).
  */
 
@@ -141,7 +142,7 @@ export class Session {
     memory.set(m.mem.ram, 0x4000 - DIFF_START);
     const p = this.program;
     /** @type {Snapshot} */
-    const snap = { name, state, cycles: m.cycles, kb: Math.ceil(JSON.stringify(state).length / 1024), memory, program: p === null ? null : { name: p.name, path: p.path, sha256: p.sha256 } };
+    const snap = { name, state, cycles: m.cycles, kb: Math.ceil(JSON.stringify(state).length / 1024), memory, columns32: m.video.columns === 32, program: p === null ? null : { name: p.name, path: p.path, sha256: p.sha256 } };
     const replaced = this.snapshots.delete(name);
     let evicted = null;
     if (this.snapshots.size >= snapshotCap(this.config)) {

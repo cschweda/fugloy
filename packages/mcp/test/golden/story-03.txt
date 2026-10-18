@@ -1,0 +1,79 @@
+> load {"path":"<dir>/tabler.cmd"}
+Loaded TABLER from <dir>/tabler.cmd
+Format: .CMD (load module)
+Blocks (1):
+  7000h–7051h (82 bytes)  record 01
+Entry: 7000h (the PC is there now)
+ROM: unrecognised (SHA-256 bb54154772c1e7d2…)
+Boot: the ROM showed no READY within 5 s emulated, so the program was loaded where the ROM had got to
+Sidecar: none yet; label writes <dir>/tabler.fugloy.json
+Path: <dir>/tabler.cmd
+
+> run {"seconds":0.1}
+stopped: cycles (the 0.1 s asked for)
+Ran 202,754 cycles (0.100 s emulated)
+PC 701D  SP 7F00  AF 0044  BC 0000  DE 7E08  HL 7048  IX 0000  IY 0000
+AF' 0000 BC' 0000 DE' 0000 HL' 0000  I 00  R 11  IFF1 0  IFF2 0  IM 0
+Flags: S0 Z1 H0 PV1 N0 C0     Cycles: 10,340,364
+
+> coverage {}
+Coverage since load (this session):
+Loaded: 82 bytes in 1 block (7000h–7051h)
+Executed: 28 bytes (34.1%) in 2 code ranges
+Data: 10 bytes read or written and never executed, in 2 data ranges
+Never seen: 44 bytes
+Outside the loaded blocks: 0 bytes executed, 8 read or written
+Sidecar: none yet (coverage mode "export" writes <dir>/tabler.fugloy.json)
+
+> coverage {"mode":"ranges"}
+Ranges in the loaded blocks (7):
+start  end    bytes  kind
+7000h  7016h     23  code
+7017h  7019h      3  never seen
+701Ah  701Eh      5  code
+701Fh  703Fh     33  never seen
+7040h  7047h      8  data
+7048h  704Fh      8  never seen
+7050h  7051h      2  data
+
+> disasm {"addr":"7011","n":6}
+* 7011  3A 50 70     LD A,(7050H)
+* 7014  B7           OR A
+* 7015  28 03        JR Z,701AH
+? 7017  CD 30 70     CALL 7030H
+* 701A  32 51 70     LD (7051H),A
+* 701D  18 FE        JR 701DH
+Marks: * executed, d read or written as data, ? never seen (coverage since load)
+
+> disasm {"addr":"7030","n":2}
+? 7030  3E 01        LD A,01H
+? 7032  C9           RET
+Marks: * executed, d read or written as data, ? never seen (coverage since load)
+
+> label {"addr":"7040","name":"TABLE","kind":"data","size":8,"note":"read a byte at a time by the copy loop at 700Bh"}
+Labelled 7040h TABLE (data, 8 bytes).
+Wrote <dir>/tabler.fugloy.json.
+
+> label {"addr":"7050","name":"FLAG","kind":"data","note":"read at 7011h; zero, so the CALL at 7017h is skipped"}
+Labelled 7050h FLAG (data).
+Wrote <dir>/tabler.fugloy.json.
+
+> peek {"addr":"7040","len":18}
+      ; TABLE
+7040  01 02 04 08 10 20 40 80  00 00 00 00 00 00 00 00  ..... @.........
+      ; FLAG
+7050  00 00                                             ..
+
+> coverage {"mode":"export"}
+Wrote <dir>/tabler.fugloy.json: 3 labels, 1 session
+Executed in the loaded blocks, all sessions: 28 bytes of 82 (34.1%)
+Fugløy reads it with: fugloy <program> --labels <file>
+
+> coverage {}
+Coverage since load (this session):
+Loaded: 82 bytes in 1 block (7000h–7051h)
+Executed: 28 bytes (34.1%) in 2 code ranges
+Data: 10 bytes read or written and never executed, in 2 data ranges
+Never seen: 44 bytes
+Outside the loaded blocks: 0 bytes executed, 8 read or written
+Sidecar: <dir>/tabler.fugloy.json, 1 recorded session (coverage mode "export" merges this one in)

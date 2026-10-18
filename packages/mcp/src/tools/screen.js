@@ -9,7 +9,7 @@ import { screenDiff, screenText } from '../format/screen.js';
 export default {
   name: 'screen',
   description:
-    'Show the screen: 16 lines inside a fence under a column ruler, non-printables as ·. diff: true shows only the cells changed since the previous screen call (or since load or restore), as (row,col) old→new; diff: "<snapshot name>" shows the cells changed since that snapshot.',
+    'Show the screen: 16 lines inside a fence under a column ruler, non-printables as ·. diff: true shows only the cells changed since the previous screen call (or since load or restore), as (row,col) old→new; diff: "<snapshot name>" shows the cells changed since that snapshot (or, when the snapshot was taken in the other of the 32- and 64-column widths, both screens, each in its own width).',
   inputSchema: {
     diff: z.union([z.boolean(), z.string()]).optional()
       .describe('true: only the cells changed since the previous screen call; a snapshot name: only the cells changed since that snapshot (default false)'),
@@ -23,8 +23,22 @@ export default {
     const now = Uint8Array.from(m.video.raw);
     const columns32 = m.video.columns === 32;
     // A snapshot's memory starts with video RAM ($3C00, DIFF_START), 1,024 bytes.
-    const before = typeof diff === 'string' ? session.useSnapshot(diff).memory.subarray(0, 1024) : (session.screenBaseline ?? now);
+    const snap = typeof diff === 'string' ? session.useSnapshot(diff) : undefined;
+    const before = snap !== undefined ? snap.memory.subarray(0, 1024) : (session.screenBaseline ?? now);
     session.screenBaseline = now;
-    return diff === false ? screenText(now, columns32) : screenDiff(before, now, columns32);
+    if (diff === false) return screenText(now, columns32);
+    // Cells are screen positions, so a snapshot taken in the other width has no cell-by-cell
+    // diff: say so, and show each screen in its own width.
+    if (snap !== undefined && snap.columns32 !== columns32) {
+      const width = (/** @type {boolean} */ c32) => (c32 ? '32 columns' : '64 columns');
+      return [
+        `The widths differ: snapshot ${JSON.stringify(snap.name)} was taken at ${width(snap.columns32)} and the screen is now ${width(columns32)}, so cells cannot be compared one by one. The two screens, each in its own width:`,
+        `Snapshot ${JSON.stringify(snap.name)} (${width(snap.columns32)}):`,
+        screenText(before, snap.columns32),
+        `Now (${width(columns32)}):`,
+        screenText(now, columns32),
+      ].join('\n');
+    }
+    return screenDiff(before, now, columns32);
   },
 };

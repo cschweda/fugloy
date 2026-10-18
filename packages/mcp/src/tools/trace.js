@@ -8,10 +8,14 @@ import { z } from 'zod';
 import { parseCount } from '../args.js';
 import { collapse, traceLines } from '../format/trace.js';
 
+/** Spec §7: a trace call returns at most 100 trace lines a page, after its one heading line. */
+export const TRACE_PAGE = Object.freeze({ lines: 100, heading: 1 });
+
 export default {
   name: 'trace',
+  page: TRACE_PAGE,
   description:
-    'Show the newest n recorded instructions (a decimal count, default 100, at most limits.traceDepth, 2,000 by default), oldest first, loops collapsed as ×N. Only run with trace: true and step record instructions; nothing else does (tracing slows emulation). The newest limits.traceDepth are kept across every traced run and step, and only load and reset empty them; a "… (N cycles ran untraced)" line marks execution that was not recorded between two stretches. regs: true adds the registers before each instruction and shows every instruction uncollapsed.',
+    'Show the newest n recorded instructions (a decimal count, default 100, at most limits.traceDepth, 2,000 by default), oldest first, loops collapsed as ×N, at most 100 lines a page (the rest with offset). Only run with trace: true and step record instructions; nothing else does (tracing slows emulation). The newest limits.traceDepth are kept across every traced run and step, and only load and reset empty them; a "… (N cycles ran untraced)" line marks execution that was not recorded between two stretches. regs: true adds the registers before each instruction and shows every instruction uncollapsed.',
   inputSchema: {
     n: z.number().int().optional().describe('How many of the newest instructions to show, a decimal count (default 100)'),
     regs: z.boolean().optional().describe('Show A, F, BC, DE, HL, and SP before each instruction, uncollapsed (default false)'),

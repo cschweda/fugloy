@@ -43,7 +43,7 @@ and 1.1.0. Phase 4 was merged after 1.1.0.
 Emu phase 4: the MCP server, `@fugloy/mcp` 0.1.0 (not on npm), with MCP
 phases A–C. Phase 4's done-criterion is met: Claude Code loaded a game, found
 its print routine, and labelled it unaided. Given only story 1's prompt on Sea
-Dragon (`prompts/story-01.md`), a headless session (`claude -p`, the server
+Dragon (`packages/mcp/prompts/story-01.md`), a headless session (`claude -p`, the server
 from the working tree, the MCP tools its only tools; 2026-10-18, 15 turns, 47
 s) watched video RAM, ran until the screen settled, read `hits` (the credits
 written at `$6141`, in the routine called at `$6140`), `suggest`, `callers`,
@@ -144,6 +144,41 @@ spec §6):
   with `{path}` and `{minCalls}` (and the keys described for any game, Sea
   Dragon's as the example), and `story-01.md` moved unchanged. The root
   `prompts/README.md` points there.
+
+MCP phase F, part 1: guardrails and golden transcripts (`@fugloy/mcp`; MCP
+spec §7, §10):
+
+- `test/guardrails.test.js` trips every §7 limit through the protocol and
+  checks its text: the output cap (each page within `limits.outputBytes`, the
+  pages joined giving the whole output back) and the 8,192-byte default on
+  the longest output, `run`'s emulated and wall-clock caps, trace depth,
+  `step`, `peek`, the 16-snapshot cap, `poke` into ROM (nothing written
+  without `force`), and `load` outside the fixtures folder echoing the path.
+  A session that calls every tool, export included, leaves only the sidecar
+  and the export file behind, and a non-label file at an export path is
+  kept.
+- `trace` shows at most 100 trace lines a page, after its heading line, as
+  spec §7 says; the rest page with `offset`. A tool can now declare such a
+  line page (`page: { lines, heading }`) beside the byte cap.
+- The label round trip of spec §10 with a real restart: two child processes
+  of the bin, one after the other, the second showing the first's label from
+  the sidecar.
+- Story 3 joins the golden transcripts (`test/golden/story-03.txt`): on a
+  synthetic program, TABLER, coverage tells executed code, a table and flag
+  read as data, and a skipped CALL and its routine never seen apart, and
+  `disasm` marks them. The story scripts live in `test/stories.js`, each
+  replay in a folder of its own, and `test/golden.test.js` replays every
+  golden story twice, byte for byte, cycle counts included.
+- `screen diff: "<snapshot>"` against a snapshot taken in the other of the
+  32- and 64-column widths says the widths differ and shows both screens,
+  each in its own width, instead of comparing cells at the wrong positions.
+- The prompts refuse a `path`, `range`, or `addr` holding a control
+  character with a sentence, instead of pasting it into the prompt's text.
+  `orient` now asks for the ROM calls made from the program's own blocks
+  only, not those the ROM makes to itself.
+- `fugloy://program/manifest` reads as a sentence if the manifest text was
+  not kept, never as no text; a test pins that `search` over `FFFE-FFFF`
+  for three bytes finds nothing.
 
 Emu phase 4 (`@fugloy/mcp` 0.1.0, MCP phases A–C; MCP spec §5, §11):
 
@@ -270,8 +305,9 @@ Emu phase 4 (`@fugloy/mcp` 0.1.0, MCP phases A–C; MCP spec §5, §11):
   and `CALL PRINT` from the exported file. Golden transcripts are committed
   only for synthetic sessions; ROM sessions assert properties, since their
   output would carry ROM screen text.
-- `prompts/story-01.md` and `prompts/story-07.md`, the story prompts to paste
-  into Claude Code, and `.mcp.json.example`, the dev config that runs the
+- The story prompts to paste into Claude Code (now
+  `packages/mcp/prompts/story-01.md` and `packages/mcp/prompts/label-pass.md`,
+  story 7's; MCP phase E moved them from the root `prompts/`), and `.mcp.json.example`, the dev config that runs the
   working tree (copy it to `.mcp.json`, now gitignored; a committed one
   would start the server in every contributor's session).
 - The label and coverage file (emu spec §8, `docs/label-format.md`) gains

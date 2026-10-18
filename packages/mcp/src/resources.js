@@ -89,8 +89,8 @@ export const RESOURCES = [
     name: 'manifest',
     description: 'The manifest load returned for the loaded program: format, blocks, entry point, the ROM, the sidecar file, and the path.',
     read: (session) => textOf(() => {
-      session.requireProgram();
-      return /** @type {string} */ (session.program?.manifestText);
+      const { program } = session.requireProgram();
+      return program.manifestText ?? `${program.name} is loaded from ${program.path}, and the manifest load returned for it was not kept; call load again to see it.`;
     }),
   },
 ];

@@ -212,13 +212,20 @@ release check for npm (spec §10, phase F).
 14K ROM and synthetic programs; `test/phase-a-rom.test.js` and
 `test/story-7-rom.test.js` need the Model III ROM named in `fugloy.mcp.json`
 and skip without it. Golden transcripts are committed only for sessions on
-the synthetic ROM, since a real ROM's screen text would be in them. To
-rewrite `test/golden/story-01.txt` or `story-02.txt` after a deliberate change
-to a tool's output: `FUGLOY_UPDATE_GOLDEN=1 pnpm vitest run packages/mcp/test/story-1.test.js`
-(or `phase-d-snapshots.test.js`), then review the diff.
+the synthetic ROM, since a real ROM's screen text would be in them: stories
+1, 2, and 3 (`test/golden/story-0N.txt`, scripts in `test/stories.js`;
+story 3 is coverage telling code, data, and never-seen bytes apart), each
+also replayed twice by `test/golden.test.js` to show the output is the same
+byte for byte. `test/guardrails.test.js` trips every limit of spec §7 and
+checks the text, checks that a session calling every tool writes only the
+sidecar and an explicit export path, and does the label round trip across
+two real child processes of the bin. To rewrite the transcripts after a
+deliberate change to a tool's output:
+`FUGLOY_UPDATE_GOLDEN=1 pnpm vitest run packages/mcp/test/golden.test.js`,
+then review the diff.
 
 ## Not yet
 
-Guardrail hardening and the npm release (F). The
+The npm release (F). The
 dependencies on `@fugloy/emu`, `@fugloy/disasm`, and `@fugloy/z80` are
 `workspace:*`; `pnpm pack` rewrites them to the local versions.

@@ -10,11 +10,13 @@
  * Prompt arguments are strings (the protocol's rule). They are checked here, after the server's
  * strict parse (server.js), so a bad one is refused with a sentence: `range` and `addr` as the
  * tools read them, `minCalls` as a decimal count. `path` is echoed as given; `load` resolves it.
+ * A `path`, `range`, or `addr` holding a control character is refused, since it would be pasted
+ * into the prompt's text unchanged.
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { z } from 'zod';
-import { hex4, parseAddr, parseRange } from './args.js';
+import { CONTROL, hex4, parseAddr, parseRange } from './args.js';
 
 /** Where the prompt texts ship: `packages/mcp/prompts/`. */
 export const PROMPTS_DIR = new URL('../prompts/', import.meta.url);
@@ -30,9 +32,20 @@ export const PROMPTS_DIR = new URL('../prompts/', import.meta.url);
 
 const path = z.string().describe('The program file, as load takes it: relative to the server\'s working folder, then the config\'s fixtures folder');
 
-/** `path` echoed, trimmed, or a sentence when it is empty. */
+/**
+ * `value`, or a sentence when it holds a control character (a newline or escape would be
+ * pasted into the prompt's text as it is, where it could end the sentence and start another).
+ * @param {string} name
+ * @param {string} value
+ */
+function plain(name, value) {
+  if (CONTROL.test(value)) throw new Error(`${name} ${JSON.stringify(value)} holds a control character (such as a newline or a tab); give it on one line, without one.`);
+  return value;
+}
+
+/** `path` echoed, trimmed, or a sentence when it is empty or holds a control character. */
 function given(/** @type {string | undefined} */ p) {
-  const t = (p ?? '').trim();
+  const t = plain('path', p ?? '').trim();
   if (t === '') throw new Error('path is empty; give the program file to load.');
   return t;
 }
@@ -53,7 +66,7 @@ export const PROMPTS = [
       range: z.string().describe('The range to watch: "3C00-3FFF" (both ends included; addresses are hex, as the tools read them)'),
     },
     fill: (a, session) => {
-      const { addr, len } = parseRange(a.range, session.labels);
+      const { addr, len } = parseRange(plain('range', a.range ?? ''), session.labels);
       return { path: given(a.path), range: `${hex4(addr)}–${hex4(addr + len - 1)}`, addr: hex4(addr), len: String(len) };
     },
   },
@@ -76,7 +89,7 @@ export const PROMPTS = [
     argsSchema: {
       addr: z.string().describe('The address: 5200, 0x5200, $5200, 5200h, or a label name'),
     },
-    fill: (a, session) => ({ addr: hex4(parseAddr(a.addr, session.labels)) }),
+    fill: (a, session) => ({ addr: hex4(parseAddr(plain('addr', a.addr ?? ''), session.labels)) }),
   },
 ];
 

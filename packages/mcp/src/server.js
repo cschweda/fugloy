@@ -21,7 +21,9 @@
  * result (and whether it was an error) in `session.lastOutput`, keyed by tool name and arguments
  * without `offset`; a call with `offset` > 0 pages from that cache and never runs the handler, so
  * side effects happen once.
- * Output is `cap`ped to `limits.outputBytes`, ending `… (N more lines; use offset=K)`.
+ * Output is `cap`ped to `limits.outputBytes`, ending `… (N more lines; use offset=K)`. A tool
+ * that declares `page: { lines, heading? }` is also cut at that many lines a page (after its
+ * heading lines); `trace` shows at most 100 trace lines a page (spec §7).
  *
  * Resources and prompts (spec §6): `resources.js` and `prompts.js` hold them; they are registered
  * here with the SDK's `registerResource` and `registerPrompt`. The prompt texts are read from
@@ -80,6 +82,7 @@ const { version } = JSON.parse(readFileSync(new URL('../package.json', import.me
  *   name: string,
  *   description: string,
  *   inputSchema?: import('zod').ZodRawShape,
+ *   page?: { lines: number, heading?: number },
  *   handler: (session: Session, args: any) => string | { text: string, isError?: boolean } | Promise<string | { text: string, isError?: boolean }>,
  * }} Tool
  */
@@ -239,7 +242,7 @@ export function createServer({ config, session = new Session(config), tools = TO
         text ??= '';
         session.lastOutput = { key, text, isError };
       }
-      const shown = cap(text, { limit: config.limits.outputBytes, offset: start });
+      const shown = cap(text, { limit: config.limits.outputBytes, offset: start, ...(tool.page && !isError ? { page: tool.page } : {}) });
       return { content: [{ type: /** @type {const} */ ('text'), text: shown }], ...(isError ? { isError: true } : {}) };
     });
   }

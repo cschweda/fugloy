@@ -5,48 +5,17 @@
  * snapshot diff, the screen baseline after restore, and diff naming a sized label over a run.
  *
  * To rewrite the transcript after a deliberate change to a tool's output, run
- * `FUGLOY_UPDATE_GOLDEN=1 pnpm vitest run packages/mcp/test/phase-d-snapshots.test.js` and review the diff.
+ * `FUGLOY_UPDATE_GOLDEN=1 pnpm vitest run packages/mcp/test/phase-d-snapshots.test.js` and review the diff
+ * (the script and SCORER are in test/stories.js).
  */
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { RAIDERS, buildCmd, connect, syntheticRom, testConfig } from './helpers.js';
+import { SCORER, golden, replay, story } from './stories.js';
 
 const NO_MACHINE = 'No program loaded; call load first.';
-const GOLDEN = fileURLToPath(new URL('./golden/story-02.txt', import.meta.url));
-
-/**
- * SCORER, the story 2 program: waits for A (keyboard row 0, 3801h bit 1), adds 100 to the
- * little-endian SCORE word at 7E10h, counts the press in the byte at 7E20h, waits for A to be
- * let go, and goes round again. No calls, so the stack never shows in a diff.
- */
-const SCORER = buildCmd(
-  [
-    { name: 'SCORER' },
-    {
-      addr: 0x7000,
-      data: [
-        0x31, 0x00, 0x7f, //  7000  LD SP,7F00H
-        0x3a, 0x01, 0x38, //  7003  LD A,(3801H)
-        0xe6, 0x02, //        7006  AND 02H
-        0x28, 0xf9, //        7008  JR Z,7003H
-        0x2a, 0x10, 0x7e, //  700A  LD HL,(7E10H)
-        0x11, 0x64, 0x00, //  700D  LD DE,0064H
-        0x19, //              7010  ADD HL,DE
-        0x22, 0x10, 0x7e, //  7011  LD (7E10H),HL
-        0x21, 0x20, 0x7e, //  7014  LD HL,7E20H
-        0x34, //              7017  INC (HL)
-        0x3a, 0x01, 0x38, //  7018  LD A,(3801H)
-        0xe6, 0x02, //        701B  AND 02H
-        0x20, 0xf9, //        701D  JR NZ,7018H
-        0x18, 0xe2, //        701F  JR 7003H
-      ],
-    },
-  ],
-  0x7000,
-);
 
 let dir;
 const at = (name) => join(dir, name);
@@ -230,30 +199,8 @@ describe('phase D snapshots', () => {
   });
 
   it('story 2 on a synthetic program', async () => {
-    const { call, close } = await loaded('scorer.cmd');
-    const script = [
-      ['snapshot', { name: 'before' }],
-      ['key', { text: 'A' }],
-      ['run', { seconds: 1 }],
-      ['diff', { a: 'before', b: 'now', range: '4000-7FFF' }],
-      ['peek', { addr: '7E10', len: 2 }],
-      ['key', { text: 'A' }],
-      ['run', { seconds: 1 }],
-      ['peek', { addr: '7E10', len: 2 }],
-      ['label', { addr: '7E10', name: 'SCORE', kind: 'data', size: 2, note: 'increments by 100 per press of A; little-endian' }],
-      ['diff', { a: 'before', b: 'now', range: '4000-7FFF' }],
-      ['snapshots', {}],
-    ];
-    const parts = [];
-    const out = [];
-    for (const [name, args] of script) {
-      const r = await call(name, args);
-      if (r.isError) throw new Error(`${name} failed: ${r.text}`);
-      out.push(r.text);
-      parts.push(`> ${name} ${JSON.stringify(args)}\n${r.text}\n`);
-    }
-    await close();
-    const transcript = parts.join('\n').replaceAll(dir, '<dir>');
+    const s = story('02');
+    const { transcript, out } = await replay(s);
 
     // The score byte is found: 7E10h goes 00 → 64 (100; the high byte stays 00), and the press count at 7E20h.
     expect(out[3].split('\n')).toEqual(['diff before → now over 4000h–7FFFh: 2 runs, 2 bytes changed', '7E10h (1 byte)  00 → 64', '7E20h (1 byte)  00 → 01']);
@@ -261,12 +208,7 @@ describe('phase D snapshots', () => {
     expect(out[7]).toMatch(/^7E10  C8 00 /);
     expect(out[9].split('\n')).toContain('7E10h (1 byte)  00 → C8  ; SCORE');
 
-    if (process.env.FUGLOY_UPDATE_GOLDEN === '1') {
-      mkdirSync(join(GOLDEN, '..'), { recursive: true });
-      writeFileSync(GOLDEN, transcript);
-    }
-    if (!existsSync(GOLDEN)) throw new Error(`${GOLDEN} is missing; run with FUGLOY_UPDATE_GOLDEN=1 to write it, then review it.`);
-    expect(transcript).toBe(readFileSync(GOLDEN, 'utf8'));
+    expect(transcript).toBe(golden(s, transcript));
   });
 });
 
@@ -284,7 +226,26 @@ describe('phase D screen and diff follow-ups', () => {
     await close();
   });
 
-  it('restore makes the restored screen the baseline for screen diff', async () => {
+  it('screen diff against a snapshot taken in the other width shows both screens', async () => {
+    // NARROW: LD A,04H / OUT (0ECH),A (the mode register's 32-column bit) / LD A,'N' / LD (3C00H),A / JR $.
+    writeFileSync(at('narrow.cmd'), buildCmd([{ name: 'NARROW' }, { addr: 0x7000, data: [0x3e, 0x04, 0xd3, 0xec, 0x3e, 0x4e, 0x32, 0x00, 0x3c, 0x18, 0xfe] }], 0x7000));
+    const { call, close } = await loaded('narrow.cmd');
+    await ok(call, 'snapshot', { name: 'wide' });
+    await ok(call, 'run', { cycles: 1000 });
+    const out = (await ok(call, 'screen', { diff: 'wide' })).split('\n');
+    expect(out[0]).toBe('The widths differ: snapshot "wide" was taken at 64 columns and the screen is now 32 columns, so cells cannot be compared one by one. The two screens, each in its own width:');
+    expect(out[1]).toBe('Snapshot "wide" (64 columns):');
+    expect(out[4]).toBe('0123456789'.repeat(7).slice(0, 64)); // the 64-column ruler
+    const now = out.indexOf('Now (32 columns):');
+    expect(out[now + 3]).toBe('0123456789'.repeat(4).slice(0, 32)); // the 32-column ruler
+    expect(out[now + 4]).toBe(`N${' '.repeat(31)}`);
+    // Back in the same width, the cells are compared again.
+    await ok(call, 'snapshot', { name: 'narrow' });
+    expect(await ok(call, 'screen', { diff: 'narrow' })).toBe('0 cells changed');
+    await close();
+  });
+
+    it('restore makes the restored screen the baseline for screen diff', async () => {
     const { call, close } = await loaded('raiders.cmd');
     await ok(call, 'snapshot', { name: 'blank' });
     await ok(call, 'run', { until: 'screen' });

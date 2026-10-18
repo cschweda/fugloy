@@ -17,8 +17,11 @@ nothing.
 > a program commonly uses (0033h display a character, 0049h wait for a key,
 > 002Bh scan the keyboard, 01C9h clear the screen, 0060h delay, 0040h read a
 > line) and on any other ROM address you see the program call in disasm of
-> its entry point; list each ROM routine it called, with its name from the
-> resource, how many times, and from where. Then call suggest and coverage
+> its entry point. Count only the calls made from the program's own blocks
+> (the address ranges the manifest lists): callers also shows calls the ROM
+> makes to itself, and those are not the program's. List each ROM routine
+> the program called, with its name from the resource, how many times, and
+> from which of its own addresses. Then call suggest and coverage
 > mode "summary". Finish with a short report: what the program is, as far as
 > the screen shows; the ROM routines it uses; the three to five routines of
 > its own most worth naming first, from suggest's list, with why; and the

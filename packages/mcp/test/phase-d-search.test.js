@@ -95,6 +95,11 @@ describe('phase D search', () => {
     // A match must lie wholly inside the range.
     expect(await ok(call, 'search', { bytes: 'CD3070', range: '7009-700A' })).toContain('no matches');
     expect(await ok(call, 'search', { bytes: 'CD3070', range: { addr: '7009', len: 3 } })).toContain('1 match\n7009h');
+    // A pattern longer than the range finds nothing, even where it would wrap past FFFFh.
+    await ok(call, 'poke', { addr: 'FFFE', bytes: 'CD30' });
+    await ok(call, 'poke', { addr: '0000', bytes: '70', force: true });
+    expect(await ok(call, 'search', { bytes: 'CD3070', range: 'FFFE-FFFF' })).toBe('search bytes CD 30 70 over FFFEh–FFFFh: no matches');
+    expect(await ok(call, 'search', { bytes: 'CD3070' })).not.toContain('FFFEh');
     await close();
   });
 
