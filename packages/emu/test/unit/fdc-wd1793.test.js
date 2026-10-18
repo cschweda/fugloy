@@ -105,6 +105,33 @@ describe('Type I commands', () => {
     expect(io.fdc.physicalTrack[0]).toBe(0);
   });
 
+  it('a step outward with Track 00 active: no pulse, no r1 r0 delay, and 0 in the track register, whatever u is', () => {
+    // "Type I Command Flow" (page 9): "Is head at track 0 and direction = 0?" leads to "0 to TR".
+    const io = rig(writeJv1());
+    io.writePort(0xf1, 3); // the DOS believes the head is on 3; it is on 0
+    const out = run(io, 0x73, { lag: 1 }); // Step-Out, u = 1, 30 ms
+    expect(out.t).toBe(1);
+    expect([io.fdc.physicalTrack[0], io.readPort(0xf1)]).toEqual([0, 0]);
+    io.writePort(0xf1, 3);
+    expect(run(io, 0x63, { lag: 1 }).t).toBe(1); // u = 0 too
+    expect(io.readPort(0xf1)).toBe(0);
+    io.writePort(0xf1, 3);
+    expect(run(io, 0x23, { lag: 1 }).t).toBe(1); // Step, the last direction (out)
+    expect(io.readPort(0xf1)).toBe(0);
+    // An outward Seek stops there too: TR = 0 although DR = 1.
+    io.writePort(0xf1, 5);
+    io.writePort(0xf3, 1);
+    expect(run(io, 0x13, { lag: 1 }).t).toBe(1);
+    expect(io.readPort(0xf1)).toBe(0);
+    // Inward from track 0 steps as usual; and with no drive selected TR00 is not active.
+    expect(run(io, 0x53, { lag: 1 }).t).toBe(STEP_TSTATES[3]);
+    expect([io.fdc.physicalTrack[0], io.readPort(0xf1)]).toEqual([1, 1]);
+    io.writePort(0xf4, 0x80);
+    io.writePort(0xf1, 0);
+    expect(run(io, 0x73, { lag: 1 }).t).toBe(STEP_TSTATES[3]);
+    expect(io.readPort(0xf1)).toBe(255);
+  });
+
   it('verify (V = 1): 30 ms settling, then the first ID with a good CRC must carry the track register', () => {
     const io = rig(writeJv1());
     io.writePort(0xf3, 5);

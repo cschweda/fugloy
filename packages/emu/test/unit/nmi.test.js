@@ -1,12 +1,14 @@
 /**
  * The disk NMI (phase 5 plan, Ruling 3): the edge latch that makes one INTRQ assertion one NMI is
  * part of a save state, and an NMI arriving right after a lone DD or FD prefix waits one
- * instruction, as a maskable interrupt does (Young §3.6, spec §4).
+ * instruction, as a maskable interrupt does (Young §3.6, spec §4). And the disk controller's clock
+ * keeps step with the CPU's across interrupt and NMI responses.
  */
 import { describe, expect, it } from 'vitest';
 import { TRS80System } from '../../src/machine/trs80-system.js';
 import { DiskImage } from '../../src/devices/disk-image.js';
 import { restoreState, serializeState } from '../../src/debug/state.js';
+import { INDEX_PERIOD } from '../../src/devices/fdc-wd1793.js';
 import { writeJv1 } from './disk-writers.js';
 
 /** A 14K ROM with `code` at 0000 and `handler` at the NMI vector 0066. */
@@ -106,5 +108,30 @@ describe('the NMI edge latch in a save state', () => {
     restoreState(other, state);
     other.runTStates(20_000);
     expect(other.memory.readByte(0x5000)).toBe(2); // the NMI fires again: why the latch is saved
+  });
+});
+
+describe("the controller's clock", () => {
+  it('keeps step with the CPU’s across interrupt and NMI responses', () => {
+    const code = [
+      0xf3, 0x31, 0x00, 0x50, 0xed, 0x56, // DI / LD SP,5000H / IM 1
+      0x3e, 0x04, 0xd3, 0xe0, // interrupt mask: the RTC
+      0x3e, 0x80, 0xd3, 0xe4, // NMI mask: INTRQ
+      0xfb, // EI
+      0x3e, 0xd8, 0xd3, 0xf0, // 000F: FORCE INTERRUPT, immediate: INTRQ, one NMI per assertion
+      0x3e, 0xd0, 0xd3, 0xf0, 0xdb, 0xf0, // FORCE INTERRUPT, none, and a status read: INTRQ clears
+      0x06, 0x00, 0x10, 0xfe, // LD B,0 / DJNZ $
+      0x18, 0xf0, // JR 000FH
+    ];
+    const bytes = rom(code, [0x21, 0x01, 0x50, 0x34, 0xed, 0x45]); // NMI: INC (5001H) / RETN
+    bytes.set([0xf5, 0xdb, 0xec, 0x21, 0x00, 0x50, 0x34, 0xf1, 0xfb, 0xc9], 0x38); // RTC: ack, INC (5000H), EI, RET
+    const sys = new TRS80System({ romData: bytes });
+    sys.mountDisk(0, new DiskImage(writeJv1()));
+    const skew = () => (((sys.cpu.cycles - sys.io.fdc.indexClock) % INDEX_PERIOD) + INDEX_PERIOD) % INDEX_PERIOD;
+    const start = skew();
+    sys.runTStates(500_000); // a quarter of a second: 7 RTC interrupts and over a hundred NMIs (byte counters)
+    expect(sys.memory.readByte(0x5000)).toBe(7);
+    expect(sys.memory.readByte(0x5001)).toBeGreaterThan(100);
+    expect(skew()).toBe(start);
   });
 });

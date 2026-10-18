@@ -322,6 +322,12 @@ export class FDC1793 {
    * controller forward to that moment and returns the T-states it took, which the caller adds to
    * the CPU's clock; 0 when DRQ or INTRQ is already up or no command is running (nothing would
    * release the line; real hardware would hang, and the model does not).
+   *
+   * The controller is ticked after each instruction, so when the OUT that sets WAIT runs, its clock
+   * still stands at the start of that OUT: the wait runs ahead from there, and the OUT's own
+   * T-states (11 for `OUT (n),A`) are ticked after the DRQ. A DRQ can thus release the CPU up to
+   * 11 T-states before the OUT would have ended, well inside the 65 T-state MFM byte window, and
+   * the ROM's `OUT`/`INI` loop takes every byte either way.
    */
   waitForDrq() {
     let total = 0;
@@ -465,6 +471,10 @@ export class FDC1793 {
       this.pending = null;
       this.buffer = null;
       this.trackWrite = null;
+      // DRQ is cleared with Busy. The sheet ("Force Interrupt") says "the Busy status bit is
+      // reset, and the rest of the status bits are unchanged", which read literally leaves DRQ
+      // set; the model drops it because the stopped command will move no more bytes, so a DRQ
+      // left up would request one nobody can take. Unverified: spec §5.
       this.status &= ~(ST_BUSY | (this.commandType === 1 ? 0 : ST_DRQ));
       this.idlePulses = 0;
     } else {
@@ -480,8 +490,9 @@ export class FDC1793 {
 
   /**
    * Restore, Seek, Step, Step-In, Step-Out ("Type I Commands"). h loads the head at the start
-   * (h = 0 unloads it); one step pulse per r1 r0 period, the head moving one track each (it stops
-   * at track 0, the drive's end stop); V verifies after the last step: the head loads, 30 ms
+   * (h = 0 unloads it); one step pulse per r1 r0 period, the head moving one track each; a step
+   * outward with Track 00 active issues no pulse and ends with the track register 0 (the flow
+   * chart, `_atTrack0Outward`); V verifies after the last step: the head loads, 30 ms
    * settle, then the first ID with a good CRC must carry the track register's number.
    */
   _startType1(value) {
@@ -534,6 +545,7 @@ export class FDC1793 {
         }
         this.stepDir = this.dataReg > this.trackReg ? 1 : -1;
         this.trackReg = (this.trackReg + this.stepDir) & 0xff;
+        if (this._atTrack0Outward(p)) return;
         this._stepPulse(this.stepDir);
         p.delay = p.rate;
         return;
@@ -544,8 +556,9 @@ export class FDC1793 {
         return;
       }
       p.left = 0;
-      this._stepPulse(this.stepDir);
       if (p.update) this.trackReg = (this.trackReg + this.stepDir) & 0xff;
+      if (this._atTrack0Outward(p)) return;
+      this._stepPulse(this.stepDir);
       p.delay = p.rate;
       return;
     }
@@ -557,6 +570,20 @@ export class FDC1793 {
       this.status |= p.result;
       this._finish();
     }
+  }
+
+  /**
+   * The "Type I Command Flow" chart (page 9 of the FD179X-01 sheet): after the track register is
+   * updated, "Is head at track 0 and direction = 0?" (TR00 active, stepping out) leads to "0 to
+   * TR" and on to the verify branch, with no step pulse and no r1 r0 delay. So a Step-Out or an
+   * outward Seek with the head on track 0 ends at once with the track register 0, whatever u is.
+   * Needs a selected drive: with none, TR00 is not active.
+   */
+  _atTrack0Outward(p) {
+    if (this.stepDir !== -1 || this.selected < 0 || this._track !== 0) return false;
+    this.trackReg = 0;
+    this._afterSteps(p);
+    return true;
   }
 
   _stepPulse(dir) {

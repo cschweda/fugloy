@@ -128,11 +128,16 @@ export class TRS80System {
       this._nmiWasPending = nmiNow;
     }
 
+    // The disk controller ticks by every T-state the boundary takes, an interrupt or NMI
+    // response included, so its clock (the disk's angle) keeps step with the CPU's: the response
+    // first, so an OUT that sets the WAIT finds the controller at the start of that OUT; then the
+    // instruction, less the T-states the WAIT already ran it ahead for (`_fdcAhead`).
+    const before = this.cpu.cycles;
+    if (before !== start) this.io.fdc.tick(before - start);
+
     // beforeExecute returning true has executed the boundary's instruction itself (the
     // Machine's ROM keyboard-scan hook stands in for a RET), so the CPU does not run one.
-    // Returning 'stop' runs nothing and the disk controller does not tick: like the normal path,
-    // it never ticks for an interrupt response's T-states. The return value is those T-states.
-    const before = this.cpu.cycles;
+    // Returning 'stop' runs nothing; the return value is then the response's T-states.
     this._executing = true;
     if (beforeExecute !== undefined) {
       const r = beforeExecute();
