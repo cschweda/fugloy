@@ -49,13 +49,12 @@ progress on the `emu-phase6` branch:
 - `new Machine({ model: 1, ram, roms: { level2 }, expansion, lowercase })`
   builds the Model I's memory map: the 12 KB Level II ROM at `$0000`–`$2FFF`
   (any other size refused), `$3000`–`$37FF` reading `$FF` with writes lost
-  (the Expansion Interface's `$37E0`–`$37EF` are not built yet), the keyboard
+  (the Expansion Interface's `$37E0`–`$37EF` below), the keyboard
   matrix at `$3800`, video RAM at `$3C00`, and 4, 16, 32, or 48 KB of RAM from
   `$4000` (48 by default), with reads above it `$FF` and writes lost;
   `m.mem.ram` is the fitted size. The Model III's ports float to `$FF` on a
-  Model I and it takes no interrupts yet. `expansion` (default `true`) and
-  `lowercase` (default `false`) are checked and stored, and refused on the
-  Model III; the devices that use them come next.
+  Model I. `expansion` (default `true`) and `lowercase` (default `false`) are
+  checked, and refused on the Model III.
 - `m.model` (1 or 3) and `clockHz(model)` (1,774,080 or 2,027,520 Hz);
   `CPU_CLOCK_HZ` stays the Model III's. The system runs, types (`cps`), and
   clocks its disk controller at its model's clock.
@@ -71,6 +70,42 @@ progress on the `emu-phase6` branch:
   comes in its own plan, and the Model III's `ram: 16` or `32` says those
   sizes come in a later phase (they were one "phase 2 builds the Model III
   with 48K" message).
+- The Model I's timer: with the Expansion Interface (`expansion: true`, the
+  default) its 40 Hz clock raises bit 7 of the interrupt latch at `$37E0`
+  (`src/devices/interrupt-latch.js`, `IOSystem.latch`), which holds the INT
+  line low until a CPU read of `$37E0` (or `$37E1`–`$37E3`) clears the clock
+  bit; bit 6 is kept for the WD1771's INTRQ (Task 3: `raise`/`clear(DISK_BIT)`),
+  and a `$37E0` read leaves it. There is no mask. Without the Expansion
+  Interface there is no latch, no clock, and `$37E0` reads `$FF`. The Level II
+  ROM runs with interrupts disabled (its vector at `$4012` is `EI / RET`), so
+  the clock bit waits in the latch until a program enables interrupts with a
+  handler that reads `$37E0`. A Model I save state carries the latch
+  (`state.latch`; Model III states are unchanged).
+- The Model I's video RAM has no bit 6 (Technical Reference Handbook, p. 34):
+  a byte written to `$3C00`–`$3FFF` is kept, read back, and shown with bit 6
+  = NOT (bit 5 OR bit 7), so `$61` reads `$21`; `lowercase: true` keeps all
+  eight bits.
+- The Model I's port `$FF`: writes set the cassette output (bits 0–1, in
+  `m.sound` as on the Model III), the motor relay (bit 2), and MODESEL
+  (bit 3: 32 columns, so `m.video.columns` and `text()` follow `CHR$(23)`);
+  any write resets the cassette flip-flop, which reads in bit 7; bit 6 reads
+  MODESEL inverted and bits 0–5 read 1 (MAME's, unverified).
+- The cassette deck on the Model I plays at 500 baud only (1500 is refused
+  with a sentence, by `m.cassette.insert` and by `m.load.cas` via the ROM),
+  with the tape's times scaled to the Model I's clock so a bit cell stays
+  2 ms; the Level II ROM's SYSTEM and CLOAD read it, and a CSAVE recording
+  decodes (its times scaled back) and loads into another Model I.
+- The ROM keyboard-scan hook stands in on the Model I too: the Level II ROM's
+  `$002B` and `$0049` keep the Model III's contract (`CP $01` at `$0453`, the
+  KDCB in DE, BC, HL, and IX restored by `CIO`), so `m.keyboard.feed` and
+  `.BAS` text loads work there (phase 6 Ruling 6). Matrix typing is timed at
+  the Model I clock.
+- Changed: `m.mem.read` peeks: reading the Model I's `$37E0` through it does
+  not clear the latch, as a CPU read does (`MemorySystem.peekByte`). On the
+  Model III nothing changes.
+- Changed: a save state of one model restored into a Model I says which
+  ("This is a Model III save state; the machine is a Model I, …"); into a
+  Model III the sentence is unchanged.
 
 Emu phase 5 (disk controller and images; emu spec §3, §5, §6), `@fugloy/emu`,
 unreleased, on the `emu-phase5` branch:

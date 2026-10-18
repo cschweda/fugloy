@@ -37,8 +37,8 @@ export const MODEL_I = Object.freeze({
   id: 1,
   name: 'Model I',
   clockHz: 1774080,
-  // The Expansion Interface's 40 Hz timer (spec §5); the latch that delivers it is not built yet,
-  // so a Model I takes no interrupts.
+  // The Expansion Interface's 40 Hz clock, raised through its latch at $37E0
+  // (devices/interrupt-latch.js, which cites it); none without the Expansion Interface.
   timerHz: 40,
   romTop: 0x3000,
   romSizes: Object.freeze([0x3000]),

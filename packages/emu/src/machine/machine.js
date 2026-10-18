@@ -114,7 +114,8 @@ export class Machine {
     this.mem = {
       read(addr, len) {
         const out = new Uint8Array(len);
-        for (let k = 0; k < len; k++) out[k] = sys.memory.readByte((addr + k) & 0xffff);
+        // Peeked: reading the Model I's interrupt latch here does not clear it, as a CPU read would.
+        for (let k = 0; k < len; k++) out[k] = sys.memory.peekByte((addr + k) & 0xffff);
         return out;
       },
       write(addr, bytes) {
@@ -183,7 +184,8 @@ export class Machine {
    * delivery, before the instruction executes) by both `step` and `run`: deliver the matrix key
    * events now due, then, with a fed character waiting and the PC at the ROM's keyboard scan
    * ($002B) or wait-for-key ($0049), return from that routine with the character as the ROM
-   * would (spec §6, "Keyboard-scan hook"). That return stands in for the boundary's instruction,
+   * would (spec §6, "Keyboard-scan hook"). The Model I Level II ROM has the same two entries with
+   * the same contract (romKeyReturn), so the hook serves both models. That return stands in for the boundary's instruction,
    * as one RET (10 T-states); a halted CPU idles instead, as it does for any instruction, so the next boundary is at the caller's return address.
    * Between draining and the keyboard hook, a breakpoint hit (only while `debug.active`, and
    * never in `step`) stops the boundary: nothing executes. Last, with memory accesses watched or

@@ -21,17 +21,22 @@
  * The keyboard is memory-mapped at 0x3800-0x3BFF (see MemorySystem), not
  * an I/O port.
  *
- * The Model I has only port 0xFF (cassette, sound, and the video mode): its
- * other devices are memory-mapped by the Expansion Interface at
- * 0x37E0-0x37EF (src/machine/models.js), so a Model I gets port 0xFF alone,
- * and every other port floats to 0xFF. The controller object exists on both
- * models, clocked at the model's CPU clock; the Model I does not reach it
- * through ports.
+ * The Model I has only port 0xFF (cassette, sound, and the video mode; its
+ * own handler, initializeModel1CassettePort): its other devices are
+ * memory-mapped by the Expansion Interface at 0x37E0-0x37EF
+ * (src/machine/models.js), which MemorySystem hands to `readExpansion`,
+ * `peekExpansion`, and `writeExpansion` here, so every other port floats to
+ * 0xFF. With the Expansion Interface (`expansion`, the default) the Model I
+ * has the interrupt latch at 0x37E0 (`latch`, devices/interrupt-latch.js);
+ * without it `latch` is null and nothing interrupts. The controller object
+ * exists on both models, clocked at the model's CPU clock; the Model I does
+ * not reach it through ports.
  */
 
 import { CassetteSystem } from "../devices/cassette.js";
 import { FDC1793 } from "../devices/fdc-wd1793.js";
 import { Printer } from "../devices/printer.js";
+import { InterruptLatch } from "../devices/interrupt-latch.js";
 import { MODEL_III } from "./models.js";
 
 export const RTC_IRQ_BIT = 0x04;
@@ -48,6 +53,14 @@ export const NMI_INTRQ_BIT = 0x80;
 
 // Mode register (port 0xEC write) bits
 export const MODE_32COL_BIT = 0x04; // 32-character display mode
+
+// The Model I's port 0xFF output latch (Z59), D0-D3: "D0 and D1 ... are used
+// to output data that is recorded on tape during a CSAVE function. D2 ...
+// controls the status of the Recorder's motor. D3 ... controls the status of
+// MODESEL*" (TRS-80 Micro Computer Technical Reference Handbook, 2nd ed.,
+// 1982, p. 45, "OUTSIG*"). On the Model I `modeRegister` holds this latch.
+export const M1_MOTOR_BIT = 0x04;
+export const M1_MODESEL_BIT = 0x08; // 32-character display mode
 
 /**
  * Decode a Model III port F4 write: bits 0-3 select drive 0-3 (the lowest set bit wins; none set
@@ -67,10 +80,20 @@ export function decodeModel3Select(value) {
 }
 
 export class IOSystem {
-  /** @param {{ model?: import('./models.js').Model }} [opts] the model whose ports to install (the Model III by default) */
-  constructor({ model = MODEL_III } = {}) {
+  /**
+   * @param {{ model?: import('./models.js').Model, expansion?: boolean }} [opts] the model whose
+   *   ports to install (the Model III by default), and on the Model I whether the Expansion
+   *   Interface is fitted (by default it is)
+   */
+  constructor({ model = MODEL_III, expansion = true } = {}) {
     this.model = model;
+    // The Expansion Interface's interrupt latch at 0x37E0: the one object the timer (bit 7) and
+    // the disk controller (bit 6, emu phase 6 Task 3) raise and clear their bits in.
+    /** @type {InterruptLatch | null} */
+    this.latch = model.id === 1 && expansion ? new InterruptLatch() : null;
     this.cassette = new CassetteSystem();
+    // A Model I recording decodes in Model III T-states (cassette.js)
+    if (model.id !== 3) this.cassette.timeScale = MODEL_III.clockHz / model.clockHz;
     this.fdc = new FDC1793({ cpuHz: model.clockHz });
     this.printer = new Printer();
     this.keyboardBuffer = []; // legacy internal buffer (not a Model III port)
@@ -83,7 +106,8 @@ export class IOSystem {
     // NMI mask (port 0xE4 write): bit 7 = FDC INTRQ triggers NMI
     this.nmiMask = 0;
 
-    // Mode register (port 0xEC write)
+    // Mode register (port 0xEC write); on the Model I, the port 0xFF
+    // output latch, D0-D3 (M1_MOTOR_BIT, M1_MODESEL_BIT)
     this.modeRegister = 0;
 
     // Fired when a mode-register write changes the value (the display
@@ -112,8 +136,14 @@ export class IOSystem {
 
     if (model.id === 3) {
       this.initializeModelIIIPorts();
+      this.initializeCassettePort();
+    } else {
+      this.initializeModel1CassettePort();
+      // The Model I interrupts through the Expansion Interface's latch alone, which has no mask
+      // (none without the interface); the Model III's pendingInterrupt below is left as it was.
+      const latch = this.latch;
+      this.pendingInterrupt = latch === null ? () => false : () => latch.bits !== 0;
     }
-    this.initializeCassettePort();
   }
 
   initializeModelIIIPorts() {
@@ -224,11 +254,7 @@ export class IOSystem {
     }
   }
 
-  /**
-   * Port 0xFF, on both models. The Model III's bits are modeled; the Model
-   * I's own layout (its motor and 32-column bits) is not yet, so it gets the
-   * same handler for now.
-   */
+  /** Port 0xFF on the Model III. */
   initializeCassettePort() {
     // 0xFF: cassette data port. Reads return the input latch in bit 7
     // (set by tape transitions while the motor runs); ANY write clears
@@ -266,6 +292,91 @@ export class IOSystem {
       },
     });
   }
+
+  /**
+   * Port 0xFF on the Model I. The port is the Z59 output latch and one input
+   * flip-flop (Technical Reference Handbook, 2nd ed., p. 45, "OUTSIG*",
+   * and pp. 50-51, "INSIG*"):
+   *   write D0-D1  cassette output level (the only sound source; logged for
+   *                the sound driver and m.sound, and recorded while the
+   *                motor runs, as on the Model III)
+   *   write D2     the cassette motor relay
+   *   write D3     MODESEL: 32 characters a line when set
+   *   any write    resets the cassette flip-flop ("set by cassette data and
+   *                reset by OUTSIG*", p. 50)
+   *   read  D7     the cassette flip-flop: the Level II ROM's bit reader
+   *                (MDL1LEV2.Z80, CTBIT at $0241) polls it with RLA and resets
+   *                it through CTSTAT ($021E), an OUT of the shadow copy CAST
+   * The other read bits are MAME's (trs80 driver, port_ff_r: D6 is MODESEL
+   * inverted, D0-D5 read 1); the handbook says only that INSIG* enables the
+   * flip-flop's buffer, so they are unverified. The deck sets the flip-flop
+   * on a rising edge of the tape signal (cassette.js); MAME takes the
+   * falling edge, which for the 500-baud pulses moves nothing a reader sees.
+   */
+  initializeModel1CassettePort() {
+    this.portHandlers.set(0xff, {
+      read: () => {
+        const cycles = this.getCycles ? this.getCycles() : 0;
+        this.cassette.tapeLevel(cycles); // play the tape up to now
+        return (
+          (this.cassette.pulseLatch ? 0x80 : 0x00) |
+          (this.modeRegister & M1_MODESEL_BIT ? 0x00 : 0x40) |
+          0x3f
+        );
+      },
+      write: (value) => {
+        const cycles = this.getCycles ? this.getCycles() : 0;
+        if (this.onSoundWrite) this.onSoundWrite(cycles, value);
+        const motor = (value & M1_MOTOR_BIT) !== 0;
+        if (motor !== this.cassette.motorOn) {
+          this.cassette.control(motor ? 1 : 0, cycles);
+        }
+        const level = value & 0x03;
+        if (level !== this.cassetteOut) {
+          this.cassetteOut = level;
+          if (this.getCycles && this.soundLog.length < this.SOUND_LOG_LIMIT) {
+            this.soundLog.push({ t: cycles, level });
+          }
+          this.cassette.recordTransition(cycles, level);
+        }
+        const latch = value & 0x0f;
+        const changed = (latch ^ this.modeRegister) & M1_MODESEL_BIT;
+        this.modeRegister = latch;
+        if (changed && this.onModeWrite) this.onModeWrite(this.modeRegister);
+        this.cassette.clearPulseLatch(cycles);
+      },
+    });
+  }
+
+  /**
+   * A CPU read of the Model I's Expansion Interface addresses 0x37E0-0x37EF
+   * (MemorySystem calls it only on a Model I with the Expansion Interface).
+   * 0x37E0-0x37E3 read the interrupt latch, clearing its clock bit
+   * (interrupt-latch.js); the rest read 0xFF until their devices are built
+   * (the printer at 0x37E8 and the WD1771 at 0x37EC-0x37EF, Task 3).
+   * @param {number} address
+   */
+  readExpansion(address) {
+    if (address <= 0x37e3) return this.latch.read();
+    return 0xff;
+  }
+
+  /**
+   * What `readExpansion` would return, with no side effect.
+   * @param {number} address
+   */
+  peekExpansion(address) {
+    if (address <= 0x37e3) return this.latch.peek();
+    return 0xff;
+  }
+
+  /**
+   * A CPU write to 0x37E0-0x37EF. Nothing takes one yet: the drive select
+   * at 0x37E1, the printer, and the controller come with the WD1771 (Task 3).
+   * @param {number} address
+   * @param {number} value
+   */
+  writeExpansion(address, value) {}
 
   readPort(port) {
     port &= 0xff;
@@ -316,6 +427,7 @@ export class IOSystem {
 
   /** Clear interrupt state (system reset). Mounted disks stay mounted. */
   reset() {
+    this.latch?.reset();
     this.intLatch = 0;
     this.intMask = 0;
     this.nmiMask = 0;

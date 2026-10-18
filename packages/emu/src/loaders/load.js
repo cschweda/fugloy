@@ -10,6 +10,7 @@
 import { parseCmd, fastLoadCmd } from './cmd-format.js';
 import { parseCas, fastLoadBasic, fastLoadSystem } from './cas-format.js';
 import { casToPulses } from '../devices/cassette-tape.js';
+import { CPU_CLOCK_HZ } from '../machine/trs80-system.js';
 import { DiskImage } from '../devices/disk-image.js';
 
 /**
@@ -27,8 +28,32 @@ import { DiskImage } from '../devices/disk-image.js';
 
 const TXTTAB_PTR = 0x40a4;
 
-function checkBaud(baud) {
+/**
+ * @param {unknown} baud
+ * @param {import('../machine/machine.js').Machine} machine
+ */
+function checkBaud(baud, machine) {
+  if (machine.model === 1) {
+    // The Level II ROM reads only 500 baud (MDL1LEV2.Z80, CTBIT at $0241: one clock pulse and an
+    // optional data pulse a bit cell); 1500 baud is the Model III's.
+    if (baud !== 500) throw new Error(`The Model I reads cassettes at 500 baud only (1500 is the Model III's rate), not ${String(baud)}.`);
+    return;
+  }
   if (baud !== 500 && baud !== 1500) throw new Error(`cassette baud must be 500 or 1500 (the Model III's L and H rates), not ${String(baud)}`);
+}
+
+/**
+ * The pulse tape for `bytes` at `baud`, in T-states of this machine's clock. casToPulses times the
+ * tape in Model III T-states; a tape plays in real time, so on the Model I (a slower clock) every
+ * time is scaled by the clocks' ratio, which keeps the 500-baud bit cell at its 2 ms.
+ * @param {import('../machine/machine.js').Machine} machine
+ * @param {Uint8Array} bytes
+ * @param {500 | 1500} baud
+ */
+function pulsesFor(machine, bytes, baud) {
+  const times = casToPulses(tapeForBaud(bytes, baud), baud);
+  const scale = machine.system.clockHz / CPU_CLOCK_HZ;
+  return scale === 1 ? times : times.map((t) => Math.round(t * scale));
 }
 
 /**
@@ -62,8 +87,8 @@ export function cassetteDeck(machine) {
      * @param {{ baud?: 500 | 1500 }} [opts]
      */
     insert(bytes, { baud = 500 } = {}) {
-      checkBaud(baud);
-      deck.insertPulseTape(casToPulses(tapeForBaud(bytes, baud), baud));
+      checkBaud(baud, machine);
+      deck.insertPulseTape(pulsesFor(machine, bytes, baud));
     },
     /** Back to the start of the tape. */
     rewind() {
@@ -109,7 +134,7 @@ export function loadCmd(machine, bytes) {
  */
 export function loadCas(machine, bytes, { baud = 500, via = 'rom' } = {}) {
   if (via !== 'rom' && via !== 'fast') throw new Error(`load.cas: via must be 'rom' or 'fast', not ${String(via)}`);
-  if (via === 'rom') checkBaud(baud);
+  if (via === 'rom') checkBaud(baud, machine);
   const parsed = parseCas(bytes);
   const system = machine.system;
 
@@ -127,7 +152,7 @@ export function loadCas(machine, bytes, { baud = 500, via = 'rom' } = {}) {
   if (via === 'rom') blocks = blocks.map((b) => ({ ...b, predicted: /** @type {true} */ (true) }));
 
   if (via === 'rom') {
-    system.io.cassette.insertPulseTape(casToPulses(tapeForBaud(bytes, baud), baud));
+    system.io.cassette.insertPulseTape(pulsesFor(machine, bytes, baud));
   } else if (parsed.kind === 'system') {
     fastLoadSystem(system, parsed);
   } else {

@@ -74,7 +74,15 @@ const KDCB = 0x4015;
  * `code` in A, verified against the ROM listing (spec §6, "Keyboard-scan hook"): DE = $4015 (the
  * KDCB), BC, HL, IX, IY and the alternate set unchanged, F as the routine's last flag-setting
  * instruction leaves it (`CP 01H` at $3100 for $002B, `OR A` at $004C for $0049), and the return
- * address popped. It also does what the CPU does at the end of any instruction: clears `afterPrefix`
+ * address popped.
+ *
+ * The Model I Level II ROM keeps the same contract (MDL1LEV2.Z80, kiwisincebirth/TRS-80-ROMS at
+ * 736bcba): `_KBD` at $002B loads DE with the KDCB ($4015) and goes through `_GET` ($0013) and
+ * `CIO` ($03C2), which saves BC, HL, IX, and that DE and restores them at `CIORTN` ($03DD), to the
+ * keyboard driver `KBDDRV` ($03E3, the KDCB's driver address at $4016), whose path for a key ends
+ * with `CP $01` at $0453 (the BREAK test) and `RET NZ`, or for BREAK `RST 28H` (a RET under
+ * Level II, $400C) and `RET`; `_KEY` at $0049 is `CALL _KBD / OR A / RET NZ / JR _KEY`. So the
+ * stand-in is the same on both models (phase 6 plan, Ruling 6). It also does what the CPU does at the end of any instruction: clears `afterPrefix`
  * and counts a pending EI down. It costs what a RET costs, 10 T-states and one refresh-counter step; the
  * routine's RAM side effects (its key-rollover buffer at $4036, the repeat counters) are not made.
  * @param {import('../cpu/z80cpu.js').Z80CPU} cpu
