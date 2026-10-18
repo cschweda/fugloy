@@ -314,9 +314,22 @@ function storedInto(a: Analysis, addr: number): boolean {
   return index(a).stores.has(addr & 0xffff) || (viaRegs(a)?.has(addr & 0xffff) ?? false);
 }
 
-/** The instructions that provably store into `addr`: LD (nn) by its operand, or through a register whose value is proven; ascending. */
+/**
+ * The instructions that store into `addr` and whose address a line can show
+ * as proven: LD (nn) by its operand, and a store through a register only when
+ * `knownBefore` at that store, under the final rewrite rules, still gives
+ * `addr`. The register-store set behind the rewrite rules is a superset (its
+ * sweep ran before the register stores were known), which is right for
+ * forgetting registers but not for naming a writer. Ascending.
+ */
 export function storesInto(a: Analysis, addr: number): number[] {
-  const set = new Set([...(index(a).stores.get(addr & 0xffff) ?? []), ...(viaRegs(a)?.get(addr & 0xffff) ?? [])]);
+  const b = addr & 0xffff;
+  const set = new Set(index(a).stores.get(b) ?? []);
+  for (const w of viaRegs(a)?.get(b) ?? []) {
+    if (set.has(w)) continue;
+    const ins = a.pass1.instructions.get(w)!;
+    if (!anyPatched(a, w, ins) && (storesThroughRegs(ins, knownBefore(a, w).regs) ?? []).includes(b)) set.add(w);
+  }
   return [...set].sort((p, q) => p - q);
 }
 
@@ -347,7 +360,7 @@ export function rewrittenOpcodeBytes(a: Analysis, at: number): number[] {
 /**
  * True when some instruction provably stores into an opcode byte of the
  * instruction at `at` (`opcodeOffsets`): by LD (nn),r or LD (nn),rr, or
- * through a register whose value knownBefore proves at that store. At run
+ * through a register whose value the forward `sweep` proves at that store. At run
  * time it may be a different instruction altogether. A mere data reference
  * to an instruction start (a pointer the program loads) is not enough.
  */
@@ -358,7 +371,11 @@ export function opcodeRewritten(a: Analysis, at: number): boolean {
   return false;
 }
 
-/** True when `patchedBytes` would find a byte: the same rule, without building the list (the replay asks this at every step). */
+/**
+ * True when `patchedBytes` would find a byte: the same rule, without building
+ * the list (the replay asks this at every step). The two must stay in step; a
+ * test checks they agree on every Sea Dragon instruction.
+ */
 function anyPatched(a: Analysis, at: number, ins: Instruction): boolean {
   if (opcodeRewritten(a, at)) return true;
   const ops = opcodeOffsets(ins);
@@ -373,7 +390,8 @@ function anyPatched(a: Analysis, at: number, ins: Instruction): boolean {
  * The bytes of an instruction the program may rewrite as it runs: its opcode
  * bytes that an instruction stores into (`opcodeRewritten`), and among its
  * other bytes the ones the program refers to (a label) or provably stores
- * into. Either way the decoded numbers are only where they start.
+ * into. Either way the decoded numbers are only where they start. Keep in
+ * step with `anyPatched`.
  */
 export function patchedBytes(a: Analysis, at: number, ins: Instruction): number[] {
   const out = rewrittenOpcodeBytes(a, at);
@@ -393,11 +411,12 @@ export function sourceRewritten(a: Analysis, from: number): boolean {
 }
 
 /**
- * One forward step of the replay. When the program may rewrite the
- * instruction's first byte, it may be any instruction at run time, so every
- * register becomes unknown. When a label lies inside its other bytes, the
- * program may rewrite its operand, so whatever it writes is unproven and
- * becomes unknown instead of the decoded value.
+ * One forward step of the replay. When the program stores into one of the
+ * instruction's opcode bytes (`opcodeRewritten`), it may be any instruction
+ * at run time, so every register becomes unknown. When another of its bytes
+ * is labelled or stored into (`patchedBytes`), the program may rewrite its
+ * operand, so whatever it writes is unproven and becomes unknown instead of
+ * the decoded value.
  */
 function step(a: Analysis, at: number, ins: Instruction, regs: RegState): void {
   if (opcodeRewritten(a, at)) {

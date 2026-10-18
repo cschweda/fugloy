@@ -141,7 +141,7 @@ function fromSentences(c: LineCtx, isRoot: boolean): { sentences: Sentence[]; en
   return { sentences: out, entry: w.stop === 'root' && w.at === c.addr && isRoot };
 }
 
-/** The instructions that provably store into `b` (`storesInto`: LD (nn), or through a register whose value is proven), and the others that only refer to it. */
+/** The instructions that provably store into `b` (`storesInto`: LD (nn), or through a register whose value knownBefore proves there), and the others that only refer to it. */
 function usersOf(a: Analysis, b: number): { writers: number[]; refs: number[] } {
   const writers = storesInto(a, b);
   const refs: number[] = [];
@@ -175,12 +175,13 @@ function patchedSentences(c: LineCtx): Sentence[] {
   if (ops.length > 0) {
     const u = usersOfAll(c.a, ops);
     const which = ops.length === 1 && ops[0] === c.addr ? 'the first byte' : ops.length === 1 ? 'an opcode byte' : 'the opcode bytes';
+    // A store found only by the rewrite rules' wider sweep is not named: its address is not proven where it stands.
+    const written: Piece[] = u.writers.length > 0 ? [{ text: ', written at ' }, ...addrList(c, u.writers)] : [];
     out.push(
       say(
-        `The program stores into ${which} of this instruction as it runs (`,
+        `The program ${u.writers.length > 0 ? 'stores' : 'may store'} into ${which} of this instruction as it runs (`,
         andList(ops, name),
-        ', written at ',
-        addrList(c, u.writers),
+        written,
         '), so at run time it may be a different instruction; this line shows only what it starts as.',
       ),
     );
@@ -191,6 +192,10 @@ function patchedSentences(c: LineCtx): Sentence[] {
   const u = usersOfAll(c.a, operand);
   if (u.writers.length > 0) {
     out.push(say('The program rewrites part of this instruction as it runs (', names, ', written at ', addrList(c, u.writers), '), so the numbers shown are only where they start.'));
+    return out;
+  }
+  if (u.refs.length === 0 && operand.every((b) => !c.a.symbols.has(b))) {
+    out.push(say('The program may store into part of this instruction as it runs (', names, '), so the numbers shown are only where they start.'));
     return out;
   }
   const used = u.refs.length > 0 ? [{ text: ', used at ' }, ...addrList(c, u.refs)] : [];

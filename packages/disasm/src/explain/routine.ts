@@ -54,7 +54,7 @@ interface Exits {
   indirect: string[];
   /** Jumps whose target bytes the program may rewrite: where they are. */
   rewritten: number[];
-  /** Instructions whose first byte the program stores into: at run time they may be anything, so where they lead is not proven. */
+  /** Instructions whose opcode bytes (`opcodeOffsets`) the program stores into: at run time they may be anything, so where they lead is not proven. */
   rewrittenOps: number[];
   /** Jumps into loaded bytes not decoded as code: target → the jumps. */
   undecoded: Map<number, number[]>;
@@ -345,7 +345,7 @@ function summarize(c: Ctx, ix: Index, start: number): RoutineSummary {
       { text: 'whatever the ' },
       { text: at.length === 1 ? 'instruction at ' : 'instructions at ' },
       ...capped(at.map((x) => [addrPiece(c, x)])),
-      { text: at.length === 1 ? ' becomes (the program rewrites its first byte)' : ' become (the program rewrites their first bytes)' },
+      { text: at.length === 1 ? ' becomes (the program rewrites it)' : ' become (the program rewrites them)' },
     ]);
   }
   if (b.undecoded.size > 0) {

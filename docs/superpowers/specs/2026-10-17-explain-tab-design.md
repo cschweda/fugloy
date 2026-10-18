@@ -147,7 +147,12 @@ Explain runs a small, local value tracker. My call on its scope:
   its cap, computed on first need and cached; while it runs, only the
   operand stores count, so the pass cannot depend on itself. The repeating
   block moves (`LDIR`, `LDDR`, `INIR`, `INDR`) are not counted: a loader's
-  `LDIR` copies the whole program to where it runs. A call or jump whose
+  `LDIR` copies the whole program to where it runs. Writes through SP
+  (`PUSH`, the return address a `CALL` or `RST` pushes, `EX (SP),HL` and
+  its IX/IY forms) and stores through a register whose value is not proven
+  are not counted either: Explain assumes they do not land in code. A
+  program that patches itself that way can leave a line without its
+  caveat. A call or jump whose
   bytes the program may rewrite is not stated as a way into its target.
   A mere pointer to an instruction start (an address the program loads) is
   not enough.

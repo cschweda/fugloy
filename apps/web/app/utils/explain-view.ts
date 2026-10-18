@@ -215,7 +215,11 @@ export function labelSentences(s: Session, e: Explanation): Sentence[] | null {
     out.push(parts.length > 0 ? [{ text: 'Its address is also used at ' }, ...linkList(l.pointers), { text: ', so it may also be reached through a pointer.' }] : [{ text: 'Its address is used at ' }, ...linkList(l.pointers), { text: ', so it may be reached through a pointer.' }]);
   }
   if (l.rewritten.length > 0) {
-    const kinds = new Set(l.rewritten.map((x) => (ins.get(x)?.flow.kind === 'call' ? 'call' : ins.get(x)?.flow.kind === 'jump' ? 'jump' : 'instruction')));
+    const kindOf = (x: number): string => {
+      const flow = ins.get(x)?.flow.kind;
+      return flow === 'call' || flow === 'jump' ? flow : 'instruction';
+    };
+    const kinds = new Set(l.rewritten.map(kindOf));
     const kind = kinds.size === 1 ? [...kinds][0]! : 'instruction';
     const one = l.rewritten.length === 1;
     out.push([

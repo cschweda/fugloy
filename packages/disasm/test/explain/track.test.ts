@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { pair } from '../../src/analysis/regs.js';
 import { decodeAt } from '@fugloy/z80';
-import { djnzLoop, knownBefore, opcodeRewritten, sweep, written } from '../../src/explain/track.js';
+import { djnzLoop, knownBefore, opcodeRewritten, patchedBytes, sourceRewritten, sweep, written } from '../../src/explain/track.js';
 import { emptyAnnotations } from '../../src/hints/apply.js';
 import { analyze } from '../../src/pipeline.js';
 import { loadRaw } from '../../src/raw.js';
@@ -251,6 +251,10 @@ describe('Sea Dragon, with hints', () => {
   it('the loader\'s LDIR, which copies the program to where it runs, does not mark its instructions rewritten', () => {
     expect(opcodeRewritten(sea, 0x497f)).toBe(false);
     expect(opcodeRewritten(sea, 0x49a7)).toBe(false);
+  });
+
+  it('the replay\'s quick patched test agrees with patchedBytes at every instruction', () => {
+    for (const [at, ins] of sea.pass1.instructions) expect([at, sourceRewritten(sea, at)]).toEqual([at, patchedBytes(sea, at, ins).length > 0]);
   });
 
   it('the forward sweep proves at least what knownBefore proves, at every instruction', () => {

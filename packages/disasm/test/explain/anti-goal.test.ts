@@ -164,4 +164,22 @@ describe('Explain never states what is not proven', () => {
     expect(t).not.toMatch(/by the jump at \$7009/);
     expect(t).toMatch(/perhaps by the instruction at \$7009, which starts out leading here but which the program rewrites/);
   });
+
+  it('a writer is named only when its address is proven: a store through DE whose E is rewritten names no writer', () => {
+    // 7000 LD H,70H; 7002 LD L,09H; 7004 LD (HL),10H (E becomes $10); 7006 LD D,70H; 7008 LD E,0EH; 700A LD A,0C9H; 700C LD (DE),A; 700D NOP; 700E LD B,9; 7010 NOP; 7011 LD A,B; 7012 RET
+    const s = raw([0x26, 0x70, 0x2e, 0x09, 0x36, 0x10, 0x16, 0x70, 0x1e, 0x0e, 0x3e, 0xc9, 0x12, 0x00, 0x06, 0x09, 0x00, 0x78, 0xc9]);
+    expect(lead(explainLine(s, 0x700c))).toMatch(/do not prove what DE holds/);
+    const t = lead(explainLine(s, 0x700e));
+    expect(t).not.toMatch(/written at \$700C/);
+    expect(t).toMatch(/The program may store into the first byte of this instruction as it runs/);
+    // The operand store at $7004 is proven: it is still named.
+    expect(lead(explainLine(s, 0x7008))).toMatch(/written at \$7004/);
+  });
+
+  it('the routine summary does not call a rewritten second opcode byte the first', () => {
+    // The CB probe: 7002 LD (7009H),A stores into the second byte of 7008 BIT 0,A.
+    const t = summary(raw([0x3e, 0x07, 0x32, 0x09, 0x70, 0x3e, 0x05, 0x00, 0xcb, 0x47, 0x32, 0x00, 0x3c, 0xc9]), 0x7000);
+    expect(t).not.toMatch(/first byte/);
+    expect(t).toMatch(/whatever the instruction at \$7008 becomes \(the program rewrites it\)/);
+  });
 });
