@@ -43,6 +43,9 @@ describe('trace', () => {
     expect(e.regs.pc).toBe(4);
     expect(e.regs.a).toBe(1);
     expect(e.regs.b).toBe(2);
+    // A copy each time: changing it changes nothing recorded.
+    e.regs.a = 0x55;
+    expect(m.debug.trace.last(1)[0].regs.a).toBe(1);
   });
 
   it('runs entries under run, skips a breakpoint stop, and does not instrument memory', () => {

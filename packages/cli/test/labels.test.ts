@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { run } from '../src/index.js';
 import type { Io } from '../src/index.js';
@@ -41,6 +42,22 @@ describe('--labels', () => {
     const ir = capture();
     expect(await run([cmd, '--labels', SAMPLE_LABELS_PATH, '--format', 'ir'], ir.io)).toBe(0);
     expect((JSON.parse(ir.out.join('')) as { labels: unknown }).labels).toEqual({ source: 'sample.labels.json', names: 3, roots: 16, dataRuns: 1, warnings: [] });
+  });
+
+  it('--labels warns, once, about code that changed at runtime', async () => {
+    // Sea Dragon copies itself down; without the hint file's relocate line its runtime coverage says nothing about the file's bytes.
+    const sea = fileURLToPath(new URL('../../../examples/sea-dragon/', import.meta.url));
+    const { io, out } = capture();
+    expect(await run([join(sea, 'seadrg01.cmd'), '--labels', join(sea, 'seadrg01.labels.json')], io)).toBe(0);
+    const warnings = out.join('').split('\n').filter((l) => l.startsWith('; warning: '));
+    expect(warnings).toEqual([expect.stringMatching(/^; warning: 165 executed or labelled addresses changed at runtime .*a relocate hint says where moved code runs\)$/)]);
+    const ir = capture();
+    expect(await run([join(sea, 'seadrg01.cmd'), '--labels', join(sea, 'seadrg01.labels.json'), '--format', 'ir'], ir.io)).toBe(0);
+    expect(ir.err.join('')).toMatch(/^fugloy: warning: 165 executed or labelled addresses changed at runtime/);
+    // With the hints, nothing to warn about.
+    const hinted = capture();
+    expect(await run([join(sea, 'seadrg01.cmd'), '--hints', join(sea, 'seadrg01.hints'), '--labels', join(sea, 'seadrg01.labels.json'), '--format', 'ir'], hinted.io)).toBe(0);
+    expect(hinted.err).toEqual([]);
   });
 
   it('--labels with --sweep is refused', async () => {

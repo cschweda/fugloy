@@ -4,10 +4,13 @@
  * coverage on, run to the title screen as test/integration/programs.test.js does, hold ENTER, and
  * run to "1 or 2 Players?".
  *
- * Coverage starts at $497F, after the stub at $8881 has copied the game down from $5200 with LDIR:
- * the copy reads every source byte, and those runtime addresses are where the game itself then
- * sits, so a coverage file taken across the copy marks the game's unexercised code as read and
- * never executed, which the disassembler applies as data (no descent into it).
+ * Coverage starts at $497F, after the stub at $8881 has copied the game down from $5200 with LDIR.
+ * The label file still says what the copy did: `write` marks every loaded byte that differs now
+ * from what the load placed, so the disassembler, reading the file's bytes, skips the game's
+ * runtime coverage wherever the copy overwrote the file's $5200-$7FFF (unless a relocate hint says
+ * the game runs there). Started at $497F, the game's own data reads show as read-only runs; from
+ * the load (`{ fromLoad: true }`, what label-session.test.js also checks) the copy writes every
+ * byte of the game, so none does, and nothing is lost either way.
  * Shared by label-session.test.js, which checks the committed file against it, and
  * scripts/sea-dragon-labels.mjs, which writes it. No `started`, so the file is reproducible.
  */
@@ -25,10 +28,15 @@ export const INPUT = 'ENTER at Cass? and Memory Size?, then (coverage on from $4
 /** Where the stub jumps once the game is copied down. */
 export const GAME_START = 0x497f;
 
-/** The session's Machine, with coverage on from $497F to the "1 or 2 Players?" prompt. */
-export function seaDragonMachine(rom) {
+/**
+ * The session's Machine, with coverage on from $497F (or from the load) to the "1 or 2 Players?" prompt.
+ * @param {Uint8Array} rom
+ * @param {{ fromLoad?: boolean }} [opts]
+ */
+export function seaDragonMachine(rom, { fromLoad = false } = {}) {
   const m = bootToReady(rom);
   m.load.cmd(new Uint8Array(readFileSync(SEA_DRAGON_CMD)));
+  if (fromLoad) m.debug.coverage.enable();
   const id = m.debug.break(GAME_START, { once: true });
   const r = m.run({ cycles: CPU_CLOCK_HZ });
   if (r.reason !== 'break' || r.id !== id) throw new Error(`Sea Dragon's stub did not reach $497F: ${JSON.stringify(r)}`);

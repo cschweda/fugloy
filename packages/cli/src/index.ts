@@ -62,8 +62,12 @@ listing instead, with each code line disassembled at its true address.
                    names, comments (see docs/Fugloy-Project-Plan.md, "Hint file")
   --labels <path>  apply a label and coverage file the emulator wrote for this
                    program (docs/label-format.md): executed instructions and
-                   code labels become entry points, read-only data stops
-                   descent, names and evidence are kept; the hint file wins
+                   code labels become entry points; bytes only read (never
+                   run or written) stop descent as data, a heuristic that
+                   never overrides another entry point; code that changed at
+                   runtime (a program that moved or rewrote itself) is
+                   skipped with a warning unless a relocate hint says where
+                   it runs; names and evidence are kept; the hint file wins
                    where both speak; refused when written for another program
   --write-hints <path>
                    write a hint-file skeleton for this program (identities and

@@ -178,6 +178,41 @@ describe('m.debug.labelFile', () => {
   });
 });
 
+describe('the write field', () => {
+  // 7000 LD HL,7010H / LD (HL),0 / INC HL / LD (HL),0BBH (the byte it already holds) / HALT; $7010 holds AA BB.
+  const code = [0x21, 0x10, 0x70, 0x36, 0x00, 0x23, 0x36, 0xbb, 0x76, 0, 0, 0, 0, 0, 0, 0, 0xaa, 0xbb];
+  const cmd = buildCmd([{ name: 'SELF' }, { addr: 0x7000, data: code }], 0x7000);
+  const writeAt = (file, addr) => decodeRle(file.coverage['0:0'].write)[addr];
+
+  it('a loaded byte the program overwrote before coverage started is marked written', () => {
+    const m = new Machine({ roms: { level2: sampleRom() } });
+    m.load.cmd(cmd);
+    expect(m.run({ until: 'halt', cycles: 1000 }).reason).toBe('halt');
+    m.debug.coverage.enable();
+    const file = m.debug.labelFile();
+    // Changed since the load: written. Rewritten with the byte it held: nothing to tell.
+    expect([writeAt(file, 0x7010), writeAt(file, 0x7011), writeAt(file, 0x7000)]).toEqual([1, 0, 0]);
+    // The live bits are the session's own, untouched.
+    expect(m.debug.coverage.bits[0x7010]).toBe(0);
+  });
+
+  it('with coverage on from the load, every write is marked, a same-value one included', () => {
+    const m = new Machine({ roms: { level2: sampleRom() } });
+    m.load.cmd(cmd);
+    m.debug.coverage.enable();
+    m.run({ until: 'halt', cycles: 1000 });
+    const file = m.debug.labelFile();
+    expect([writeAt(file, 0x7010), writeAt(file, 0x7011), writeAt(file, 0x7000)]).toEqual([1, 1, 0]);
+  });
+
+  it('a byte poked outside the CPU after the load counts as changed', () => {
+    const m = new Machine({ roms: { level2: sampleRom() } });
+    m.load.cmd(cmd);
+    m.mem.write(0x7001, [0x99]);
+    expect(writeAt(m.debug.labelFile(), 0x7001)).toBe(1);
+  });
+});
+
 describe('m.debug.label', () => {
   it('user labels win over observed at one address', () => {
     const m = sampleMachine();
@@ -242,6 +277,11 @@ describe('parseLabelFile', () => {
     expect(broken((f) => delete f.labels[1].evidence)).toEqual(['labels[1].evidence: an observed label must carry its evidence']);
     expect(broken((f) => (f.labels[4].size = -1))).toEqual(['labels[4].size: must be an integer 1..65536']);
     expect(broken((f) => (f.labels[1].addr = 0x7000))).toEqual(['labels[1]: a second label at $7000']);
+    // Duplicates are keyed by map, page, and address, map and page defaulting to 0 (as disasm keys them).
+    expect(broken((f) => Object.assign(f.labels[1], { addr: 0x7000, map: 0, page: 0 }))).toEqual(['labels[1]: a second label at $7000']);
+    expect(parseLabelFile({ ...good, labels: [...good.labels, { ...good.labels[0], page: 1 }] }).errors).toEqual([]);
+    expect(broken((f) => (f.labels[3].name = 'BU\nMP'))).toEqual(['labels[3].name: must not contain a control character']);
+    expect(broken((f) => (f.labels[1].evidence = 'called\u007f'))).toEqual(['labels[1].evidence: must not contain a control character']);
     expect(broken((f) => (f.coverage['0:0'].encoding = 'rle'))).toEqual(['coverage["0:0"].encoding: must be "rle-hex"']);
     expect(broken((f) => delete f.coverage['0:0'].jump)).toEqual(['coverage["0:0"].jump: missing']);
     expect(broken((f) => (f.coverage['0:0'].read = 'FFFF'))).toEqual(['coverage["0:0"].read: the runs sum to 65535, not 65536']);

@@ -146,7 +146,7 @@ function withLabels(p: Parts): { annotations: Annotations; labels: LabelsSummary
   const hints = p.applied.annotations;
   if (p.labelFile === undefined) return { annotations: hints, labels: undefined };
   const { space } = analysisSpace(p.module.image, hints.relocations);
-  const own = labelAnnotations(p.labelFile, space.image, p.hash);
+  const own = labelAnnotations(p.labelFile, space.image, p.hash, space.relocations);
   if (own.refused !== null) throw new OpenError('labels', own.refused);
   const annotations = mergeAnnotations(hints, own.annotations);
   const warnings = [...own.summary.warnings];

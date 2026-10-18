@@ -29,6 +29,8 @@ const SOURCES = ['loader', 'observed', 'user', 'disasm'];
 const RANK = { loader: 0, disasm: 1, observed: 2, user: 3 };
 const KINDS = ['call', 'jp', 'jr', 'rst', 'ret-to'];
 const SPACE = 0x10000;
+/** C0 controls and DEL: a CR or LF in a name or evidence would start a new line in a listing or zmac source. */
+const CONTROL = /[\u0000-\u001f\u007f]/;
 
 /**
  * @typedef {{ addr: number, name: string, kind: 'code' | 'data', size?: number, source: 'loader' | 'observed' | 'user' | 'disasm', evidence?: string, map?: number, page?: number }} Label
@@ -230,10 +232,12 @@ export function parseLabelFile(value) {
         if (!isObject(l)) return err(`${at}: must be an object`);
         if (!isAddr(l.addr)) err(`${at}.addr: must be an address 0..65535`);
         if (typeof l.name !== 'string' || l.name === '') err(`${at}.name: must be a non-empty string`);
+        else if (CONTROL.test(l.name)) err(`${at}.name: must not contain a control character`);
         if (l.kind !== 'code' && l.kind !== 'data') err(`${at}.kind: must be code or data`);
         if (!SOURCES.includes(l.source)) err(`${at}.source: must be loader, observed, user, or disasm`);
         if (l.size !== undefined && (!Number.isInteger(l.size) || l.size < 1 || l.size > SPACE)) err(`${at}.size: must be an integer 1..65536`);
         if (l.evidence !== undefined && typeof l.evidence !== 'string') err(`${at}.evidence: must be a string`);
+        else if (l.evidence !== undefined && CONTROL.test(l.evidence)) err(`${at}.evidence: must not contain a control character`);
         else if (l.source === 'observed' && (l.evidence === undefined || l.evidence === '')) err(`${at}.evidence: an observed label must carry its evidence`);
         mapPage(l, at);
         if (isAddr(l.addr)) {

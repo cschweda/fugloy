@@ -154,6 +154,28 @@ describe('watchpoints', () => {
     expect(m.run({ cycles: 1000 }).reason).toBe('cycles');
   });
 
+  it('unwatch drops a pending stop of that watch, and keeps another watch\'s', () => {
+    const rom = new Uint8Array(0x40);
+    rom.set([0x3e, 0x04, 0xd3, 0xe0, 0xed, 0x56, 0x31, 0x00, 0x80, 0xfb, 0x0c, 0x18, 0xfd], 0);
+    rom.set([0xf5, 0xdb, 0xec, 0xf1, 0xfb, 0xc9], 0x38);
+    // Two stop watches the interrupt push hits; the break holds both stops pending.
+    const m = machine(rom);
+    const b = m.debug.break(0x0038);
+    const w1 = m.debug.watch(0x7ffe, 2, { stop: true });
+    const w2 = m.debug.watch(0x7fff, 1, { stop: true });
+    expect(m.run({ cycles: 1e7 })).toMatchObject({ reason: 'break', id: b });
+    expect(m.debug.unwatch(w1)).toBe(true);
+    expect(m.run({ cycles: 1e7 })).toEqual({ reason: 'watch', id: w2, cycles: 11 });
+
+    // With the only stop watch removed, nothing pending stops the run.
+    const n = machine(rom);
+    n.debug.break(0x0038);
+    const w = n.debug.watch(0x7ffe, 2, { stop: true });
+    expect(n.run({ cycles: 1e7 }).reason).toBe('break');
+    n.debug.unwatch(w);
+    expect(n.run({ cycles: 1000 }).reason).toBe('cycles');
+  });
+
   it('the keyboard hook\'s stand-in RET reads the stack with the CPU\'s pc', () => {
     // LD SP,8000H / CALL 002BH / HALT: the hook returns from $002B with the fed key.
     const m = machine([0x31, 0x00, 0x80, 0xcd, 0x2b, 0x00, 0x76]);

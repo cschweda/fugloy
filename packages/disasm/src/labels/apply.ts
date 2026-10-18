@@ -3,8 +3,18 @@
  * them under a hint file's (phase 3 Rulings 9, 10, 11). Label-file addresses
  * are runtime addresses: they came from the running machine, so the image to
  * pass is the analysis space (the file image with every relocate hint applied).
+ *
+ * A runtime address holds the file's byte only if nothing changed it: the
+ * file's `write` field marks bytes written while coverage was on or changed
+ * since the load. An executed instruction or a code label whose bytes were
+ * written says nothing true about the file's bytes there (a program that
+ * copied itself, or rewrote its own code), so it applies only inside a region
+ * a relocate hint moved; elsewhere it is skipped, with one summary warning.
+ * Read-only → data is a heuristic: a read run that was also written, executed,
+ * or decoded as an operand is never applied as `nocode`.
  */
 import { hex4 } from '@fugloy/z80';
+import type { Relocation } from '../analysis/relocate.js';
 import { emptyAnnotations } from '../hints/apply.js';
 import type { Annotations, Override } from '../hints/apply.js';
 import { isValidName, nameProblem, SYNTH_NAME } from '../hints/format.js';
@@ -27,7 +37,17 @@ export interface LabelsSummary {
 const $ = (n: number): string => `$${hex4(n)}`;
 const overlaps = (a: Override, b: Override): boolean => a.addr < b.addr + Math.max(b.length, 1) && b.addr < a.addr + Math.max(a.length, 1);
 
-export function labelAnnotations(file: LabelFile, image: MemoryImage, programHash: string): { annotations: Annotations; summary: LabelsSummary; refused: string | null } {
+/**
+ * `image` is the analysis space and `relocations` the relocate hints that made it: inside a
+ * relocation's runtime region, executed and labelled code applies even where it was written
+ * (the hint says the file's bytes run there).
+ */
+export function labelAnnotations(
+  file: LabelFile,
+  image: MemoryImage,
+  programHash: string,
+  relocations: readonly Relocation[] = [],
+): { annotations: Annotations; summary: LabelsSummary; refused: string | null } {
   const annotations = emptyAnnotations();
   const sha = file.program.sha256;
   // Ruling 10: a file keyed by address states nothing true about another program.
@@ -42,12 +62,34 @@ export function labelAnnotations(file: LabelFile, image: MemoryImage, programHas
   const roots = new Set<number>();
   const labelled = new Set<number>();
   const used = new Map<string, number>();
+  const coverage = file.coverage['0:0'];
+  const exec = coverage === undefined ? null : decodeRle(coverage.exec)!;
+  const operand = coverage === undefined ? null : decodeRle(coverage.operand)!;
+  const read = coverage === undefined ? null : decodeRle(coverage.read)!;
+  const write = coverage === undefined ? null : decodeRle(coverage.write)!;
+  const relocated = (a: number): boolean => relocations.some((r) => a >= r.runAddr && a < r.runAddr + r.length);
+  /** Executed or labelled code at `addr` that the file's bytes may not hold: its instruction's bytes were written, outside any relocation. */
+  const changed = (addr: number): boolean => {
+    if (write === null || relocated(addr)) return false;
+    if (write[addr] === 1) return true;
+    // The instruction's other bytes: the operand bytes that follow an executed start (at most three).
+    for (let k = 1; k < 4 && addr + k <= 0xffff && operand![addr + k] === 1 && exec![addr + k] === 0; k++) if (write[addr + k] === 1) return true;
+    return false;
+  };
+  /** Addresses whose executed or labelled code was skipped because it changed at runtime. */
+  const skipped = new Set<number>();
   for (const label of file.labels) {
     const { addr, name } = label;
+    if ((label.map ?? 0) !== 0 || (label.page ?? 0) !== 0) {
+      warnings.push(`label ${name} at ${$(addr)} is for map ${label.map ?? 0}, page ${label.page ?? 0}; only map 0, page 0 applies to this machine; skipped`);
+      continue;
+    }
     if (!image.isLoaded(addr)) {
       warnings.push(`label ${name} at ${$(addr)} is outside loaded memory; skipped`);
       continue;
     }
+    // A data label stays: data is what a program writes. Code whose bytes changed is not the file's code.
+    if (label.kind === 'code' && changed(addr)) { skipped.add(addr); continue; }
     if (label.kind === 'code') { roots.add(addr); labelled.add(addr); }
     // Ruling 9: a name of the generated shape means "no name given".
     if (!SYNTH_NAME.test(name)) {
@@ -74,11 +116,15 @@ export function labelAnnotations(file: LabelFile, image: MemoryImage, programHas
     const [map, page] = key.split(':');
     warnings.push(`coverage for map ${map}, page ${page} is ignored; only "0:0" applies to this machine`);
   }
-  const coverage = file.coverage['0:0'];
-  if (coverage !== undefined) {
-    const exec = decodeRle(coverage.exec)!;
-    const operand = decodeRle(coverage.operand)!;
-    const read = decodeRle(coverage.read)!;
+  if (exec !== null && operand !== null && read !== null && write !== null) {
+    const changedRuns: { addr: number; length: number }[] = [];
+    let changedStart = -1;
+    for (let a = 0; a <= 0x10000; a++) {
+      const on = a <= 0xffff && write[a] === 1 && image.isLoaded(a) && !relocated(a);
+      if (on && changedStart < 0) changedStart = a;
+      else if (!on && changedStart >= 0) { changedRuns.push({ addr: changedStart, length: a - changedStart }); changedStart = -1; }
+    }
+    if (changedRuns.length > 0) annotations.changed = changedRuns;
     let runStart = -1;
     const endRun = (end: number): void => {
       if (runStart < 0) return;
@@ -88,13 +134,22 @@ export function labelAnnotations(file: LabelFile, image: MemoryImage, programHas
     };
     for (let a = 0; a <= 0xffff; a++) {
       if (!image.isLoaded(a)) { endRun(a); continue; }
-      if (exec[a] === 1) roots.add(a);
-      if (read[a] === 1 && exec[a] === 0 && operand[a] === 0) { if (runStart < 0) runStart = a; }
+      if (exec[a] === 1) {
+        if (changed(a)) skipped.add(a);
+        else roots.add(a);
+      }
+      // Read and never run, written, or fetched as an operand: probably data (a heuristic; see docs/label-format.md).
+      if (read[a] === 1 && exec[a] === 0 && operand[a] === 0 && write[a] === 0) { if (runStart < 0) runStart = a; }
       else endRun(a);
     }
     endRun(0x10000);
   }
+  if (skipped.size > 0) {
+    const n = skipped.size;
+    warnings.push(`${n} executed or labelled address${n === 1 ? '' : 'es'} changed at runtime (written while coverage was on, or since the load); their coverage is not applied to the file's bytes (a relocate hint says where moved code runs)`);
+  }
   annotations.entries = [...roots].sort((a, b) => a - b);
+  annotations.labelRoots = annotations.entries.slice();
   annotations.executed = annotations.entries.filter((a) => !labelled.has(a));
   return { annotations, summary: { names: annotations.names.size, roots: roots.size, dataRuns, warnings }, refused: null };
 }
@@ -115,6 +170,8 @@ export function mergeAnnotations(hints: Annotations, labels: Annotations): Annot
     ...hints,
     entries: [...new Set([...hints.entries, ...labels.entries])],
     executed: (labels.executed ?? []).filter((a) => !hints.entries.includes(a) && !hints.overrides.some((o) => o.kind === 'code' && o.addr === a)),
+    ...(labels.changed === undefined ? {} : { changed: labels.changed }),
+    labelRoots: (labels.labelRoots ?? []).filter((a) => !hints.entries.includes(a) && !hints.overrides.some((o) => o.kind === 'code' && o.addr === a)),
     overrides: [...hints.overrides, ...labels.overrides.filter((o) => !hints.overrides.some((h) => overlaps(h, o)))],
     names,
     comments,

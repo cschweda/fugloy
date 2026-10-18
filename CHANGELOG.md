@@ -12,7 +12,14 @@ Emu phase 3 (`@fugloy/emu`, unreleased): the debugger and the label and
 coverage file, which the disassembler reads. Phase 3's done-criterion is met:
 a scripted session produces a label file Fugløy's disassembler consumes.
 
+Emu phase 2 (`@fugloy/emu`, unreleased): the Model III as a `Machine`, with
+the devices and loaders that run real programs. Phase 2's done-criterion is
+met: Sea Dragon, Eliminator, and Rear Guard load and reach their title screens
+through `Machine`.
+
 ### Added
+
+Emu phase 3:
 
 - `m.debug` (spec §3, §7): breakpoints with `once` and `when`, read and write
   watches with a 65,536-entry hit log, memory and port hooks, coverage of
@@ -25,24 +32,25 @@ a scripted session produces a label file Fugløy's disassembler consumes.
   `rle-hex` coverage encoding: the label and coverage file of spec §8 and
   `docs/label-format.md`, with a committed synthetic fixture.
 - `@fugloy/disasm` reads the file (`parseLabelFile`, `withLabelFile`), and the
-  CLI applies it with `--labels <path>`: executed bytes become roots, read-only
-  runs stop descent, observed subroutines get their evidence as a comment, and
-  a file written for another program is refused. Hint files win.
+  CLI applies it with `--labels <path>`: executed bytes become roots, runs read
+  and never run or written stop descent (never at another source's entry
+  point), observed subroutines get their evidence as a comment, and a file
+  written for another program is refused. Hint files win. The file's `write`
+  field also marks loaded bytes changed since the load, and code that changed
+  at runtime (a program that moved or rewrote itself) is not applied to the
+  file's bytes outside a relocate hint's region; one warning counts it.
 - `examples/sea-dragon/seadrg01.labels.json`: the file of a scripted Sea Dragon
   session (coverage from `$497F`, after the loader's copy, through the title
   screen and ENTER), written by `packages/emu/scripts/sea-dragon-labels.mjs`.
-  With the committed hints it adds 457 roots and contradicts nothing.
+  With the committed hints every executed root it gives starts an instruction
+  the hints decode; without them it states nothing the file's bytes do not
+  hold.
 - The deliverable proof, `packages/emu/test/integration/label-session.test.js`:
   a synthetic session's file makes the disassembler type a table as data and
   name the subroutine, and two runs end with identical hit logs and files.
   `packages/emu/scripts/benchmark.mjs` measures speed per mode.
 
-Emu phase 2 (`@fugloy/emu`, unreleased): the Model III as a `Machine`, with
-the devices and loaders that run real programs. Phase 2's done-criterion is
-met: Sea Dragon, Eliminator, and Rear Guard load and reach their title screens
-through `Machine`.
-
-### Added
+Emu phase 2:
 
 - `Machine` (spec §3): `step(n)` and `run({ cycles, until })` with reasons,
   registers, flags, memory, ports, ROM identification (`m.rom`, `ROM_HASHES`),

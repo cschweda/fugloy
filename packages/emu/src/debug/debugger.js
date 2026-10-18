@@ -53,7 +53,7 @@ export class Debugger {
   active = false;
   /** @type {number | null} The id of the breakpoint that made the last `beforeInstruction` stop. */
   stopId = null;
-  /** @type {boolean} True while memory accesses are instrumented, so the Machine calls `startInstruction` before each instruction. */
+  /** @type {boolean} True while memory reads or writes are instrumented (coverage, a watch, or a memory hook listens). */
   tracksAccess = false;
   /** @type {boolean} True while the Machine must call `startInstruction` before each instruction: memory accesses are instrumented or the trace is on. */
   startsInstruction = false;
@@ -107,8 +107,8 @@ export class Debugger {
   #reads = 0;
   /** True while `readMemory` is instrumented, so `startInstruction` needs the length. */
   #readsOn = false;
-  /** @type {number | null} The lowest id of a stop watch hit since the last `afterInstruction`. */
-  #stopHit = null;
+  /** @type {number[]} The ids of the stop watches hit since the last `afterInstruction` (or pending from a breakpoint stop), unsorted. */
+  #stopHits = [];
 
   /** True while coverage is enabled. */
   #covOn = false;
@@ -149,6 +149,8 @@ export class Debugger {
   #labels = new Map();
   /** @type {{ manifest: any, sha256: string } | null} The last `m.load.*` call's manifest and the SHA-256 of the bytes it was given. */
   #loaded = null;
+  /** @type {{ addr: number, bytes: Uint8Array }[]} What the last load placed in memory: each landed manifest block's bytes, read back once the loader finished. */
+  #placed = [];
 
   /** @param {any} machine */
   constructor(machine) {
@@ -260,7 +262,7 @@ export class Debugger {
    */
   restore(snap) {
     restoreState(this.#machine.system, snap);
-    this.#stopHit = null;
+    this.#stopHits = [];
     this.#inInstr = false;
     this.#tOpen = false;
     this.#machine.newTimeline();
@@ -300,6 +302,16 @@ export class Debugger {
    */
   recordLoad(manifest, bytes) {
     this.#loaded = { manifest: JSON.parse(JSON.stringify(manifest)), sha256: sha256Hex(bytes) };
+    // A copy of what landed, so the label file can tell which loaded bytes changed since (a
+    // block still `predicted` has not landed). Read after the loader, so a later block wins.
+    const read = this.#plain.readMemory;
+    this.#placed = manifest.blocks
+      .filter((/** @type {any} */ b) => !b.predicted)
+      .map((/** @type {any} */ b) => {
+        const placed = new Uint8Array(b.len);
+        for (let i = 0; i < b.len; i++) placed[i] = read((b.addr + i) & 0xffff);
+        return { addr: b.addr, bytes: placed };
+      });
   }
 
   /**
@@ -307,17 +319,28 @@ export class Debugger {
    * the last load's manifest), its loaded blocks and entry, labels (`ENTRY`, observed call
    * targets in the loaded blocks, user labels), the six coverage fields, the callers map, and one
    * session. The core reads no clock: `started` is recorded only when the caller passes it.
+   * `write` marks a byte written while coverage was on, or a loaded byte that differs now from
+   * what the load placed there (so a program that rewrote itself before coverage started still
+   * says so); the live `coverage.bits` are not changed.
    * @param {{ name?: string, started?: string, input?: string }} [opts]
    * @returns {import('./label-file.js').LabelFile}
    */
   labelFile({ name, started, input } = {}) {
+    const bits = this.#bits.slice();
+    const read = this.#plain.readMemory;
+    for (const { addr, bytes } of this.#placed) {
+      for (let i = 0; i < bytes.length; i++) {
+        const a = (addr + i) & 0xffff;
+        if (read(a) !== bytes[i]) bits[a] |= WRITE;
+      }
+    }
     return writeLabelFile({
       name,
       started,
       input,
       loaded: this.#loaded,
       userLabels: [...this.#labels.values()],
-      bits: this.#bits,
+      bits,
       callerMap: this.callerMap(),
       cycles: this.#cpu.cycles,
     });
@@ -333,7 +356,7 @@ export class Debugger {
       const len = this.#tLens[i];
       /** @type {TraceEntry} */
       const e = { pc: this.#tPcs[i], bytes: Array.from(this.#tBytes.subarray(i * 4, i * 4 + len)), cycles: this.#tCycles[i] };
-      if (this.#traceRegs) e.regs = this.#tRegs[i];
+      if (this.#traceRegs) e.regs = { ...this.#tRegs[i] };
       out.push(e);
     }
     return out;
@@ -408,6 +431,8 @@ export class Debugger {
    */
   unwatch(id) {
     if (!this.#watches.delete(id)) return false;
+    // A stop this watch made and `run` has not yet returned goes with it.
+    if (this.#stopHits.length > 0) this.#stopHits = this.#stopHits.filter((x) => x !== id);
     this.#rebuildMask();
     this.#refresh();
     return true;
@@ -529,9 +554,10 @@ export class Debugger {
     }
     if (this.#inInstr && this.#covOn && this.#kind !== null) this.#transfer();
     this.#inInstr = false;
-    const id = this.#stopHit;
-    this.#stopHit = null;
-    return id;
+    const hits = this.#stopHits;
+    if (hits.length === 0) return null;
+    this.#stopHits = [];
+    return Math.min(...hits);
   }
 
   /**
@@ -641,7 +667,7 @@ export class Debugger {
         this.#ringHead = (this.#ringHead + 1) % RING;
         this.hitsOverflowed = true;
       }
-      if (w.stop && (this.#stopHit === null || w.id < this.#stopHit)) this.#stopHit = w.id;
+      if (w.stop && !this.#stopHits.includes(w.id)) this.#stopHits.push(w.id);
     }
   }
 

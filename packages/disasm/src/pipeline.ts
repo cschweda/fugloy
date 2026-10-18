@@ -117,14 +117,19 @@ export function analyze(mod: Module, opts: AnalyzeOptions = {}): Analysis {
   for (const o of hints.overrides) if (o.kind === 'code') roots.push(o.addr);
   for (const m of entries) if (m.addr !== null) roots.push(m.addr);
   roots.push(...(basic?.candidates ?? []));
-  // A root only a label file's coverage gave is an instruction that ran; one that is a root for any other reason stays an entry.
-  if (hints.executed !== undefined) {
-    const executed = new Set(hints.executed);
-    const other = new Set<number>(roots.filter((r) => !executed.has(r)));
+  // A root only a label file gave is an instruction that ran or a code label; one that is a root for any other reason stays an
+  // entry in the listing, and a read-only run of the label file never ends a path there.
+  if (hints.executed !== undefined || hints.labelRoots !== undefined) {
+    const fromLabels = new Set([...(hints.executed ?? []), ...(hints.labelRoots ?? [])]);
+    const other = new Set<number>(roots.filter((r) => !fromLabels.has(r)));
     for (const r of [entry, ...(opts.entries ?? []).map((e) => e & 0xffff), ...hints.overrides.filter((o) => o.kind === 'code').map((o) => o.addr)]) if (r !== null) other.add(r);
     for (const m of entries) if (m.addr !== null) other.add(m.addr);
     for (const c of basic?.candidates ?? []) other.add(c);
-    annotations = { ...annotations, executed: hints.executed.filter((a) => !other.has(a)) };
+    annotations = {
+      ...annotations,
+      ...(hints.executed === undefined ? {} : { executed: hints.executed.filter((a) => !other.has(a)) }),
+      ...(hints.labelRoots === undefined ? {} : { labelRoots: hints.labelRoots.filter((a) => !other.has(a)) }),
+    };
   }
   // applyHints refuses bad relocations and reports them; annotations built directly are checked here.
   const { space, errors: relocationErrors } = analysisSpace(mod.image, annotations.relocations);

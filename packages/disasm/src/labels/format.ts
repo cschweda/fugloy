@@ -15,6 +15,9 @@ export interface Label {
   size?: number;
   source: LabelSource;
   evidence?: string;
+  /** Memory map and bank (Model 4); absent means 0. */
+  map?: number;
+  page?: number;
 }
 
 /** One coverage object: each bit field rle-hex encoded over the 64K address space. */
@@ -132,13 +135,20 @@ export function parseLabelFile(text: string): { file: LabelFile | null; errors: 
   if ('labels' in json) {
     if (!Array.isArray(labels)) errors.push('labels must be a list');
     else {
-      const seen = new Set<number>();
+      // Keyed by map, page, and address, map and page defaulting to 0, as the emulator's reader keys them.
+      const seen = new Set<string>();
       labels.forEach((l: unknown, i) => {
         const at = `labels[${i}]`;
         if (!isObject(l)) { errors.push(`${at} must be an object`); return; }
+        for (const k of ['map', 'page']) if (l[k] !== undefined && !isInt(l[k], 0, Number.MAX_SAFE_INTEGER)) errors.push(`${at}.${k} must be a non-negative integer`);
         if (!isAddr(l['addr'])) errors.push(`${at}.addr must be an address 0 to 65535`);
-        else if (seen.has(l['addr'])) errors.push(`${at}: $${hex4(l['addr'])} already has a label`);
-        else seen.add(l['addr']);
+        else {
+          const map = isInt(l['map'], 0, Number.MAX_SAFE_INTEGER) ? l['map'] : 0;
+          const page = isInt(l['page'], 0, Number.MAX_SAFE_INTEGER) ? l['page'] : 0;
+          const key = `${map}:${page}:${l['addr']}`;
+          if (seen.has(key)) errors.push(`${at}: $${hex4(l['addr'])}${map !== 0 || page !== 0 ? ` (map ${map}, page ${page})` : ''} already has a label`);
+          else seen.add(key);
+        }
         if (typeof l['name'] !== 'string' || l['name'] === '') errors.push(`${at}.name must be a non-empty string`);
         else if (CONTROL.test(l['name'])) errors.push(`${at}.name contains a control character`);
         if (l['kind'] !== 'code' && l['kind'] !== 'data') errors.push(`${at}.kind must be "code" or "data"`);

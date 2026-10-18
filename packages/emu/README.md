@@ -67,9 +67,11 @@ m.debug.label(0x6212, 'TONE')                // a user label: the listing names 
 writeFileSync('seadrg01.labels.json', JSON.stringify(m.debug.labelFile({ name: 'seadrg01.cmd' }), null, 2))
 ```
 
-Start coverage after a self-relocating program has copied itself: the copy
-reads every byte it moves, so coverage taken across it marks the program's
-unexercised code as read and never executed, and the disassembler stops there.
+Coverage can start at the load: the label file's `write` field marks every
+byte a self-relocating program's copy writes, and every loaded byte that
+differs from what the load placed, so the disassembler neither mistakes moved
+code for data nor applies the moved code's coverage to the file's bytes (a
+relocate hint says where it runs).
 Everything on `m.debug` is described in spec §3 and §7, the file in §8 and
 [`docs/label-format.md`](../../docs/label-format.md).
 `examples/sea-dragon/seadrg01.labels.json` is the file of the scripted session

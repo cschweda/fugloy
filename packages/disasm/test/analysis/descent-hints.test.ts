@@ -105,3 +105,43 @@ describe('descent with annotations', () => {
     expect(a.diagnostics).toEqual(b.diagnostics);
   });
 });
+
+describe('descent with a label file\'s evidence', () => {
+  const lnocode = (addr: number, length: number) => ({ addr, kind: 'nocode' as const, length, fromLabels: true as const });
+
+  it('a read-only run never ends a path at a root from another source: it stops short of the root', () => {
+    // NOP / NOP / NOP / RET, all four bytes read and never run per the label file; the root at $6001 is a hint's.
+    const img = image({ 0x6000: [0x00, 0x00, 0x00, 0xc9] });
+    const p = recursiveDescent(img, [0x6001], ann({ overrides: [lnocode(0x6000, 4)] }));
+    expect(starts(p)).toEqual([0x6001, 0x6002, 0x6003]);
+    expect(p.diagnostics).toEqual([]);
+    // A root only the label file gave is not stronger than its own run.
+    const weak = recursiveDescent(img, [0x6001], ann({ overrides: [lnocode(0x6000, 4)], labelRoots: [0x6001] }));
+    expect(starts(weak)).toEqual([]);
+    expect(weak.diagnostics.map((d) => d.message)).toEqual(['path ends at $6001 (read, never executed, per the label file)']);
+    // The bytes before the root stay data to a path that lands there.
+    const back = recursiveDescent(image({ 0x6000: [0x00, 0x00, 0x18, 0xfc] }), [0x6002], ann({ overrides: [lnocode(0x6000, 4)] }));
+    expect(starts(back)).toEqual([0x6002]);
+    expect(back.diagnostics.map((d) => d.message)).toEqual(['path ends at $6000 (read, never executed, per the label file)']);
+  });
+
+  it('a table\'s targets are roots the read-only run stops short of', () => {
+    const img = image({ 0x6000: [0x00, 0xc9], 0x6010: [0x00, 0x60] });
+    const p = recursiveDescent(img, [], ann({ tables: [{ addr: 0x6010, count: 1, width: 2 }], overrides: [lnocode(0x6000, 2)] }));
+    expect(starts(p)).toEqual([0x6000, 0x6001]);
+  });
+
+  it('a path from a label-only root ends before a byte that changed at runtime; other paths do not', () => {
+    // NOP / LD A,5 / RET with the LD's operand changed at runtime.
+    const img = image({ 0x6000: [0x00, 0x3e, 0x05, 0xc9] });
+    const changed = [{ addr: 0x6002, length: 1 }];
+    const weak = recursiveDescent(img, [0x6000], ann({ labelRoots: [0x6000], changed }));
+    expect(starts(weak)).toEqual([0x6000]);
+    expect(weak.diagnostics.map((d) => d.message)).toEqual(["path ends at $6001 (changed at runtime, per the label file: the file's bytes are not what ran)"]);
+    expect(starts(recursiveDescent(img, [0x6000], ann({ changed })))).toEqual([0x6000, 0x6001, 0x6003]);
+    // A transfer from a weak path is weak too.
+    const jump = image({ 0x6000: [0xc3, 0x10, 0x60], 0x6010: [0xc9] });
+    expect(starts(recursiveDescent(jump, [0x6000], ann({ labelRoots: [0x6000], changed: [{ addr: 0x6010, length: 1 }] })))).toEqual([0x6000]);
+    expect(starts(recursiveDescent(jump, [0x6000], ann({ changed: [{ addr: 0x6010, length: 1 }] })))).toEqual([0x6000, 0x6010]);
+  });
+});

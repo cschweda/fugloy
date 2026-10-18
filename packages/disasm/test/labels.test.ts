@@ -5,6 +5,7 @@ import { programHash } from '../src/hints/identity.js';
 import { decodeRle, parseLabelFile } from '../src/labels/format.js';
 import type { LabelFile } from '../src/labels/format.js';
 import { labelAnnotations, mergeAnnotations } from '../src/labels/apply.js';
+import { analysisSpace } from '../src/analysis/relocate.js';
 import { openProgram, OpenError, renderSession, skeletonHints, withHintText, withLabelFile } from '../src/session.js';
 import { sampleCmd, sampleLabelText } from './label-sample.js';
 
@@ -22,6 +23,21 @@ const edited = (edit: (o: Record<string, any>) => void): string => {
   return JSON.stringify(o);
 };
 const open = () => openProgram(bytes, { name: 'sample.cmd' });
+/** An rle-hex field with exactly `addrs` set. */
+const rle = (addrs: number[]): string => {
+  const bits = new Uint8Array(0x10000);
+  for (const a of addrs) bits[a] = 1;
+  const runs: number[] = [];
+  let state = 0;
+  let run = 0;
+  for (const b of bits) {
+    if (b === state) run++;
+    else { runs.push(run); state = b; run = 1; }
+  }
+  runs.push(run);
+  return runs.map((n) => n.toString(16).toUpperCase()).join(',');
+};
+const range = (from: number, n: number): number[] => Array.from({ length: n }, (_, i) => from + i);
 const EXEC = [0x7000, 0x7001, 0x7004, 0x7006, 0x7009, 0x700b, 0x700c, 0x700f, 0x7012, 0x7015, 0x7018, 0x7020, 0x7023, 0x7024, 0x7030, 0x7034];
 
 describe('the label file in the disassembler', () => {
@@ -63,6 +79,11 @@ describe('the label file in the disassembler', () => {
       'labels[3].name contains a control character',
     ]);
     expect(errorsOf(edited((o) => { o['labels'][1].evidence = ''; }))).toEqual(['labels[1] is observed and has no evidence']);
+    // Duplicates are keyed by map, page, and address (map and page default to 0), as the emulator's reader keys them.
+    expect(errorsOf(edited((o) => { Object.assign(o['labels'][4], { addr: 0x7034, map: 0 }); }))).toEqual(['labels[4]: $7034 already has a label']);
+    expect(errorsOf(edited((o) => { Object.assign(o['labels'][4], { addr: 0x7034, page: 1 }); o['labels'][3].page = 1; }))).toEqual(['labels[4]: $7034 (map 0, page 1) already has a label']);
+    expect(parseLabelFile(edited((o) => { Object.assign(o['labels'][4], { addr: 0x7034, page: 1 }); })).errors).toEqual([]);
+    expect(errorsOf(edited((o) => { o['labels'][4].map = -1; }))).toEqual(['labels[4].map must be a non-negative integer']);
     // Either case, and zero-length runs anywhere, are fine.
     expect(parseLabelFile(edited((o) => { o['coverage']['0:0'].read = '0,0,7040,1,ebd,0,0,2,8100'; })).errors).toEqual([]);
   });
@@ -157,6 +178,47 @@ describe('the label file in the disassembler', () => {
     expect(s.analysis.pass1.instructions.has(0x7030)).toBe(true);
   });
 
+  it('a root from another source inside a read-only run decodes: the run stops short of it', () => {
+    // $7033-$7035 read and never run, as above; a hint entry at $7033 and --entry $7034 are stronger.
+    const file = parseLabelFile(edited((o) => {
+      o['labels'] = [];
+      o['coverage']['0:0'] = { encoding: 'rle-hex', exec: '10000', operand: '10000', read: '7033,3,8FCA', write: '10000', jump: '10000', call: '10000' };
+    })).file!;
+    const s = open();
+    const hinted = withLabelFile(withHintText(s, `${writeHints(skeletonHints(s.module, bytes))}block 0:$0033 entry\n`), file);
+    expect(hinted.analysis.pass1.instructions.has(0x7033)).toBe(true);
+    expect(hinted.analysis.pass1.instructions.has(0x7034)).toBe(true);
+    expect(hinted.analysis.pass1.diagnostics.filter((d) => d.kind === 'nocode')).toEqual([]);
+    const entered = withLabelFile(openProgram(bytes, { name: 'sample.cmd', entries: [0x7034] }), file);
+    expect(entered.analysis.pass1.instructions.has(0x7034)).toBe(true);
+    expect(entered.analysis.pass1.diagnostics.filter((d) => d.kind === 'nocode')).toEqual([]);
+  });
+
+  it('a written byte is never applied as data, and code that changed at runtime is skipped with one warning', () => {
+    // The sample's coverage, with $7006-$7008 (CALL 7020H, executed) and the code label BUMP at $7034 written, and $7040 (read) written.
+    const file = parseLabelFile(edited((o) => { o['coverage']['0:0'].write = rle([0x7007, 0x7034, 0x7040, 0x7041]); })).file!;
+    const { annotations, summary } = labelAnnotations(file, open().module.image, hash);
+    expect(annotations.entries).not.toContain(0x7006);
+    expect(annotations.entries).not.toContain(0x7034);
+    expect(annotations.names.has(0x7034)).toBe(false);
+    // The data label SCORE stays (data is what a program writes); its read-only run does not, being written.
+    expect(annotations.names.get(0x7040)).toBe('SCORE');
+    expect(annotations.overrides).toEqual([{ addr: 0x7040, kind: 'bytes', length: 2 }]);
+    expect(annotations.changed).toEqual([{ addr: 0x7007, length: 1 }, { addr: 0x7034, length: 1 }, { addr: 0x7040, length: 2 }]);
+    expect(summary.warnings).toEqual(["2 executed or labelled addresses changed at runtime (written while coverage was on, or since the load); their coverage is not applied to the file's bytes (a relocate hint says where moved code runs)"]);
+    // The module's entry is not the label file's: its path still decodes the changed bytes, which are the file's own.
+    const s = withLabelFile(open(), file);
+    expect(s.analysis.pass1.instructions.has(0x7006)).toBe(true);
+    expect(s.analysis.pass1.instructions.has(0x7034)).toBe(true);
+  });
+
+  it('a label for another map or page is skipped', () => {
+    const file = parseLabelFile(edited((o) => { o['labels'][3].page = 2; })).file!;
+    const { annotations, summary } = labelAnnotations(file, open().module.image, hash);
+    expect(annotations.names.has(0x7034)).toBe(false);
+    expect(summary.warnings).toEqual(['label BUMP at $7034 is for map 0, page 2; only map 0, page 0 applies to this machine; skipped']);
+  });
+
   it('refuses a file written for another program', () => {
     const other = parseLabelFile(edited((o) => { o['program'].sha256 = '0'.repeat(64); })).file!;
     const r = labelAnnotations(other, open().module.image, hash);
@@ -193,5 +255,22 @@ describe('the label file in the disassembler', () => {
     expect(both.analysis.annotations.names.get(0x8004)).toBe('MOVED');
     expect(both.analysis.annotations.names.has(0x7034)).toBe(false);
     expect(both.analysis.labels?.warnings).toContain('label BUMP at $7034 is outside loaded memory; skipped');
+  });
+
+  it('inside a relocation, executed code applies even where it was written; outside one it does not', () => {
+    const s = open();
+    const hints = `${writeHints(skeletonHints(s.module, bytes))}block 0:$0030 relocate $8000 $0005\n`;
+    // The copy wrote $8000-$8004, and the moved JP ran at $8000; $7001-$7003 (LD SP, executed) changed too.
+    const file = parseLabelFile(edited((o) => {
+      delete o['program'].sha256;
+      o['labels'] = [];
+      Object.assign(o['coverage']['0:0'], { exec: rle([0x7000, 0x7001, 0x8000]), operand: rle([0x7002, 0x7003, 0x8001, 0x8002]), read: '10000', write: rle([...range(0x7001, 3), ...range(0x8000, 5)]) });
+    })).file!;
+    const { space } = analysisSpace(s.module.image, [{ fileAddr: 0x7030, length: 5, runAddr: 0x8000 }]);
+    const { annotations, summary } = labelAnnotations(file, space.image, '', space.relocations);
+    expect(annotations.entries).toEqual([0x7000, 0x8000]);
+    expect(annotations.changed).toEqual([{ addr: 0x7001, length: 3 }]);
+    expect(summary.warnings).toHaveLength(1);
+    expect(withLabelFile(withHintText(s, hints), file).analysis.pass1.instructions.has(0x8000)).toBe(true);
   });
 });

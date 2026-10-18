@@ -8,11 +8,11 @@
  */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { openProgram, parseLabelFile, renderSession, withLabelFile } from '@fugloy/disasm';
+import { openProgram, parseLabelFile, renderSession, withHintText, withLabelFile } from '@fugloy/disasm';
 import { Machine } from '../../src/index.js';
 import { configuredRom, ROM_TEST_TIMEOUT } from '../rom.js';
 import { buildCmd, sampleRom } from '../unit/label-sample.js';
-import { SEA_DRAGON_LABELS, seaDragonLabelText } from './sea-dragon-session.js';
+import { NAME, SEA_DRAGON_CMD, SEA_DRAGON_LABELS, seaDragonLabelText, seaDragonMachine } from './sea-dragon-session.js';
 
 /**
  * The program, at $7000. XOR A sets Z, so the JR Z at $7014 is always taken and the table at $7016
@@ -101,5 +101,28 @@ describe.skipIf(rom === null)('the Sea Dragon session on the Model III ROM', { t
   it('writes the committed examples/sea-dragon/seadrg01.labels.json byte for byte', () => {
     const text = seaDragonLabelText(rom);
     expect(text, 'regenerate with: node packages/emu/scripts/sea-dragon-labels.mjs').toBe(readFileSync(SEA_DRAGON_LABELS, 'utf8'));
+  });
+
+  it('with coverage on from the load, the label file loses none of the hinted code and states nothing the file\'s bytes do not hold', () => {
+    const m = seaDragonMachine(rom, { fromLoad: true });
+    const ran = m.mem.read(0, 0x10000);
+    const { file, errors } = parseLabelFile(JSON.stringify(m.debug.labelFile({ name: NAME })));
+    expect(errors).toEqual([]);
+    const bytes = new Uint8Array(readFileSync(SEA_DRAGON_CMD));
+    const base = openProgram(bytes, { name: NAME });
+    const hintText = readFileSync(new URL('seadrg01.hints', SEA_DRAGON_CMD), 'utf8');
+    const hinted = withHintText(base, hintText, 'seadrg01.hints');
+    // With the hints: the copy wrote every byte of the game, so no read-only run cuts the descent short.
+    const both = withLabelFile(hinted, file);
+    expect(hinted.analysis.pass1.instructions.size).toBe(2896);
+    expect(both.analysis.pass1.instructions.size).toBe(2896);
+    for (const addr of hinted.analysis.pass1.instructions.keys()) expect(both.analysis.pass1.instructions.has(addr), `$${addr.toString(16)}`).toBe(true);
+    expect(both.analysis.labels.warnings).toEqual([]);
+    // Without them: every decoded instruction's bytes are the bytes that ran there, and one warning says what was skipped.
+    const bare = withLabelFile(base, file);
+    for (const [addr, ins] of bare.analysis.pass1.instructions) {
+      for (let k = 0; k < ins.length; k++) expect(bare.analysis.space.image.read(addr + k), `$${addr.toString(16)}+${k}`).toBe(ran[(addr + k) & 0xffff]);
+    }
+    expect(bare.analysis.labels.warnings).toEqual([expect.stringMatching(/^\d+ executed or labelled addresses changed at runtime/)]);
   });
 });
