@@ -130,6 +130,29 @@ describe.skipIf(trsjsSkip !== null)(`trsjs adapter against @fugloy/emu${trsjsSki
     expect(ref.peek(0x3c00, 1)[0]).toBe(0x5a); // video RAM takes it
   });
 
+  it('wraps PC and (IX+d) at 16 bits, as the Z80 does', () => {
+    const ref = loadTrsjs();
+    const r = ref.z.reg;
+    ref.poke(0xffff, [0x00]); // NOP at $FFFF
+    r.PC = 0xffff;
+    ref.step();
+    expect(r.PC).toBe(0x0000);
+    ref.poke(0xffff, [0x3e]); // LD A,n with n at $0000
+    ref.poke(0x0000, [0x42]);
+    r.PC = 0xffff;
+    expect(ref.step().cycles).toBe(7);
+    expect([r.PC, r.A]).toEqual([0x0001, 0x42]);
+    ref.poke(0x0000, [0x18, 0xfc]); // JR $-2 from $0000: $FFFE
+    r.PC = 0x0000;
+    ref.step();
+    expect(r.PC).toBe(0xfffe);
+    ref.poke(0x5000, [0xdd, 0x7e, 0x01]); // LD A,(IX+1) with IX = $FFFF reads $0000
+    ref.poke(0x0000, [0x99]);
+    r.PC = 0x5000; r.IX = 0xffff;
+    ref.step();
+    expect(r.A).toBe(0x99);
+  });
+
   it('holds a frame-end request back when asked, and takes it when forced', () => {
     const ref = loadTrsjs();
     ref.poke(0x5000, [0x00, 0x00, 0x00]); // NOPs

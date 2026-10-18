@@ -7,9 +7,10 @@
  * gitignored `tools/trsjs/`, and this loader refuses any file whose SHA-256 is not the pinned one
  * before running a line of it. The script runs in a `node:vm` context with a few DOM stubs. Its
  * text is changed in memory only (the file on disk is never touched), in two places: one line
- * before the IIFE's final `return api;` exposes the internal functions the harness needs, and two
+ * before the IIFE's final `return api;` exposes the internal functions the harness needs; two
  * lines at the top of `putbyte` (trsjs's only CPU write path) log each write the CPU makes and
- * drop one below $3C00 (ROM and keyboard), as the Model III does.
+ * drop one below $3C00 (ROM and keyboard), as the Model III does; and the fetches through PC, and
+ * the (IX+d) address, wrap at 16 bits, as the Z80's do.
  *
  * The driver reproduces trsjs's own frame loop (`TRS80Field`) one instruction at a time: after
  * an instruction drives the per-frame down-counter `z.cycles` below 0, a frame (33,792 T-states)
@@ -39,6 +40,10 @@ const RTC_PERIOD = 67_584;
 const EXPORTS = ['stepz80', 'mode_1_IRQ', 'BEAM_IRQ_ENABLED', 'BEAM_IRQ_RAISE', 'getAF', 'setAF', 'resetz80'];
 const RETURN_MARKER = "\t// Create the default emulator\n\tapi = api['mknew']();\n\n\treturn api;";
 const PUTBYTE_MARKER = 'function putbyte(z,addr,val)\n{\n';
+/** trsjs's fetch through PC (fetch_opcode, fetch_n, fetch_nn, branch, ixy), which never wraps PC. */
+const PC_FETCH = 'z.mem[z.reg.PC++]';
+/** ixy's (IX+d)/(IY+d) address, which never wraps either. */
+const IXY_ADDR = 'return signed_char(z.mem[z.reg.PC++ & 0xffff]) + z.reg.IQ';
 
 /**
  * @typedef {import('../../src/machine/machine.js').Regs} Regs
@@ -103,7 +108,7 @@ function readChecked(path) {
  */
 export function loadTrsjs({ path = TRSJS_PATH } = {}) {
   let src = readChecked(path);
-  if (!src.includes(RETURN_MARKER) || !src.includes(PUTBYTE_MARKER)) throw new Error(`${path}: an injection point is missing (the pinned file should have both)`);
+  if (!src.includes(RETURN_MARKER) || !src.includes(PUTBYTE_MARKER) || src.split(PC_FETCH).length !== 7) throw new Error(`${path}: an injection point is missing (the pinned file has them all)`);
   // The opcodes trsjs implements after DD or FD (its `opx` table); after any other byte its
   // `opx_default` does nothing and takes no T-states, so the prefixed instruction is dropped.
   const prefixedOps = new Set([...src.matchAll(/\bopx\[0x([0-9a-f]{2})\] = /g)].map((mm) => parseInt(mm[1], 16)));
@@ -114,6 +119,13 @@ export function loadTrsjs({ path = TRSJS_PATH } = {}) {
   // only reads (Model III Technical Reference Manual, the memory map and Address Decoding, p. 13):
   // a write there changes nothing, as in our MemorySystem.
   src = src.replace(PUTBYTE_MARKER, `${PUTBYTE_MARKER}   if (z.wlog) z.wlog.push(addr, val);\n   if (addr < 0x3c00) return;\n`);
+  // PC and the address it forms are 16 bits (Zilog UM0080: the program counter is a 16-bit
+  // register): an instruction at $FFFF continues at $0000, and (IX+d) wraps likewise. trsjs lets PC
+  // run on to $10000 (and a JR below $0000), reading undefined; each fetch through PC is masked, and
+  // step() masks PC after the instruction.
+  src = src.replaceAll(PC_FETCH, 'z.mem[z.reg.PC++ & 0xffff]');
+  if (!src.includes(IXY_ADDR)) throw new Error(`${path}: an injection point is missing (ixy's address)`);
+  src = src.replace(IXY_ADDR, `return (${IXY_ADDR.slice('return '.length)}) & 0xffff`);
 
   const document = {
     getElementById() { return null; }, createElement() { return stubElement(); },
@@ -191,6 +203,7 @@ export function loadTrsjs({ path = TRSJS_PATH } = {}) {
       }
       const before = z.cycles;
       x.stepz80(z);
+      z.reg.PC &= 0xffff;
       const cycles = used + (before - z.cycles);
       total += cycles;
       return { cycles, irq: taken, raised: fe.raised };
@@ -256,6 +269,7 @@ export function loadTrsjs({ path = TRSJS_PATH } = {}) {
       if (next !== 0xdd && next !== 0xfd && next !== 0xed) {
         const before = z.cycles;
         x.stepz80(z);
+        reg.PC &= 0xffff;
         cycles += before - z.cycles;
       }
       total += cycles;
