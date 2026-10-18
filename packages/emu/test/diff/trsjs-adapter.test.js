@@ -144,6 +144,21 @@ describe.skipIf(trsjsSkip !== null)(`trsjs adapter against @fugloy/emu${trsjsSki
     expect([ref.z.mem[0x6000], r.A]).toEqual([0x9a, 0x35]);
   });
 
+  it('counts 21 T-states for a CPDR that repeats and 16 for its last, as for CPIR', () => {
+    const ref = loadTrsjs();
+    const r = ref.z.reg;
+    ref.poke(0x5000, [0xed, 0xb9, 0xed, 0xb1]); // CPDR / CPIR
+    ref.poke(0x6000, [0x00, 0x00]);
+    r.PC = 0x5000; r.HL = 0x6001; r.BC = 2; r.A = 0x99;
+    expect(ref.step().cycles).toBe(21);
+    expect(r.PC).toBe(0x5000);
+    expect(ref.step().cycles).toBe(16);
+    expect(r.PC).toBe(0x5002);
+    r.HL = 0x6000; r.BC = 2;
+    expect(ref.step().cycles).toBe(21);
+    expect(ref.step().cycles).toBe(16);
+  });
+
   it('wraps PC and (IX+d) at 16 bits, as the Z80 does', () => {
     const ref = loadTrsjs();
     const r = ref.z.reg;

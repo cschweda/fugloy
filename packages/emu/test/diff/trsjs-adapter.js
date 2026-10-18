@@ -6,11 +6,11 @@
  * trsjs carries no license, so it is never committed: `pnpm trsjs:install` fetches it into the
  * gitignored `tools/trsjs/`, and this loader refuses any file whose SHA-256 is not the pinned one
  * before running a line of it. The script runs in a `node:vm` context with a few DOM stubs. Its
- * text is changed in memory only (the file on disk is never touched), in two places: one line
- * before the IIFE's final `return api;` exposes the internal functions the harness needs; three
- * lines at the top of `putbyte` (trsjs's only CPU write path) mask the value to a byte, log each
- * write the CPU makes, and drop one below $3C00 (ROM and keyboard), as the Model III does; and the fetches through PC, and
- * the (IX+d) address, wrap at 16 bits, as the Z80's do.
+ * text is changed in memory only (the file on disk is never touched): one line before the IIFE's
+ * final `return api;` exposes the internal functions the harness needs; three lines at the top of
+ * `putbyte` (trsjs's only CPU write path) mask the value to a byte, log each write the CPU makes,
+ * and drop one below $3C00 (ROM and keyboard), as the Model III does; the fetches through PC, and
+ * the (IX+d) address, wrap at 16 bits, as the Z80's do; and a repeating CPDR takes its 21 T-states.
  *
  * The driver reproduces trsjs's own frame loop (`TRS80Field`) one instruction at a time: after
  * an instruction drives the per-frame down-counter `z.cycles` below 0, a frame (33,792 T-states)
@@ -42,6 +42,8 @@ const RETURN_MARKER = "\t// Create the default emulator\n\tapi = api['mknew']();
 const PUTBYTE_MARKER = 'function putbyte(z,addr,val)\n{\n';
 /** trsjs's fetch through PC (fetch_opcode, fetch_n, fetch_nn, branch, ixy), which never wraps PC. */
 const PC_FETCH = 'z.mem[z.reg.PC++]';
+/** The repeat of trsjs's CPDR (oped_b9), which counts no T-states; CPIR's (oped_b1) has cy(z, 21) there. */
+const CPDR_REPEAT = '		if ( z.reg.BC == 0 || z.reg.fZ ) { cy(z,  16 ) \n return \n } \n		z.reg.PC = z.reg.PC - 2 \n		 \n}\nfunction oped_ba(z)';
 /** ixy's (IX+d)/(IY+d) address, which never wraps either. */
 const IXY_ADDR = 'return signed_char(z.mem[z.reg.PC++ & 0xffff]) + z.reg.IQ';
 
@@ -129,6 +131,10 @@ export function loadTrsjs({ path = TRSJS_PATH } = {}) {
   // step() masks PC after the instruction.
   src = src.replaceAll(PC_FETCH, 'z.mem[z.reg.PC++ & 0xffff]');
   if (!src.includes(IXY_ADDR)) throw new Error(`${path}: an injection point is missing (ixy's address)`);
+  // A CPDR that repeats takes 21 T-states (Zilog UM0080, CPDR), as trsjs's own CPIR does; its CPDR
+  // counts none, which moves every later frame interrupt (found on Asylum 1g).
+  if (src.split(CPDR_REPEAT).length !== 2) throw new Error(`${path}: an injection point is missing (CPDR's repeat)`);
+  src = src.replace(CPDR_REPEAT, CPDR_REPEAT.replace('z.reg.PC = z.reg.PC - 2', 'cy(z, 21); z.reg.PC = z.reg.PC - 2'));
   src = src.replace(IXY_ADDR, `return (${IXY_ADDR.slice('return '.length)}) & 0xffff`);
 
   const document = {
