@@ -255,6 +255,22 @@ describe('hooks', () => {
     expect(m.debug.active).toBe(true);
   });
 
+  it('hooks are told the instruction that made the access', () => {
+    const m = dataMachine();
+    const log = [];
+    m.debug.hooks.onMemRead = (addr, value, pc) => log.push(['r', addr, pc]);
+    m.debug.hooks.onMemWrite = (addr, value, prev, pc) => log.push(['w', addr, pc]);
+    m.debug.hooks.onPort = (port, value, dir, pc) => log.push(['p', dir, pc]);
+    m.run({ until: 'halt' });
+    // LD (5000H),A at $0005, LD A,(5000H) at $0008, OUT (FFH),A at $000B, IN A,(FFH) at $000D.
+    expect(log).toEqual([
+      ['w', 0x5000, 0x0005],
+      ['r', 0x5000, 0x0008],
+      ['p', 'out', 0x000b],
+      ['p', 'in', 0x000d],
+    ]);
+  });
+
   it('clearing every listener restores the plain accessors', () => {
     const m = dataMachine();
     const cpu = m.system.cpu;

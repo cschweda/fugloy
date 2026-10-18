@@ -9,8 +9,11 @@ tools are in (`load`, `reset`, `status`, `run`, `step`, `key`, `regs`, `peek`,
 title screen; so are the phase B tools (`break`, `unbreak`, `watch`,
 `unwatch`, `hits`, `trace`, `callers`, `disasm`), with which it can find a
 program's print routine (spec §13, story 1; `test/golden/story-01.txt` is
-that session on a synthetic program). The phase C tools follow (plan:
-`docs/superpowers/plans/2026-10-18-emu-phase4-mcp.md`).
+that session on a synthetic program); and so are the phase C tools
+(`label`, `unlabel`, `labels`, `coverage`, `suggest`), which keep labels in
+the sidecar `<program>.fugloy.json` beside the program and export the label
+and coverage file the disassembler reads (`fugloy <program> --labels
+<file>`). The plan: `docs/superpowers/plans/2026-10-18-emu-phase4-mcp.md`.
 
 Run it from the monorepo with `node packages/mcp/bin/fugloy-mcp.js`. It reads
 `fugloy.mcp.json` from `$FUGLOY_CONFIG`, else the working directory, else

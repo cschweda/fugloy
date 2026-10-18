@@ -190,7 +190,7 @@ describe('phase A tools', () => {
       'Entry: 7000h (the PC is there now)',
       lines[6],
       'Boot: the ROM showed no READY within 5 s emulated, so the program was loaded where the ROM had got to',
-      'Sidecar: no sidecar',
+      `Sidecar: none yet; label writes ${at('hello.fugloy.json')}`,
       `Path: ${at('hello.cmd')}`,
     ]);
     expect(await ok(call, 'status', {})).toContain(`Program: HELLO (${at('hello.cmd')})`);

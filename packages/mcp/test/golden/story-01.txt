@@ -6,7 +6,7 @@ Blocks (1):
 Entry: 7000h (the PC is there now)
 ROM: unrecognised (SHA-256 bb54154772c1e7d2…)
 Boot: the ROM showed no READY within 5 s emulated, so the program was loaded where the ROM had got to
-Sidecar: no sidecar
+Sidecar: none yet; label writes <dir>/raiders.fugloy.json
 Path: <dir>/raiders.cmd
 
 > run {"until":"screen"}

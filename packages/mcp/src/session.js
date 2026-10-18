@@ -5,6 +5,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { Machine } from '@fugloy/emu';
+import { recordFacts } from './attribution.js';
 import { TraceLog } from './trace-log.js';
 
 /** The sentence every tool that needs a machine answers before the first `load`. */
@@ -42,7 +43,8 @@ export function makeMachine(config, rom = readRom(config)) {
 
 /**
  * @typedef {{ path: string, name: string, bytes: number, manifest: unknown, sha256: string }} Program
- * @typedef {{ addr: number, name: string, kind?: 'code' | 'data', size?: number, note?: string }} Label
+ * @typedef {{ addr: number, name: string, kind?: 'code' | 'data', size?: number, source?: 'loader' | 'observed' | 'user' | 'disasm', evidence?: string, note?: string }} Label
+ *   A label as the §8 file holds it; `kind` defaults to code and `source` to user.
  */
 
 /** `limits.traceDepth` as the emulator takes it: a whole number from 1 to 1,000,000. */
@@ -53,8 +55,12 @@ export class Session {
   machine = null;
   /** @type {Program | null} */
   program = null;
-  /** @type {Map<number, Label>} Labels by address. */
+  /** @type {Map<number, Label>} Labels by address: the sidecar's, then the agent's (src/sidecar.js). */
   labels = new Map();
+  /** @type {import('./sidecar.js').SidecarState | null} The loaded program's sidecar file. */
+  sidecar = null;
+  /** Per instruction address, what it did while coverage was on (src/attribution.js, Ruling 4). */
+  facts = new Uint8Array(0x10000);
   /** @type {Uint8Array | null} Video RAM as the last `screen` call saw it. */
   screenBaseline = null;
   /** @type {{ key: string, text: string } | null} The last full tool result, for `offset` paging. */
@@ -73,15 +79,18 @@ export class Session {
   }
 
   /**
-   * Make `machine` the session's: coverage (and callers) on from the start (Ruling 3), and the
-   * screen baseline at what video RAM holds now. The trace stays off (Ruling 3), and the trace
-   * log starts empty.
+   * Make `machine` the session's: coverage (and callers) on from the start (Ruling 3), with the
+   * hooks that record what each instruction did for `suggest` (Ruling 4), and the screen
+   * baseline at what video RAM holds now. The trace stays off (Ruling 3), and the trace log
+   * starts empty.
    * @param {Machine} machine
    */
   install(machine) {
     this.machine = machine;
     this.trace.clear();
     machine.debug.coverage.enable();
+    this.facts.fill(0);
+    recordFacts(machine, this.facts);
     this.screenBaseline = Uint8Array.from(machine.video.raw);
   }
 
@@ -89,5 +98,12 @@ export class Session {
   requireMachine() {
     if (this.machine === null) throw new Error(NO_MACHINE);
     return this.machine;
+  }
+
+  /** The machine and the program loaded into it (labels and coverage belong to a program), or the same throw. */
+  requireProgram() {
+    const m = this.requireMachine();
+    if (this.program === null || this.sidecar === null) throw new Error(NO_MACHINE);
+    return { m, program: this.program, sidecar: this.sidecar };
   }
 }

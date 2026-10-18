@@ -62,6 +62,7 @@ describe('phase B tools', () => {
     expect(tools.map((t) => t.name)).toEqual([
       'load', 'reset', 'status', 'run', 'step', 'key', 'regs', 'peek', 'poke', 'disasm', 'screen',
       'break', 'unbreak', 'watch', 'unwatch', 'hits', 'trace', 'callers',
+      'label', 'unlabel', 'labels', 'coverage', 'suggest',
     ]);
     await close();
   });

@@ -101,7 +101,9 @@ export function labelAnnotations(
         annotations.names.set(addr, name);
       }
     }
-    if (label.evidence !== undefined) annotations.comments.set(addr, `observed: ${label.evidence}`);
+    // The note (a person's remark) first, then the evidence; a hint comment still wins (mergeAnnotations).
+    const comment = [label.note, label.evidence === undefined ? undefined : `observed: ${label.evidence}`].filter((c) => c !== undefined && c !== '').join('; ');
+    if (comment !== '') annotations.comments.set(addr, comment);
     if (label.kind === 'data' && label.size !== undefined) {
       let length = 0;
       while (length < label.size && addr + length <= 0xffff && image.isLoaded(addr + length)) length++;

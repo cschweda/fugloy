@@ -15,6 +15,8 @@ export interface Label {
   size?: number;
   source: LabelSource;
   evidence?: string;
+  /** A remark for a human, on a label of any source; the listing shows it as the line's comment. */
+  note?: string;
   /** Memory map and bank (Model 4); absent means 0. */
   map?: number;
   page?: number;
@@ -57,7 +59,7 @@ export const COVERAGE_FIELDS = ['exec', 'operand', 'read', 'write', 'jump', 'cal
 const SOURCES: readonly string[] = ['loader', 'observed', 'user', 'disasm'];
 const EDGE_KINDS: readonly string[] = ['call', 'jp', 'jr', 'rst', 'ret-to'];
 const RUN = /^[0-9A-Fa-f]{1,5}$/;
-/** C0 controls and DEL: a CR or LF in a name or evidence would start a new line in the listing or the zmac source. */
+/** C0 controls and DEL: a CR or LF in a name, evidence, or note would start a new line in the listing or the zmac source. */
 const CONTROL = /[\u0000-\u001f\u007f]/;
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -156,6 +158,8 @@ export function parseLabelFile(text: string): { file: LabelFile | null; errors: 
         if (typeof l['source'] !== 'string' || !SOURCES.includes(l['source'])) errors.push(`${at}.source must be one of ${SOURCES.join(', ')}`);
         if (l['evidence'] !== undefined && typeof l['evidence'] !== 'string') errors.push(`${at}.evidence must be a string`);
         else if (typeof l['evidence'] === 'string' && CONTROL.test(l['evidence'])) errors.push(`${at}.evidence contains a control character`);
+        if (l['note'] !== undefined && typeof l['note'] !== 'string') errors.push(`${at}.note must be a string`);
+        else if (typeof l['note'] === 'string' && CONTROL.test(l['note'])) errors.push(`${at}.note contains a control character`);
         if (l['source'] === 'observed' && (typeof l['evidence'] !== 'string' || l['evidence'] === '')) errors.push(`${at} is observed and has no evidence`);
       });
     }

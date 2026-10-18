@@ -139,11 +139,11 @@ Schemas are JSON Schema in the SDK; shown here abbreviated. Required fields mark
 
 | Tool | Input | Output |
 |---|---|---|
-| `label` | `addr*`, `name*`, `kind?` = `"code" \| "data"`, `size?`, `note?` | Confirmation; writes sidecar file |
-| `unlabel` | `addr*` or `name*` | Confirmation |
-| `labels` | `range?`, `source?` | Table of labels |
-| `coverage` | `mode?` = `"summary" \| "ranges" \| "export"`, `path?` | Summary: % of loaded bytes executed, number of code/data ranges; ranges as a table; export writes the §8 file |
-| `suggest` | `minCalls?` (default 5) | Unlabeled addresses that are call targets, with caller count and a one-line heuristic (`writes video RAM`, `reads keyboard`, `loops ≥ 1000×`) — the agent's starting list for story 7 |
+| `label` | `addr*`, `name*` (an identifier the disassembler accepts: `nameProblem` of `@fugloy/disasm`, so no mnemonic, register, or generated `SUB_hhhh` shape, and not a name another address has), `kind?` = `"code" \| "data"`, `size?`, `note?` (a remark for a human: §8's `note`) | `Labelled 7030h PRINT (code).` and the sidecar path written; a second label at one address replaces the first and says so |
+| `unlabel` | `addr*` or `name*` | `Removed PRINT at 7030h.` and the sidecar path; removes a label of any source |
+| `labels` | `range?`, `source?` | Table of labels by address: kind, size, source, name, and after `;` the note and evidence |
+| `coverage` | `mode?` = `"summary" \| "ranges" \| "export"`, `path?` (export only), `format?` (summary and ranges) | Summary: % of loaded bytes executed (an instruction or its operand), counts of code ranges and data ranges (read or written, never executed), bytes never seen, and what ran outside the loaded blocks; ranges: the loaded blocks as a table of code, data, and never-seen ranges; export: the §8 file merged with the sidecar's earlier coverage, this session appended, written to `path` or the sidecar |
+| `suggest` | `minCalls?` (default 5) | Call targets with no name yet (no label, or only a generated `SUB_hhhh`) outside the ROM, reached by `CALL` or `RST` at least `minCalls` times, most calls first: calls, callers (distinct sites), and notes by address, heuristic (Ruling 4 of the emu phase 4 plan): `writes video RAM`, `reads the keyboard`, `writes port FFh (sound)`, `loops ≥ 1000× a call`. The routine runs from the target to its first executed unconditional `RET`, `RETN`, or `RETI`, ending early before a byte never executed or at another call target, within 256 bytes. The agent's starting list for story 7 |
 
 ### Snapshots
 
@@ -195,7 +195,7 @@ No tool is destructive beyond the emulated machine's RAM and the label sidecar. 
 
 ## 8. Label file round-trip
 
-On `load`, the server looks for `<program>.fugloy.json` beside the program (or in `fixtures`). If found, labels and prior coverage are merged in; the `disasm` tool shows them immediately. Every `label`/`unlabel` rewrites the file. `coverage export` merges the current session's coverage with any prior coverage (union of bitfields) and appends a session record. Fugløy's disassembler reads the same file; `user` labels are never overwritten by either side.
+On `load`, the server looks for `<program>.fugloy.json` beside the program (the program's file name without its extension: `SEADRG01.CMD` → `SEADRG01.fugloy.json`), or in `fixtures` when there is none beside it. If found, its labels (every source) become the session's, and the `disasm` tool and every address argument use them immediately; its coverage is kept as the base `coverage export` merges into (the live coverage marks still count from this load). Every `label`/`unlabel` rewrites the file at once: the file as it stands (or a skeleton naming the program and its blocks) with the session's labels in place of its own, its coverage, callers, and sessions untouched. `coverage export` merges the current session's coverage with the prior coverage read at load (union of bitfields, callers counts summed) and appends a session record; exporting again in one session replaces that record and its counts rather than adding them twice, and an export to the sidecar makes its labels (the newly observed `SUB_hhhh` call targets) the session's. A sidecar that is not JSON, breaks a rule of §8, or was written for another program (its `sha256` differs) is reported by `load` and ignored, and neither `label` nor `coverage export` overwrites it (an export to another `path` still works). Fugløy's disassembler reads the same file; `user` labels are never overwritten by either side.
 
 ## 9. Install and use
 
