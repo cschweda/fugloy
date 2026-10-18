@@ -104,7 +104,7 @@ does take, never ignored.
 
 | Group | Tools |
 | --- | --- |
-| Lifecycle | `load` (`.CMD`, `.BAS`, `.CAS`, detected by content; boots the ROM to `READY` first), `reset`, `status` |
+| Lifecycle | `load` (`.CMD`, `.BAS`, `.CAS`, or a JV1, JV3, or DMK disk image, detected by content; boots the ROM to `READY` first, or boots the disk from drive 0), `reset`, `status` |
 | Execution | `run` (`cycles`, `seconds`, or `until`: `break`, `halt`, `screen`, `settled`, `pc:<addr>`; `trace`), `step`, `key` (text and named keys, through the keyboard matrix or the ROM's keyboard routine) |
 | Inspection | `regs`, `peek`, `poke`, `disasm` (with coverage marks and names), `screen` (or its diff since the last call or a snapshot), `search` (bytes or text, `fold` for either case and the screen's `00h`–`1Fh` forms; at most 256 addresses) |
 | Debugging | `break` (with `<reg> <op> <value>` conditions), `unbreak`, `watch`, `unwatch`, `hits` (with the routine each writing PC is in), `trace`, `callers`, `callees` (the routines a routine called, as a tree up to 4 levels deep) |
@@ -117,6 +117,21 @@ setup. `run until: "settled"` stops once the screen has changed and then
 either closes an animation or blink cycle or stays still for 0.5 s; a title
 screen that animates takes one call per phase (Sea Dragon's intro, then its
 title).
+
+A disk image (unreleased, emu phase 5) goes into drive 0 of a fresh Model III,
+and `load` runs until the ROM has read the boot sector and jumped to it at
+`4300h`. The disk's own loader then reads the rest as the drive turns, which
+takes seconds of emulated time, so follow it with `run until: "settled"`,
+again until the program's screen is up:
+
+```
+load     SCARFMAN.DSK                → disk image (DMK, 40 tracks, 1 side, …), in drive 0;
+                                       the ROM jumped to 4300h after 0.434 s
+run      until=settled               → (repeat; the title is up about 8 s after the reset)
+```
+
+A dual-boot disk (Eliminator, Rear Guard) shows its loader's menu first; hold
+ENTER half a second (`key keys=["ENTER"] cps=1`) and run on to the title.
 
 Labels live in `<program>.fugloy.json` beside the program (`SEADRG01.CMD` →
 `SEADRG01.fugloy.json`), in the format of
@@ -295,7 +310,12 @@ and `tools/list` over a pipe. It needs those `@fugloy` versions on npm, so
 `@fugloy/emu` is published first; with emu only staged, the check is a
 rehearsal that stages nothing.
 
+Disk images (emu phase 5) make `load` call emu APIs that `@fugloy/emu` 0.2.0
+does not have (`m.fdc`, `m.load.dsk`, `DiskImage`, `CPU_CLOCK_HZ`), so emu is
+bumped to 0.3.0 and released before the next mcp release, whose range then
+reads `^0.3.0`.
+
 ## Not yet
 
-Only the Model III (the Model I and 4 wait for emu phase 6), no disk images
-(emu phase 5), and stdio only (Streamable HTTP is an open question, spec §12).
+Only the Model III (the Model I and 4 wait for emu phase 6), disk images in
+drive 0 only (unreleased, emu phase 5), and stdio only (Streamable HTTP is an open question, spec §12).

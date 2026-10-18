@@ -47,6 +47,19 @@ export class TRS80System {
     // Cassette-out sound transitions are stamped in CPU T-states
     this.io.getCycles = () => this.cpu.cycles;
 
+    // The Model III WAIT (port F4 bit 6): the controller runs ahead to its
+    // next DRQ or INTRQ; the CPU's clock catches up, and stepInstruction
+    // does not tick the controller for those T-states again. A port write
+    // from outside an instruction (a debugger poke) does not wait.
+    this._executing = false;
+    this._fdcAhead = 0;
+    this.io.onWait = (runToDrq) => {
+      if (!this._executing) return;
+      const held = runToDrq();
+      this.cpu.cycles += held;
+      this._fdcAhead += held;
+    };
+
     this.memory.loadROM(romData);
 
     this.nextRtcAt = RTC_INTERVAL_TSTATES;
@@ -104,28 +117,46 @@ export class TRS80System {
     if (this.io.pendingInterrupt()) {
       this.cpu.interrupt();
     }
-    // FDC INTRQ -> NMI, edge-triggered so one assertion fires one NMI
+    // FDC INTRQ -> NMI, edge-triggered so one assertion fires one NMI. The
+    // CPU holds an NMI off after a lone DD/FD prefix, as it does a maskable
+    // interrupt (Young §3.6); the edge then stays pending for the next
+    // boundary.
     const nmiNow = this.io.nmiPending();
     if (nmiNow && !this._nmiWasPending) {
-      this.cpu.nmi();
+      if (this.cpu.nmi()) this._nmiWasPending = true;
+    } else {
+      this._nmiWasPending = nmiNow;
     }
-    this._nmiWasPending = nmiNow;
+
+    // The disk controller ticks by every T-state the boundary takes, an interrupt or NMI
+    // response included, so its clock (the disk's angle) keeps step with the CPU's: the response
+    // first, so an OUT that sets the WAIT finds the controller at the start of that OUT; then the
+    // instruction, less the T-states the WAIT already ran it ahead for (`_fdcAhead`).
+    const before = this.cpu.cycles;
+    if (before !== start) this.io.fdc.tick(before - start);
 
     // beforeExecute returning true has executed the boundary's instruction itself (the
     // Machine's ROM keyboard-scan hook stands in for a RET), so the CPU does not run one.
-    // Returning 'stop' runs nothing and the disk controller does not tick: like the normal path,
-    // it never ticks for an interrupt response's T-states. The return value is those T-states.
-    const before = this.cpu.cycles;
-    if (beforeExecute !== undefined) {
-      const r = beforeExecute();
-      if (r === 'stop') {
-        return before - start;
+    // Returning 'stop' runs nothing; the return value is then the response's T-states.
+    // try/finally: a callback or an instruction that throws must not leave `_executing` set, or
+    // a later debugger port poke would wait as if an instruction were running.
+    this._executing = true;
+    try {
+      if (beforeExecute !== undefined) {
+        const r = beforeExecute();
+        if (r === 'stop') return before - start;
+        if (r !== true) this.cpu.executeInstruction();
+      } else {
+        this.cpu.executeInstruction();
       }
-      if (r !== true) this.cpu.executeInstruction();
-    } else {
-      this.cpu.executeInstruction();
+    } catch (e) {
+      this._fdcAhead = 0;
+      throw e;
+    } finally {
+      this._executing = false;
     }
-    this.io.fdc.tick(this.cpu.cycles - before);
+    this.io.fdc.tick(this.cpu.cycles - before - this._fdcAhead);
+    this._fdcAhead = 0;
     return this.cpu.cycles - start;
   }
 

@@ -75,8 +75,11 @@ const FDC_SCALARS = [
   "status",
   "intrq",
   "commandType",
-  "bufferPos",
-  "writing",
+  "command",
+  "stepDir",
+  "headLoaded",
+  "idlePulses",
+  "intrqCond",
   "writeDeleted",
   "mfm",
   "indexClock",
@@ -123,6 +126,9 @@ export function serializeState(system) {
     printer: { bytes: [...io.printer.bytes] },
     disks: [],
     nextRtcAt: system.nextRtcAt,
+    // The NMI edge latch: true while the INTRQ NMI already fired and its line is still up, so a
+    // restore neither fires it again nor loses one still pending.
+    nmiWasPending: system._nmiWasPending,
   };
   for (const key of CPU_SCALARS) state.cpu[key] = cpu[key];
   for (const key of IO_SCALARS) state.io[key] = io[key];
@@ -134,6 +140,11 @@ export function serializeState(system) {
       drive,
       name: disk.name,
       bytes: toBase64(disk.bytes),
+      // The container and a JV1's directory track, so a restore parses the bytes as what they
+      // are rather than detecting again (a JV3 the session formatted may hold too few sectors for
+      // detection, and a JV1's track 0 may have been rewritten since the mount read its byte 2).
+      format: disk.format,
+      dirTrack: disk.format === "jv1" ? disk.dirTrack : undefined,
       sectorBase: disk.sectorBase,
       writeProtected: disk.writeProtected,
     });
@@ -173,6 +184,12 @@ export function restoreState(system, state) {
   for (const key of FDC_SCALARS) fdc[key] = state.fdc[key];
   fdc.writeDeleted = !!fdc.writeDeleted; // absent in version-1 saves from before DAM support
   fdc.mfm = state.fdc.mfm ?? true; // absent before WRITE TRACK support
+  // Absent before the emu phase 5 datasheet model: the defaults a reset leaves.
+  fdc.command ??= 0;
+  fdc.stepDir ??= 1;
+  fdc.headLoaded ??= false;
+  fdc.idlePulses ??= 0;
+  fdc.intrqCond ??= 0;
   fdc.physicalTrack = [...state.fdc.physicalTrack];
   fdc.pending = state.fdc.pending ? { ...state.fdc.pending } : null;
   fdc.buffer = state.fdc.buffer ? fromBase64(state.fdc.buffer) : null;
@@ -197,15 +214,22 @@ export function restoreState(system, state) {
 
   fdc.drives = [null, null, null, null];
   for (const entry of state.disks) {
-    const disk = new DiskImage(fromBase64(entry.bytes), entry.name);
-    // Carry over learned/derived flags the constructor can't know
-    disk.sectorBase = entry.sectorBase;
+    // Saves from before emu phase 5's final fixes carry no format: detected, as they were made.
+    const disk = new DiskImage(fromBase64(entry.bytes), entry.name, {
+      format: entry.format ?? undefined,
+      dirTrack: entry.dirTrack ?? undefined,
+    });
+    // Carry over flags the constructor can't know: write protection set at mount, and a JV1's
+    // sector base (fixed by its geometry since emu phase 5; older saves may hold null, meaning the
+    // geometry's, or a base learned by the fallback the reader then had).
+    if (entry.sectorBase != null) disk.sectorBase = entry.sectorBase;
     disk.writeProtected = entry.writeProtected;
     fdc.drives[entry.drive & 3] = disk;
   }
 
   system.nextRtcAt = state.nextRtcAt;
-  system._nmiWasPending = false;
+  system._nmiWasPending = state.nmiWasPending ?? false; // absent before emu phase 5
+  system._fdcAhead = 0;
   system.keyboard.reset(); // held keys don't survive a restore
   io.soundLog = [];
   io.onSoundReset?.(); // the Machine's raw sound ring belongs to the old timeline

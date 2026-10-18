@@ -34,7 +34,249 @@ creates and pushes the tag.
 
 ## [Unreleased]
 
-Nothing yet since the releases below.
+### Added
+
+Emu phase 5 (disk controller and images; emu spec §3, §5, §6), `@fugloy/emu`,
+unreleased, on the `emu-phase5` branch:
+
+- `m.fdc`, the four floppy drives behind `Machine`: `mount(drive, bytes |
+  DiskImage, { writeProtect })` detects JV1, JV3, or DMK from the content and
+  returns `{ drive, container, tracks, sides, sectorsPerTrack?,
+  writeProtected }` (`sectorsPerTrack` only when every track side holds the
+  same count); `unmount(drive)` returns whether the drive held a disk;
+  `drives` lists the four drives' info or null, read from the controller so
+  it follows a snapshot restore. A non-image, a drive outside 0–3, and a
+  `writeProtect` that is not a boolean are refused. With nothing mounted the
+  controller's ports float and the machine boots to cassette BASIC as before.
+- `m.load.dsk(bytes, { drive = 0, boot = true })` mounts and, with `boot`,
+  resets so the ROM boots from drive 0 (it reads track 0, sector 1 to `$4300`
+  and jumps there, ROM `$34D9`–`$3516`); its manifest is `{ format: 'dsk',
+  container, drive, boot, blocks: [] }`, recorded in `m.debug.loaded`.
+  Booting with drive 0 empty throws.
+- JV1 detection accepts only a real geometry, 35, 40, 77, or 80 tracks of 10
+  or 18 sectors. Before, any file whose length was a whole number of 10- or
+  18-sector tracks mounted as a short JV1 (a 13,824-byte `.CMD` as three
+  tracks), which the ROM would then boot; now it is refused as
+  `Unrecognized disk image (N bytes): …`, a sentence that no longer claims a
+  1,792-byte file is "not a multiple of 256-byte sectors".
+- Tests (`test/unit/fdc-api.test.js`) on synthetic JV1, JV3, and DMK images
+  from a new writer (`test/unit/disk-writers.js`, which also builds a boot
+  sector): each container mounts and boots, through a small ROM that boots
+  the way the Model III ROM does (in CI) and through the real ROM when one is
+  configured; a snapshot with disks mounted restores their bytes and write
+  protection.
+- The WD1793 follows the Western Digital FD179X data sheet (the FD179X-01
+  sheet of October 1979, whose commands, flags, and status bits the -02 part
+  shares), checked behaviour by behaviour in `test/unit/fdc-wd1793.test.js`
+  (52 tests on synthetic images through the ports). Time is in T-states:
+  the disk turns at 300 rpm (405,504 T-states a revolution), IDs pass at
+  their place on the track (the DMK's raw offsets; JV1 and JV3 sectors
+  spaced evenly in image order), and bytes arrive one byte time apart (65
+  T-states in MFM, 130 in FM). What changed:
+  - Type I: Seek steps from the track register to the data register (it had
+    jumped the head to the data register's track); one step pulse per r1 r0
+    period at the 1 MHz rates (6, 12, 20, 30 ms) instead of a flat 6 ms;
+    Restore loads zero into the track register at Track 00 and gives up with
+    Seek Error after 255 pulses; Step remembers the direction of Restore and
+    Seek too; verify (V) waits the 30 ms settle and checks the first good ID
+    against the track register (Seek Error on a mismatch, CRC Error for a bad
+    ID CRC, Seek Error at the fifth index pulse with no good ID); h loads and
+    unloads the head, which also unloads after 15 idle index pulses (Head
+    Loaded had always read 1); the Type I status is live while busy (Track 00
+    and Index had read 0 until the command ended); no index pulses without a
+    disk.
+  - Type II: the ID must carry the track register's track (not the head's
+    position), the sector register's sector, and, with C = 1, the S flag's
+    side; IDs recorded in the other density are invisible (port F4 bit 7);
+    E adds the 30 ms settle; Record Not Found comes at the fifth index pulse
+    (it had come after 6 ms); Read Sector with m = 1 reads on until a sector
+    is not found (it had read one); Lost Data is set when the computer leaves
+    a byte unread when the next arrives, or does not load a byte to write in
+    time (a zero goes to the disk, or, for the first byte, the command ends);
+    ID and data CRCs are checked on DMK images (and JV3's CRC-error flag),
+    setting CRC Error; a write to a protected disk and a command to a drive
+    that is not ready end at once with an interrupt.
+  - Type III: Read Address returns the next ID's six bytes with its CRC and
+    puts the ID's track (not the head's) in the sector register; Read Track,
+    which had returned nothing, returns a revolution of raw track bytes
+    (DMK) or an IBM layout synthesized from the sectors (JV1, JV3); Write
+    Track raises DRQ at once, writes from index pulse to index pulse one byte
+    per byte time, and ends with Lost Data if no byte was loaded by the first
+    index pulse.
+  - Type IV: Force Interrupt keeps the status bits of the command it stops
+    (it had replaced them with Type I status), interrupts on I0, I1 (ready
+    transitions), I2 (every index pulse), and I3 (at once, holding INTRQ
+    until a D0 lets a status read clear it).
+  - Port F4: bit 6 (WAIT) holds the CPU until DRQ or INTRQ, which the ROM's
+    boot read and the DOSes' INI loops rely on now that bytes are timed; a
+    write with no drive bit selects no drive (it had kept the last one).
+    Ports F4 and E4 follow MAME's Model III driver and the ROM's use of them;
+    the Model III Technical Reference Manual was not at hand (spec §5).
+  - Boot timing on the local disk images (real ROM): the dual-boot
+    Eliminator and Rear Guard DMKs, the Eliminator DMK, and Scarfman reach
+    the same screens as before, more slowly, as a real drive does (Scarfman's
+    title by 10 emulated seconds instead of by 2). The ROM sometimes reads the boot
+    sector twice: the 30 Hz interrupt it leaves enabled can cost a byte, and
+    the ROM retries on Lost Data as it was written to.
+  - `DiskImage.trackIds(track, side)` lists a track's ID fields as the
+    controller meets them, and `DiskImage.rawTrack` gives a DMK track's raw
+    bytes.
+- The disk NMI (phase 5 plan, Ruling 3): an NMI that arrives right after a
+  lone `DD` or `FD` prefix waits one instruction, as a maskable interrupt
+  does (Young §3.6; `cpu.nmi()` now returns whether it was taken, and
+  `TRS80System` keeps the edge pending until it is); and the NMI edge latch
+  is part of a snapshot (`nmiWasPending`), so a restore while INTRQ is up
+  neither fires the NMI again nor loses one (`test/unit/nmi.test.js`).
+  Snapshots from before restore the latch as clear, as before. A snapshot
+  taken mid-command also restores the controller's new state (the command
+  byte, step direction, head load, idle count, and interrupt conditions).
+- The disk images read exactly (emu spec §5, "Disk images", after Tim
+  Mann's format notes in the xtrs distribution), and `m.fdc.export(drive)`
+  returns any mounted disk as DMK bytes (spec §6: write DMK only):
+  - `m.fdc.export(drive)` (and `DiskImage.toDMK()`): a DMK as it stands, its
+    write-protect byte following the drive's; a JV1 or JV3 laid out as raw
+    tracks, each ID in order with its track, side, sector, size code,
+    density, data mark, and CRCs (a JV3 CRC error stays one), JV1's
+    10-sector tracks in FM and 18-sector ones in MFM. The bytes mount back
+    with the same sectors, writes the program made included; an empty drive
+    throws. A blank disk exports as a DMK with no tracks, which a format
+    extends.
+  - JV3: a free header entry keeps its data area, so the sectors after it
+    are read from where the header puts them (they had been read from the
+    wrong offset once a free entry sat between sectors); a second header
+    block (more than 2,901 sectors) is read and written; the data marks
+    `FA`, `F9`, and `F8` are told apart (`DiskImage.trackIds` and
+    `readSectorEx` report `dam`); a write clears the CRC-error flag.
+  - DMK: any of `F8`–`FB` is a data mark (`FA` and `F9` had been missed in
+    FM, losing the sector), in MFM only after its `A1` sync; header flag
+    `80` (density ignored) is honoured; a sector whose data runs past the
+    track's end is kept with a data CRC error (it had vanished: Scarfman's
+    track 0 sector 15 now reads as a CRC error, not as missing); a Write
+    Track in FM lays the track out in FM (it had been written as MFM and
+    could not be read back in FM).
+  - Two IDs with one sector number on a track are kept apart: the
+    controller reads and writes the ID it found (`trackIds` gives each its
+    `index`, which `readSectorEx` and `writeSector` take).
+  - JV1: the geometry fixes the sector numbering (0–9 for 10 sectors, 1–18
+    for 18); a read of a sector outside it no longer falls back to the other
+    base and remaps the disk.
+  - Detection is stricter: a DMK header with a write-protect byte other than
+    `00` or `FF`, an undefined flag bit, or an IDAM pointer outside its
+    track is refused; tests check that the committed `.CMD` files and random
+    bytes are refused.
+  - Six synthetic images (`fixtures/synthetic/disk/`, written by
+    `pnpm fixtures` from `test/unit/disk-samples.js`): a 35×10 JV1, a mixed
+    JV3 (two sides, both densities, `FA`/`F9`/`F8`, a CRC error, free
+    entries), and double-sided MFM, doubled FM, single-byte FM, and
+    mixed-density DMKs; `test/unit/disk-image.test.js` reads every sector of
+    each, through the controller too.
+- WD1793 and machine fixes from the phase's review: a Step-Out, a Step
+  outward, or an outward Seek with Track 00 active issues no step pulse and
+  loads 0 into the track register (the data sheet's Type I flow chart; the
+  register had counted below zero to 255 with u = 1); the controller now
+  ticks for interrupt and NMI response T-states, so the disk's angle no
+  longer drifts against the CPU's clock with each interrupt.
+- Real disks boot on the Model III (emu spec §5, "Checked on real disks";
+  §11 row 5 met as the phase 5 plan's Ruling 1 reads it), in
+  `test/integration/disk-boot.test.js` with the configured ROM, each image
+  skipped when it is missing from the gitignored `fixtures/real/`:
+  - The dual-boot Eliminator and Rear Guard DMKs and the Eliminator DMK
+    (`ELIMATOR.dsk`) boot to the menu of the loader they carry, Russ
+    Wetmore's "Model I/III Duo-Loader" (the DOS stand-in: no TRSDOS 1.3
+    image is present, so spec §10's TRSDOS row stays open).
+  - ENTER, held half a second, loads Eliminator and Rear Guard from their
+    dual-boot disks to their titles; Scarfman boots from its disk to its
+    title and into its attract play.
+  - Determinism: Scarfman for 16 s, and Rear Guard from its menu through
+    ENTER to its title, each end byte-identical in `m.debug.snapshot()` when
+    run twice.
+  - The ROM reaches the boot sector at `$4300` 0.23 s (the dual-boot DMKs)
+    to 0.43 s (`ELIMATOR.dsk`, Scarfman) after the reset.
+  - `test/rom.js` gained `configuredFixtures(pattern)`, the files under the
+    config's `fixtures` folder.
+- `@fugloy/mcp` (unreleased) `load` takes a disk image (MCP spec §5; the
+  phase 5 plan's Ruling 4):
+  - Detected from the content as `m.fdc.mount` does (`DiskImage`): a DMK
+    header or a JV3 sector table before the program formats, a JV1, which is
+    only a size, after them all, so every committed example `.CMD` stays a
+    program. `formatOf` returns `'dsk'`, and `diskContainer(bytes)` names
+    the container.
+  - With `reset` (the default) the image goes into drive 0 of a fresh
+    machine, and `load` runs until the ROM jumps to the boot sector at
+    `4300h`, for at most 5 s emulated; the `Boot:` line says when, or that it
+    did not get there and where the PC is, and tells the agent to follow with
+    `run until: "settled"`, repeated, since a disk loader takes seconds of
+    emulated time. The screen baseline and coverage start there.
+  - The manifest names the container and geometry (`Format: disk image (DMK,
+    40 tracks, 1 side, sectors a track varying), in drive 0`), with no blocks
+    and no entry. `coverage` says why a disk has no blocks (what it ran
+    counts as outside them) instead of blaming ASCII BASIC.
+  - With `reset: false` the image is only put in drive 0 of the running
+    machine (`Boot: none`), and `reset` boots from it.
+  - A file that is neither is refused with a sentence naming both kinds.
+  - Tests (`packages/mcp/test/disk.test.js`): on a synthetic disk-boot ROM
+    and a JV1 built by the test, the committed DMK and JV3 samples, and the
+    synthetic ROM that never boots, in CI; with the Model III ROM and the
+    local Rear Guard dual-boot DMK, `load`, `run until: "settled"`, ENTER,
+    and the title. `test/helpers.js` gained `diskBootRom` and `bootJv1`.
+- Docs: emu spec §3 (an export lays a JV1 or JV3 out with standard gaps, so
+  rotational positions and timing change; the four local images are DMKs and
+  export as themselves), §5 (a DMK is detected only at its exact length; a
+  field cut off by a DMK track's end, Scarfman's track 0 sector 15, moved to
+  the unverified list, with `_dmkWriteSector` dropping bytes past the end;
+  the real-disk checks), §10 and §11 row 5; MCP spec §5 `load`; the emu and
+  MCP READMEs, the root README, and CLAUDE.md.
+- Phase 6 prep, behaviour-neutral on the Model III: the WD1793 takes its CPU
+  clock as a constructor option (`new FDC1793({ cpuHz })`, 2,027,520 by
+  default), and derives the step rates, settling, byte times, revolution, and
+  index-pulse width from it (`fdcTimes(cpuHz)`; the exported constants are
+  the Model III's values, unchanged). The drive-select latch is taken decoded,
+  `fdc.select(drive, side, mfm)`; the Model III's port `F4` is decoded in
+  `src/machine/io.js` (`decodeModel3Select`), and `fdc.selectDrive(byte)`
+  stays as a convenience for a bare controller.
+
+### Fixed
+
+From the emu phase 5 final review, `@fugloy/emu`, on `emu-phase5`:
+
+- Read Track no longer throws (a `TypeError` on a null disk) when the drive
+  goes empty or none is selected while it waits for the index pulse (a guest
+  `OUT` to port `F4`, or `m.fdc.unmount`): the command ends on the not-ready
+  path, Busy reset, an interrupt, Not Ready in the status. Write Track ends
+  the same way. Every other place the controller reaches the disk was checked
+  to sample Ready or find an ID first.
+- A snapshot restores each disk as the container it was: each disk entry
+  carries `format`, and a JV1's `dirTrack`, and `restoreState` parses the
+  bytes as that container (`new DiskImage(bytes, name, { format, dirTrack })`)
+  instead of detecting. Before, a blank disk formatted with a first track of
+  5 × 1024 or 8 × 512 sectors serialized but threw on restore (JV3 detection
+  refuses fewer than ten sectors), and a JV1 whose track 0, sector 0 the
+  program rewrote came back with the directory track its new byte 2 named.
+  A snapshot without these fields is detected as before.
+- A DMK ID with no data mark within 30 (FM) or 43 (MFM) bytes of its CRC is
+  kept (`noData` in `trackIds`) instead of dropped: Read Address and a Type I
+  verify read it, Read Sector passes over it to Record Not Found, and Write
+  Sector lays its data field where the chip writes one, which Read Sector
+  then reads.
+- `TRS80System.stepInstruction` resets its in-instruction flag (`_executing`)
+  in a `finally`, so a `beforeExecute` callback or an instruction that throws
+  no longer leaves later debugger port pokes waiting on the controller.
+- Docs: emu spec §5 (the ENTER-to-title check covers the two dual-boot DMKs;
+  `ELIMATOR.dsk` is checked only to its menu; Master Reset not modeled and
+  Read or Write Track with no disk at the index pulse, both unverified; the
+  DMK ID with no data mark; disks in a snapshot), §3, and §8 and
+  `docs/label-format.md` (a disk loaded with `m.load.dsk` contributes no
+  `load` blocks, and `labelFile()` needs a `name` for one). MCP `formatOf`
+  notes that a JV1 that also parses as a `.CMD` loads as a program.
+
+### Release coupling
+
+`@fugloy/mcp`'s disk support needs emu APIs that `@fugloy/emu` 0.2.0 does not
+have (`m.fdc`, `m.load.dsk`, `DiskImage`, `CPU_CLOCK_HZ`). Its dependency is
+`workspace:^`, which publishes as `^` the emu version in the workspace, so
+`@fugloy/emu` must be bumped to 0.3.0 and released before the next
+`@fugloy/mcp` release; an mcp published against emu 0.2.0 would install an
+emu without the disk controller.
 
 ## [1.2.0] - 2026-10-18
 

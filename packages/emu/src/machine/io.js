@@ -7,8 +7,12 @@
  *   0xEC-0xEF  read: acknowledge/clear the RTC interrupt
  *              write: mode register (bit 1 = cassette motor,
  *                     bit 2 = 32-column mode, bit 3 = alt charset)
- *   0xF0-0xF3  floppy controller — absent; reads float to 0xFF
- *   0xF4       drive select — absent
+ *   0xE4-0xE7  read: NMI status, active-low (bit 7 = FDC INTRQ)
+ *              write: NMI mask (bit 7 = FDC INTRQ raises NMI)
+ *   0xF0-0xF3  WD1793 floppy controller; with no disk mounted anywhere it
+ *              is absent and reads float to 0xFF
+ *   0xF4       drive select (write): bits 0-3 drive, bit 4 side, bit 6
+ *              WAIT, bit 7 MFM
  *   0xF8-0xFB  line printer (read: status, write: data byte)
  *   0xFF       cassette port (write bits 0-1 = output level,
  *              read bit 7 = tape input)
@@ -36,6 +40,23 @@ export const NMI_INTRQ_BIT = 0x80;
 
 // Mode register (port 0xEC write) bits
 export const MODE_32COL_BIT = 0x04; // 32-character display mode
+
+/**
+ * Decode a Model III port F4 write: bits 0-3 select drive 0-3 (the lowest set bit wins; none set
+ * selects no drive, -1), bit 4 the side, bit 6 WAIT, bit 7 MFM (1) or FM (0); bit 5, write
+ * precompensation, does nothing here. Bits from MAME's trs80m3 driver and the ROM's use, not yet
+ * checked against the Model III Technical Reference Manual (spec §5).
+ * @param {number} value
+ * @returns {{ drive: number, side: number, mfm: boolean, wait: boolean }}
+ */
+export function decodeModel3Select(value) {
+  let drive = -1;
+  if (value & 0x01) drive = 0;
+  else if (value & 0x02) drive = 1;
+  else if (value & 0x04) drive = 2;
+  else if (value & 0x08) drive = 3;
+  return { drive, side: value & 0x10 ? 1 : 0, mfm: (value & 0x80) !== 0, wait: (value & 0x40) !== 0 };
+}
 
 export class IOSystem {
   constructor() {
@@ -74,6 +95,10 @@ export class IOSystem {
     this.onSoundWrite = null;
     // Called when the timeline restarts (state restore): the Machine clears its sound ring.
     this.onSoundReset = null;
+    // The Model III WAIT (port F4 bit 6): called with a function that runs the controller to
+    // its next DRQ or INTRQ and returns the T-states that took, for the CPU to wait them; wired
+    // by TRS80System. Unwired, port F4 does not wait.
+    this.onWait = null;
 
     this.initializeModelIIIPorts();
   }
@@ -114,6 +139,10 @@ export class IOSystem {
 
     // 0xE4-0xE7: disk NMI mask (write) / status (read, active-low).
     // With no controller "present" (no disk mounted) the port floats.
+    // Bit 7 is the FDC's INTRQ, read live. MAME's trs80m3 driver also
+    // names bit 6 (motor timeout, its own NMI enable) and bit 5 (the reset
+    // button); neither is modeled, and none of this is yet checked against
+    // the Model III Technical Reference Manual (spec §5).
     for (let port = 0xe4; port <= 0xe7; port++) {
       this.portHandlers.set(port, {
         read: () => {
@@ -157,11 +186,17 @@ export class IOSystem {
       },
     });
 
-    // 0xF4: drive select / side / density latch
+    // 0xF4: drive select / side / density latch. Bit 6 asserts WAIT
+    // until the controller raises DRQ or INTRQ (MAME's trs80m3: only when
+    // both are low); the ROM's boot read and the DOSes' INI loops rely on
+    // it to take each byte as it arrives.
     this.portHandlers.set(0xf4, {
       read: () => 0xff,
       write: (v) => {
-        if (fdcPresent()) this.fdc.selectDrive(v);
+        if (!fdcPresent()) return;
+        const sel = decodeModel3Select(v);
+        this.fdc.select(sel.drive, sel.side, sel.mfm);
+        if (sel.wait && this.onWait) this.onWait(() => this.fdc.waitForDrq());
       },
     });
 
@@ -267,11 +302,7 @@ export class IOSystem {
     this.modeRegister = 0;
     this.cassetteOut = 0;
     this.soundLog = [];
-    this.fdc.intrq = false;
-    this.fdc.pending = null;
-    this.fdc.buffer = null;
-    this.fdc.status = 0;
-    this.fdc.commandType = 1;
+    this.fdc.reset();
   }
 
   readKeyboard() {

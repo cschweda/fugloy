@@ -237,7 +237,7 @@ describe('phase A tools', () => {
     expect(await call('load', { path: at('missing.cmd') })).toEqual({ text: `There is no file at ${at('missing.cmd')}.`, isError: true });
     expect(await call('load', { path: dir })).toEqual({ text: `${dir} is a folder, not a program file.`, isError: true });
     expect((await call('load', { path: at('notes.txt') })).text).toBe(
-      `${at('notes.txt')} is not a .CMD, .BAS, or .CAS program as far as its content shows (the extension is not consulted); raw memory images cannot be loaded.`,
+      `${at('notes.txt')} is not a .CMD, .BAS, or .CAS program or a JV1, JV3, or DMK disk image as far as its content shows (the extension is not consulted); raw memory images cannot be loaded.`,
     );
     const none = await connect();
     expect(await none.call('load', { path: at('hello.cmd') })).toEqual({
