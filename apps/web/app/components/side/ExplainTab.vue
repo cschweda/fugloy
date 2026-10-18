@@ -1,6 +1,8 @@
 <script setup lang="ts">
 // The Explain tab: a plain-English tutor for the line at the cursor. The lead
-// sentence first, then a quiet details strip, what a group of lines does (a
+// sentence first, then a quiet details strip, why the line is there (the
+// register the Z80 makes it use, what it does here, why it is written this
+// way, and the routine it is part of, muted), what a group of lines does (a
 // pattern), on a label row who reaches the label, the routine around the line,
 // the data region a data row belongs to (with its picture), and "what's at"
 // previews of each address it uses.
@@ -12,7 +14,8 @@ import type { Explanation, Preview, Row, RoutineSummary, Sentence, TableEntry } 
 import { hex4 } from '@fugloy/z80';
 import ExplainText from './ExplainText.vue';
 import RegionPicture from './RegionPicture.vue';
-import { detailsText, explainAt, explainRowAt, labelSentences, patternSentences, pictureBytes, summaryAt, summaryParts } from '../../utils/explain-view';
+import { detailsText, explainAt, explainRowAt, labelSentences, patternSentences, pictureBytes, summaryAt, summaryParts, whyParts } from '../../utils/explain-view';
+import type { WhyPart } from '../../utils/explain-view';
 
 /** What to explain: the clicked row when the cursor is still on it, otherwise the cursor's line. */
 export interface ExplainTarget {
@@ -35,6 +38,8 @@ interface View {
   picture: Uint8Array | null;
   /** On a label row (or a label inside an instruction): who calls or jumps to the label, and whether it is the entry point. */
   label: Sentence[] | null;
+  /** "Why it’s here": the register, what it does here, the idiom; and the routine reference, shown last and muted. */
+  why: { parts: WhyPart[]; routine: Sentence[] } | null;
 }
 
 // Recomputed only while the tab shows; while it does not, the last view stays as it was.
@@ -51,7 +56,7 @@ watch(
     const summary = e.kind === 'code' && e.addr !== null ? summaryAt(s, e.addr) : null;
     const picture = e.region === undefined ? null : pictureBytes(s, e.region);
     const onLabel = t.row?.kind === 'label' || e.kind === 'label';
-    view.value = { e, summary, parts: summary === null ? null : summaryParts(summary), pattern: patternSentences(e), picture, label: onLabel ? labelSentences(s, e) : null };
+    view.value = { e, summary, parts: summary === null ? null : summaryParts(summary), pattern: patternSentences(e), picture, label: onLabel ? labelSentences(s, e) : null, why: whyParts(e) };
   },
   { immediate: true },
 );
@@ -76,6 +81,17 @@ function openPreview(p: Preview): void {
         <ExplainText :sentences="view.e.sentences" lead @go="emit('go', $event)" @table="emit('table', $event)" />
       </div>
       <p v-if="view.e.details" class="fg-explain-details" data-testid="explain-details">{{ detailsText(view.e.details) }}</p>
+
+      <section v-if="view.why" data-testid="explain-why">
+        <h3 class="fg-sec">Why it’s here</h3>
+        <div v-for="p in view.why.parts" :key="p.key" class="fg-explain-why" :data-testid="`explain-why-${p.key}`">
+          <h4 class="fg-explain-why-title">{{ p.title }}</h4>
+          <ExplainText :sentences="p.sentences" @go="emit('go', $event)" @table="emit('table', $event)" />
+        </div>
+        <div v-if="view.why.routine.length > 0" class="fg-explain-why-routine" data-testid="explain-why-routine">
+          <ExplainText :sentences="view.why.routine" @go="emit('go', $event)" @table="emit('table', $event)" />
+        </div>
+      </section>
 
       <section v-if="view.label && view.e.label" data-testid="explain-label">
         <h3 class="fg-sec">The label <span class="fg-explain-range fg-mono">{{ view.e.label.name }}</span></h3>
