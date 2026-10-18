@@ -20,6 +20,8 @@
  * does).
  */
 
+import { startProgram } from "./cmd-format.js";
+
 // Model III cassette BASIC work area
 const TXTTAB_PTR = 0x40a4; // -> start of BASIC program (0x42E9 stock)
 const VARTAB_PTR = 0x40f9; // simple variables (= end of program)
@@ -207,7 +209,5 @@ export function fastLoadSystem(system, parsed) {
       system.memory.writeByte((block.addr + i) & 0xffff, block.data[i]);
     }
   }
-  system.cpu.halted = false;
-  system.cpu.registers.PC = parsed.entry;
-  return parsed.entry;
+  return startProgram(system, parsed.entry);
 }

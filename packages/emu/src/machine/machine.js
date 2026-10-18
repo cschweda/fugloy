@@ -9,6 +9,7 @@ import { sha256Hex } from './sha256.js';
 import { Video } from '../devices/video.js';
 import { Sound } from '../devices/sound.js';
 import { loadBas } from '../loaders/bas.js';
+import { cassetteDeck, loadCas, loadCmd } from '../loaders/load.js';
 import { KeyQueue, romKeyReturn } from '../devices/key-queue.js';
 
 /**
@@ -37,8 +38,14 @@ export class Machine {
   sound;
   /** @type {KeyQueue} Key presses now, cycle-timed typing through the matrix, and the ROM keyboard-scan hook's feed. */
   keyboard;
-  /** @type {{ bas(bytes: Uint8Array): ReturnType<typeof loadBas> }} Program loaders; each returns a manifest. */
+  /**
+   * @type {{ bas(bytes: Uint8Array): ReturnType<typeof loadBas>, cmd(bytes: Uint8Array): ReturnType<typeof loadCmd>,
+   *   cas(bytes: Uint8Array, opts?: { baud?: 500 | 1500, via?: 'rom' | 'fast' }): ReturnType<typeof loadCas> }}
+   * Program loaders; each returns a manifest of where the bytes land and why.
+   */
   load;
+  /** @type {ReturnType<typeof cassetteDeck>} The cassette deck: insert a .CAS at a baud, rewind, read the motor relay. */
+  cassette;
 
   /**
    * @param {{ model?: 3, ram?: 48, roms: { level2: Uint8Array }, log?: (level: string, text: string) => void }} opts
@@ -89,7 +96,12 @@ export class Machine {
     sys.io.onSoundWrite = (cycle, value) => this.sound.record(cycle, value);
     sys.io.onSoundReset = () => this.sound.clear();
     this.keyboard = new KeyQueue(sys.keyboard, () => sys.cpu.cycles);
-    this.load = { bas: (bytes) => loadBas(this, bytes) };
+    this.load = {
+      bas: (bytes) => loadBas(this, bytes),
+      cmd: (bytes) => loadCmd(this, bytes),
+      cas: (bytes, opts) => loadCas(this, bytes, opts),
+    };
+    this.cassette = cassetteDeck(this);
     this.io = {
       in: (port) => sys.io.readPort(port),
       out: (port, value) => sys.io.writePort(port, value),

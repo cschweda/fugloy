@@ -15,6 +15,14 @@
  *   other                     skipped by their length byte (comments,
  *                             patch and directory records)
  *
+ * Record 07 is a patch name header: its payload is the patch's name in
+ * ASCII, and the patch's code follows it as ordinary 01 blocks, which
+ * load like any other; a patch that has been YANKed has those blocks
+ * retyped 10, which the loader ignores (LDOS 5.1 manual, Tech Info:
+ * File Formats p. 1, item c; Soltoff, The Programmer's Guide to
+ * LDOS/TRSDOS Version 6, p. A-149, figure A-1). So skipping 07 and 10
+ * by their length is the whole of their handling.
+ *
  * Fast-loading writes the blocks straight into RAM and jumps to the
  * entry point — the same hand-off TRSDOS performs — so tape/disk-era
  * machine-language games run with no DOS resident.
@@ -73,7 +81,26 @@ export function fastLoadCmd(system, parsed) {
       system.memory.writeByte((block.addr + i) & 0xffff, block.data[i]);
     }
   }
-  system.cpu.halted = false;
-  system.cpu.registers.PC = parsed.entry;
-  return parsed.entry;
+  return startProgram(system, parsed.entry);
+}
+
+/**
+ * The loader's hand-off, shared with fastLoadSystem: jump to `entry` with nothing of the
+ * interrupted code carried over. The CPU leaves HALT; an EI or DD/FD prefix still pending from
+ * the old code is dropped; and any interrupt request latched before the load is cleared, so no
+ * request from before the load interrupts the program and a later EI does not take a stale
+ * request at once; the next request is the next one the hardware raises. IFF1, IFF2, and the
+ * interrupt mode are left as they were.
+ * @param {any} system a TRS80System (a bare { cpu } works too)
+ * @param {number} entry
+ * @returns {number} the entry
+ */
+export function startProgram(system, entry) {
+  const cpu = system.cpu;
+  cpu.halted = false;
+  cpu.pendingEI = 0;
+  cpu.afterPrefix = false;
+  if (system.io) system.io.intLatch = 0;
+  cpu.registers.PC = entry;
+  return entry;
 }
