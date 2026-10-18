@@ -8,7 +8,7 @@
  * $4000 with SP = $7000, IM 1, the 30 Hz interrupt enabled in port $E0, and the request due
  * `rtcIn` T-states from the start, so it lands on a chosen instruction boundary.
  */
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { Machine } from '../../src/index.js';
 import { compareRun, formatReport, keyEvents } from './compare.js';
 import { CLASS_NAMES, INTERRUPT_CLASSES, REFERENCE_FIXES, STEP_CLASSES } from './known.js';
@@ -60,7 +60,13 @@ describe('the known classes', () => {
 });
 
 describe.skipIf(trsjsSkip !== null)(`compareRun against trsjs${trsjsSkip === null ? '' : ` (skipped: ${trsjsSkip})`}`, () => {
-  const ref = loadTrsjs();
+  // Loaded before the tests, not while collecting: a skipped describe's body still runs, and
+  // without trsjs (CI) loading here would fail the file.
+  /** @type {import('./trsjs-adapter.js').Reference} */
+  let ref;
+  beforeAll(() => {
+    ref = loadTrsjs();
+  });
   const run = (m, n, opts = {}) => compareRun({ machine: m, reference: ref, instructions: n, ...opts });
 
   // Each program differs from trsjs only by the named classes; the counts are exact, so a class
