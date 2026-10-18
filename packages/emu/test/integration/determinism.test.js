@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { CPU_CLOCK_HZ, Machine, serializeState } from '../../src/index.js';
 import { configuredRom, ROM_TEST_TIMEOUT } from '../rom.js';
+import { bootToReady, screen } from './boot-helpers.js';
 
 const SECOND = CPU_CLOCK_HZ;
 
@@ -45,11 +46,11 @@ function syntheticRom() {
 }
 
 /** The synthetic script: run 0.3 s, type `keys` (matrix, the default), run 0.5 s. */
-function syntheticScript(keys = 'AB\n', at = 0.3) {
+function syntheticScript(keys = 'AB\n') {
   const m = new Machine({ roms: { level2: syntheticRom() } });
-  m.run({ cycles: Math.round(at * SECOND) });
+  m.run({ cycles: Math.round(0.3 * SECOND) });
   m.keyboard.type(keys);
-  m.run({ cycles: Math.round((0.8 - at) * SECOND) });
+  m.run({ cycles: Math.round(0.5 * SECOND) });
   return { m, ...outcome(m) };
 }
 
@@ -74,26 +75,47 @@ describe('same-script-twice, synthetic ROM', () => {
   });
 });
 
-const rom = configuredRom('model3');
-const screen = (m) => m.video.text().join('\n');
+describe('slicing independence, synthetic ROM', () => {
+  const T1 = 600_000;
+  const T2 = 1_700_000;
 
-/** Runs in quarter-second slices until the screen shows `text`, or throws after `seconds`. */
-function waitFor(m, text, seconds) {
-  for (let t = 0; t < seconds * 4; t++) {
-    if (screen(m).includes(text)) return;
-    m.run({ cycles: SECOND / 4 });
+  /** The script: run to T1, type, run to T2; `advance(m, target)` decides how each leg is sliced. */
+  function script(advance) {
+    const m = new Machine({ roms: { level2: syntheticRom() } });
+    advance(m, T1);
+    m.keyboard.type('AB\n');
+    advance(m, T2);
+    return { m, ...outcome(m), screen: screen(m) };
   }
-  if (!screen(m).includes(text)) throw new Error(`no "${text}" within ${seconds} s:\n${screen(m)}`);
-}
 
+  const oneRun = (m, target) => m.run({ until: (mm) => mm.cycles >= target });
+  /** Mixed step(1) and run({ cycles }) slices, all short of the target, then run on to the first boundary at or past it. */
+  const sliced = (m, target) => {
+    const stop = m.cycles + 0.7 * (target - m.cycles);
+    for (let k = 0; m.cycles < stop; k++) {
+      if (k % 3 === 0) m.step(1);
+      else if (k % 3 === 1) m.run({ cycles: 1234 + 97 * k });
+      else m.step(7);
+    }
+    oneRun(m, target);
+  };
+
+  it('one run and mixed step/run slices end identical in state, sound, and screen', () => {
+    const a = script(oneRun);
+    const b = script(sliced);
+    expect(a.sound.length).toBeGreaterThan(1000); // the script did something worth comparing
+    expect(a.m.video.raw.some((v) => v !== 0)).toBe(true);
+    expect(b.cycles).toBe(a.cycles);
+    expect(b.state).toBe(a.state);
+    expect(b.sound).toEqual(a.sound);
+    expect(b.screen).toBe(a.screen);
+  });
+});
+
+const rom = configuredRom('model3');
 /** Boot (ENTER at Cass? and Memory Size?, to READY), load Sea Dragon, run 3 s, type ENTER, run 2 s. */
 function seaDragonScript() {
-  const m = new Machine({ roms: { level2: rom } });
-  waitFor(m, 'Cass?', 2);
-  m.keyboard.type('\n');
-  waitFor(m, 'Memory Size?', 2);
-  m.keyboard.type('\n');
-  waitFor(m, 'READY', 2);
+  const m = bootToReady(rom);
   m.load.cmd(new Uint8Array(readFileSync(new URL('../../../../examples/sea-dragon/seadrg01.cmd', import.meta.url))));
   m.run({ cycles: 3 * SECOND });
   m.keyboard.type('\n');

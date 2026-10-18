@@ -19,31 +19,11 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { CPU_CLOCK_HZ, Machine } from '../../src/index.js';
 import { configuredRom, ROM_TEST_TIMEOUT } from '../rom.js';
+import { bootToReady as boot, screen, waitFor } from './boot-helpers.js';
 
 const rom = configuredRom('model3');
+const bootToReady = () => boot(rom);
 const example = (path) => new Uint8Array(readFileSync(new URL(`../../../../examples/${path}`, import.meta.url)));
-const screen = (m) => m.video.text().join('\n');
-
-/** Runs in quarter-second slices until the screen shows `text`, or throws after `seconds`. */
-function waitFor(m, text, seconds) {
-  for (let t = 0; t < seconds * 4; t++) {
-    if (screen(m).includes(text)) return;
-    m.run({ cycles: CPU_CLOCK_HZ / 4 });
-  }
-  if (!screen(m).includes(text)) throw new Error(`no "${text}" within ${seconds} s:\n${screen(m)}`);
-}
-
-/** A Model III at READY, booted through the facade: ENTER at Cass? (1500 baud) and at Memory Size?. */
-function bootToReady() {
-  const m = new Machine({ roms: { level2: rom } });
-  waitFor(m, 'Cass?', 2);
-  m.keyboard.type('\n');
-  waitFor(m, 'Memory Size?', 2);
-  m.keyboard.type('\n');
-  waitFor(m, 'READY', 2);
-  m.run({ cycles: CPU_CLOCK_HZ / 4 }); // let the cursor settle
-  return m;
-}
 
 /** How many of the 1,024 video cells differ between two screens. */
 function cellsDiffering(a, b) {
