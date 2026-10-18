@@ -70,6 +70,10 @@ export class IOSystem {
     this.getCycles = null;
     this.soundLog = [];
     this.SOUND_LOG_LIMIT = 100000;
+    // Raw port 0xFF write sink (cycles, value): the Machine's sound ring.
+    this.onSoundWrite = null;
+    // Called when the timeline restarts (state restore): the Machine clears its sound ring.
+    this.onSoundReset = null;
 
     this.initializeModelIIIPorts();
   }
@@ -195,6 +199,7 @@ export class IOSystem {
       write: (value) => {
         const cycles = this.getCycles ? this.getCycles() : 0;
         const level = value & 0x03;
+        if (this.onSoundWrite) this.onSoundWrite(cycles, value);
         if (level !== this.cassetteOut) {
           this.cassetteOut = level;
           if (this.getCycles && this.soundLog.length < this.SOUND_LOG_LIMIT) {

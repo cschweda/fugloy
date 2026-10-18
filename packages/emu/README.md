@@ -20,6 +20,31 @@ Without one it stays silent, unlike upstream, which printed warnings;
 `system.cpu.unimplementedOpcodes` still records every opcode it hit and does
 not implement.
 
+## Using the machine
+
+```js
+import { readFileSync } from 'node:fs'
+import { Machine, CPU_CLOCK_HZ } from '@fugloy/emu'
+
+const m = new Machine({ roms: { level2: readFileSync('model3.rom') } })   // Model III, 48K; you supply the ROM
+const shows = (text) => (mm) => mm.video.text().join('\n').includes(text)
+const second = CPU_CLOCK_HZ                                              // T-states per emulated second
+
+m.run({ until: shows('Cass?'), cycles: 5 * second })          // boot; stops at the prompt, or after 5 s
+m.keyboard.type('\n')                                          // ENTER: 1500 baud
+m.run({ until: shows('Memory Size?'), cycles: 5 * second })
+m.keyboard.type('\n')                                          // ENTER at Memory Size?
+m.run({ until: shows('READY'), cycles: 5 * second })
+
+m.load.cmd(readFileSync('seadrg01.cmd'))   // PC at the program's entry
+m.run({ cycles: 5 * second })
+console.log(m.video.text().join('\n'))     // the screen, 16 lines
+```
+
+`step`, `run`, the registers, memory, the keyboard (matrix typing and a ROM
+keyboard hook), sound events, and the three loaders are described in spec §3.
+The debugger (breakpoints, trace, coverage, snapshots) is phase 3.
+
 - Spec: [`docs/fugloy-emu-spec.md`](../../docs/fugloy-emu-spec.md) (phases 0–7 in §11)
 - Label and coverage file shared with `mcp` and `disasm`: [`docs/label-format.md`](../../docs/label-format.md)
 - ROM images are never bundled or committed; `roms/` here is gitignored and

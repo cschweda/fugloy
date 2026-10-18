@@ -208,6 +208,7 @@ export function restoreState(system, state) {
   system._nmiWasPending = false;
   system.keyboard.reset(); // held keys don't survive a restore
   io.soundLog = [];
+  io.onSoundReset?.(); // the Machine's raw sound ring belongs to the old timeline
 
   return system;
 }

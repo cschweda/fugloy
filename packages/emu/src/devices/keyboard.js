@@ -133,6 +133,11 @@ export class KeyboardMatrix {
     return true;
   }
 
+  /** True when `browserKey` maps to the TRS-80 matrix. */
+  knows(browserKey) {
+    return KEY_MAP.has(browserKey);
+  }
+
   /** Release whatever combo the physical key pressed. */
   keyUp(physicalCode) {
     if (!this.pressed.delete(physicalCode)) {

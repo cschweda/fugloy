@@ -15,10 +15,20 @@
  *   other                     skipped by their length byte (comments,
  *                             patch and directory records)
  *
+ * Record 07 is a patch name header: its payload is the patch's name in
+ * ASCII, and the patch's code follows it as ordinary 01 blocks, which
+ * load like any other; a patch that has been YANKed has those blocks
+ * retyped 10, which the loader ignores (LDOS 5.1 manual, Tech Info:
+ * File Formats p. 1, item c; Soltoff, The Programmer's Guide to
+ * LDOS/TRSDOS Version 6, p. A-149, figure A-1). So skipping 07 and 10
+ * by their length is the whole of their handling.
+ *
  * Fast-loading writes the blocks straight into RAM and jumps to the
  * entry point — the same hand-off TRSDOS performs — so tape/disk-era
  * machine-language games run with no DOS resident.
  */
+
+import { startProgram } from "./handoff.js";
 
 /**
  * Parse a /CMD byte stream.
@@ -73,7 +83,6 @@ export function fastLoadCmd(system, parsed) {
       system.memory.writeByte((block.addr + i) & 0xffff, block.data[i]);
     }
   }
-  system.cpu.halted = false;
-  system.cpu.registers.PC = parsed.entry;
-  return parsed.entry;
+  return startProgram(system, parsed.entry);
 }
+

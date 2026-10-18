@@ -8,6 +8,38 @@ Releases are tagged `vX.Y.Z` on `main`.
 
 ## [Unreleased]
 
+Emu phase 2 (`@fugloy/emu`, unreleased): the Model III as a `Machine`, with
+the devices and loaders that run real programs. Phase 2's done-criterion is
+met: Sea Dragon, Eliminator, and Rear Guard load and reach their title screens
+through `Machine`.
+
+### Added
+
+- `Machine` (spec §3): `step(n)` and `run({ cycles, until })` with reasons,
+  registers, flags, memory, ports, ROM identification (`m.rom`, `ROM_HASHES`),
+  and `m.system` as an escape hatch.
+- `m.video.text()`: the screen as 16 lines, 64 or 32 columns.
+- `m.sound`: every port `FF` write in a 65,536-event ring, stamped in T-states,
+  with `events(sinceCycle)` and `overflowed`.
+- `m.keyboard`: `press`, `release`, cycle-timed `type` through the matrix, and
+  `feed` through a hook on the ROM's keyboard-scan entries (`$002B`, `$0049`),
+  verified against the Model III ROM listing.
+- `m.load.bas`: tokenized (`FF`) and ASCII `.BAS` files; ASCII goes through the
+  keyboard hook. A file without the `FF` header is rejected with a message
+  that says to add one.
+- `m.load.cmd` and `m.load.cas` with manifests of where bytes landed and why,
+  including the ROM-loader path (`via: 'rom'`, blocks marked `predicted`) and
+  the `m.cassette` deck.
+- Determinism proof: a scripted session run twice ends byte-identical
+  (synthetic ROM in CI, Sea Dragon locally).
+
+### Changed
+
+- The load hand-off: `fastLoadCmd` and `fastLoadSystem` now clear a latched
+  interrupt request, a pending `DD`/`FD` prefix, and HALT, and complete an `EI`
+  still in flight, before jumping to the entry. A caller that relied on a
+  latched tick surviving a load will see it dropped.
+
 ## [1.0.0] - 2026-10-17
 
 v1: phases 3 and 4 of the plan. Phase 3 names ROM, hardware, and DOS
