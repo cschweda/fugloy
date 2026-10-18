@@ -34,6 +34,121 @@ creates and pushes the tag.
 
 ## [Unreleased]
 
+The Model 4, for the next `@fugloy/emu` and the `@fugloy/mcp` that needs it.
+Emu phase 6b builds the Model 4 in Model III mode on its own ROM and its native
+hardware (memory maps and banking, 80×24 video, the 4 MHz clock), keys
+coverage by memory map and page, and lets the MCP server load Model 4
+programs. A version 6 DOS (LS-DOS 6 or TRSDOS 6) booting is still open: no
+such disk is at hand. The Model III and Model I are unchanged (their fixtures,
+goldens, save states, differential runs, and speed).
+
+### Added
+
+Emu phase 6b (the Model 4; emu spec §5, §8, §11, §12; plan
+`docs/superpowers/plans/2026-10-18-emu-phase6b-model4.md`), on the
+`emu-phase6b` branch. No Model 4 Technical Reference Manual is at hand, so
+every hardware fact is from MAME's `trs80m3` driver and Tim Mann's xtrs, cited
+where the code decides it, with what is unverified listed in spec §5:
+
+- `new Machine({ model: 4, ram: 64 | 128 })` (128 by default; `MODEL_4` in
+  `src/machine/models.js`). The ROM is the TRS32 set's 14K `MODEL4.ROM`
+  (`fixtures/real/model4.rom`), recognised by its SHA-256 in `ROM_HASHES` as
+  `model4-trs32`; it is refused on the Model III and Model I, and their ROMs
+  are refused on the Model 4, each with a sentence naming the model it runs
+  on. The 4P is out of scope: the set's `MODEL4P.ROM` is an emulator's
+  504-byte stand-in, not Tandy's boot ROM.
+- Port `$84`–`$87` (write only; a reset writes 0) and `Model4Memory`: four
+  memory maps (map 0, Model III mode: ROM, keyboard at `$3800`, video at
+  `$3C00`, RAM from `$4000`; map 1: RAM under the ROM; map 2: RAM to
+  `$F3FF`, keyboard at `$F400`, all 2K of video at `$F800`; map 3: all RAM),
+  2K of video RAM with port `$84` bit 7 choosing the 1K page at `$3C00`, and
+  the 128K page select in bits 4–6 (bit 5 on: bank 2 + bit 4 in place of the
+  high 32K, or with bit 6 the low 32K). The sources corrected the plan twice:
+  the page select is bits 4–6, not 4–5, and map 2 keeps the keyboard at
+  `$F400`. On the Model 4 `m.mem.ram` holds the 32K banks in physical order,
+  so in map 0 the CPU's address A is `ram[A]` (on the other models `ram[0]` is
+  `$4000`). The ROM keyboard-scan hook stands in at `$002B`/`$0049` in map 0
+  only. Save states (machine `trs80-model4`) carry all RAM, the 2K of video
+  RAM, and the port `$84` byte, and refuse a state from another RAM size.
+- Video: 80×24 (port `$84` bit 2; row r at r × 80 in the 2K), halved to 40
+  columns by port `$EC` bit 2 as 64 is to 32, and inverse video (port `$84`
+  bit 3: a byte with bit 7 set is its character, shown as such by
+  `m.video.text()`). `m.video.columns` is 80, 64, 40, or 32; `m.video.rows`
+  is 24 or 16; `m.video.diff` rows are 80 bytes in 80-column mode.
+- The clock switch: port `$EC` bit 6 runs the CPU at 4,055,040 Hz, clear at
+  2,027,520 Hz (a reset clears it). `m.clockHz` follows it, the WD1793's
+  times are recomputed and its pending command and disk angle rescaled so a
+  switch moves nothing in real time (`setCpuHz`), the cassette's decode is
+  scaled, `m.keyboard.type` times its keys in the clock at the time it is
+  queued, and a save state restores the clock from the mode register. The
+  timer runs at 30 Hz at 2 MHz and 60 Hz at 4 MHz, one tick every 67,584
+  T-states at either clock (xtrs; MAME keeps 30 Hz of real time, so spec §5
+  lists it as an open check for the first LS-DOS 6 boot).
+- Model III mode: the Model 4 ROM boots to `Cass ?`, `Memory Size?`, and
+  Model III BASIC's `READY` in map 0 at 2 MHz, 64×16, and a Model 4 left there
+  runs Sea Dragon exactly as the Model III does, with the same screens at
+  every quarter second and the same T-states from `READY` to "1 or 2
+  Players?" (only the boot to `READY` differs, by 11 T-states, from the ROMs'
+  727 different bytes; `test/integration/model4-boot.test.js`). Model III
+  disks boot on it: the Eliminator and Rear Guard dual-boot DMKs reach their
+  Duo-Loader menu and load the game to its title, and Scarfman boots to its
+  title, all in map 0 at 2 MHz (`test/integration/model4-disk.test.js`,
+  gated on the ROM and each image in the gitignored `fixtures/real`).
+- Coverage keyed by `(map, page)` (spec §8; the §12 question answered by
+  building it): the debugger keeps one bitfield per memory map and 128K page
+  select the Model 4 has run in, marking each access under the map and page
+  in force when it is made (an instruction under the key at its start, each
+  data access under the key at that access, interrupt responses included).
+  `m.debug.coverage.bits` is the live bitfield of the map and page in force,
+  `m.debug.coverage.keys` lists the keys recorded (`'0:0'` first), and
+  `m.debug.coverage.bitsOf(key)` returns one. `m.debug.labelFile()` writes
+  `"0:0"` always and each other key with a bit set (`"3:2"`, …); the `write`
+  mark for a loaded byte that changed is computed in the map the load ran in.
+  `writeLabelFile` takes a map of keys to bitfields as well as one
+  bitfield. The files parse back and merge per key, and `@fugloy/disasm`
+  applies `"0:0"` and warns that the others are ignored, as it already did.
+  The Model III, the Model I, and a Model 4 left in Model III mode write the
+  single key `"0:0"`, so their files are unchanged.
+- `pnpm --filter @fugloy/emu test` runs the emu suite alone (a `test`
+  script, `vitest run --root ../.. packages/emu/`, on the root config; the
+  root `pnpm test` still runs every package once).
+
+`@fugloy/mcp` (unreleased; needs this emu):
+
+- `load { model: 4 }` builds a 128K Model 4 on `roms.model4` and boots it to
+  `READY` in Model III mode, answering its `Cass ?` and `Memory Size?`; the
+  manifest adds `Model: Model 4 (128K; its ROM boots it in Model III mode:
+  memory map 0, 2 MHz, 64 by 16)`. `defaultModel` may be 4. A disk boots
+  toward `4300h` as on the Model III. With no `roms.model4` it says which
+  entry to set; a Model III ROM named there is refused naming its model.
+- `screen` shows 80 by 24 (or 40 columns) when the program selects it, with
+  inverse video, and lists only cells on screen: video RAM bytes the screen
+  does not show (a Model 4's second 1K at 64 by 16, its last 128 bytes at 80
+  by 24) are counted on a last line. A snapshot taken in another screen width
+  is shown in its own width, as 32 against 64 columns already was. `run` and
+  `key` screen diffs and the `fugloy://screen` resource follow the same
+  layout.
+- `snapshot` and `diff` keep `3C00h`–`FFFFh` as the CPU saw it, in the memory
+  map and page in force (the Model 4's `m.mem.ram` is its banks, and copying
+  it as the Model III's RAM from `4000h` would not fit); a `Note:` line says
+  when the two sides are in different maps, pages, or video pages, and a run
+  in video RAM that the screen does not show is marked `; video RAM off
+  screen`.
+- `coverage` summary names the keys recorded on a Model 4 and which one the
+  counts are of; `coverage export` writes each key.
+- `disasm` and `callees` name from the Model III tables on a Model 4, and
+  `fugloy://rom/4/symbols` says so and points to `fugloy://rom/3/symbols`.
+- Tests: `test/model4.test.js` on a synthetic ROM in CI, and
+  `test/model4-rom.test.js` (Sea Dragon to its title and ENTER, Scarfman from
+  disk, a Model III ROM refused as `roms.model4`) on the real ROM, skipped
+  without it.
+
+### Changed
+
+- `@fugloy/mcp`: `load { model: 4 }` and `defaultModel: 4`, refused before as
+  "no Model 4 yet", now build the Model 4; any other model is refused naming
+  1, 3, and 4.
+
 ## [mcp 0.1.1] - 2026-10-18
 
 Disk images and the Model I for the MCP server. `load` accepts a disk image

@@ -90,8 +90,9 @@ Sea Dragon already annotated, from
 
 ### The emulator
 
-`@fugloy/emu` is a headless TRS-80 Model III, and (unreleased, emu phase 6) a
-Model I with its Expansion Interface, in plain JavaScript, built on the
+`@fugloy/emu` is a headless TRS-80 Model III, and (since emu 0.3.0, phase 6) a
+Model I with its Expansion Interface, and (unreleased, emu phase 6b) a Model 4,
+in Model III mode and with its native hardware, in plain JavaScript, built on the
 core of [trs80-emulator](https://github.com/cschweda/trs80-emulator). It has
 no DOM and no Node APIs, and the same inputs give the same run every time, so
 a scripted session repeats byte for byte. Its Z80 core passes ZEXDOC and
@@ -133,7 +134,7 @@ Rear Guard, each with a note saying how it knew.
 
 Install it with `npx -y @fugloy/mcp` as an MCP server
 (or run `node packages/mcp/bin/fugloy-mcp.js` from a clone, for development), with a
-`fugloy.mcp.json` that names your Model III ROM (and your Model I ROM, for `load` with `model: 1`, unreleased); the setup (from npm or from
+`fugloy.mcp.json` that names your Model III ROM (and your Model I ROM, for `load` with `model: 1`, and your Model 4 ROM, for `model: 4`, unreleased, emu phase 6b); the setup (from npm or from
 a clone), the tools, and those sessions are in its
 [README](packages/mcp/README.md), and the design is in
 [docs/fugloy-mcp-spec.md](docs/fugloy-mcp-spec.md).
@@ -143,10 +144,10 @@ a clone), the tools, and those sessions are in its
 From the roadmap in [CLAUDE.md](CLAUDE.md) and the
 [project plan](docs/Fugloy-Project-Plan.md):
 
-- **The emulator's later phases:** the Model 4 (split off from phase 6 into
-  its own plan, for when a Model 4 ROM and boot disk are supplied) and a
-  differential harness. Disk images (phase 5) and the Model I (phase 6) are
-  built and not yet released.
+- **The emulator's later phases:** the Model 4's native DOS (emu phase 6b
+  built the Model 4's hardware and Model III mode; an LS-DOS 6 or TRSDOS 6
+  boot waits for a disk), and a Model I differential reference. Disk images
+  (phase 5) and the Model I (phase 6) are released in `@fugloy/emu` 0.3.0.
 - **An assembler and IDE** (plan phase 5): write Z80 assembly in the
   workbench, assemble it to a `.CMD`, and run it on an emulated Model I or
   Model III beside its listing, an IDE in the way Inform 7 has one for its
@@ -322,28 +323,32 @@ releases: phase 2, Pass 1 and Pass 2, as
 core decoder and loaders, as
 [v0.1.0](https://github.com/cschweda/fugloy/releases/tag/v0.1.0).
 
-The emulator, `@fugloy/emu` 0.2.0 (on npm since 2026-10-18; 0.3.0, with disks and the Model I, is being released), has phases 0–4 of eight
-done: the core of [trs80-emulator](https://github.com/cschweda/trs80-emulator)
+The emulator, `@fugloy/emu` 0.3.0 (on npm since 2026-10-18), has all eight
+of its phases built, the Model 4 and the Model I's differential run aside:
+the core of [trs80-emulator](https://github.com/cschweda/trs80-emulator)
 booting the Model III ROM to `READY` in Node (0); a Z80 core that passes
 ZEXDOC and ZEXALL (1); the Model III as a `Machine`, with video, sound,
 keyboard, and `.CMD`, `.BAS`, and `.CAS` loaders, on which Sea Dragon,
-Eliminator, and Rear Guard reach their title screens (2); and the debugger,
+Eliminator, and Rear Guard reach their title screens (2); the debugger,
 `m.debug`, with breakpoints, watches, coverage, a trace, snapshots, and the
-label and coverage file (3); and the MCP server, `@fugloy/mcp` 0.1.0 (4),
-whose phases A–F are done, from the tools through snapshots and diffs,
-resources and prompts, and the npm release. Disk images (5) are built,
-unreleased: the WD1793 controller, JV1, JV3, and DMK images, and
-MCP `load` booting a disk, on which Eliminator, Rear Guard, and Scarfman
-load from their disks to their titles. The Model I (6) is built on the
-`emu-phase6` branch, unreleased: its Level II ROM, 4–48K, the Expansion
-Interface's 40 Hz clock, WD1771 disk controller, and printer, the video
-without bit 6 (and the lowercase modification), 500-baud cassette, and the
-keyboard; fourteen programs reach their titles on it and four disks boot, and
-MCP `load` takes `model: 1`. The Model 4 is split off into its own plan until
-a Model 4 ROM and boot disk are supplied. Because MCP `load` then needs the
-emulator's disk and Model I APIs, `@fugloy/emu` 0.3.0 has to be released before the next
-`@fugloy/mcp`. Next is a differential
-harness (see the roadmap in [CLAUDE.md](CLAUDE.md)). Later,
+label and coverage file (3); the MCP server, `@fugloy/mcp` 0.1.1 (4), whose
+phases A–F are done, from the tools through snapshots and diffs, resources
+and prompts, and the npm release; disk images (5): the WD1793 controller,
+JV1, JV3, and DMK images, and MCP `load` booting a disk, on which
+Eliminator, Rear Guard, and Scarfman load from their disks to their titles;
+the Model I (6): its Level II ROM, 4–48K, the Expansion Interface's 40 Hz
+clock, WD1771 disk controller, and printer, the video without bit 6 (and the
+lowercase modification), 500-baud cassette, and the keyboard, on which
+fourteen programs reach their titles and four disks boot, with MCP `load`
+taking `model: 1`; and a differential harness against trsjs (7), with no
+unexplained divergence in six game sessions on the Model III. The Model 4
+(6b) is built on the `emu-phase6b` branch, unreleased: on the Model 4 ROM it
+boots to Model III BASIC's `READY` and runs Model III programs and disks
+exactly as the Model III does, and its native hardware (four memory maps,
+128K banking, 80 by 24 video, the 4 MHz clock) runs synthetic programs;
+coverage is kept per memory map and page, and MCP `load` takes `model: 4`. A
+version 6 DOS booting waits for an LS-DOS 6 or TRSDOS 6 disk (see the
+roadmap in [CLAUDE.md](CLAUDE.md)). Later,
 phase 5 adds an assembler with an IDE in the workbench: write Z80 code,
 assemble it, and run it on an emulated Model I or Model III. Every change is
 recorded in [CHANGELOG.md](CHANGELOG.md); core releases are tagged `vX.Y.Z`
