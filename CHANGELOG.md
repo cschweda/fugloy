@@ -36,8 +36,10 @@ creates and pushes the tag.
 
 ### Added
 
-Emu phase 6 (the Model I; emu spec §3, §5), `@fugloy/emu`, unreleased, in
-progress on the `emu-phase6` branch:
+Emu phase 6 (the Model I; emu spec §3, §5, §11), `@fugloy/emu` and
+`@fugloy/mcp`, unreleased, on the `emu-phase6` branch. The Model 4 half of the
+phase is split off into its own plan, for when a Model 4 ROM and boot disk are
+supplied (`model: 4` refuses with a sentence saying so):
 
 - The machine is described by model (`src/machine/models.js`): clock, timer
   rate, ROM sizes and top, RAM sizes, the ROMs each model runs, and the save
@@ -147,6 +149,54 @@ progress on the `emu-phase6` branch:
   not read the WD1771's status (which would drop INTRQ). The Model III's
   reads are as before. `MemorySystem.getMemoryView` shows `$37E0`–`$37EF` as
   `m.mem.read` does.
+- Real programs on the Model I (`test/integration/model1-programs.test.js`,
+  on the Level II ROM; skipped without `roms.model1`): from `examples/`,
+  Eliminator's Model I-only build `elimin8a` and the `$4900` build
+  `elimin8c`, Sea Dragon, and Rear Guard reach their titles (in capitals: the
+  stock Model I has no lowercase) and answer ENTER, and Armored Patrol
+  (`ARMOUR.III`) reaches its players screen; from `fixtures/real`, Space Warp
+  1 and 3, Asylum 16K and 32K, Crazy Painter, Deathmaze 5000, Pirate's
+  Adventure, and Volcano reach their title or first question, and Super Nova
+  shows its lowercase credits as punctuation on the stock machine and as
+  written with `lowercase: true`. A scripted Model I session (Eliminator:
+  title, ENTER, one player) repeats byte for byte.
+- Fixed: `m.debug.labelFile` records the machine's model as `program.model`
+  (it wrote 3 on a Model I too).
+- Changed: the Sea Dragon speed test (`test/integration/benchmark.test.js`)
+  runs only with `FUGLOY_BENCH=1`: beside the rest of the parallel suite it
+  measured 12–15× against about 40× alone, and failed. `./publish.sh check`
+  runs it by itself after the suite; `node packages/emu/scripts/benchmark.mjs
+  off` (or `debug`) measures it by hand.
+- `@fugloy/mcp` (unreleased) runs the Model I (MCP spec §3, §5):
+  - `load { model: 1 }` builds a Model I (48K, the Expansion Interface) on the
+    config's `roms.model1` and boots it to READY, answering MEMORY SIZE? with
+    ENTER; the manifest adds a `Model: Model I (48K, with the Expansion
+    Interface)` line (a Model III's manifest is unchanged). A disk on the
+    Model I boots toward `$4200` (track 0, sector 0). Without `roms.model1`
+    the sentence names the entry to set; a Model III ROM named there is
+    refused naming its model; `model: 4` says the Model 4 comes in its own
+    plan; `reset: false` with a model other than the running machine's is
+    refused.
+  - The config's `defaultModel` takes 1 or 3 (it took only 3); 4 and any
+    other value are refused with a sentence. `reset` keeps the running
+    machine's model; `status` names the running machine's model and that
+    model's ROM.
+  - Emulated time counts on the machine's own clock (1,774,080 Hz on the
+    Model I): `run seconds`, the `limits.runSecondsEmulated` cap, `settled`'s
+    0.5 s, `key`'s 0.2 s tail, and every `N s emulated` the tools print. They
+    all used the Model III's clock.
+  - `key` types at 10 characters a second by default on a Model I, 20 on the
+    Model III: the Level II ROM drops every other key typed at 20.
+  - `disasm` and `callees` name from the Model I's ROM and hardware tables on
+    a Model I; `fugloy://rom/1/symbols` serves them (it read as a sentence
+    naming emu phase 6), and `fugloy://rom/4/symbols` says the Model 4 is not
+    here. `poke` refuses the Model I's ROM as `0000h`–`2FFFh` without `force`
+    and its Expansion Interface space, `3000h`–`37FFh`, outright.
+    `coverage export` refuses to write over either configured ROM.
+  - Tests: `packages/mcp/test/model1.test.js` on a synthetic 12K ROM (in CI);
+    `model1-rom.test.js` on the Level II ROM (Eliminator to its title and
+    ENTER, BASIC typed at the default rate, Scarfman's disk to `4200h` and its
+    title, and the wrong-ROM sentence).
 
 Emu phase 5 (disk controller and images; emu spec §3, §5, §6), `@fugloy/emu`,
 unreleased, on the `emu-phase5` branch:
@@ -388,7 +438,9 @@ have (`m.fdc`, `m.load.dsk`, `DiskImage`, `CPU_CLOCK_HZ`). Its dependency is
 `workspace:^`, which publishes as `^` the emu version in the workspace, so
 `@fugloy/emu` must be bumped to 0.3.0 and released before the next
 `@fugloy/mcp` release; an mcp published against emu 0.2.0 would install an
-emu without the disk controller.
+emu without the disk controller. The same holds for its Model I support
+(emu phase 6), which needs `new Machine({ model: 1 })`, `m.model`, and
+`m.system.clockHz`.
 
 ## [1.2.0] - 2026-10-18
 

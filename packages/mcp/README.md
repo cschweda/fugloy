@@ -21,11 +21,15 @@ public-domain games on its own (story 7, below).
 `@fugloy/mcp` is on npm (0.1.0, 2026-10-18): run it from npm with Node 22 or later
 (`npx -y @fugloy/mcp`; for development, use the clone setup below,
 `node packages/mcp/bin/fugloy-mcp.js`). Write a `fugloy.mcp.json` that names
-your Model III ROM (paths in it are relative to the file):
+your Model III ROM, and your Model I Level II ROM if you have one (paths in it
+are relative to the file):
 
 ```json
-{ "roms": { "model3": "./roms/model3.rom" } }
+{ "roms": { "model3": "./roms/model3.rom", "model1": "./roms/level2.rom" } }
 ```
+
+`"defaultModel": 1` makes the Model I what `load` builds when it is not given
+a `model` (the default is 3).
 
 and give Claude Code the server, in `.mcp.json` in the folder you start it
 in, or with `claude mcp add`:
@@ -95,7 +99,8 @@ lists the tools and calls them by hand.
 
 ## The tools
 
-One machine per server process, a Model III; nothing runs between calls.
+One machine per server process, a Model III or (unreleased, emu phase 6) a
+Model I; nothing runs between calls.
 Every result is text, and every error is a sentence the agent can act on.
 Addresses are hex (`5200`, `0x5200`, `$5200`, `5200h`), a JSON number
 (decimal), or a label name; lengths and counts are decimal. Arguments are
@@ -133,6 +138,25 @@ run      until=settled               → (repeat; the title is up about 8 s afte
 A dual-boot disk (Eliminator, Rear Guard) shows its loader's menu first; hold
 ENTER half a second (`key keys=["ENTER"] cps=1`) and run on to the title.
 
+The Model I (unreleased, emu phase 6): `load` with `model: 1` builds a Model I
+(48K, with the Expansion Interface) on `roms.model1` and boots it to `READY`,
+answering MEMORY SIZE? for you; the manifest says `Model: Model I (48K, with
+the Expansion Interface)`. A disk boots toward `4200h` (track 0, sector 0)
+instead of `4300h`. The stock Model I has no lowercase, so screens read in
+capitals. Emulated seconds count on its 1.774 MHz clock, and `key` types at
+10 characters a second by default (20 drops keys under its Level II ROM):
+
+```
+load     elimin8a.cmd  model=1       → Model: Model I (48K, with the Expansion Interface)
+                                       ROM: model1-level2-1.3; Boot: READY after …
+run      until=settled               → "BY: WAYNE WESTMORELAND & TERRY GILMAN"
+key      keys=["ENTER"] cps=1        → "1 OR 2 PLAYERS?"
+```
+
+Switching models needs a fresh machine: `load` with `reset: false` and another
+`model` is refused. `disasm` and `callees` name from the Model I's ROM tables,
+and `fugloy://rom/1/symbols` lists them.
+
 Labels live in `<program>.fugloy.json` beside the program (`SEADRG01.CMD` →
 `SEADRG01.fugloy.json`), in the format of
 [`docs/label-format.md`](https://github.com/cschweda/fugloy/blob/main/docs/label-format.md). `load` reads it,
@@ -165,7 +189,7 @@ there is one.
 | `fugloy://screen` | The screen, as `screen` shows it |
 | `fugloy://labels` | The label table, as `labels` shows it |
 | `fugloy://program/manifest` | The manifest `load` returned |
-| `fugloy://rom/{model}/symbols` | The Model III ROM's entry points and variables, its memory-mapped regions, and its ports, one line each (`0033h  routine  $VDCHAR  display the character in A at the cursor`), from `@fugloy/disasm`'s cited symbol tables (167 entries); only `fugloy://rom/3/symbols` exists until emu phase 6 |
+| `fugloy://rom/{model}/symbols` | A model's ROM entry points and variables, its memory-mapped regions, and its ports, one line each (`0033h  routine  $VDCHAR  display the character in A at the cursor`), from `@fugloy/disasm`'s cited symbol tables: `fugloy://rom/3/symbols` the Model III's (167 entries), `fugloy://rom/1/symbols` the Model I's (unreleased, emu phase 6) |
 
 Prompts are where the method lives; the tools stay plain. Each prompt's
 text is a Markdown file in [`prompts/`](https://github.com/cschweda/fugloy/tree/main/packages/mcp/prompts), shipped in the package
@@ -287,7 +311,8 @@ ran.
 `pnpm test` runs them with the rest of the monorepo. CI uses a synthetic
 14K ROM and synthetic programs; `test/phase-a-rom.test.js` and
 `test/story-7-rom.test.js` need the Model III ROM named in `fugloy.mcp.json`
-and skip without it. Golden transcripts are committed only for sessions on
+and skip without it, as `test/model1-rom.test.js` does without the Model I's
+(`test/model1.test.js` runs the Model I on a synthetic 12K ROM in CI). Golden transcripts are committed only for sessions on
 the synthetic ROM, since a real ROM's screen text would be in them: stories
 1, 2, and 3 (`test/golden/story-0N.txt`, scripts in `test/stories.js`;
 story 3 is coverage telling code, data, and never-seen bytes apart), each
@@ -313,9 +338,12 @@ rehearsal that stages nothing.
 Disk images (emu phase 5) make `load` call emu APIs that `@fugloy/emu` 0.2.0
 does not have (`m.fdc`, `m.load.dsk`, `DiskImage`, `CPU_CLOCK_HZ`), so emu is
 bumped to 0.3.0 and released before the next mcp release, whose range then
-reads `^0.3.0`.
+reads `^0.3.0`. The Model I (emu phase 6) needs the same release: `new
+Machine({ model: 1 })`, `m.model`, and `m.system.clockHz` are not in emu 0.2.0.
 
 ## Not yet
 
-Only the Model III (the Model I and 4 wait for emu phase 6), disk images in
+No Model 4 (split off from emu phase 6 until a Model 4 ROM and boot disk are
+supplied), the Model I only at 48K with the Expansion Interface (the emu takes
+4–48K and `expansion: false`; `load` does not offer them), disk images in
 drive 0 only (unreleased, emu phase 5), and stdio only (Streamable HTTP is an open question, spec §12).
