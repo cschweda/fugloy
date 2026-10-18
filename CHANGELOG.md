@@ -78,8 +78,10 @@ Core, Explain's "why" layer (design in
     takes it; a CP after a key routine, with the key's name) or back to where
     it was set. The scan stops at a branch, a join, a call that does not take
     the register, a jump or return, undecoded bytes, and a rewritten opcode,
-    and says the next use is not certain and why. Model I has no lowercase,
-    so $60–$7F show as capitals there.
+    and says the next use is not certain and why. Only the Model III and 4
+    show $60–$7F as lowercase; on a stock Model I (no bit 6 in video RAM, so
+    $61 shows as "!") and with no machine selected, those bytes are not
+    named.
   - `idiom`: why a programmer usually writes the line this way: `XOR A` and
     `SUB A`, `OR A` and `AND A` (and before `SBC HL`), `CP`, `LD B,n` with
     `DJNZ`, `DJNZ`, `ADD A,A` and `ADD HL,HL`, `SLA` and `SRL`, the one-byte
@@ -97,8 +99,9 @@ Core, Explain's "why" layer (design in
   register" when the facts speak of several), **What it does here**, and
   **Why write it this way**, each only when it has sentences, with the same
   address and Symbol-tab links as the lead. The routine reference closes the
-  section in a muted line, since it repeats on most lines of a routine. The
-  section is absent when all three parts are empty.
+  section in a muted line, since it repeats on most lines of a routine, and
+  only when the routine section below is not shown (that section already
+  names the routine). The section is absent when all three parts are empty.
 
 Emu phase 3:
 

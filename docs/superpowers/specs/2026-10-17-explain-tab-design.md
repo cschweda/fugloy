@@ -318,8 +318,9 @@ inference. The anti-goal holds throughout: no unproven value or destination.
   the instruction; a port picked by a register is in C; DJNZ counts in B; the
   block instructions fix HL, DE and BC; the rotate-A and adjust instructions
   work only on A; 16-bit adds land in HL, IX or IY; `JP (HL)` jumps only
-  through HL, IX or IY; `EX DE,HL` exists because HL is the register most
-  memory instructions use. A line that loads a register a later ROM or DOS
+  through HL, IX or IY; `EX DE,HL` swaps a value kept in DE into HL, in one
+  step, because HL is the register most memory and 16-bit arithmetic
+  instructions use, so those instructions can use it. A line that loads a register a later ROM or DOS
   call takes, by its table entry's purpose, cites that entry. Lines with no
   forced choice get nothing (`why-register.ts`).
 - **What it does here** (`why.purpose`). *Proven flow*: from `track.ts`'s
@@ -327,9 +328,13 @@ inference. The anti-goal holds throughout: no unproven value or destination.
   the register, calls that do not take it, and unknown code. A value is
   followed to its next use or back to where it was set, and a destination
   gets its TRS-80 meaning: the screen (row and column, the character when
-  proven), the keyboard matrix, port $FF (sound and cassette), a ROM routine,
-  a DJNZ count. Past a branch or a join it says the next use is not certain
-  and where the code branches or other code arrives. A line whose opcode
+  proven; $60–$7F only on the Model III and 4, which have lowercase), the
+  keyboard matrix, port $FF (sound and cassette), a ROM routine, a DJNZ
+  count. Past a branch or a join it says the next use is not certain and
+  where the code branches or other code arrives, but only when it can name
+  what the register holds (a source or a proven value): a bare "the result"
+  whose next use is not certain says nothing. `OR A` and `AND A` leave A as
+  it was, so, like `CP`, they are not followed as writing A. A line whose opcode
   the program rewrites gets nothing, and no number comes from rewritten
   bytes (`why-purpose.ts`).
 - **Why write it this way** (`why.idiom`). *Idioms with a computed motive*:
@@ -346,7 +351,8 @@ inference. The anti-goal holds throughout: no unproven value or destination.
   the section and muted, rather than as a part of its own; the routine
   section below carries the full summary. It is left out on the routine's
   start line and when the routine touches neither the screen, the keyboard
-  nor a port.
+  nor a port, and the tab leaves it out whenever that routine section shows
+  on the same line, which already names the routine.
 - **The section** shows each part only when it has sentences, in the order
   above, every address a link into the listing and every table name a link
   to the Symbol tab, as in the lead. It is absent when the three parts are

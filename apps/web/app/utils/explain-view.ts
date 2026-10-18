@@ -109,17 +109,19 @@ export interface WhyPart {
  * use; "Why this register" when the facts speak of several), "What it does
  * here" (proven flow), "Why write it this way" (the idiom) — and the routine
  * reference, which the tab shows last and muted because it repeats on most
- * lines of a routine. Null when all three parts are empty: the routine
- * reference alone makes no section (the routine section below says as much).
+ * lines of a routine; it is left out (`routine` empty) when `summaryShown`,
+ * since the routine section below then names the routine. Null when all three
+ * parts are empty: the routine reference alone makes no section (the routine
+ * section below says as much).
  */
-export function whyParts(e: Explanation): { parts: WhyPart[]; routine: Sentence[] } | null {
+export function whyParts(e: Explanation, summaryShown = false): { parts: WhyPart[]; routine: Sentence[] } | null {
   const w = e.why;
   if (w === undefined) return null;
   const parts: WhyPart[] = [];
   if (w.register.length > 0) parts.push({ key: 'register', title: `Why ${w.registerName ?? 'this register'}`, sentences: w.register });
   if (w.purpose.length > 0) parts.push({ key: 'purpose', title: 'What it does here', sentences: w.purpose });
   if (w.idiom.length > 0) parts.push({ key: 'idiom', title: 'Why write it this way', sentences: w.idiom });
-  return parts.length === 0 ? null : { parts, routine: w.routine };
+  return parts.length === 0 ? null : { parts, routine: summaryShown ? [] : w.routine };
 }
 
 /** The most bytes a region picture draws (16K). */

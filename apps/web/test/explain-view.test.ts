@@ -166,6 +166,10 @@ describe('whyParts: the "Why it’s here" section', () => {
     const w = view(0x4b86)!;
     expect(w.parts.map((p) => p[0])).toEqual(['purpose']);
     expect(w.routine).toEqual(['It is part of the routine TITLE_FRAME ($4B5E), which writes to the screen and reads the keyboard.']);
+    // With the routine section shown below, the reference would repeat it: left out.
+    const shown = whyParts(explainAt(open(), 0x4b86), true)!;
+    expect(shown.parts.map((p) => p.key)).toEqual(['purpose']);
+    expect(shown.routine).toEqual([]);
   });
 
   it('is absent when all three parts are empty, even with a routine reference, and on rows that are not code', () => {

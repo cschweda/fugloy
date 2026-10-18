@@ -169,8 +169,9 @@ test('"Why it’s here": a PRINT_TEXT caller names the screen, XOR A shows all t
   await expect(why.getByRole('heading', { level: 4 })).toHaveText(['What it does here']);
   await expect(why.getByTestId('explain-why-purpose')).toHaveText('What it does hereDE holds $3F15 (VIDEO+0315H, the screen, row 12, column 21); its next use is not certain: the call at $4B8B may use or change it.');
   await expect(why.getByTestId('explain-why-register')).toHaveCount(0);
-  // The routine reference comes last, apart from the parts.
-  await expect(why.getByTestId('explain-why-routine')).toHaveText('It is part of the routine TITLE_FRAME ($4B5E), which writes to the screen and reads the keyboard.');
+  // The routine section below names TITLE_FRAME, so the why section does not repeat it.
+  await expect(page.getByTestId('explain-routine')).toContainText('TITLE_FRAME');
+  await expect(why.getByTestId('explain-why-routine')).toHaveCount(0);
   // A link in it moves the cursor, as everywhere in the tab.
   await why.getByTestId('explain-why-purpose').getByRole('button', { name: '$4B8B' }).click();
   await cursorAt(page, 0x4b8b);
@@ -211,8 +212,8 @@ test('axe finds nothing on the Explain tab, for a code line, a data row and the 
   await (await row(page, 0x7dd5)).click();
   await expect(page.getByTestId('region-canvas')).toBeVisible();
   expect(await violations()).toEqual([]);
-  // The "Why it’s here" section, with its muted routine line.
+  // The "Why it’s here" section.
   await (await row(page, 0x4b86)).click();
-  await expect(page.getByTestId('explain-why-routine')).toBeVisible();
+  await expect(page.getByTestId('explain-why')).toBeVisible();
   expect(await violations()).toEqual([]);
 });

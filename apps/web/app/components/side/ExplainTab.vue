@@ -2,7 +2,8 @@
 // The Explain tab: a plain-English tutor for the line at the cursor. The lead
 // sentence first, then a quiet details strip, why the line is there (the
 // register the Z80 makes it use, what it does here, why it is written this
-// way, and the routine it is part of, muted), what a group of lines does (a
+// way, and the routine it is part of, muted, when the routine section does
+// not show), what a group of lines does (a
 // pattern), on a label row who reaches the label, the routine around the line,
 // the data region a data row belongs to (with its picture), and "what's at"
 // previews of each address it uses.
@@ -38,7 +39,7 @@ interface View {
   picture: Uint8Array | null;
   /** On a label row (or a label inside an instruction): who calls or jumps to the label, and whether it is the entry point. */
   label: Sentence[] | null;
-  /** "Why it’s here": the register, what it does here, the idiom; and the routine reference, shown last and muted. */
+  /** "Why it’s here": the register, what it does here, the idiom; and the routine reference, shown last and muted, only when the routine section is not shown. */
   why: { parts: WhyPart[]; routine: Sentence[] } | null;
 }
 
@@ -56,7 +57,8 @@ watch(
     const summary = e.kind === 'code' && e.addr !== null ? summaryAt(s, e.addr) : null;
     const picture = e.region === undefined ? null : pictureBytes(s, e.region);
     const onLabel = t.row?.kind === 'label' || e.kind === 'label';
-    view.value = { e, summary, parts: summary === null ? null : summaryParts(summary), pattern: patternSentences(e), picture, label: onLabel ? labelSentences(s, e) : null, why: whyParts(e) };
+    // The routine section names the routine, so the why section's muted routine line shows only without it.
+    view.value = { e, summary, parts: summary === null ? null : summaryParts(summary), pattern: patternSentences(e), picture, label: onLabel ? labelSentences(s, e) : null, why: whyParts(e, summary !== null) };
   },
   { immediate: true },
 );
