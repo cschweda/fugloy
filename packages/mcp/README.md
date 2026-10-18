@@ -128,7 +128,9 @@ written for another program, is a link, or was edited by hand since it last
 read it, and an export `path` that holds anything but a label file unless
 `overwrite: true`. Sidecars beside the committed examples are gitignored
 (`examples/**/*.fugloy.json`), so running the story prompts leaves the tree
-clean. The disassembler reads the same file:
+clean. The disassembler reads the same file (a label's `note` is shown as
+its comment from core 1.2.0, the next core release; `@fugloy/disasm` 1.1.0 on
+npm reads the file but ignores `note`):
 
 ```sh
 pnpm fugloy SEADRG01.CMD --labels SEADRG01.fugloy.json
@@ -246,16 +248,16 @@ tree, the MCP tools its only tools) got the prompt with `minCalls` 5 for each
 of the three public-domain games in `examples/` that run under the emulator,
 each on a scratch copy:
 
-| Game | Turns, time | Labelled | On the spot-check, a reviewer would keep |
+| Game | Turns, time | Labelled | Checked |
 | --- | --- | --- | --- |
-| Sea Dragon (`seadrg01.cmd`) | 90, 5 min | 18 of 22 listed; left 4 whose object tables stayed empty, so their code never ran | All 18. Twelve are routines the hand-made [`seadrg01.hints`](https://github.com/cschweda/fugloy/blob/main/examples/sea-dragon/seadrg01.hints) names, with the same meaning (`PrintText` for `PRINT_TEXT`, `BlitSprite` for `DRAW_SHAPE`, `SurfaceAndAir` for `AIR_SUPPLY`, `UnpackLevelObjects` for `SETUP_OBJECTS`, …); three are title routines the hints describe; three the code bears out |
-| Eliminator (`elimin8c.cmd`) | 119, 4 min | All 17 listed (`RenderFrame`, confirmed by a trace; `DrawObject`, 12,234 calls; `HitTestPlayerShip`; `SpawnWave`; …) | All, perhaps renaming the three it marked as weaker readings (`InitHumanoids`, `ShotMoveUp`, `ShotMoveDown`) |
-| Rear Guard (`reargrd5.cmd`) | 93, 5 min | All 24 listed (`PlayTone`, `SoundUpdate`, `PrintToScreen`, `UpdateEnemies`, `SpawnEnemyBombs`, …), mostly from reading the code, as it said | The names; it guessed which terrain layer scrolls faster |
+| Sea Dragon (`seadrg01.cmd`) | 90, 5 min | 18 of 22 listed; left 4 whose object tables stayed empty, so their code never ran | 18 checked, all agree; 0 unchecked. Twelve are routines the hand-made [`seadrg01.hints`](https://github.com/cschweda/fugloy/blob/main/examples/sea-dragon/seadrg01.hints) names, with the same meaning (`PrintText` for `PRINT_TEXT`, `BlitSprite` for `DRAW_SHAPE`, `SurfaceAndAir` for `AIR_SUPPLY`, `UnpackLevelObjects` for `SETUP_OBJECTS`, …); three are title routines the hints describe in notes; three were read in the disassembly |
+| Eliminator (`elimin8c.cmd`) | 119, 4 min | All 17 listed (`RenderFrame`, confirmed by a trace; `DrawObject`, 12,234 calls; `HitTestPlayerShip`; `SpawnWave`; …) | 4 checked against the disassembly, all agree; 13 unchecked. The agent marked three as weaker readings (`InitHumanoids`, `ShotMoveUp`, `ShotMoveDown`) |
+| Rear Guard (`reargrd5.cmd`) | 93, 5 min | All 24 listed (`PlayTone`, `SoundUpdate`, `PrintToScreen`, `UpdateEnemies`, `SpawnEnemyBombs`, …), mostly from reading the code, as it said | 4 checked against the disassembly, all agree; 20 unchecked. The agent said it guessed which terrain layer scrolls faster |
 
 Each session played, went down `suggest`'s list with `disasm` and `callers`
 (and watches, breakpoints, or a trace where reading was not enough), wrote
 a note with the evidence for every label, exported the file, and said which
-names were guesses. Every label carries the agent's evidence note; a sample (Sea Dragon's 12 names shared with the hints and 3 more routines against the hints and code, 4 of Eliminator's 17, 4 of Rear Guard's 24) was checked against the code and agreed. Rear Guard's
+names were guesses. Every label carries the agent's evidence note. What was checked: all 18 of Sea Dragon's (12 against the hint file's names, 3 against its notes, 3 in the disassembly), 4 of Eliminator's 17, and 4 of Rear Guard's 24 (in the disassembly); every one checked agreed, and the rest are unchecked. Rear Guard's
 build writes the Model I's keyboard driver address (`03E3h`) into the
 keyboard vector at `4016h`, so the Model III ROM's key wait hung at
 "1 or 2 Players?"; the agent worked that out and poked `4016h` to the Model

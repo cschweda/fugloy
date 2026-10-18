@@ -226,6 +226,23 @@ describe('phase D screen and diff follow-ups', () => {
     await close();
   });
 
+  it('screen diff against a snapshot of another program gives the note diff gives', async () => {
+    const { call, close } = await loaded('raiders.cmd');
+    await ok(call, 'run', { until: 'screen' });
+    await ok(call, 'snapshot', { name: 'title' });
+    await ok(call, 'load', { path: at('scorer.cmd') });
+    const note = 'Note: title belongs to RAIDERS and now to SCORER.';
+    const screen = (await ok(call, 'screen', { diff: 'title' })).split('\n');
+    expect(screen[0]).toMatch(/^\d+ cells? changed$/);
+    expect(screen[1]).toBe(note);
+    const diff = (await ok(call, 'diff', { a: 'title', b: 'now' })).split('\n');
+    expect(diff[1]).toBe(note);
+    // The same program: no note.
+    await ok(call, 'snapshot', { name: 'mine' });
+    expect(await ok(call, 'screen', { diff: 'mine' })).not.toContain('Note:');
+    await close();
+  });
+
   it('screen diff against a snapshot taken in the other width shows both screens', async () => {
     // NARROW: LD A,04H / OUT (0ECH),A (the mode register's 32-column bit) / LD A,'N' / LD (3C00H),A / JR $.
     writeFileSync(at('narrow.cmd'), buildCmd([{ name: 'NARROW' }, { addr: 0x7000, data: [0x3e, 0x04, 0xd3, 0xec, 0x3e, 0x4e, 0x32, 0x00, 0x3c, 0x18, 0xfe] }], 0x7000));

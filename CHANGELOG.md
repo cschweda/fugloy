@@ -53,9 +53,12 @@ public-domain games that run under `Machine`, each on a scratch copy
 (`claude -p`, the server from the working tree, the MCP tools its only tools,
 nobody helping). All three finished, exported the sidecar, and said what they
 left alone and which names were guesses. Every label carries the agent's
-evidence note; a sample (Sea Dragon's 12 names shared with the hints and 3
-more routines against the hints and code, 4 of Eliminator's 17, 4 of Rear
-Guard's 24) was checked against the code and agreed.
+evidence note. What was checked: all 18 of Sea Dragon's labels (12 against
+the hint file's names, 3 against its notes, 3 in the disassembly), 4 of
+Eliminator's 17, and 4 of Rear Guard's 24 (in the disassembly); every one
+checked agreed, and the rest are unchecked. A label's `note` is shown by
+the disassembler from core 1.2.0, the next core release; `@fugloy/disasm`
+1.1.0 reads the file but ignores `note`.
 
 - **Sea Dragon** (`seadrg01.cmd`; 90 turns, 5 min): 18 labels of the 22
   routines `suggest` listed, each with a note giving its evidence (code, plus
@@ -70,7 +73,7 @@ Guard's 24) was checked against the code and agreed.
   (`OneShotTone`, `ReadFireKeys`, `LaunchTorpedo`) the code bears out. It
   left `$57C4`, `$5525`, `$586D`, and `$557C` alone: their object tables
   stayed empty in a minute of play, so the code that would show what they
-  are never ran. On the spot-check, a reviewer would keep all 18.
+  are never ran. 18 checked, all agree; 0 unchecked.
 - **Eliminator** (`elimin8c.cmd`; 119 turns, 4 min): all 17 listed routines,
   among them `RenderFrame` (confirmed with a trace from call to return),
   `DrawObject` (12,234 calls), `HitTestPlayerShip`, `PlayToneOnce` (a
@@ -78,9 +81,8 @@ Guard's 24) was checked against the code and agreed.
   print routine as Sea Dragon's), `SpawnObjects` and `SpawnWave`, and
   `ResetPlayerShip`. It marked three as weaker readings in their notes:
   `InitHumanoids` (a *Defender*-style name for objects enemies carry up),
-  and `ShotMoveUp`/`ShotMoveDown`. The four sampled routines agree with
-  their notes; on the spot-check, a reviewer would keep them all, perhaps renaming the three it
-  flagged.
+  and `ShotMoveUp`/`ShotMoveDown`. 4 checked against the disassembly, all
+  agree; 13 unchecked.
 - **Rear Guard** (`reargrd5.cmd`; 93 turns, 5 min): all 24 listed routines,
   from `PlayTone`, `SoundUpdate`, and `PrintToScreen` to `UpdateEnemies`,
   `SpawnEnemyBombs`, and `AnimateExplosions`, mostly from reading the code
@@ -88,8 +90,8 @@ Guard's 24) was checked against the code and agreed.
   past "1 or 2 Players?" it found on its own that this build writes `$03E3`,
   the Model I's keyboard driver, into the keyboard vector at `$4016`, so the
   Model III ROM's key wait never returns, and poked `$4016` to the Model III
-  driver at `$3024` in the running machine. The notes agree with the
-  four sampled routines; on the spot-check, a reviewer would keep the names, checking which terrain
+  driver at `$3024` in the running machine. 4 checked against the
+  disassembly, all agree; 20 unchecked. It said it guessed which terrain
   layer is the "slow" one.
 
 Two of the three answers pointed out that `coverage` counts only the loaded
@@ -124,8 +126,12 @@ MCP phase F, part 2: the release (`@fugloy/mcp`; MCP spec §9–§11):
   `tools/list` over a pipe, printing nothing but JSON-RPC. `publish` refuses
   an mcp release whose `@fugloy` dependencies are not on npm. Tags are
   `mcp-vX.Y.Z`. The core and emu sets are unchanged.
-- The README's setup starts from npm (`npx -y @fugloy/mcp` in `.mcp.json`
-  or `claude mcp add`), with the clone setup after it.
+- The README's setup describes the npm install (`npx -y @fugloy/mcp` in
+  `.mcp.json` or `claude mcp add`) for once the package is published, and
+  the clone setup to use until then.
+- `screen diff: "<snapshot>"` against a snapshot of another program adds the
+  line `diff` gives in that case (`Note: title belongs to RAIDERS and now to
+  SCORER.`), after its count line.
 - The restart round trip in `test/guardrails.test.js` closes both servers in
   `finally`, whatever failed, and prints each child's stderr when it fails.
 - Story 7 on three games, above.

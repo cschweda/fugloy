@@ -27,18 +27,26 @@ export default {
     const before = snap !== undefined ? snap.memory.subarray(0, 1024) : (session.screenBaseline ?? now);
     session.screenBaseline = now;
     if (diff === false) return screenText(now, columns32);
+    // A snapshot of another program: the same note diff gives, after the first line.
+    const current = session.program?.name ?? '(none)';
+    const theirs = snap === undefined ? current : (snap.program?.name ?? '(none)');
+    const note = theirs !== current ? [`Note: ${diff} belongs to ${theirs} and now to ${current}.`] : [];
+    const withNote = (/** @type {string} */ text) => {
+      const [first, ...rest] = text.split('\n');
+      return [first, ...note, ...rest].join('\n');
+    };
     // Cells are screen positions, so a snapshot taken in the other width has no cell-by-cell
     // diff: say so, and show each screen in its own width.
     if (snap !== undefined && snap.columns32 !== columns32) {
       const width = (/** @type {boolean} */ c32) => (c32 ? '32 columns' : '64 columns');
-      return [
+      return withNote([
         `The widths differ: snapshot ${JSON.stringify(snap.name)} was taken at ${width(snap.columns32)} and the screen is now ${width(columns32)}, so cells cannot be compared one by one. The two screens, each in its own width:`,
         `Snapshot ${JSON.stringify(snap.name)} (${width(snap.columns32)}):`,
         screenText(before, snap.columns32),
         `Now (${width(columns32)}):`,
         screenText(now, columns32),
-      ].join('\n');
+      ].join('\n'));
     }
-    return screenDiff(before, now, columns32);
+    return withNote(screenDiff(before, now, columns32));
   },
 };
