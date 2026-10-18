@@ -6,12 +6,13 @@ registers, type on its keyboard, read the screen, set breakpoints and
 watches, and record labels and coverage in the file the Fugløy disassembler
 reads. Version 0.1.0, not yet on npm: MCP phases A–C, built as the emulator's
 phase 4 (spec §11), with which an assistant can load a game, find its print
-routine, and label it on its own.
+routine, and label it on its own, then snapshots and search (D) and the
+resources and prompts (E).
 
 - Spec: [`docs/fugloy-mcp-spec.md`](../../docs/fugloy-mcp-spec.md) (the tools in §5, phases A–F in §11, the stories in §13)
 - Companion core spec: [`docs/fugloy-emu-spec.md`](../../docs/fugloy-emu-spec.md)
 - Label and coverage file it reads and writes: [`docs/label-format.md`](../../docs/label-format.md)
-- Story prompts: [`prompts/story-01.md`](../../prompts/story-01.md), [`prompts/story-07.md`](../../prompts/story-07.md)
+- Prompts, shipped in the package: [`prompts/`](prompts/) (story 1 in `story-01.md`; story 7 is `label-pass.md`)
 
 ## Set up
 
@@ -98,9 +99,45 @@ clean. The disassembler reads the same file:
 pnpm fugloy SEADRG01.CMD --labels SEADRG01.fugloy.json
 ```
 
+## Resources and prompts
+
+Resources give a client context without a tool call. Each is plain text,
+reading one changes nothing (reading `fugloy://screen` does not move the
+baseline `screen diff: true` compares with), and one that needs a program
+reads as the tool's sentence (`No program loaded; call load first.`) until
+there is one.
+
+| URI | Content |
+| --- | --- |
+| `fugloy://status` | What `status` shows |
+| `fugloy://screen` | The screen, as `screen` shows it |
+| `fugloy://labels` | The label table, as `labels` shows it |
+| `fugloy://program/manifest` | The manifest `load` returned |
+| `fugloy://rom/{model}/symbols` | The Model III ROM's entry points and variables, its memory-mapped regions, and its ports, one line each (`0033h  routine  $VDCHAR  display the character in A at the cursor`), from `@fugloy/disasm`'s cited symbol tables (167 entries); only `fugloy://rom/3/symbols` exists until emu phase 6 |
+
+Prompts are where the method lives; the tools stay plain. Each prompt's
+text is a Markdown file in [`prompts/`](prompts/), shipped in the package
+and read when the server starts; the server sends its `## Prompt` section
+with the arguments filled in. The same file is what you paste into Claude
+Code by hand, so the two never drift apart.
+
+| Prompt | Arguments | What it asks for |
+| --- | --- | --- |
+| `orient` | `path` | Load, run to the first screen, list the ROM routines it called (`callers` on the common ones, names from the symbols resource), `suggest` and `coverage`; a short report, no labels |
+| `find-writer` | `path`, `range` (`"3C00-3FFF"`) | A write watch on the range (the `watch` arguments worked out), one input if needed, then `hits`, `callers`, and `disasm` on the writing routine, labelled with evidence |
+| `label-pass` | `path`, `minCalls` (default 5) | Story 7: play a minute, then go down `suggest`'s list and label what can be justified, with notes; export the file |
+| `explain` | `addr` (any address spelling or a label) | Break there, step through, watch what it writes, and answer in prose with the trace as evidence |
+
+Prompt arguments are strings, as the protocol has them, and are checked like
+tool arguments: a missing or unknown one, a range or address the tools would
+not take, or a `minCalls` that is not a decimal count is refused with a
+sentence. `path` is passed on as given; `load` resolves it. A prompt file
+that is missing does not stop the server: the prompt is still listed, and
+asking for it says which file is missing.
+
 ## Story 1: find the print routine
 
-The prompt ([`prompts/story-01.md`](../../prompts/story-01.md)):
+The prompt ([`prompts/story-01.md`](prompts/story-01.md)):
 
 > Load examples/sea-dragon/seadrg01.cmd (a TRS-80 Model III game) and find the
 > routine that writes text to the screen. Label it.
@@ -143,7 +180,8 @@ synthetic program and byte-compares `test/golden/story-01.txt`, and
 
 ## Story 7: label a whole program
 
-The prompt ([`prompts/story-07.md`](../../prompts/story-07.md)) asks the
+The prompt, which the server also offers as its `label-pass` prompt
+([`prompts/label-pass.md`](prompts/label-pass.md)), asks the
 agent to play for a minute, take `suggest`'s list, investigate each routine,
 label what it can justify with notes, and export the file. The scripted form
 is `test/story-7-rom.test.js`, run where a ROM is configured:
@@ -181,6 +219,6 @@ to a tool's output: `FUGLOY_UPDATE_GOLDEN=1 pnpm vitest run packages/mcp/test/st
 
 ## Not yet
 
-Resources and prompts over the protocol (E); guardrail hardening and the npm release (F). The
+Guardrail hardening and the npm release (F). The
 dependencies on `@fugloy/emu`, `@fugloy/disasm`, and `@fugloy/z80` are
 `workspace:*`; `pnpm pack` rewrites them to the local versions.

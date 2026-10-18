@@ -116,6 +116,35 @@ MCP phase D, `search` and `callees` (`@fugloy/mcp`; MCP spec §5):
 - `poke`'s byte parsing moved to `args.js` for `search`; an empty hex string
   now says `bytes is empty` rather than `not hex pairs`.
 
+MCP phase E, resources, prompts, and the ROM symbols (`@fugloy/mcp`; MCP
+spec §6):
+
+- Resources, plain text, reading one changing nothing: `fugloy://status`,
+  `fugloy://screen` (which leaves `screen diff`'s baseline alone),
+  `fugloy://labels`, `fugloy://program/manifest` (the text `load` returned),
+  and `fugloy://rom/{model}/symbols`. One that needs a program reads as the
+  tool's sentence until one is loaded.
+- `fugloy://rom/3/symbols` is generated from `@fugloy/disasm`'s cited Model
+  III ROM and hardware tables, 167 lines of address (or range, or port),
+  kind, name, and purpose, such as `0033h routine $VDCHAR display the
+  character in A at the cursor`. Other models read as a sentence naming emu
+  phase 6. MCP spec §12's `@fugloy/rom-symbols` question is settled: no
+  separate package.
+- Prompts `orient {path}`, `find-writer {path, range}`, `label-pass {path,
+  minCalls?}`, and `explain {addr}`. Their texts are Markdown files in
+  `packages/mcp/prompts/`, shipped in the npm package and read at startup;
+  the server sends each file's `## Prompt` section with its placeholders
+  filled in. `find-writer` gets the range as `3C00h–3FFFh` with the `watch`
+  arguments worked out, and `explain` gets the address as the tools echo it,
+  labels included. Arguments are checked like a tool's and refused with
+  sentences; a missing prompt file does not stop the server, and asking for
+  that prompt names the file.
+- The story prompts moved from the root `prompts/` to `packages/mcp/prompts/`,
+  so each text has one copy: story 7's prompt is now `label-pass.md`, written
+  with `{path}` and `{minCalls}` (and the keys described for any game, Sea
+  Dragon's as the example), and `story-01.md` moved unchanged. The root
+  `prompts/README.md` points there.
+
 Emu phase 4 (`@fugloy/mcp` 0.1.0, MCP phases A–C; MCP spec §5, §11):
 
 - The stdio server (`bin/fugloy-mcp.js`, MCP SDK 1.32.0, zod 4.6.5, plain

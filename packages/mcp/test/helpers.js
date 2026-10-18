@@ -15,10 +15,10 @@ export function testConfig(over = {}) {
 
 /**
  * Connect a client to a fresh server.
- * @param {{ config?: object, session?: Session, tools?: object[] }} [opts]
+ * @param {{ config?: object, session?: Session, tools?: object[], maxToolInputElements?: number, promptsDir?: string }} [opts]
  */
-export async function connect({ config = testConfig(), session = new Session(config), tools, maxToolInputElements } = {}) {
-  const server = createServer({ config, session, ...(tools ? { tools } : {}), ...(maxToolInputElements === undefined ? {} : { maxToolInputElements }) });
+export async function connect({ config = testConfig(), session = new Session(config), tools, maxToolInputElements, promptsDir } = {}) {
+  const server = createServer({ config, session, ...(tools ? { tools } : {}), ...(maxToolInputElements === undefined ? {} : { maxToolInputElements }), ...(promptsDir === undefined ? {} : { promptsDir }) });
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'fugloy-mcp-test', version: '0.0.0' });
   await Promise.all([server.connect(serverSide), client.connect(clientSide)]);
