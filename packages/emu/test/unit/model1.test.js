@@ -3,7 +3,8 @@
  * memory map and RAM sizes, the ROM size and model checks, and the Model III left byte-identical
  * (against fixtures/synthetic/emu/model3-state.json, captured before the refactor). Synthetic
  * ROMs throughout; the real Model I and Model III ROMs, when fugloy.mcp.json names them, add the
- * recognition and mismatch checks.
+ * recognition and mismatch checks. Last, the Task 1 review's fixes: the save-state model sentence,
+ * and the committed pre-phase-6 Model III state restoring into a fresh Model III.
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -11,7 +12,8 @@ import { describe, expect, it } from 'vitest';
 import { CPU_CLOCK_HZ, Machine, ROM_HASHES, clockHz, restoreState, serializeState } from '../../src/index.js';
 import { MODELS, romModelProblem } from '../../src/machine/models.js';
 import { configuredRom } from '../rom.js';
-import { model3SampleText } from './model3-state-sample.js';
+import { sha256Hex } from '../../src/machine/sha256.js';
+import { model3SampleRom, model3SampleText } from './model3-state-sample.js';
 
 /** A 12K Model I ROM with `bytes` at $0000 (and `at` maps more addresses to bytes). */
 function rom12(bytes = [0x76], at = {}) {
@@ -234,5 +236,32 @@ describe('the Model III is unchanged', () => {
     if (committed !== model3SampleText()) {
       throw new Error(`the synthetic Model III session no longer ends in the state committed in ${FIXTURE}; the Model III must stay byte-identical (rewrite the fixture with node packages/emu/scripts/write-model3-state-fixture.mjs only for an intended change to the Model III)`);
     }
+  });
+});
+
+describe('save states across models (Task 1 review)', () => {
+  it('a Model III state restored into a Model I is refused, naming both models', () => {
+    const state = serializeState(new Machine({ roms: { level2: new Uint8Array(0x3800) } }).system);
+    expect(() => restoreState(model1().system, state)).toThrow(/^This is a Model III save state; the machine is a Model I, and a state restores only into the model that saved it\.$/);
+  });
+
+  it('a Model I state restored into a Model III keeps the Model III sentence', () => {
+    const state = serializeState(model1().system);
+    expect(() => restoreState(new Machine({ roms: { level2: new Uint8Array(0x3800) } }).system, state)).toThrow(/^Not a TRS-80 Model III save state$/);
+    expect(() => restoreState(model1().system, { machine: 'toString' })).toThrow(/^Not a TRS-80 Model I save state$/);
+  });
+
+  it('the committed pre-phase-6 Model III state restores into a fresh Model III', () => {
+    const FIXTURE = fileURLToPath(new URL('../../../../fixtures/synthetic/emu/model3-state.json', import.meta.url));
+    const { state, memory64k, screen } = JSON.parse(readFileSync(FIXTURE, 'utf8'));
+    const m = new Machine({ roms: { level2: model3SampleRom() } });
+    restoreState(m.system, state);
+    expect(serializeState(m.system)).toEqual(state);
+    expect(sha256Hex(m.mem.read(0, 0x10000))).toBe(memory64k);
+    expect(m.video.text()).toEqual(screen);
+    // and it runs on: the session's RTC handler keeps counting ticks at $4101
+    const ticks = m.mem.read(0x4101, 1)[0];
+    m.run({ cycles: 2027520 / 10 });
+    expect((m.mem.read(0x4101, 1)[0] - ticks) & 0xff).toBe(3);
   });
 });

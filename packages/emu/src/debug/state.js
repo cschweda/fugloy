@@ -11,6 +11,10 @@
  */
 
 import { DiskImage } from "../devices/disk-image.js";
+import { MODELS } from "../machine/models.js";
+
+/** Model names by save-state machine id ("trs80-model1": "Model I"). */
+const MODELS_BY_STATE = Object.fromEntries(Object.values(MODELS).map((d) => [d.stateMachine, d.name]));
 
 export const STATE_VERSION = 1;
 /** The Model III's machine id; a state carries its system's model's (`model.stateMachine`, models.js). */
@@ -161,14 +165,20 @@ export function serializeState(system) {
 export function restoreState(system, state) {
   const machine = system.model?.stateMachine ?? STATE_MACHINE;
   if (!state || state.machine !== machine) {
-    throw new Error(`Not a TRS-80 ${system.model?.name ?? "Model III"} save state`);
+    const name = system.model?.name ?? "Model III";
+    const from = typeof state?.machine === "string" && Object.hasOwn(MODELS_BY_STATE, state.machine) ? MODELS_BY_STATE[state.machine] : undefined;
+    // A state of a model the emulator builds says which; anything else keeps the old sentence.
+    if (from !== undefined && name !== "Model III") {
+      throw new Error(`This is a ${from} save state; the machine is a ${name}, and a state restores only into the model that saved it.`);
+    }
+    throw new Error(`Not a TRS-80 ${name} save state`);
   }
   if (state.version !== STATE_VERSION) {
     throw new Error(`Unsupported save-state version ${state.version}`);
   }
   const ram = fromBase64(state.memory.ram);
   if (ram.length !== system.memory.ram.length) {
-    throw new Error(`This ${system.model.name} save state has ${ram.length / 1024}K of RAM; the machine has ${system.memory.ram.length / 1024}K, and a state restores only into a machine with the same RAM`);
+    throw new Error(`This ${system.model?.name ?? "Model III"} save state has ${ram.length / 1024}K of RAM; the machine has ${system.memory.ram.length / 1024}K, and a state restores only into a machine with the same RAM`);
   }
 
   const cpu = system.cpu;
