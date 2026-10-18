@@ -366,3 +366,49 @@ describe('the keyboard on the Model I', () => {
     expect(m.cpu.flags.z).toBe(false);
   });
 });
+
+describe('Task 2 review fixes', () => {
+  // LD SP,8000H / DI / wait for (5100H) <> 0 / LD A,1 / LD (37E1H),A / LD A,(37E0H) / LD (5000H),A / HALT
+  const WRITES_37E1 = [0x31, 0x00, 0x80, 0xf3, 0x3a, 0x00, 0x51, 0xb7, 0x28, 0xfa, 0x3e, 0x01, 0x32, 0xe1, 0x37, 0x3a, 0xe0, 0x37, 0x32, 0x00, 0x50, 0x76];
+  const rom = (bytes) => rom12(bytes);
+
+  it('a watched write to $37E1 leaves the clock bit: $37E0 still reads $80, and the hit\'s old value is the peeked latch', () => {
+    const m = new Machine({ model: 1, roms: { level2: rom(WRITES_37E1) } });
+    m.run({ cycles: 50000 }); // the 40 Hz clock has raised its bit (due at 44,352)
+    const id = m.debug.watch(0x37e1, 1, { write: true });
+    m.mem.write(0x5100, [1]);
+    m.run({ until: 'halt', cycles: 10000 });
+    expect(m.mem.read(0x5000, 1)[0]).toBe(TIMER_BIT);
+    expect(m.debug.hits(id)).toMatchObject([{ kind: 'write', addr: 0x37e1, value: 1, prev: TIMER_BIT }]);
+  });
+
+
+  it('the debug memory view agrees with m.mem.read at $37E0-$37EF', () => {
+    const m = new Machine({ model: 1, roms: { level2: rom([0xf3, 0x18, 0xfe]) } });
+    m.run({ cycles: 50000 });
+    const view = m.system.memory.getMemoryView();
+    expect([...view.subarray(0x37e0, 0x37f0)]).toEqual([...m.mem.read(0x37e0, 16)]);
+    expect(view[0x37e0]).toBe(m.system.io.latch.bits);
+  });
+
+  it('a Model I state restores only into a machine with the same Expansion Interface and lowercase fitting', () => {
+    const level2 = rom([0xf3, 0x18, 0xfe]);
+    const make = (opts) => new Machine({ model: 1, roms: { level2 }, ...opts });
+    const fitted = make({}).debug.snapshot();
+    const bare = make({ expansion: false }).debug.snapshot();
+    const lower = make({ lowercase: true }).debug.snapshot();
+    expect(() => make({ expansion: false }).debug.restore(fitted)).toThrow(
+      'This Model I save state was saved with the Expansion Interface; the machine has none, and a state restores only into a machine fitted the same way (expansion: true).'
+    );
+    expect(() => make({}).debug.restore(bare)).toThrow(
+      'This Model I save state was saved without the Expansion Interface; the machine has one, and a state restores only into a machine fitted the same way (expansion: false).'
+    );
+    expect(() => make({}).debug.restore(lower)).toThrow(
+      'This Model I save state was saved with the lowercase modification; the machine has none, and a state restores only into a machine fitted the same way (lowercase: true).'
+    );
+    expect(() => make({ lowercase: true }).debug.restore(fitted)).toThrow(/saved without the lowercase modification; the machine has it/);
+    for (const [opts, snap] of /** @type {const} */ ([[{}, fitted], [{ expansion: false }, bare], [{ lowercase: true }, lower]])) {
+      expect(() => make(opts).debug.restore(snap)).not.toThrow();
+    }
+  });
+});

@@ -12,8 +12,9 @@
  *     0x0000-0x2FFF  12K Level II ROM (write-protected)
  *     0x3000-0x37DF  nothing: reads float to 0xFF, writes are lost
  *     0x37E0-0x37EF  the Expansion Interface (IOSystem.readExpansion and
- *                    writeExpansion; the interrupt latch at 0x37E0); without
- *                    it, nothing, as 0x3000-0x37DF
+ *                    writeExpansion: the interrupt latch at 0x37E0, the drive
+ *                    select at 0x37E1, the printer at 0x37E8, the WD1771 at
+ *                    0x37EC-0x37EF); without it, nothing, as 0x3000-0x37DF
  *     0x3800-0x3BFF  keyboard matrix, as on the Model III
  *     0x3C00-0x3FFF  1K video RAM, seven bits wide (below)
  *     0x4000-...     4, 16, 32, or 48K RAM; above it reads float to 0xFF
@@ -154,7 +155,7 @@ export class MemorySystem {
    */
   peekByte(address) {
     address = address & 0xffff;
-    if (address >= EXPANSION_BASE && address < EXPANSION_LIMIT && address >= this.romLimit && this.expansion !== null) {
+    if (address >= EXPANSION_BASE && address < EXPANSION_LIMIT && this.expansion !== null) {
       return this.expansion.peekExpansion(address);
     }
     return this.readByte(address);
@@ -280,6 +281,10 @@ export class MemorySystem {
     view.set(this.rom.subarray(0, this.romLimit), 0);
     view.set(this.videoRam, KEYBOARD_LIMIT);
     view.set(this.ram, RAM_BASE);
+    // The Model I's Expansion Interface, peeked, as m.mem.read shows it
+    if (this.expansion !== null) {
+      for (let a = EXPANSION_BASE; a < EXPANSION_LIMIT; a++) view[a] = this.expansion.peekExpansion(a);
+    }
     return view;
   }
 }

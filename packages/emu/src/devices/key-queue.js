@@ -82,9 +82,10 @@ const KDCB = 0x4015;
  * keyboard driver `KBDDRV` ($03E3, the KDCB's driver address at $4016), whose path for a key ends
  * with `CP $01` at $0453 (the BREAK test) and `RET NZ`, or for BREAK `RST 28H` (a RET under
  * Level II, $400C) and `RET`; `_KEY` at $0049 is `CALL _KBD / OR A / RET NZ / JR _KEY`. So the
- * stand-in is the same on both models (phase 6 plan, Ruling 6). It also does what the CPU does at the end of any instruction: clears `afterPrefix`
- * and counts a pending EI down. It costs what a RET costs, 10 T-states and one refresh-counter step; the
- * routine's RAM side effects (its key-rollover buffer at $4036, the repeat counters) are not made.
+ * stand-in is the same on both models (phase 6 plan, Ruling 6). It also does what the CPU does at
+ * the end of any instruction: clears `afterPrefix` and counts a pending EI down. It costs what a
+ * RET costs, 10 T-states and one refresh-counter step; the routine's RAM side effects (its
+ * key-rollover buffer at $4036, the repeat counters) are not made.
  * @param {import('../cpu/z80cpu.js').Z80CPU} cpu
  * @param {number} pc
  * @param {number} code

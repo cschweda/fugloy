@@ -185,8 +185,9 @@ export class Machine {
    * events now due, then, with a fed character waiting and the PC at the ROM's keyboard scan
    * ($002B) or wait-for-key ($0049), return from that routine with the character as the ROM
    * would (spec §6, "Keyboard-scan hook"). The Model I Level II ROM has the same two entries with
-   * the same contract (romKeyReturn), so the hook serves both models. That return stands in for the boundary's instruction,
-   * as one RET (10 T-states); a halted CPU idles instead, as it does for any instruction, so the next boundary is at the caller's return address.
+   * the same contract (romKeyReturn), so the hook serves both models. That return stands in for
+   * the boundary's instruction, as one RET (10 T-states); a halted CPU idles instead, as it does
+   * for any instruction, so the next boundary is at the caller's return address.
    * Between draining and the keyboard hook, a breakpoint hit (only while `debug.active`, and
    * never in `step`) stops the boundary: nothing executes. Last, with memory accesses watched or
    * hooked, the debugger is told an instruction starts at PC, so its fetches are not taken for

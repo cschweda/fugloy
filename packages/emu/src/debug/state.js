@@ -135,8 +135,10 @@ export function serializeState(system) {
     // restore neither fires it again nor loses one still pending.
     nmiWasPending: system._nmiWasPending,
   };
-  // The Model I's Expansion Interface latch at $37E0 (absent from Model III states, which stay as they were)
+  // The Model I's Expansion Interface latch at $37E0 (absent from Model III states, which stay as
+  // they were, and from a Model I's without the interface) and its lowercase modification
   if (io.latch) state.latch = io.latch.bits;
+  if (system.model?.id === 1) state.lowercase = !!system.lowercase;
   for (const key of CPU_SCALARS) state.cpu[key] = cpu[key];
   for (const key of IO_SCALARS) state.io[key] = io[key];
   for (const key of FDC_SCALARS) state.fdc[key] = fdc[key];
@@ -181,6 +183,20 @@ export function restoreState(system, state) {
   const ram = fromBase64(state.memory.ram);
   if (ram.length !== system.memory.ram.length) {
     throw new Error(`This ${system.model?.name ?? "Model III"} save state has ${ram.length / 1024}K of RAM; the machine has ${system.memory.ram.length / 1024}K, and a state restores only into a machine with the same RAM`);
+  }
+
+  // A Model I state restores only into a Model I fitted the same way: the Expansion Interface
+  // (its latch, its disk controller) and the lowercase modification (what video RAM holds).
+  if (system.model?.id === 1) {
+    const saved = Object.hasOwn(state, "latch");
+    const fitted = system.io.latch !== null;
+    if (saved !== fitted) {
+      throw new Error(`This Model I save state was saved ${saved ? "with" : "without"} the Expansion Interface; the machine has ${fitted ? "one" : "none"}, and a state restores only into a machine fitted the same way (expansion: ${saved}).`);
+    }
+    const lowercase = state.lowercase ?? false;
+    if (lowercase !== !!system.lowercase) {
+      throw new Error(`This Model I save state was saved ${lowercase ? "with" : "without"} the lowercase modification; the machine has ${system.lowercase ? "it" : "none"}, and a state restores only into a machine fitted the same way (lowercase: ${lowercase}).`);
+    }
   }
 
   const cpu = system.cpu;
