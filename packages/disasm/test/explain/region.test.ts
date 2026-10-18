@@ -23,21 +23,21 @@ const must = (r: DataRegion | null): DataRegion => {
 describe('dataRegion on Sea Dragon (seadrg01.hints)', () => {
   const r = must(dataRegion(sea, 0x7dd5));
 
-  it('$7DD5 belongs to DATA_7399, $7399-$7FFF (file $7C1A-$8880, run at $497F on)', () => {
-    expect(r).toMatchObject({ start: 0x7399, end: 0x7fff, name: 'DATA_7399' });
-    expect(text(r)[0]).toBe('This row is part of DATA_7399, 3,175 bytes of data from $7399 to $7FFF.');
+  it('$7DD5 belongs to CAVERN_MAP (DATA_7399 before the hints named it), $7399-$7FFF (file $7C1A-$8880, run at $497F on)', () => {
+    expect(r).toMatchObject({ start: 0x7399, end: 0x7fff, name: 'CAVERN_MAP' });
+    expect(text(r)[0]).toBe('This row is part of CAVERN_MAP, 3,175 bytes of data from $7399 to $7FFF.');
   });
 
   it('its users are the two loads of its address', () => {
     expect(r.users).toEqual([
-      { addr: 0x4c42, text: 'LD HL,DATA_7399' },
-      { addr: 0x5fb6, text: 'LD HL,DATA_7399' },
+      { addr: 0x4c42, text: 'LD HL,CAVERN_MAP' },
+      { addr: 0x5fb6, text: 'LD HL,CAVERN_MAP' },
     ]);
   });
 
-  it('the address is kept in DATA_624A, stored at $4C45 and read back at $4F0C', () => {
-    expect(r.pointers).toEqual([{ variable: 0x624a, name: 'DATA_624A', storedAt: 0x4c45, readers: [0x4f0c] }]);
-    expect(text(r).join(' ')).toContain('kept in DATA_624A');
+  it('the address is kept in MAP_PTR (DATA_624A), stored at $4C45 and read back at $4F0C', () => {
+    expect(r.pointers).toEqual([{ variable: 0x624a, name: 'MAP_PTR', storedAt: 0x4c45, readers: [0x4f0c] }]);
+    expect(text(r).join(' ')).toContain('kept in MAP_PTR');
   });
 
   it('the loop at L5FB9 reads it forward, and AND 0F0H at $5FC5 splits off bytes $00-$0F', () => {

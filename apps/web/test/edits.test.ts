@@ -11,10 +11,17 @@ import { createEditing } from '../app/composables/useEditing';
 const repo = (path: string): string => fileURLToPath(new URL(`../../../${path}`, import.meta.url));
 const MODEL3 = { machine: 3, dos: 'trsdos' } as const;
 
-/** seadrg01 with its committed hints: the game relocated from $5200 to $497F, one block. */
+/**
+ * seadrg01 with its committed hints, less their names and notes: the game relocated from $5200 to $497F, one block.
+ * The annotations are dropped so these edits start from a hint file that names and notes nothing.
+ */
 function seaDragon(): Session {
   const s = openProgram(new Uint8Array(readFileSync(repo('examples/sea-dragon/seadrg01.cmd'))), { name: 'seadrg01.cmd', selection: MODEL3 });
-  return withHintText(s, readFileSync(repo('examples/sea-dragon/seadrg01.hints'), 'utf8'), 'seadrg01.hints');
+  const text = readFileSync(repo('examples/sea-dragon/seadrg01.hints'), 'utf8')
+    .split('\n')
+    .filter((l) => !/^block \d+:\$[0-9A-F]+ (name|note)\b/.test(l))
+    .join('\n');
+  return withHintText(s, text, 'seadrg01.hints');
 }
 
 /** Applies an edit that must succeed and returns the re-analyzed session. */

@@ -22,7 +22,16 @@ the Technical details and About pages with full SEO. Design:
 `docs/superpowers/plans/2026-10-17-phase4-web-workbench.md`. The v1
 done-criterion is met locally (asylum16 annotated and saved in Chromium under
 Model I, `apps/web/test/e2e/asylum.spec.ts`), and CI runs the browser flow on
-Sea Dragon. Merged to `main` 2026-10-17. Next: deploy to `app.fugloy.dev` on Netlify (ask
+Sea Dragon. Merged to `main` 2026-10-17. Added after the merge, on the
+`explain-tab` branch: the **Explain tab** (design
+`docs/superpowers/specs/2026-10-17-explain-tab-design.md`, plan
+`docs/superpowers/plans/2026-10-17-explain-tab.md`; engine in
+`packages/disasm/src/explain/`, UI `apps/web/app/components/side/ExplainTab.vue`),
+which explains the clicked line in plain English from proven values, with
+previews, patterns, the routine summary, and data regions with a picture;
+**block comments** (the hint file's `note` directive, the `:` key); and an
+annotated Sea Dragon (`examples/sea-dragon/seadrg01.hints`, names and notes
+for its main routines and data). Next: deploy to `app.fugloy.dev` on Netlify (ask
 the user before the first deploy and before any DNS change), and release v1
 with phases 3 and 4 (see `[Unreleased]` in `CHANGELOG.md`); emu phase 2 and
 the MCP server resume after v1. Phase 3 (symbol tables: eight cited JSON
@@ -88,7 +97,16 @@ phase 1 as v0.1.0.
    publish. A starts after emu phase 0; B and C need emu phase 3.
 
 The plan's phase 5 (assembler and IDE) is not placed in this sequence: it comes
-after v1 and needs phases 3 and 4 and emu phases 2–3. When phase 4 builds the
+after v1 and needs phases 3 and 4 and emu phases 2–3. Phase 6, **Learn assembly
+with Fugløy** (requested 2026-10-17), follows phase 5: an introduction to
+assembly language for non-programmers, not only retro fans, on the small and
+straightforward Z80, with instant feedback (Explain's tutor voice on each line
+written, the assembler and emulator running the code) and a tutorial that
+builds a Space Invaders-style game from a blank page (a base along the bottom,
+a shot going straight up, invaders marching left and right and inching down,
+as Big Five's Super Nova did), opening the public-domain games side by side.
+It needs phase 5 and emu phases 2–3; audience, lesson format, and how much
+TRS-80 to hide are decided at design time. No estimate yet. When phase 4 builds the
 site, it gets a "technical details" page carrying the interactive explainer of
 how Fugløy was built (dark, infographic, many examples, written for a curious
 student or retro enthusiast; requested 2026-10-16). Its source is

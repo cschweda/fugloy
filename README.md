@@ -304,7 +304,10 @@ game ships with Fugløy in [`examples/sea-dragon/`](examples/sea-dragon/)):
 Put those two lines under the skeleton that `--write-hints` writes, as
 [`seadrg01.hints`](examples/sea-dragon/seadrg01.hints) does, and pass the
 file with `--hints`: the game then decodes at `$497F`, 45% of its bytes as
-code, and the zmac output still assembles to the identical memory image.
+code, and the zmac output still assembles to the identical memory image. The
+committed file goes on to name and comment the game's main routines and data
+(`MAIN_LOOP`, `DRAW_CAVERN`, `CAVERN_MAP`, …), as an example of an annotated
+listing.
 
 ### Hint files
 

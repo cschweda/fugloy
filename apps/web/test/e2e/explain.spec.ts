@@ -55,7 +55,7 @@ test('a table name in a sentence opens the Symbol tab; an address in one moves t
   await page.getByRole('tab', { name: 'Explain' }).click();
   await page.keyboard.press('ArrowDown');
   await (await row(page, 0x49ab)).click();
-  // "$628F (DATA_628F)": one link for the address, not two.
+  // "$628F (MAP_CHARS)": one link for the address, not two.
   await expect(page.getByTestId('explain-lead').getByRole('button')).toHaveText(['$628F']);
   await page.getByTestId('explain-lead').getByRole('button', { name: '$628F' }).click();
   await cursorAt(page, 0x628f);
@@ -77,7 +77,7 @@ test('with Program showing, ArrowDown moves the cursor and leaves Program showin
 test('a preview click moves the cursor to its address', async ({ page }) => {
   await open(page);
   await (await row(page, 0x49ab)).click();
-  const preview = page.getByRole('button', { name: '$628F DATA_628F', exact: true });
+  const preview = page.getByRole('button', { name: '$628F MAP_CHARS', exact: true });
   await expect(preview).toContainText('628F  83 87 8B 8C');
   await preview.click();
   await cursorAt(page, 0x628f);
@@ -104,11 +104,11 @@ test('a click on a block-comment row says it is your block comment', async ({ pa
   await expect(page.getByTestId('explain-lead')).not.toContainText('block comment');
 });
 
-test('a data row shows its region, DATA_7399, and a picture with width buttons', async ({ page }) => {
+test('a data row shows its region, CAVERN_MAP (DATA_7399 before the hints named it), and a picture with width buttons', async ({ page }) => {
   await open(page);
   await (await row(page, 0x7dd5)).click();
   const region = page.getByTestId('explain-region');
-  await expect(region).toContainText('DATA_7399');
+  await expect(region).toContainText('CAVERN_MAP');
   await expect(region).toContainText('$7399–$7FFF');
   const canvas = region.getByTestId('region-canvas');
   await expect(canvas).toBeVisible();

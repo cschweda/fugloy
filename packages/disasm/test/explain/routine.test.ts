@@ -22,9 +22,9 @@ const must = (r: RoutineSummary | null): RoutineSummary => {
 };
 
 describe('summarizeRoutine on Sea Dragon', () => {
-  it('SUB_6140: starts at $6140, loops with DJNZ, called from $4A96 and $4AA1', () => {
+  it('PRINT_TEXT (SUB_6140 before the hints named it): starts at $6140, loops with DJNZ, called from $4A96 and $4AA1', () => {
     const r = must(summarizeRoutine(sea, 0x6146));
-    expect(r).toMatchObject({ start: 0x6140, name: 'SUB_6140', instructions: 11, bytes: 15, truncated: false });
+    expect(r).toMatchObject({ start: 0x6140, name: 'PRINT_TEXT', instructions: 11, bytes: 15, truncated: false });
     const t = text(r);
     expect(t).toMatch(/DJNZ/);
     expect(t).toMatch(/called from/);
@@ -34,7 +34,7 @@ describe('summarizeRoutine on Sea Dragon', () => {
     expect(t).not.toMatch(/screen/);
   });
 
-  it('SUB_6212: writes port $FF (CASSETTE)', () => {
+  it('TONE (SUB_6212 before the hints named it): writes port $FF (CASSETTE)', () => {
     const r = must(summarizeRoutine(sea, 0x6212));
     expect(r.start).toBe(0x6212);
     expect(text(r)).toMatch(/writes to port \$FF \(CASSETTE\)/);
@@ -71,7 +71,7 @@ describe('summarizeRoutine on Sea Dragon', () => {
     expect(t).toContain('It fills 1,024 bytes ($0400) from $3C00 (VIDEO, the screen, row 0, column 0) with $80.');
   });
 
-  it('SUB_4B5E: a screen range, keyboard reads (each address once) and a ROM routine with its purpose', () => {
+  it('TITLE_FRAME (SUB_4B5E before the hints named it): a screen range, keyboard reads (each address once) and a ROM routine with its purpose', () => {
     const r = must(summarizeRoutine(sea, 0x4b5e));
     const t = text(r);
     expect(t).toMatch(/from row 13, column 24 to row 13, column 38 \(at \$4BDD\)/);
@@ -80,7 +80,7 @@ describe('summarizeRoutine on Sea Dragon', () => {
     expect(t.match(/\$3810 \(KEYBOARD/g)).toHaveLength(1);
   });
 
-  it('SUB_5055: the self-modified JP at $509A is an exit to an unproven address, not a return', () => {
+  it('DRAW_PLAYER (SUB_5055 before the hints named it): the self-modified JP at $509A is an exit to an unproven address, not a return', () => {
     const r = must(summarizeRoutine(sea, 0x5055));
     const t = text(r);
     expect(t).toMatch(/It ends by jumping to an address the program rewrites \(the jump at \$509A\)\./);

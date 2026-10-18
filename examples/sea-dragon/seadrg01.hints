@@ -3,10 +3,291 @@
 #
 # The file loads the game at $5200 and starts at a 15-byte stub at $8881 that copies it down:
 #   LD HL,5200H / LD DE,497FH / LD BC,3681H / LDIR / JP 497FH
-# The two lines at the end are the ones the listing header proposes. With them the game
-# is analyzed at $497F, where it runs, and the zmac output still rebuilds the same image.
+# The two lines after the block line are the ones the listing header proposes. With them
+# the game is analyzed at $497F, where it runs, and the zmac output still rebuilds the
+# same image.
+#
+# The names and notes after them annotate the game: its main routines, variables and data,
+# researched with the workbench's Explain tab and the listing. Offsets count from $497F,
+# where the game runs (block 0:$0000 is $497F; the loader at $8881 is block 0:$3681).
+# What the code shows is stated plainly; what is a reading of it says "probably".
 fugloy-hints 1
 program sha256 8fa50e79d9f699e23f5daf41c654fc82c288e4df8816d5aaebd709bce43ed2af
 block 0 length $3690 hash d2d65cca12ac798d    # start $5200
 block 0:$0000 relocate $497F $3681
 block 0:$0000 entry
+
+# The title screen
+block 0:$0000 note Start of the game, and where it comes back to after each game
+block 0:$0000 note (GAME_OVER), or when SHIFT and BREAK are held during play. Interrupts
+block 0:$0000 note off, the stack at $4495, just under the off-screen buffer at $4529,
+block 0:$0000 note and the title animation's counters reset.
+block 0:$001B note Screen setup: clear the screen (SUB_4B9E), set the video and cassette
+block 0:$001B note modes through port $EC (MODEPORT), draw the sea floor along rows 14
+block 0:$001B note and 15 (the loop at L49B1), then draw two shapes straight onto the
+block 0:$001B note screen with DRAW_SHAPE: the ones DATA_7196 and DATA_7198 point to, at
+block 0:$001B note row 11, column 5 and row 12, column 50.
+block 0:$0032 note One byte of DATA_6602 per column: its low bits pick a character from
+block 0:$0032 note MAP_CHARS, and bit 7 moves it down from row 14 to row 15. The index is
+block 0:$0032 note stored into the instruction at $49BF (DATA_49C1), so LD A,(IY+n) reads
+block 0:$0032 note a different character each time: the program rewrites its own code.
+block 0:$006F name TITLE_LOOP
+block 0:$006F note The title loop. Each pass is one frame of the title animation: clear
+block 0:$006F note nine rows of the off-screen buffer (667 bytes from $4529), draw into
+block 0:$006F note it (SUB_4A0A, SUB_4AA5 and SUB_4B1F), and let TITLE_FRAME show it and
+block 0:$006F note look for ENTER. TITLE_FRAME leaves the loop by jumping into
+block 0:$006F note START_GAME; this loop itself never ends.
+block 0:$008B note Probably the first part of the title animation. From frame 14
+block 0:$008B note (DATA_65FB counts frames) it draws shapes at DATA_6600, among them the
+block 0:$008B note sub (the first drawing DATA_671E points to), one column further right
+block 0:$008B note each frame. Its tone (TONE, pitch in DATA_5B3D) falls as it goes. At
+block 0:$008B note frame $5D it prints the credits, BY: Wayne Westmoreland & Terry
+block 0:$008B note Gilman, and the copyright line.
+block 0:$0126 note Probably the second part of the title animation: a shape climbs the
+block 0:$0126 note screen one pixel row at a time. A character cell is three pixels high,
+block 0:$0126 note so smooth movement needs three drawings of the shape, one per pixel
+block 0:$0126 note offset: DATA_718E points to them, DATA_65FC picks one, and after the
+block 0:$0126 note third the shape moves up a whole row (74 bytes of buffer, at $4AFD).
+block 0:$0126 note Its tone rises (pitch in DATA_5B3C).
+block 0:$01A0 note Probably the waves on the surface: an 8-character pattern repeated
+block 0:$01A0 note across buffer row 4 (from $4656). It swaps between DATA_65EF and
+block 0:$01A0 note DATA_65F3 every eight frames (bit 3 of DATA_65FD), so the waves move,
+block 0:$01A0 note and it merges each character with what is already there: AND keeps the
+block 0:$01A0 note cell's other pixels, OR adds the wave.
+block 0:$01DF name TITLE_FRAME
+block 0:$01DF note Shows a title frame: copies nine rows of the off-screen buffer to the
+block 0:$01DF note top of the screen, 64 of each row's 74 bytes (the buffer has five
+block 0:$01DF note spare columns on each side). Late in the animation it prints Hit
+block 0:$01DF note <ENTER> to Begin, alternating with a copy that has the word <ENTER>
+block 0:$01DF note blanked, so the word blinks. Then it watches the keyboard ($3840) for
+block 0:$01DF note ENTER for a moment and returns if none comes.
+block 0:$021F note Clears the screen: all 1,024 bytes of video memory ($3C00-$3FFF) are
+block 0:$021F note set to $80, the graphics character with no pixels lit.
+
+# The game
+block 0:$022D name START_GAME
+block 0:$022D note ENTER was pressed. POP AF drops TITLE_FRAME's return address, so the
+block 0:$022D note title loop is left for good and the game starts here.
+block 0:$022D note
+block 0:$022D note It asks 1 or 2 Players? (keys 1 and 2, keyboard row $3810), then, for
+block 0:$022D note each player, Skill level (0=Novice 1=Expert). An Expert scores double
+block 0:$022D note (ADD_SCORE) and gets a shorter FRAME_DELAY, so the game runs faster:
+block 0:$022D note $0302 against the Novice's $0C02.
+block 0:$02BE note The first player's game: CUR_PLAYER is 1, MAP_PTR starts at the
+block 0:$02BE note beginning of CAVERN_MAP, SCORE and DISTANCE are 0, SHIPS is 4, and the
+block 0:$02BE note bottom row gets the status line (STATUS_LINE).
+block 0:$0339 name MAIN_LOOP
+block 0:$0339 note The main loop: one pass is one frame of play. SHIFT and BREAK go back
+block 0:$0339 note to the title; SHIFT and S pause the game until ENTER.
+block 0:$0339 note
+block 0:$0339 note Each frame draws the cavern (DRAW_CAVERN), the objects in it
+block 0:$0339 note (UPDATE_OBJECTS, twice), the player's sub (DRAW_PLAYER), the shots
+block 0:$0339 note (SUB_5B42) and the water surface (AIR_SUPPLY), reads the controls
+block 0:$0339 note (MOVE_PLAYER), and copies 15 rows of the buffer to the screen (L4DA3).
+block 0:$0339 note NEXT_NOTE runs between the steps, so the sound plays a note at a time
+block 0:$0339 note while the frame is drawn.
+block 0:$0368 note At DISTANCE $06D9 (1,753 columns) the objects switch to the shapes at
+block 0:$0368 note DATA_6766 and DATA_6256 is set: probably the end of the cavern.
+block 0:$0424 note Copies 15 rows of 64 from the off-screen buffer to the screen. Drawing
+block 0:$0424 note in a buffer and copying it whole means the player never sees a
+block 0:$0424 note half-drawn frame.
+block 0:$0461 note The air gauge: AIR is drawn as a bar along the bottom row, from column
+block 0:$0461 note 16, two units to a character ($8C, or $84 for the half). When AIR is 0
+block 0:$0461 note the sub is lost (PLAYER_HIT).
+block 0:$04D2 note The frame delay: a count of FRAME_DELAY / 2, shorter for an Expert.
+block 0:$04D2 note While it runs, letting go of SPACE (bit 7 of $3840) clears DATA_625E,
+block 0:$04D2 note so the fire key has to be pressed again for each shot.
+block 0:$0551 name DRAW_CAVERN
+block 0:$0551 note Draws the cavern into the off-screen buffer. It clears the buffer
+block 0:$0551 note (1,110 bytes from $4529: 15 rows of 74), then reads 64 columns of
+block 0:$0551 note CAVERN_MAP from MAP_PTR and puts each byte's character on its row,
+block 0:$0551 note using ROW_OFFSETS for where each row starts.
+block 0:$0551 note
+block 0:$0551 note On the way it notes where the water surface starts and ends (DATA_624C
+block 0:$0551 note and DATA_624E) for AIR_SUPPLY. Then it moves MAP_PTR on one column
+block 0:$0551 note (most frames), adds 1 to DISTANCE, and lights the bottom pixels of
+block 0:$0551 note buffer row 14 (OR $B0 in the loop at L4FB3): the sea floor.
+block 0:$066B name AIR_SUPPLY
+block 0:$066B note Probably the water surface and the air supply. It draws the surface
+block 0:$066B note ($8C, every other column) on the row the map gives (DATA_6250), from
+block 0:$066B note DATA_624C to DATA_624E. If the line runs into a full block ($BF),
+block 0:$066B note DATA_625D is set: the sub is probably at the surface. Then AIR refills
+block 0:$066B note by one a frame, up to $40, and MOVE_PLAYER will not let the sub climb.
+block 0:$066B note Under water, AIR drops by one every fifth frame (DATA_6260 counts 0 to
+block 0:$066B note 4).
+block 0:$06D6 name DRAW_PLAYER
+block 0:$06D6 note Draws the player's sub into the buffer at PLAYER_POS, on character row
+block 0:$06D6 note DATA_6254. DATA_671E holds three drawings, one per pixel row
+block 0:$06D6 note (DATA_6253 is 0-2), so the sub moves up and down a pixel at a time.
+block 0:$06D6 note While DATA_6253 has bit 7 set, the sub is exploding, and the frames at
+block 0:$06D6 note DATA_68A9 are drawn instead.
+block 0:$06D6 note
+block 0:$06D6 note MAIN_LOOP calls it twice a frame and rewrites the JP at $509A before
+block 0:$06D6 note each call. First to L509D: draw the sub, mark its cells with bit 6,
+block 0:$06D6 note and set PLAYER_HIT if a pixel lands on rock already drawn. Then, after
+block 0:$06D6 note the objects are drawn, to DATA_50C1: code that only this jump reaches,
+block 0:$06D6 note so Fugløy has left it undecoded. It probably checks whether an object
+block 0:$06D6 note was drawn over the sub (setting PLAYER_HIT), redraws the sub, and
+block 0:$06D6 note clears the marks.
+block 0:$076B name DRAW_OBJECT
+block 0:$076B note Draws one object, from the record IX points to: +0 is its kind (low
+block 0:$076B note six bits), +1 its frame, +2 its row, +3 flags. DE holds its column, as
+block 0:$076B note an address in buffer row 0. Kind plus twice the frame picks a shape
+block 0:$076B note pointer from the table at DATA_62C1. The kinds are multiples of 6
+block 0:$076B note because each has three frames of 2-byte pointers. Kinds with bit 6 set
+block 0:$076B note use the shapes at DATA_6891 or DATA_68A9, probably explosions. It runs
+block 0:$076B note on into DRAW_SHAPE.
+block 0:$07CF name DRAW_SHAPE
+block 0:$07CF note Draws a shape from DE at HL (in the buffer, or on the screen for the
+block 0:$07CF note title). A shape is a list of bytes: $80-$FF are characters to draw,
+block 0:$07CF note $01-$7F skip that many cells (to the shape's next row), and $00 ends
+block 0:$07CF note it. Each character is ORed into the cell, or XORed when the cell's bit
+block 0:$07CF note 6 is set (a cell of the player's sub; see DRAW_PLAYER), and bit 6 is
+block 0:$07CF note cleared. A character that lands on lit pixels sets bit 0 of (IX+03H),
+block 0:$07CF note the object's collision flag.
+block 0:$080E name MOVE_PLAYER
+block 0:$080E note Reads the controls and moves the sub: the arrow keys (row $3840), or
+block 0:$080E note probably a joystick on port $00, read inverted so that a pressed
+block 0:$080E note direction is a 1 bit. LEFT and RIGHT move PLAYER_POS a column, between
+block 0:$080E note $452E and $454D: the sub stays in the left half of the screen. UP and
+block 0:$080E note DOWN move it a pixel row: DATA_6253 counts 0-2 within the character
+block 0:$080E note row DATA_6254. UP does nothing at the surface (DATA_625D), and nothing
+block 0:$080E note moves once the sub is hit.
+block 0:$0895 name UPDATE_OBJECTS
+block 0:$0895 note Probably moves and draws the objects in the cavern. DATA_6265 walks a
+block 0:$0895 note list (it starts at DATA_6A2E) of 4-byte entries: the distance at which
+block 0:$0895 note an object appears, then the address of its record in OBJECTS. Objects
+block 0:$0895 note from five columns left of the screen up to its right edge are handled;
+block 0:$0895 note the list is in order of distance and ends with $FF.
+block 0:$0895 note
+block 0:$0895 note MAIN_LOOP calls it twice a frame and rewrites the jump at DATA_525E in
+block 0:$0895 note between: JP NZ the first time, JP Z the second. So the first call
+block 0:$0895 note skips objects whose kind has bit 6 set and the second skips the rest:
+block 0:$0895 note probably live objects first, exploding ones second.
+block 0:$1141 name NEXT_NOTE
+block 0:$1141 note Plays the next note of the current sound. SOUND holds it as pairs of
+block 0:$1141 note bytes, a pitch and a length for TONE, ended by 0. NOTE_INDEX is how
+block 0:$1141 note far it has got; it is written into the offsets of the two LD r,(IX+n)
+block 0:$1141 note instructions ($5AD0 and $5ADD) before they run.
+block 0:$11C3 note Probably the fire keys and the shots. SPACE (or the joystick's button)
+block 0:$11C3 note fires one kind of shot, probably forward; ENTER fires another, at most
+block 0:$11C3 note two at once (DATA_6263 counts them), probably the kind that climbs.
+block 0:$11C3 note The shots' records are probably the 6-byte entries at DATA_631F that
+block 0:$11C3 note SUB_5BCD searches.
+block 0:$1591 name LOSE_SHIP
+block 0:$1591 note The sub is lost, and its explosion has played out. One ship fewer; at
+block 0:$1591 note none, GAME_OVER. With two players, the current player's 9-byte state
+block 0:$1591 note (SCORE to FRAME_DELAY) is saved in P1_SAVED or P2_SAVED and the other
+block 0:$1591 note player's is loaded, and CUR_PLAYER switches.
+block 0:$1591 note
+block 0:$1591 note Play then resumes at the last restart point passed (RESTARTS). The
+block 0:$1591 note loop at L5FB9 finds that column by walking CAVERN_MAP from the start,
+block 0:$1591 note the same way DRAW_CAVERN reads it.
+block 0:$163A note Skips DE columns of CAVERN_MAP. A column is DATA_6244 bytes long, and
+block 0:$163A note a byte below $10 is a control code, not part of a column: $00-$03 set
+block 0:$163A note the column length to 1-4 bytes, and $04-$0F set DATA_6245 to the code
+block 0:$163A note minus 3 (probably the water surface).
+block 0:$168C name GAME_OVER
+block 0:$168C note Prints Game Over Player n and waits through three long delays. With
+block 0:$168C note one player, back to the title. With two, play passes to the other
+block 0:$168C note player if they have ships left (LOSE_SHIP's swap at L5F44).
+block 0:$16DA name SETUP_OBJECTS
+block 0:$16DA note Builds the object records in OBJECTS, mostly by unpacking DATA_7036:
+block 0:$16DA note 75 of kind $06, 29 of $0C, 15 of $12, 20 of $24 and 8 of $36, 4 to 7
+block 0:$16DA note bytes each, with a few copied whole. It runs at the start of a game
+block 0:$16DA note and after every lost ship, so the cavern is refilled. It also points
+block 0:$16DA note DATA_6265 at the start of DATA_6A2E, fills AIR ($40), and clears 310
+block 0:$16DA note bytes from DATA_631F.
+
+# Text, score and sound
+block 0:$17C1 name PRINT_TEXT
+block 0:$17C1 note Prints B characters from HL at DE (the screen). After each store it
+block 0:$17C1 note reads the cell back. If the byte comes back different, it clears bit 5
+block 0:$17C1 note and stores it again, probably so lowercase letters still show as
+block 0:$17C1 note capitals on a machine without lowercase.
+block 0:$17D0 name POINTS
+block 0:$17D0 note Points for destroying an object, by its kind (IY+0), in BCD: $0C and
+block 0:$17D0 note $24 give 5, $2A 10, $12 15, $18 25, $06 8 (15 with bit 5 of IY+3 set),
+block 0:$17D0 note anything else 50. Then it jumps to ADD_SCORE.
+block 0:$180D name ADD_SCORE
+block 0:$180D note Adds HL to SCORE, a 6-digit BCD number in 3 bytes, once for a Novice
+block 0:$180D note and twice for an Expert (SKILL + 1 times). DAA after each add keeps
+block 0:$180D note every 4 bits one decimal digit. Then it prints the score on the bottom
+block 0:$180D note row (column 8 for player 1, 57 for player 2) without leading zeros.
+block 0:$1893 name TONE
+block 0:$1893 note Plays a tone on the cassette port: B is how many cycles, A how long
+block 0:$1893 note each half lasts, so a bigger A is a lower note. Each cycle writes 1
+block 0:$1893 note and then 2 to port $FF (CASSETTE), with a DJNZ delay after each: a
+block 0:$1893 note square wave on the cassette output. TRS-80 game sound came out there,
+block 0:$1893 note through an amplifier on the cassette lead.
+
+# Variables and tables
+block 0:$18A8 name SCORE
+block 0:$18A8 note The current player's state, 9 bytes: SCORE (3 bytes of BCD), DISTANCE
+block 0:$18A8 note (columns the cavern has scrolled), SHIPS, SKILL (0 or 1) and
+block 0:$18A8 note FRAME_DELAY. With two players, LOSE_SHIP swaps it with P1_SAVED or
+block 0:$18A8 note P2_SAVED. The bytes the file holds here are leftovers; the game sets
+block 0:$18A8 note them before it reads them.
+block 0:$18AB name DISTANCE
+block 0:$18AD name SHIPS
+block 0:$18AE name SKILL
+block 0:$18AF name FRAME_DELAY
+block 0:$18B1 name P1_SAVED
+block 0:$18BA name P2_SAVED
+block 0:$18C3 name CUR_PLAYER
+block 0:$18C3 note The current player as a character, 1 or 2 ($31 or $32).
+block 0:$18C4 name PLAYERS
+block 0:$18CB name MAP_PTR
+block 0:$18CB note Where DRAW_CAVERN starts reading CAVERN_MAP: the column at the
+block 0:$18CB note screen's left edge. It moves on one column each time the cavern
+block 0:$18CB note scrolls, and LOSE_SHIP sets it again for a restart.
+block 0:$18D6 name PLAYER_HIT
+block 0:$18D6 note Set when the sub hits something or runs out of air.
+block 0:$18DC name PLAYER_POS
+block 0:$18DC note The sub's column, as an address in buffer row 0.
+block 0:$18E5 name NOTE_INDEX
+block 0:$18FA name RESTARTS
+block 0:$18FA note Restart points, 4 bytes each: a distance (a word), then the sub's
+block 0:$18FA note pixel row and row (for DATA_6253 and DATA_6254); $FFFF ends them. They
+block 0:$18FA note are at 320, 646, 948, 1,283 and 1,585 columns. The entry for distance
+block 0:$18FA note 0 sits just before the label, at $6275, which is why LOSE_SHIP reads
+block 0:$18FA note the entry at IY-4.
+block 0:$1910 name MAP_CHARS
+block 0:$1910 note The 16 block-graphics characters the cavern is built from (the low
+block 0:$1910 note four bits of a CAVERN_MAP byte pick one). Each is $80 plus six bits,
+block 0:$1910 note one per pixel of the character's 2-by-3 grid.
+block 0:$1920 name ROW_OFFSETS
+block 0:$1920 note Where each row of the off-screen buffer starts, from its top-left: 0,
+block 0:$1920 note 74, 148 and so on. A buffer row is 74 bytes, the 64 columns shown plus
+block 0:$1920 note five spare on each side, probably so shapes can move off the edges of
+block 0:$1920 note the screen without being clipped.
+block 0:$193E name AIR
+block 0:$1945 name STATUS_LINE
+block 0:$19A0 note The bytes from here on are mostly text, not data: what was left in
+block 0:$19A0 note memory of the authors' assembler source when the file was saved, tabs
+block 0:$19A0 note ($09) and all, such as A,(HITFLG), HL,SUBNOTE and DE,NOTEBUF. The game
+block 0:$19A0 note clears 310 bytes here before use (SETUP_OBJECTS), so they never show.
+block 0:$1AD6 name SOUND
+block 0:$1D47 name BOOM_SOUND
+block 0:$1D47 note Probably the sound of the sub exploding: MAIN_LOOP copies it to SOUND
+block 0:$1D47 note when PLAYER_HIT is set. Pairs of (pitch, cycles) for TONE, the pitch
+block 0:$1D47 note byte falling from $82 by 2 a note, so the sound rises.
+block 0:$2341 name OBJECTS
+block 0:$2341 note The object records SETUP_OBJECTS builds, up to $7035. What the file
+block 0:$2341 note holds there is more of the authors' source text, with names such as
+block 0:$2341 note WATBEG, WATLEV, WATEND and DECAIR: water level and air, which supports
+block 0:$2341 note reading the map's control codes and AIR_SUPPLY as these notes do.
+block 0:$2A1A name CAVERN_MAP
+block 0:$2A1A note Probably the cavern map, read a column at a time as the screen scrolls
+block 0:$2A1A note (DRAW_CAVERN, from MAP_PTR). A byte from $10 up is one character of a
+block 0:$2A1A note column: its high four bits give the row (1 is the top row), and its
+block 0:$2A1A note low four bits pick one of the 16 characters in MAP_CHARS. A byte below
+block 0:$2A1A note $10 is a control code: $00-$03 set how many bytes each column has
+block 0:$2A1A note (1-4), and $04-$0F probably mark the water surface (see L5FB9). The
+block 0:$2A1A note map ends with $FF at $7FFF.
+
+# The loader
+block 0:$3681 note The loader. TRSDOS loads the file at $5200 and starts here. It copies
+block 0:$3681 note $3681 bytes (13,953) from $5200 down to $497F with LDIR and jumps
+block 0:$3681 note there. The hint file's relocate line lets Fugløy list the game at the
+block 0:$3681 note addresses it runs at, so the notes in this file use those.

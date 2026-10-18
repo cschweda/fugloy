@@ -321,11 +321,11 @@ for (const c of CASES) {
   });
 }
 
-test('seadrg01, Explain open: 200 ArrowDowns through DATA_7399 re-explain its rows without redrawing the picture each step', async ({ page }) => {
+test('seadrg01, Explain open: 200 ArrowDowns through CAVERN_MAP re-explain its rows without redrawing the picture each step', async ({ page }) => {
   await openSeaDragon(page);
   const draws = (): Promise<string | null> => page.getByTestId('region-canvas').getAttribute('data-draws');
-  await stepWithExplain(page, 'seadrg01 DATA_7399', 0x7399, 'data');
-  await expect(page.getByTestId('explain-region')).toContainText('DATA_7399');
+  await stepWithExplain(page, 'seadrg01 CAVERN_MAP', 0x7399, 'data');
+  await expect(page.getByTestId('explain-region')).toContainText('CAVERN_MAP');
   // Drawn once, when the region first showed; the 200 steps inside it did not redraw it.
   expect(await draws()).toBe('1');
 });
