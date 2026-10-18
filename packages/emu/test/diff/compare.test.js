@@ -112,6 +112,18 @@ describe.skipIf(trsjsSkip !== null)(`compareRun against trsjs${trsjsSkip === nul
       known: { [name('dropped-prefix')]: 1, [name('held-prefix')]: 1, [IRQ_R]: 1 },
     },
     {
+      what: 'CPIR over three bytes that do not match: trsjs sets C',
+      program: [0xaf, 0x21, 0x00, 0x50, 0x01, 0x03, 0x00, 0x3e, 0x99, 0xed, 0xb1, 0x00], // XOR A / LD HL,$5000 / LD BC,3 / LD A,$99 / CPIR / NOP
+      n: 7,
+      known: { [name('cpi-c')]: 3, [name('xy')]: 1 },
+    },
+    {
+      what: 'a HALT idling with no interrupt: R counts on every step, as on trsjs',
+      program: [0xf3, 0x76], // DI / HALT
+      n: 6,
+      known: {},
+    },
+    {
       what: 'an interrupt that ends a HALT: trsjs pushes the HALT\'s address',
       program: [0xfb, 0x00, 0x76, 0x00, 0x00], // EI / NOP / HALT / NOP
       rtcIn: 12, // the boundary after HALT
@@ -159,6 +171,20 @@ describe.skipIf(trsjsSkip !== null)(`compareRun against trsjs${trsjsSkip === nul
     };
     const r = run(m, 3);
     expect(r.divergence).toMatchObject({ index: 1, pc: 0x4003, known: null, fields: ['b', 'cycles', 'sp'] });
+  });
+
+  it('a CPI of ours that changed C is a divergence, not trsjs\'s C', () => {
+    const m = setup([0x37, 0x21, 0x00, 0x50, 0x01, 0x01, 0x00, 0x3e, 0x99, 0xed, 0xa1, 0x00]); // SCF / LD HL / LD BC,1 / LD A,$99 / CPI
+    const cpu = m.system.cpu;
+    const cpi = cpu.cpi.bind(cpu);
+    cpu.cpi = () => {
+      const t = cpi();
+      cpu.flagC = 0; // test-only bug: C cleared
+      return t;
+    };
+    const r = run(m, 6);
+    expect(r.divergence).toMatchObject({ index: 4, pc: 0x4009, known: null });
+    expect(r.divergence.fields).toContain('f.C');
   });
 
   it('with strict, stops on the first known difference and names it', () => {

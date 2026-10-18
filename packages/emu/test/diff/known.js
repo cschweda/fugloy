@@ -46,11 +46,12 @@ export const flagToken = (reg, name) => `${reg}.${name}`;
  * @typedef {{
  *   bytes: Uint8Array,
  *   execPc: number,
- *   ours: Side & { wasHalted: boolean },
+ *   ours: Side & { wasHalted: boolean, fBefore: number },
  *   theirs: Side,
  * }} StepContext
  *   bytes: four bytes of our memory at execPc as our CPU began the instruction it executed this
  *   step (after an interrupt response, the handler's first; four zeros, a NOP, for a halted step).
+ *   ours.fBefore: our F before the step.
  * @typedef {{ id: string, name: string, evidence: string, explains(ctx: StepContext, diff: Set<string>): string[] | null }} StepClass
  * @typedef {{ id: string, name: string, reason: 'DI' | 'EI' | 'prefix', evidence: string }} InterruptClass
  */
@@ -92,6 +93,9 @@ function bitNumber(bytes) {
 }
 
 const isIndexedCb = (/** @type {Uint8Array} */ bytes) => (bytes[0] === 0xdd || bytes[0] === 0xfd) && bytes[1] === 0xcb;
+
+/** CPI, CPD, CPIR, CPDR (ED A1, A9, B1, B9). */
+const isBlockCompare = (/** @type {Uint8Array} */ bytes) => bytes[0] === 0xed && (bytes[1] & 0xe7) === 0xa1;
 
 /** @type {StepClass[]} */
 export const STEP_CLASSES = [
@@ -144,6 +148,22 @@ export const STEP_CLASSES = [
     explains(ctx, diff) {
       if (!diff.has('r') || !isIndexedCb(ctx.bytes) || (ctx.ours.irq && ctx.theirs.irq)) return null;
       return ((ctx.theirs.regs.r - ctx.ours.regs.r) & 0x7f) === 1 ? ['r'] : null;
+    },
+  },
+  {
+    id: 'cpi-c',
+    name: 'CPI/CPD/CPIR/CPDR: trsjs sets C on a mismatch',
+    // Zilog UM0080 (CPI, CPIR, CPD, CPDR): C is not affected; ZEXALL's "cpd<r>" and "cpi<r>"
+    // groups check it and pass on our core. trsjs's oped_a1/a9/b1/b9 save C in z.reg.tmp, but cp()
+    // uses z.reg.tmp for the subtraction, so assign_c stores A - (HL): C ends set exactly when the
+    // compare found no match (Z = 0). Explained only when our C is the C we had before the step and
+    // the reference's C is the opposite of its Z.
+    evidence: 'Zilog UM0080 (CPI, CPIR, CPD, CPDR): C is not affected; ZEXALL\'s cpd<r> and cpi<r> groups pass on our core. trsjs stores A - (HL) in C, the scratch it saved C in being reused by cp().',
+    explains(ctx, diff) {
+      if (!diff.has('f.C') || !isBlockCompare(ctx.bytes)) return null;
+      if (((ctx.ours.regs.f ^ ctx.ours.fBefore) & 0x01) !== 0) return null;
+      const f = ctx.theirs.regs.f;
+      return ((f & 0x01) !== 0) === ((f & 0x40) === 0) ? ['f.C'] : null;
     },
   },
   {

@@ -225,6 +225,7 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
       const theirsBefore = op === 0xdd || op === 0xfd ? ref.regs() : null;
       const afterPrefix = theirsBefore === null ? 0 : sys.memory.readByte((cpu.registers.PC + 1) & 0xffff);
       const refIff1 = ref.z.reg.IFF1 !== 0;
+      const fBefore = cpu.registers.F;
 
       const oursCycles = ours.step();
       const oursIrq = ours.log.irq;
@@ -263,7 +264,7 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
       const ctx = {
         bytes,
         execPc,
-        ours: { regs: o, cycles: oursCycles, irq: oursIrq, writes: ours.log.writes, wasHalted },
+        ours: { regs: o, cycles: oursCycles, irq: oursIrq, writes: ours.log.writes, wasHalted, fBefore },
         theirs: { regs: s, cycles: t.cycles, irq: t.irq, writes: ref.writes() },
       };
       /** @type {ContextLine} */
