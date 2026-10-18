@@ -154,18 +154,19 @@ function parseSystem(bytes, offset) {
 }
 
 /**
- * Fast-load a parsed BASIC program: write it at TXTTAB with recomputed
- * line links and set the variable-area pointers, exactly the state CLOAD
- * leaves. The machine should be sitting at READY. Caller typically
- * follows with system.typeText("RUN\n").
- * @returns {number} address one past the program terminator
+ * Write tokenized BASIC lines at TXTTAB with freshly computed next-line pointers, end the program
+ * with 00 00, and set the variable-area pointers ($40F9, $40FB, $40FD) as CLOAD leaves them.
+ * Shared by fastLoadBasic and the .BAS loader.
+ * @param {{ memory: any }} system
+ * @param {{ lineNo: number, tokens: ArrayLike<number> }[]} lines
+ * @returns {{ start: number, end: number }} TXTTAB, and the address one past the terminator
  */
-export function fastLoadBasic(system, parsed) {
+export function writeTokenizedProgram(system, lines) {
   const memory = system.memory;
-  const txttab = memory.readWord(TXTTAB_PTR);
-  let addr = txttab;
+  const start = memory.readWord(TXTTAB_PTR);
+  let addr = start;
 
-  for (const line of parsed.lines) {
+  for (const line of lines) {
     const next = addr + 2 + 2 + line.tokens.length + 1;
     memory.writeWord(addr, next);
     memory.writeWord(addr + 2, line.lineNo);
@@ -182,7 +183,18 @@ export function fastLoadBasic(system, parsed) {
   memory.writeWord(VARTAB_PTR, addr);
   memory.writeWord(ARYTAB_PTR, addr);
   memory.writeWord(FRETOP_PTR, addr);
-  return addr;
+  return { start, end: addr };
+}
+
+/**
+ * Fast-load a parsed BASIC program: write it at TXTTAB with recomputed
+ * line links and set the variable-area pointers, exactly the state CLOAD
+ * leaves. The machine should be sitting at READY. Caller typically
+ * follows with system.typeText("RUN\n").
+ * @returns {number} address one past the program terminator
+ */
+export function fastLoadBasic(system, parsed) {
+  return writeTokenizedProgram(system, parsed.lines).end;
 }
 
 /**

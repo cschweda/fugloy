@@ -15,5 +15,6 @@ export { FDC1793, parseWriteTrackStream } from './devices/fdc-wd1793.js';
 export { DiskImage } from './devices/disk-image.js';
 export { Printer } from './devices/printer.js';
 export { parseCas, fastLoadBasic, fastLoadSystem } from './loaders/cas-format.js';
+export { parseBas } from './loaders/bas.js';
 export { parseCmd, fastLoadCmd } from './loaders/cmd-format.js';
 export { STATE_VERSION, STATE_MACHINE, toBase64, fromBase64, serializeState, restoreState } from './debug/state.js';

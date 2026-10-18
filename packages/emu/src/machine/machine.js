@@ -8,6 +8,7 @@ import { ROM_HASHES } from './rom-hashes.js';
 import { sha256Hex } from './sha256.js';
 import { Video } from '../devices/video.js';
 import { Sound } from '../devices/sound.js';
+import { loadBas } from '../loaders/bas.js';
 import { KeyQueue, romKeyReturn } from '../devices/key-queue.js';
 
 /**
@@ -36,6 +37,8 @@ export class Machine {
   sound;
   /** @type {KeyQueue} Key presses now, cycle-timed typing through the matrix, and the ROM keyboard-scan hook's feed. */
   keyboard;
+  /** @type {{ bas(bytes: Uint8Array): ReturnType<typeof loadBas> }} Program loaders; each returns a manifest. */
+  load;
 
   /**
    * @param {{ model?: 3, ram?: 48, roms: { level2: Uint8Array }, log?: (level: string, text: string) => void }} opts
@@ -86,6 +89,7 @@ export class Machine {
     sys.io.onSoundWrite = (cycle, value) => this.sound.record(cycle, value);
     sys.io.onSoundReset = () => this.sound.clear();
     this.keyboard = new KeyQueue(sys.keyboard, () => sys.cpu.cycles);
+    this.load = { bas: (bytes) => loadBas(this, bytes) };
     this.io = {
       in: (port) => sys.io.readPort(port),
       out: (port, value) => sys.io.writePort(port, value),
