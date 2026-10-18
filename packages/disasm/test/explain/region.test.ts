@@ -111,6 +111,17 @@ describe('dataRegion: what it refuses to claim', () => {
     expect(text(r).join(' ')).toContain('stepping back (DEC HL at $7004)');
   });
 
+  it('a loop that moves HL before its first (HL) read reads "through HL", not "the bytes"', () => {
+    // 7000 LD HL,700AH; 7003 LD B,4; 7005 l: INC HL; 7006 LD A,(HL); 7007 DJNZ 7005H; 7009 RET; 700A data.
+    const r = must(dataRegion(raw([0x21, 0x0a, 0x70, 0x06, 0x04, 0x23, 0x7e, 0x10, 0xfc, 0xc9, 0x01, 0x02, 0x03, 0x04, 0x05]), 0x700b));
+    const t = text(r).join(' ');
+    expect(t).toContain('falls into the loop at L7005 (to $7007), which reads through HL, stepping forward');
+    expect(t).not.toContain('reads the bytes');
+    // Read first, then step: the bytes from the load on.
+    const r2 = must(dataRegion(raw([0x21, 0x0a, 0x70, 0x06, 0x04, 0x7e, 0x23, 0x10, 0xfc, 0xc9, 0x01, 0x02, 0x03, 0x04, 0x05]), 0x700b));
+    expect(text(r2).join(' ')).toContain('which reads the bytes through HL, stepping forward');
+  });
+
   it('ADD HL,DE with DE unproven leaves the direction unproven: no readers entry, no "stepping"', () => {
     // 7000 LD HL,700AH; 7003 LD A,(HL); INC HL; ADD HL,DE; OR A; JR NZ,7003H; RET; 700A data.
     const r = must(dataRegion(raw([0x21, 0x0a, 0x70, 0x7e, 0x23, 0x19, 0xb7, 0x20, 0xfa, 0xc9, 0x01, 0x02, 0x00]), 0x700b));

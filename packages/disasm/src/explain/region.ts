@@ -317,7 +317,10 @@ function build(c: Ctx, ix: Index, start: number, end: number): DataRegion {
     const decs = loop.body.filter((b) => b.ins.mnemonic === 'DEC' && b.ins.operands[0]?.kind === 'reg16' && b.ins.operands[0].reg === 'HL').map((b) => b.at);
     const moves = loop.body.filter((b) => !incs.includes(b.at) && !decs.includes(b.at) && written(b.ins).some((r) => r === 'H' || r === 'L')).map((b) => b.at);
     const head: Piece = { text: nameOrAddr(a, loop.head), addr: loop.head };
-    const intro: Piece[] = [{ text: 'The load at ' }, addrPiece(c, at), { text: ' falls into the loop at ' }, head, { text: ` (to ${word$(loop.end)}), which reads the bytes through HL` }];
+    // "The bytes" (from the address loaded) only when the first (HL) read in the body comes before anything changes H or L.
+    const first = loop.body.find((b) => readsHL(b.ins) || written(b.ins).some((r) => r === 'H' || r === 'L'));
+    const what = first !== undefined && readsHL(first.ins) ? 'reads the bytes through HL' : 'reads through HL';
+    const intro: Piece[] = [{ text: 'The load at ' }, addrPiece(c, at), { text: ' falls into the loop at ' }, head, { text: ` (to ${word$(loop.end)}), which ${what}` }];
     const forwardAdds = moves.length > 0 && addsOnlyForward(a, loop, moves);
     const step: 1 | -1 | null =
       (moves.length === 0 || forwardAdds) && decs.length === 0 && (incs.length > 0 || forwardAdds) ? 1 : moves.length === 0 && decs.length > 0 && incs.length === 0 ? -1 : null;
