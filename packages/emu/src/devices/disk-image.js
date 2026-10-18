@@ -6,7 +6,8 @@
  *   JV1 — headerless linear dump: track 0 sector 0.. then track 1...,
  *         256-byte sectors. Model I images use 10 sectors/track (single
  *         density); Model III TRSDOS 1.3-style images use 18. Geometry is
- *         inferred from the file size.
+ *         inferred from the file size, which must be 35, 40, 77, or 80
+ *         tracks of 10 or 18 sectors; any other size is not a JV1.
  *
  *   JV3 — 2901 three-byte sector headers (track, sector, flags) + one
  *         write-protect byte, followed by sector data in header order.
@@ -25,6 +26,12 @@
  */
 
 const JV3_ENTRIES = 2901;
+
+// The JV1 geometries a real disk has: sectors per track (Model III
+// double density, Model I single density) and track counts (35- and
+// 40-track 5.25" drives, 77-track 8", 80-track 5.25").
+const JV1_SPT = [18, 10];
+const JV1_TRACKS = [35, 40, 77, 80];
 const JV3_HEADER_SIZE = JV3_ENTRIES * 3 + 1;
 const JV3_FREE = 0xff;
 
@@ -141,7 +148,7 @@ export class DiskImage {
       this.format = "jv1";
     } else {
       throw new Error(
-        `Unrecognized disk image (${bytes.length} bytes): not DMK, not JV3, and not a multiple of 256-byte sectors`
+        `Unrecognized disk image (${bytes.length} bytes): no DMK header, no JV3 sector table, and not a JV1 size (${JV1_TRACKS.join(", ")} tracks of ${JV1_SPT.join(" or ")} 256-byte sectors)`
       );
     }
   }
@@ -268,21 +275,20 @@ export class DiskImage {
   }
 
   _tryParseJV1() {
+    // JV1 has no header, so its size is the only evidence: accept only
+    // a geometry a real disk has, 10 sectors per track (Model I single
+    // density) or 18 (Model III double density) on 35, 40, 77, or 80
+    // tracks. Anything else (a .CMD, a text file) would otherwise mount
+    // as a short JV1 whose garbage the ROM then boots. No two of these
+    // sizes coincide, so the geometry is never ambiguous.
     const size = this.bytes.length;
-    if (size === 0 || size % 256 !== 0) return false;
-
-    const totalSectors = size / 256;
-    // Prefer geometries that yield a classic track count; prefer the
-    // Model III 18-sector layout when both fit.
-    const candidates = [];
-    for (const spt of [18, 10]) {
-      if (totalSectors % spt === 0) {
-        candidates.push({ spt, tracks: totalSectors / spt });
+    let chosen = null;
+    for (const spt of JV1_SPT) {
+      for (const tracks of JV1_TRACKS) {
+        if (size === tracks * spt * 256) chosen = { spt, tracks };
       }
     }
-    if (candidates.length === 0) return false;
-    const classic = candidates.find((c) => [35, 40, 80].includes(c.tracks));
-    const chosen = classic || candidates[0];
+    if (chosen === null) return false;
 
     this.sectorsPerTrack = chosen.spt;
     this.tracks = chosen.tracks;

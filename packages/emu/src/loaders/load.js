@@ -184,7 +184,7 @@ export function diskDrives(machine) {
      * `DiskImage` is mounted as it is, so writes the machine makes show in it.
      * @param {number} drive 0..3
      * @param {Uint8Array | DiskImage} image
-     * @param {{ writeProtect?: boolean }} [opts] `writeProtect` overrides the image's own flag (the DMK or JV3 header's)
+     * @param {{ writeProtect?: boolean }} [opts] `writeProtect` overrides the image's own flag (the DMK or JV3 header's); a passed `DiskImage` has its `writeProtected` set
      * @returns {DriveInfo}
      */
     mount(drive, image, { writeProtect } = {}) {

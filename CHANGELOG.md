@@ -85,6 +85,12 @@ on the `emu-phase5` branch:
   and jumps there, ROM `$34D9`–`$3516`); its manifest is `{ format: 'dsk',
   container, drive, boot, blocks: [] }`, recorded in `m.debug.loaded`.
   Booting with drive 0 empty throws.
+- JV1 detection accepts only a real geometry, 35, 40, 77, or 80 tracks of 10
+  or 18 sectors. Before, any file whose length was a whole number of 10- or
+  18-sector tracks mounted as a short JV1 (a 13,824-byte `.CMD` as three
+  tracks), which the ROM would then boot; now it is refused as
+  `Unrecognized disk image (N bytes): …`, a sentence that no longer claims a
+  1,792-byte file is "not a multiple of 256-byte sectors".
 - Tests (`test/unit/fdc-api.test.js`) on synthetic JV1, JV3, and DMK images
   from a new writer (`test/unit/disk-writers.js`, which also builds a boot
   sector): each container mounts and boots, through a small ROM that boots

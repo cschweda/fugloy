@@ -5,9 +5,12 @@
  * tiny ROM that boots the way the Model III ROM does, and through the real ROM when one is
  * configured), and snapshots that carry the disk bytes.
  */
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { CPU_CLOCK_HZ, DiskImage, Machine } from '../../src/index.js';
-import { configuredRom, ROM_TEST_TIMEOUT } from '../rom.js';
+import { configPath, configuredRom, ROM_TEST_TIMEOUT } from '../rom.js';
 import { bootSector, withBoot, writeDmk, writeJv1, writeJv3 } from './disk-writers.js';
 
 const MARKER = 'FUGLOY DISK BOOT';
@@ -115,6 +118,38 @@ describe('m.fdc', () => {
     expect(() => m.fdc.mount(0, /** @type {any} */ ('disk.dmk'))).toThrow(/fdc\.mount: the image must be a Uint8Array/);
     expect(() => m.fdc.mount(0, /** @type {any} */ ([0, 1, 2]))).toThrow(/fdc\.mount: the image must be a Uint8Array/);
     expect(m.fdc.drives).toEqual([null, null, null, null]);
+  });
+
+  // JV1 has no header: a file whose length is a whole number of 10- or 18-sector tracks used to
+  // mount as a short JV1 whose first sector the ROM would boot.
+  const REAR_GUARD_CMD = fileURLToPath(new URL('../../../../examples/rear-guard/reargrd4.cmd', import.meta.url));
+  const notImages = {
+    'reargrd4.cmd (13,824 bytes, 54 sectors)': () => new Uint8Array(readFileSync(REAR_GUARD_CMD)),
+    'a 4,608-byte text buffer (one 18-sector track)': () => new TextEncoder().encode('10 PRINT "HELLO"\n'.repeat(512).slice(0, 4608)),
+    'a 2,560-byte buffer (one 10-sector track)': () => new Uint8Array(2560).fill(0x41),
+    'a 1,792-byte buffer (7 sectors)': () => new Uint8Array(1792),
+    '39 tracks of 18 sectors': () => new Uint8Array(39 * 18 * 256),
+    '36 tracks of 10 sectors': () => new Uint8Array(36 * 10 * 256),
+  };
+  for (const [name, bytes] of Object.entries(notImages)) {
+    it(`refuses ${name} instead of mounting it as a JV1`, () => {
+      const m = machine();
+      const b = bytes();
+      const sentence = `Unrecognized disk image (${b.length} bytes): no DMK header, no JV3 sector table, and not a JV1 size (35, 40, 77, 80 tracks of 18 or 10 256-byte sectors)`;
+      expect(() => m.fdc.mount(0, b)).toThrow(`fdc.mount: ${sentence}`);
+      expect(() => m.load.dsk(b)).toThrow(`load.dsk: ${sentence}`);
+      expect(m.fdc.drives).toEqual([null, null, null, null]);
+      expect(m.io.in(0xf0)).toBe(0xff);
+    });
+  }
+
+  it('mounts JV1 at every real geometry: 35, 40, 77, and 80 tracks of 10 or 18 sectors', () => {
+    const m = machine();
+    for (const spt of /** @type {const} */ ([10, 18])) {
+      for (const tracks of [35, 40, 77, 80]) {
+        expect(m.fdc.mount(0, writeJv1({ tracks, spt }))).toEqual({ drive: 0, container: 'jv1', tracks, sides: 1, sectorsPerTrack: spt, writeProtected: false });
+      }
+    }
   });
 
   it('refuses a drive outside 0-3 and a writeProtect that is not a boolean', () => {
@@ -242,6 +277,30 @@ describe('snapshots with a disk mounted', () => {
     other.debug.restore(snap);
     expect(other.fdc.drives).toEqual(before);
     expect(Array.from(other.system.io.fdc.drives[1].readSector(4, 0, 7))).toEqual(Array.from(written));
+  });
+});
+
+/** The `fixtures` folder of fugloy.mcp.json (relative to the file), or null; disk images found under it. */
+function realDiskImages() {
+  const config = configPath();
+  if (config === null || !existsSync(config)) return [];
+  const entry = JSON.parse(readFileSync(config, 'utf8')).fixtures;
+  if (typeof entry !== 'string') return [];
+  const root = isAbsolute(entry) ? entry : resolve(dirname(config), entry);
+  if (!existsSync(root)) return [];
+  return readdirSync(root, { recursive: true, encoding: 'utf8' })
+    .filter((f) => /\.(dmk|dsk|jv1|jv3)$/i.test(f))
+    .map((f) => join(root, f))
+    .sort();
+}
+const realDisks = realDiskImages();
+
+describe.skipIf(realDisks.length === 0)('m.fdc with the local disk images', () => {
+  it.each(realDisks)('mounts %s', (path) => {
+    const info = machine().fdc.mount(0, new Uint8Array(readFileSync(path)));
+    expect(info.drive).toBe(0);
+    expect(['jv1', 'jv3', 'dmk']).toContain(info.container);
+    expect(info.tracks).toBeGreaterThan(0);
   });
 });
 
