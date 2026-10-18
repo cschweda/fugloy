@@ -167,7 +167,15 @@ export class Machine {
     }
     if (cpu.halted) return false;
     if (kb.hasFeed && (pc === 0x002b || pc === 0x0049)) {
-      romKeyReturn(cpu, pc, kb.takeFeed());
+      const debug = this.debug;
+      if (debug.tracksAccess) {
+        debug.standIn(true);
+        try {
+          romKeyReturn(cpu, pc, kb.takeFeed());
+        } finally {
+          debug.standIn(false);
+        }
+      } else romKeyReturn(cpu, pc, kb.takeFeed());
       return true;
     }
     if (this.debug.tracksAccess) this.debug.startInstruction(pc);
@@ -195,8 +203,11 @@ export class Machine {
         if (debug.active) debug.afterInstruction();
       }
     } catch (e) {
-      // A hook or callback that threw leaves no instruction open and no stop pending for the next call.
-      if (debug.active) debug.afterInstruction();
+      // A hook or callback that threw leaves no instruction open, no edge recorded for it, and no stop pending for the next call.
+      if (debug.active) {
+        debug.endInstruction();
+        debug.afterInstruction();
+      }
       throw e;
     } finally {
       this.#busy = false;
@@ -255,8 +266,11 @@ export class Machine {
         if (cpu.cycles >= target) return { reason: 'cycles', cycles: cpu.cycles - start };
       }
     } catch (e) {
-      // A hook or callback that threw leaves no instruction open and no stop pending for the next call.
-      if (debug.active) debug.afterInstruction();
+      // A hook or callback that threw leaves no instruction open, no edge recorded for it, and no stop pending for the next call.
+      if (debug.active) {
+        debug.endInstruction();
+        debug.afterInstruction();
+      }
       throw e;
     } finally {
       this.#busy = false;

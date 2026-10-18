@@ -16,12 +16,26 @@ import { instructionInfo } from './instr.js';
 const RING = 65536;
 
 /**
+ * Coverage bits, one byte per address (spec §7): `EXEC` is the first byte of an executed
+ * instruction, prefix included, and `OPERAND` its other bytes (phase 3 Ruling 1); `READ` and
+ * `WRITE` are data accesses, never fetches (Ruling 2); `JUMP_TARGET` is where a taken jump, jump
+ * relative, `DJNZ`, `JP (HL)`, or return landed, and `CALL_TARGET` where a taken call or `RST` did.
+ */
+export const COVERAGE = Object.freeze({ EXEC: 1, OPERAND: 2, READ: 4, WRITE: 8, JUMP_TARGET: 16, CALL_TARGET: 32 });
+
+/** Callers kinds by index; an edge is keyed `from * 8 + index` within its target. */
+const EDGE_KINDS = /** @type {const} */ (['call', 'jp', 'jr', 'rst', 'ret-to']);
+/** @type {Record<string, number>} An `instructionInfo` kind → its EDGE_KINDS index. */
+const EDGE_OF = { call: 0, jp: 1, 'jp-ind': 1, jr: 2, djnz: 2, rst: 3, ret: 4 };
+
+/**
  * @typedef {{ id: number, addr: number, once: boolean, hits: number, when?: (m: any) => boolean }} BreakEntry
  * @typedef {{ id: number, addr: number, len: number, read: boolean, write: boolean, stop: boolean, hits: number }} WatchEntry
  * @typedef {{ id: number, kind: 'read' | 'write', cycle: number, pc: number, addr: number, value: number, prev: number }} Hit
  * @typedef {((addr: number, value: number) => void) | null} ReadHook
  * @typedef {((addr: number, value: number, prev: number) => void) | null} WriteHook
  * @typedef {((port: number, value: number, dir: 'in' | 'out') => void) | null} PortHook
+ * @typedef {{ from: number, kind: 'call' | 'jp' | 'jr' | 'rst' | 'ret-to', count: number }} CallerEdge
  */
 
 export class Debugger {
@@ -39,6 +53,12 @@ export class Debugger {
    * and every port access. Setting one to a function or null re-instruments the CPU.
    */
   hooks;
+  /**
+   * @type {{ enable(): void, disable(): void, clear(): void, readonly enabled: boolean, readonly bits: Uint8Array }}
+   * Per-byte coverage and the callers map, behind one switch (phase 3 Ruling 6). `bits` is live;
+   * `disable` keeps what was recorded and `clear` empties both.
+   */
+  coverage;
 
   #machine;
   /** @type {any} The Z80CPU whose accessors are swapped. */
@@ -70,6 +90,18 @@ export class Debugger {
   #readsOn = false;
   /** @type {number | null} The lowest id of a stop watch hit since the last `afterInstruction`. */
   #stopHit = null;
+
+  /** True while coverage is enabled. */
+  #covOn = false;
+  /** True while coverage records: enabled, and not inside the keyboard hook's stand-in RET. */
+  #marking = false;
+  #bits = new Uint8Array(0x10000);
+  /** @type {Map<number, Map<number, CallerEdge>>} target → (from * 8 + kind index) → edge */
+  #callers = new Map();
+  /** @type {string | null} The current instruction's `instructionInfo` kind (null unless coverage looked it up). */
+  #kind = null;
+  /** @type {number | null} The current instruction's static target. */
+  #target = null;
 
   /** @type {Hit[]} The hit log, a ring once full: `#ringHead` is the oldest entry. */
   #ring = [];
@@ -110,6 +142,26 @@ export class Debugger {
         check('onPort', f);
         dbg.#onPort = f;
         dbg.#refresh();
+      },
+    };
+    this.coverage = {
+      enable() {
+        dbg.#covOn = true;
+        dbg.#refresh();
+      },
+      disable() {
+        dbg.#covOn = false;
+        dbg.#refresh();
+      },
+      clear() {
+        dbg.#bits.fill(0);
+        dbg.#callers.clear();
+      },
+      get enabled() {
+        return dbg.#covOn;
+      },
+      get bits() {
+        return dbg.#bits;
       },
     };
   }
@@ -207,6 +259,26 @@ export class Debugger {
     return id === undefined ? out : out.filter((h) => h.id === id);
   }
 
+  /**
+   * Who transferred control to `addr`, with how many times each edge was taken: calls, jumps
+   * (`JP (HL)` included), relative jumps (`DJNZ` included), `RST`s, and returns (`ret-to`).
+   * Recorded while coverage is enabled; an interrupt response and the keyboard hook's stand-in
+   * RET are not instructions and record nothing.
+   * @param {number} addr
+   * @returns {CallerEdge[]} fresh objects, sorted by `from`, then `kind`
+   */
+  callers(addr) {
+    const edges = this.#callers.get(addr & 0xffff);
+    return edges === undefined ? [] : sortEdges(edges);
+  }
+
+  /** @returns {Map<number, CallerEdge[]>} every target's callers, as `callers` gives them, in the order targets were first reached */
+  callerMap() {
+    const out = new Map();
+    for (const [target, edges] of this.#callers) out.set(target, sortEdges(edges));
+    return out;
+  }
+
   /** Empty the hit log and clear `hitsOverflowed`. */
   clearHits() {
     this.#ring = [];
@@ -243,10 +315,25 @@ export class Debugger {
   startInstruction(pc) {
     this.#pc = pc;
     this.#reads = 0;
+    this.#inInstr = true;
+    // Reset each instruction, so coverage enabled by a hook mid-instruction records no stale edge.
+    this.#kind = null;
+    if (!this.#readsOn) {
+      this.#len = 0;
+      return;
+    }
     // The look-ahead assumes reads have no side effects: true on the Model III; the Model I's $37E0
     // interrupt latch (phase 6) clears on read and will need a side-effect-free peek.
-    this.#len = this.#readsOn ? instructionInfo(this.#plain.readMemory, pc).len : 0;
-    this.#inInstr = true;
+    const info = instructionInfo(this.#plain.readMemory, pc);
+    const len = info.len;
+    this.#len = len;
+    if (this.#covOn) {
+      this.#kind = info.kind;
+      this.#target = info.target;
+      const bits = this.#bits;
+      bits[pc] |= 1;
+      for (let k = 1; k < len; k++) bits[(pc + k) & 0xffff] |= 2;
+    }
   }
 
   /**
@@ -262,10 +349,41 @@ export class Debugger {
    * @returns {number | null} the lowest id of a stop watch hit since the last call, or null
    */
   afterInstruction() {
+    if (this.#inInstr && this.#covOn && this.#kind !== null) this.#transfer();
     this.#inInstr = false;
     const id = this.#stopHit;
     this.#stopHit = null;
     return id;
+  }
+
+  /**
+   * Internal: around the keyboard hook's stand-in RET, which executes no instruction and so marks
+   * no coverage (its stack reads are still logged by watches and hooks).
+   * @param {boolean} on
+   */
+  standIn(on) {
+    this.#marking = this.#covOn && !on;
+  }
+
+  /** After a control-transfer instruction: when it was taken, mark where it landed and count the edge. */
+  #transfer() {
+    const kind = /** @type {string} */ (this.#kind);
+    const pc = this.#pc;
+    const to = this.#cpu.registers.PC & 0xffff;
+    if (kind === 'ret') {
+      if (to === ((pc + this.#len) & 0xffff)) return;
+    } else if (kind !== 'jp-ind' && to !== this.#target) return;
+    const e = EDGE_OF[kind];
+    this.#bits[to] |= e === 0 || e === 3 ? 32 : 16;
+    let edges = this.#callers.get(to);
+    if (edges === undefined) {
+      edges = new Map();
+      this.#callers.set(to, edges);
+    }
+    const key = pc * 8 + e;
+    const edge = edges.get(key);
+    if (edge !== undefined) edge.count++;
+    else edges.set(key, { from: pc, kind: EDGE_KINDS[e], count: 1 });
   }
 
   /** The instrumented `readMemory`: fetches pass straight through. */
@@ -276,6 +394,7 @@ export class Debugger {
       if (k < this.#len && addr === ((this.#pc + k) & 0xffff)) return value;
     }
     addr &= 0xffff;
+    if (this.#marking) this.#bits[addr] |= 4;
     if (this.#watchMask[addr] & 1) this.#hit('read', addr, value, value);
     if (this.#onMemRead !== null) this.#onMemRead(addr, value);
     return value;
@@ -288,6 +407,7 @@ export class Debugger {
     const watched = (this.#watchMask[addr] & 2) !== 0;
     const prev = watched || this.#onMemWrite !== null ? this.#plain.readMemory(addr) : 0;
     this.#plain.writeMemory(addr, value);
+    if (this.#marking) this.#bits[addr] |= 8;
     if (watched) this.#hit('write', addr, value, prev);
     if (this.#onMemWrite !== null) this.#onMemWrite(addr, value, prev);
   };
@@ -341,11 +461,11 @@ export class Debugger {
 
   /**
    * Install the instrumented CPU accessors that something listens to, and the plain ones for
-   * the rest. Coverage (Task 4) will also need the instrumented reads and writes.
+   * the rest. Coverage needs the instrumented reads and writes.
    */
   #instrument() {
-    let reads = this.#onMemRead !== null;
-    let writes = this.#onMemWrite !== null;
+    let reads = this.#onMemRead !== null || this.#covOn;
+    let writes = this.#onMemWrite !== null || this.#covOn;
     for (const w of this.#watches.values()) {
       reads ||= w.read;
       writes ||= w.write;
@@ -358,12 +478,23 @@ export class Debugger {
     cpu.readPort = ports ? this.#readPort : plain.readPort;
     cpu.writePort = ports ? this.#writePort : plain.writePort;
     this.#readsOn = reads;
+    this.#marking = this.#covOn;
     this.tracksAccess = reads || writes;
     if (!this.tracksAccess) this.#inInstr = false;
   }
 
   #refresh() {
     this.#instrument();
-    this.active = this.#breaks.size > 0 || this.#watches.size > 0 || this.#onMemRead !== null || this.#onMemWrite !== null || this.#onPort !== null;
+    this.active = this.#covOn || this.#breaks.size > 0 || this.#watches.size > 0 || this.#onMemRead !== null || this.#onMemWrite !== null || this.#onPort !== null;
   }
+}
+
+/**
+ * @param {Map<number, CallerEdge>} edges
+ * @returns {CallerEdge[]} copies sorted by `from`, then `kind`
+ */
+function sortEdges(edges) {
+  return [...edges.values()]
+    .map((e) => ({ from: e.from, kind: e.kind, count: e.count }))
+    .sort((a, b) => a.from - b.from || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0));
 }
