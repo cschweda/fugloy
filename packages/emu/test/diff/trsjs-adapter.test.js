@@ -169,6 +169,31 @@ describe.skipIf(trsjsSkip !== null)(`trsjs adapter against @fugloy/emu${trsjsSki
     expect(ref.z.port_latch[0xe4]).toBe(0xe0); // trsjs keeps the top three bits
   });
 
+  it('syncRegs refreshes the inputs that change without a CPU write: port $E0 status and port $FF', () => {
+    const m = newMachine();
+    const ref = loadTrsjs();
+    ref.syncFrom(m);
+    const io = m.system.io;
+    io.intLatch = 0x04;
+    io.cassette.pulseLatch = true;
+    ref.syncRegs(m);
+    expect(ref.z.port_status[0xe0]).toBe(0xfb); // active low: the 30 Hz bit raised
+    expect(ref.z.port_status[0xff] & 0x80).toBe(0x80);
+  });
+
+  it('redoes a DD/FD pair trsjs skipped: the prefix as one M1, then the instruction unprefixed', () => {
+    const ref = loadTrsjs();
+    ref.poke(0x5000, [0xdd, 0x41, 0xdd, 0xdd]); // LD B,C (DD-prefixed), then a lone DD
+    const r = ref.z.reg;
+    r.PC = 0x5000; r.R = 0; r.BC = 0x0011;
+    expect(ref.step().cycles).toBe(0); // trsjs skips both bytes
+    expect(ref.redoDroppedPrefix(0x5000, 0)).toBe(8);
+    expect([r.PC, r.R, r.BC]).toEqual([0x5002, 2, 0x1111]);
+    expect(ref.step().cycles).toBe(0);
+    expect(ref.redoDroppedPrefix(0x5002, 2)).toBe(4); // a lone prefix runs nothing more
+    expect([r.PC, r.R]).toEqual([0x5003, 3]);
+  });
+
   it('lists the DD/FD opcodes trsjs implements: (IX+d) and IX forms, not LD B,C or a second prefix', () => {
     const ops = loadTrsjs().prefixedOps;
     for (const op of [0x09, 0x21, 0x36, 0x46, 0x77, 0x86, 0xcb, 0xe1, 0xe9]) expect(ops.has(op)).toBe(true);

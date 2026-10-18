@@ -22,7 +22,7 @@ import { decode, formatInstruction } from '@fugloy/z80';
 import { KeyQueue } from '../../src/devices/key-queue.js';
 import { KeyboardMatrix } from '../../src/devices/keyboard.js';
 import { RTC_IRQ_BIT } from '../../src/machine/io.js';
-import { diffStep, explainStep, interruptClass } from './known.js';
+import { diffStep, droppedPrefix, explainStep, interruptClass, REFERENCE_FIXES, STEP_CLASSES } from './known.js';
 
 /**
  * @typedef {import('../../src/machine/machine.js').Machine} Machine
@@ -31,7 +31,9 @@ import { diffStep, explainStep, interruptClass } from './known.js';
  * @typedef {import('./known.js').Regs} Regs
  * @typedef {{ at: number, row: number, bit: number, down: boolean }} KeyEvent
  * @typedef {{ regs: Regs, cycles: number }} SideState
- * @typedef {{ index: number, pc: number, text: string, ours: SideState, theirs: SideState }} ContextLine
+ * @typedef {{ index: number, pc: number, code: number, idle: boolean, text: string, ours: SideState, theirs: SideState }} ContextLine
+ *   code: the instruction's first four bytes as it began (big-endian), so self-modifying code shows
+ *   what ran; idle: a halted CPU's step (a NOP).
  * @typedef {{
  *   index: number,
  *   pc: number,
@@ -52,6 +54,8 @@ import { diffStep, explainStep, interruptClass } from './known.js';
  */
 
 const CONTEXT = 10;
+const XY = /** @type {string} */ (STEP_CLASSES.find((c) => c.id === 'xy')?.name);
+const DROPPED_PREFIX = REFERENCE_FIXES[0].name;
 const VIDEO = 0x3c00;
 const VIDEO_LEN = 0x400;
 
@@ -101,7 +105,7 @@ export function ourRegs(m) {
 function instrument(m) {
   const mem = m.system.memory;
   const cpu = m.system.cpu;
-  const log = { writes: /** @type {Write[]} */ ([]), irq: false, execPc: 0, idle: false };
+  const log = { writes: /** @type {Write[]} */ ([]), irq: false, execPc: 0, idle: false, code: 0 };
   const own = (/** @type {object} */ o, /** @type {string} */ k) => Object.prototype.hasOwnProperty.call(o, k);
   const saved = { write: own(mem, 'writeByte'), interrupt: own(cpu, 'interrupt'), exec: own(cpu, 'executeInstruction') };
   const write = mem.writeByte;
@@ -117,12 +121,18 @@ function instrument(m) {
     return taken;
   };
   cpu.executeInstruction = () => {
-    log.execPc = cpu.registers.PC;
+    const pc = cpu.registers.PC;
+    log.execPc = pc;
     log.idle = cpu.halted;
+    // The instruction's bytes before it runs (it may rewrite itself); a halted step runs a NOP
+    // (Zilog UM0080, "HALT Exit").
+    log.code = cpu.halted ? 0
+      : ((mem.readByte(pc) << 24) | (mem.readByte((pc + 1) & 0xffff) << 16) | (mem.readByte((pc + 2) & 0xffff) << 8) | mem.readByte((pc + 3) & 0xffff)) >>> 0;
     return exec.call(cpu);
   };
   return {
     log,
+    machine: m,
     step() {
       log.writes = [];
       log.irq = false;
@@ -154,10 +164,13 @@ function compareVideo(m, ref) {
   return { equal: differing === 0, differing, first };
 }
 
-/** The instruction at `pc` in our memory, disassembled. @param {Machine} m @param {number} pc */
-export function disassemble(m, pc) {
-  const bytes = m.mem.read(pc, 4);
-  return formatInstruction(decode((i) => (i < 4 ? bytes[i] : undefined), pc));
+/**
+ * An instruction disassembled from its first four bytes (`code`, big-endian) at `pc`.
+ * @param {number} code @param {number} pc @param {boolean} [idle] a halted CPU's step
+ */
+export function disassemble(code, pc, idle = false) {
+  if (idle) return 'HALT (halted)';
+  return formatInstruction(decode((i) => (i < 4 ? (code >>> (24 - 8 * i)) & 0xff : undefined), pc));
 }
 
 /**
@@ -169,7 +182,10 @@ export function disassemble(m, pc) {
  * count and 30 Hz phase, and the bytes our instruction wrote); with `strict`, the run stops on it
  * instead. The first difference nothing explains ends the run as the divergence, with context.
  * Our machine's own key queue must be empty: keys come through `keys`.
- * @param {{ machine: Machine, reference: Reference, instructions: number, keys?: KeyEvent[], strict?: boolean }} opts
+ *
+ * `strict: true` stops on any known class but flag bits 3 and 5 (which differ in most programs
+ * within a few instructions); `strict: 'all'` stops on that one as well.
+ * @param {{ machine: Machine, reference: Reference, instructions: number, keys?: KeyEvent[], strict?: boolean | 'all' }} opts
  * @returns {CompareResult}
  */
 export function compareRun({ machine: m, reference: ref, instructions, keys = [], strict = false }) {
@@ -204,7 +220,10 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
       const blocked = cpu.pendingEI > 0 ? 'EI' : cpu.afterPrefix ? 'prefix' : null;
       const wasHalted = cpu.halted;
       const op = cpu.halted ? 0 : sys.memory.readByte(cpu.registers.PC);
+      // Before a DD or FD, the reference's registers and the byte after the prefix, in case trsjs
+      // skips the pair (known.js, REFERENCE_FIXES).
       const theirsBefore = op === 0xdd || op === 0xfd ? ref.regs() : null;
+      const afterPrefix = theirsBefore === null ? 0 : sys.memory.readByte((cpu.registers.PC + 1) & 0xffff);
       const refIff1 = ref.z.reg.IFF1 !== 0;
 
       const oursCycles = ours.step();
@@ -212,6 +231,12 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
       /** @type {import('./trsjs-adapter.js').IrqMode} */
       const mode = oursIrq ? (held !== null ? 'force' : 'auto') : blocked !== null ? 'hold' : 'auto';
       const t = ref.step({ irq: mode });
+      /** @type {string | null} */
+      let fix = null;
+      if (theirsBefore !== null && !oursIrq && droppedPrefix(afterPrefix, theirsBefore, ref.regs(), t, ref.writes().length, ref.prefixedOps)) {
+        t.cycles = ref.redoDroppedPrefix(theirsBefore.pc, theirsBefore.r);
+        fix = DROPPED_PREFIX;
+      }
 
       /** @type {string | null} The interrupt class this step's response is counted under. */
       let interrupt = null;
@@ -220,9 +245,12 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
         held = null;
       } else if (t.raised && !t.irq) {
         // The reference raised the request and did not take it: dropped because its IFF1 was 0
-        // (DI), or held back because our CPU could not take it here (EI's delay, a lone prefix).
-        // Either way our latch keeps it.
-        held ??= { reason: refIff1 && blocked !== null ? blocked : 'DI' };
+        // (DI), or held back (hold mode) because our CPU could not take it here (EI's delay, a lone
+        // prefix). Either way our latch keeps it. Anything else records nothing, so a later take
+        // by our CPU is a divergence.
+        /** @type {'DI' | 'EI' | 'prefix' | null} */
+        const reason = !refIff1 ? 'DI' : mode === 'hold' ? blocked : null;
+        if (reason !== null) held ??= { reason };
       }
       // The request is gone from our side (read from $EC, or masked): nothing is held any more.
       if (held !== null && (io.intLatch & io.intMask & RTC_IRQ_BIT) === 0) held = null;
@@ -230,37 +258,38 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
       const o = ourRegs(m);
       const s = ref.regs();
       const execPc = ours.log.execPc;
-      // A halted CPU's step runs a NOP (Zilog UM0080, "HALT Exit"), not the bytes at its PC.
-      for (let k = 0; k < 4; k++) bytes[k] = ours.log.idle ? 0 : sys.memory.readByte((execPc + k) & 0xffff);
+      const code = ours.log.code;
+      for (let k = 0; k < 4; k++) bytes[k] = (code >>> (24 - 8 * k)) & 0xff;
       const ctx = {
         bytes,
         execPc,
         ours: { regs: o, cycles: oursCycles, irq: oursIrq, writes: ours.log.writes, wasHalted },
         theirs: { regs: s, cycles: t.cycles, irq: t.irq, writes: ref.writes() },
-        theirsBefore,
-        prefixedOps: ref.prefixedOps,
       };
-      const line = { index, pc: execPc, text: '', ours: { regs: o, cycles: oursCycles }, theirs: { regs: s, cycles: t.cycles } };
+      /** @type {ContextLine} */
+      const line = { index, pc: execPc, code, idle: ours.log.idle, text: '', ours: { regs: o, cycles: oursCycles }, theirs: { regs: s, cycles: t.cycles } };
 
       const diff = diffStep(ctx);
       const { classes, unexplained } = diff.size === 0 ? { classes: [], unexplained: [] } : explainStep(ctx, diff);
+      if (fix !== null) classes.unshift(fix);
       if (interrupt !== null) classes.unshift(interrupt);
 
-      const stop = unexplained.length > 0 || (strict && classes.length > 0);
+      const stopsOn = strict === false ? undefined : classes.find((c) => strict === 'all' || c !== XY);
+      const stop = unexplained.length > 0 || stopsOn !== undefined;
       if (stop) {
         const divergence = /** @type {Divergence} */ ({
           index,
           pc: execPc,
           kind: 'step',
           fields: unexplained.length > 0 ? unexplained.sort() : [...diff].sort(),
-          known: unexplained.length > 0 ? null : classes[0],
+          known: unexplained.length > 0 ? null : /** @type {string} */ (stopsOn),
           ours: line.ours,
           theirs: line.theirs,
           writes: { ours: ctx.ours.writes, theirs: ctx.theirs.writes },
           video: compareVideo(m, ref),
           context: [],
         });
-        divergence.context = context(m, ref, ring, index, line, ours);
+        divergence.context = context(ref, ring, index, line, ours);
         if (strict) for (const c of classes) known[c] = (known[c] ?? 0) + 1;
         return { instructions: index + 1, divergence, known };
       }
@@ -290,7 +319,7 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
           theirs: { regs: s, cycles: ref.cycles },
           writes: { ours: [], theirs: [] },
           video,
-          context: ringLines(ring, instructions).map((l) => ({ ...l, text: disassemble(m, l.pc) })),
+          context: ringLines(ring, instructions).map(withText),
         },
         known,
       };
@@ -312,20 +341,23 @@ function ringLines(ring, index) {
   return out;
 }
 
+/** A context line with its disassembly. @param {ContextLine} l */
+const withText = (l) => ({ ...l, text: disassemble(l.code, l.pc, l.idle) });
+
 /**
  * The divergence's context: the ring's lines, the divergent one, and up to CONTEXT more steps of
  * both machines, unsynced (they stop early if one throws).
- * @param {Machine} m @param {Reference} ref @param {(ContextLine | undefined)[]} ring @param {number} index @param {ContextLine} line
+ * @param {Reference} ref @param {(ContextLine | undefined)[]} ring @param {number} index @param {ContextLine} line
  * @param {ReturnType<typeof instrument>} ours
  */
-function context(m, ref, ring, index, line, ours) {
-  const lines = [...ringLines(ring, index), line].map((l) => ({ ...l, text: disassemble(m, l.pc) }));
+function context(ref, ring, index, line, ours) {
+  const lines = [...ringLines(ring, index), line].map(withText);
   for (let k = 1; k <= CONTEXT; k++) {
     try {
       const oc = ours.step();
-      const execPc = ours.log.execPc;
       const tc = ref.step().cycles;
-      lines.push({ index: index + k, pc: execPc, text: disassemble(m, execPc), ours: { regs: ourRegs(m), cycles: oc }, theirs: { regs: ref.regs(), cycles: tc } });
+      const { execPc, code, idle } = ours.log;
+      lines.push(withText({ index: index + k, pc: execPc, code, idle, text: '', ours: { regs: ourRegs(ours.machine), cycles: oc }, theirs: { regs: ref.regs(), cycles: tc } }));
     } catch {
       break;
     }

@@ -4,7 +4,7 @@
 
 **Goal:** Run a program in `@fugloy/emu` and in an external reference emulator in lockstep, compare CPU state after every instruction, and report the first divergence that is not a documented, explained difference — with zero unexplained divergence on the Model III fixtures (emu spec §11 phase 7, §10 "Differential").
 
-**Architecture:** The reference is trsjs (`trsemu-1.6.js`, https://trsjs.48k.ca/, Peter Phillips; converted from trs80gp's C), which the user named on 2026-10-18. A feasibility spike (2026-10-18) showed it loads in `node:vm` with small DOM stubs, exposes its Z80 through one line injected into the script text in memory (`stepz80`, `z.reg`, `z.mem`, `z.cycles`, `mode_1_IRQ`, the beam IRQ flags, `cycles_per_frame`), carries a ROM byte-identical to our `model3-rev-c-2ef8`, and agrees with us on every instruction's T-states, PC and general registers once its 30 Hz interrupt is aligned (`frame_cnt = 1`). The remaining differences fall into five classes, each a known trsjs inaccuracy (our core passes ZEXALL): flag bits 3/5; BIT's S, P/V, X/Y; R not incremented on an interrupt; R counted three times on DDCB/FDCB; a request raised while interrupts are disabled dropped instead of held. trsjs has no license, so it is fetched on demand into a gitignored folder, pinned by SHA-256, used only locally, never committed — exactly like the ZEX exercisers.
+**Architecture:** The reference is trsjs (`trsemu-1.6.js`, https://trsjs.48k.ca/, Peter Phillips; converted from trs80gp's C), which the user named on 2026-10-18. A feasibility spike (2026-10-18) showed it loads in `node:vm` with small DOM stubs, exposes its Z80 through one line injected into the script text in memory (`stepz80`, `z.reg`, `z.mem`, `z.cycles`, `mode_1_IRQ`, the beam IRQ flags, `cycles_per_frame`), carries a ROM byte-identical to our `model3-rev-c-2ef8`, and agrees with us on every instruction's T-states, PC and general registers once its 30 Hz interrupt is aligned (`frame_cnt = 1`). The remaining differences fall into five classes (Task 2 found three more; Ruling 2 has the table as built), each a known trsjs inaccuracy (our core passes ZEXALL): flag bits 3/5; BIT's S, P/V, X/Y; R not incremented on an interrupt; R counted three times on DDCB/FDCB; a request raised while interrupts are disabled dropped instead of held. trsjs has no license, so it is fetched on demand into a gitignored folder, pinned by SHA-256, used only locally, never committed — exactly like the ZEX exercisers.
 
 **Tech Stack:** plain JavaScript ESM, Node ≥ 22 (`node:vm`), Vitest.
 
@@ -22,10 +22,15 @@
 ## Rulings made while planning
 
 1. **Model III only.** trsjs emulates the Model III; Model I differential testing waits for a Model I reference (MAME or xtrs, which needs the user's agreement to install). Record it in §11.
-2. **Known differences are explicit.** A table of the five classes, each with a predicate over the two states and the instruction, the evidence that trsjs is the inaccurate side (ZEXALL, the Z80 documentation), and a count in the report. By default a known difference is counted and the reference is resynced from our state (registers and the affected byte); `--strict` stops on it.
+2. **Known differences are explicit** (`test/diff/known.js`, as built in Task 2; each class carries its evidence — ZEXALL, Young's "The Undocumented Z80 Documented" 0.91, Zilog UM0080 — and a count in the report). Three kinds:
+   - *Step classes*, each a predicate naming the exact fields it explains (single flag bits, R, the writes): flag bits 3/5 (X/Y); BIT's S and P/V (only when our F obeys Young §4.1); R not counted on an interrupt response (exactly 1); R counted three times on DDCB/FDCB (exactly 1); HALT: trsjs pushes the HALT's own address (we push HALT+1, Young §5.4). A step is known only when the classes together explain every differing field; the reference is then resynced from our state (registers, cycle count, 30 Hz phase, the bytes written).
+   - *Interrupt classes* — a request trsjs drops while DI, takes right after EI, or takes after a lone DD/FD — are kept as a held request with its reason; when our CPU takes it, the reference is made to take it at the same boundary and the step is compared in full, nothing excused.
+   - *Reference fixes*: a DD/FD the next instruction ignores, which trsjs skips with both bytes in 0 T-states; the reference is made to run it as the Z80 does (the prefix as one M1, then the instruction unprefixed) and the step is compared in full.
+
+   `--strict` stops on any known class except X/Y (which differs within a few instructions in most programs); `--strict-all` stops on that one too.
 3. **Keyboard input** goes to both machines through the matrix at the same T-states (`set_key_bit` on trsjs; our matrix directly) — never our ROM keyboard hook, which replaces instructions trsjs would execute.
 4. **Start state.** Both start from our machine's state at the comparison's first instruction: RAM, video RAM, registers, IFF, IM, port latches the reference models, and the RTC phase (spike: trsjs fills RAM with $76 and video with $00, and resets SP to $0000; sync them).
-5. **What is compared** after every instruction: PC, all registers (F with bits 3/5 masked; R as 7 bits), IFF1/2, IM, the instruction's T-states, and every memory write (address and value) logged on both sides; video RAM compared at the end and on every divergence.
+5. **What is compared** after every instruction: PC, all registers (F and F' bit by bit, bits 3/5 included: they are counted as the X/Y class rather than masked, so a run shows how often they differ; R as 7 bits), IFF1/2, IM, the instruction's T-states, and every memory write (address and value) logged on both sides; video RAM compared at the end and on every divergence. Mapped, not counted: our IFF reads as set during EI's delay, and our halted PC (HALT+1) is compared less one.
 
 ## Review Focus
 
@@ -47,7 +52,7 @@
 
 ### Task 2: The lockstep comparator and the divergence report
 
-**Files:** Create `packages/emu/test/diff/compare.js`, `packages/emu/test/diff/known.js` (the five classes, Ruling 2), `packages/emu/scripts/diff.mjs` (CLI: `pnpm diff <program> [--keys <script>] [--instructions N] [--from-cycle C] [--strict]`), tests `packages/emu/test/diff/compare.test.js`.
+**Files:** Create `packages/emu/test/diff/compare.js`, `packages/emu/test/diff/known.js` (the classes, Ruling 2), `packages/emu/scripts/diff.mjs` (CLI: `pnpm diff <program> [--keys <script>] [--instructions N] [--from-cycle C] [--strict | --strict-all]`), tests `packages/emu/test/diff/compare.test.js`.
 
 **Interfaces:** `compareRun({ machine, reference, instructions, keys, strict }) → { instructions, divergence: null | { index, pc, ours, theirs, context: [{pc, text, ours, theirs}], writes }, known: { class: count } }`; the CLI prints a report with ±10 instructions disassembled (via `@fugloy/z80`).
 

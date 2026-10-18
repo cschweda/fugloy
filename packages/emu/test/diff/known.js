@@ -4,7 +4,7 @@
  * difference one of these explains (and resyncs the reference from our state) instead of
  * reporting it; `--strict` stops on it.
  *
- * Two kinds:
+ * Three kinds:
  *
  * - **Step classes** explain differences in one compared step. Each has a predicate over the step
  *   (the instruction our CPU executed, both machines' registers, T-states, and memory writes) and
@@ -18,6 +18,8 @@
  *   take it at the same boundary (`irq: 'force'`). Nothing is excused on that step: registers,
  *   T-states, and writes must then agree (up to the step classes), so the class can never hide
  *   another difference. It is counted on the step the request is taken.
+ * - **Reference fixes** make the reference run what the Z80 runs where trsjs skips it (a DD/FD
+ *   the next instruction ignores), then compare the step normally. Also counted, never excusing.
  *
  * Evidence:
  * - [ZEXALL] Frank Cringle's ZEXALL, which checks flag bits 3 and 5 for every instruction group;
@@ -46,12 +48,9 @@ export const flagToken = (reg, name) => `${reg}.${name}`;
  *   execPc: number,
  *   ours: Side & { wasHalted: boolean },
  *   theirs: Side,
- *   theirsBefore: Regs | null,
- *   prefixedOps: ReadonlySet<number>,
  * }} StepContext
- *   bytes: four bytes of our memory at execPc, the instruction our CPU executed this step (after
- *   an interrupt response, the handler's first); theirsBefore: the reference's registers before
- *   the step, captured when our instruction starts with DD or FD.
+ *   bytes: four bytes of our memory at execPc as our CPU began the instruction it executed this
+ *   step (after an interrupt response, the handler's first; four zeros, a NOP, for a halted step).
  * @typedef {{ id: string, name: string, evidence: string, explains(ctx: StepContext, diff: Set<string>): string[] | null }} StepClass
  * @typedef {{ id: string, name: string, reason: 'DI' | 'EI' | 'prefix', evidence: string }} InterruptClass
  */
@@ -168,29 +167,6 @@ export const STEP_CLASSES = [
       return ours === ((theirs + 1) & 0xffff) ? ['writes'] : null;
     },
   },
-  {
-    id: 'dropped-prefix',
-    name: 'DD/FD the instruction ignores: trsjs drops the instruction',
-    // Young §3.2 and §3.7: DD or FD only changes HL, H, L, and (HL) in the instruction after it;
-    // any other instruction runs as usual, the prefix costing one M1 (4 T-states, R + 1), and a DD
-    // or FD before another prefix or ED is such a no-op itself. trsjs's opx table has no entry for
-    // those bytes: opx_default does nothing in no T-states, so both bytes are skipped and the
-    // instruction never runs. Explained only when the reference did exactly that: PC + 2, R + 2,
-    // no T-states, no writes, every other register unchanged.
-    evidence: 'Young §3.2 and §3.7: a DD or FD before an instruction that does not use HL, H, L or (HL) leaves it to run as usual (any other byte resets the prefix); trsjs\'s opx_default skips it in 0 T-states.',
-    explains(ctx, diff) {
-      const b = ctx.bytes;
-      const before = ctx.theirsBefore;
-      if (before === null || (b[0] !== 0xdd && b[0] !== 0xfd) || ctx.prefixedOps.has(b[1]) || ctx.ours.irq || ctx.theirs.irq) return null;
-      const s = ctx.theirs.regs;
-      if (ctx.theirs.cycles !== 0 || ctx.theirs.writes.length !== 0) return null;
-      if (s.pc !== ((before.pc + 2) & 0xffff) || s.r !== ((before.r + 2) & 0x7f)) return null;
-      for (const k of /** @type {(keyof Regs)[]} */ (['a', 'f', 'b', 'c', 'd', 'e', 'h', 'l', 'a2', 'f2', 'b2', 'c2', 'd2', 'e2', 'h2', 'l2', 'ix', 'iy', 'sp', 'i', 'iff1', 'iff2', 'im'])) {
-        if (s[k] !== before[k]) return null;
-      }
-      return [...diff];
-    },
-  },
 ];
 
 /** @type {InterruptClass[]} */
@@ -229,8 +205,48 @@ export const INTERRUPT_CLASSES = [
   },
 ];
 
-/** Every class's display name, step classes first. */
-export const CLASS_NAMES = [...STEP_CLASSES, ...INTERRUPT_CLASSES].map((c) => c.name);
+/**
+ * Reference fixes: a step where trsjs did not run what the Z80 runs, so compare.js makes it run
+ * that and then compares the step normally. Nothing is excused; the fix is counted.
+ * @type {{ id: string, name: string, evidence: string }[]}
+ */
+export const REFERENCE_FIXES = [
+  {
+    id: 'dropped-prefix',
+    name: 'DD/FD the instruction ignores: trsjs drops the instruction',
+    // Young §3.2 and §3.7: DD or FD only changes HL, H, L, and (HL) in the instruction after it;
+    // any other instruction runs as usual, the prefix costing one M1 (4 T-states, R + 1), and a DD
+    // or FD before another prefix or ED is a 4-T-state no-op itself (a lone prefix). trsjs's opx
+    // table has no entry for those bytes: opx_default does nothing in no T-states, so both bytes
+    // are skipped and the instruction never runs. When the reference did exactly that (PC + 2,
+    // R + 2, no T-states, no writes, every other register unchanged), compare.js has it redo the
+    // step as the Z80 does (Reference.redoDroppedPrefix) and compares our step against that.
+    evidence: 'Young §3.2 and §3.7: a DD or FD before an instruction that does not use HL, H, L or (HL) costs one M1 and leaves the instruction to run as usual (any other byte resets the prefix); trsjs\'s opx_default skips both bytes in 0 T-states.',
+  },
+];
+
+/**
+ * True when the reference skipped `DD/FD xx` as opx_default does: `xx` (the byte after the prefix)
+ * not in its opx table, and the step left PC + 2, R + 2, no T-states, no writes, and every other
+ * register as it was.
+ * @param {number} xx
+ * @param {Regs} before the reference's registers before the step
+ * @param {Regs} after its registers after it
+ * @param {{ cycles: number, irq: boolean }} step
+ * @param {number} writes how many writes it made
+ * @param {ReadonlySet<number>} prefixedOps
+ */
+export function droppedPrefix(xx, before, after, step, writes, prefixedOps) {
+  if (prefixedOps.has(xx) || step.irq || step.cycles !== 0 || writes !== 0) return false;
+  if (after.pc !== ((before.pc + 2) & 0xffff) || after.r !== ((before.r + 2) & 0x7f)) return false;
+  for (const k of /** @type {(keyof Regs)[]} */ (['a', 'f', 'b', 'c', 'd', 'e', 'h', 'l', 'a2', 'f2', 'b2', 'c2', 'd2', 'e2', 'h2', 'l2', 'ix', 'iy', 'sp', 'i', 'iff1', 'iff2', 'im'])) {
+    if (after[k] !== before[k]) return false;
+  }
+  return true;
+}
+
+/** Every class's display name: step classes, interrupt classes, reference fixes. */
+export const CLASS_NAMES = [...STEP_CLASSES, ...INTERRUPT_CLASSES, ...REFERENCE_FIXES].map((c) => c.name);
 
 /**
  * Explain a step's differences with the step classes.

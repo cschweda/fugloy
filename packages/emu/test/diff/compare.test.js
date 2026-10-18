@@ -11,7 +11,7 @@
 import { describe, expect, it } from 'vitest';
 import { Machine } from '../../src/index.js';
 import { compareRun, formatReport, keyEvents } from './compare.js';
-import { CLASS_NAMES, INTERRUPT_CLASSES, STEP_CLASSES } from './known.js';
+import { CLASS_NAMES, INTERRUPT_CLASSES, REFERENCE_FIXES, STEP_CLASSES } from './known.js';
 import { trsjsSkip } from './gate.js';
 import { loadTrsjs } from './trsjs-adapter.js';
 
@@ -32,7 +32,8 @@ function setup(program, rtcIn = 1e9) {
   return m;
 }
 
-const name = (id) => [...STEP_CLASSES, ...INTERRUPT_CLASSES].find((c) => c.id === id).name;
+const ALL = [...STEP_CLASSES, ...INTERRUPT_CLASSES, ...REFERENCE_FIXES];
+const name = (id) => ALL.find((c) => c.id === id).name;
 const IRQ_R = name('irq-r');
 
 describe('keyEvents', () => {
@@ -53,7 +54,7 @@ describe('keyEvents', () => {
 
 describe('the known classes', () => {
   it('each carries its evidence and has a distinct name', () => {
-    for (const c of [...STEP_CLASSES, ...INTERRUPT_CLASSES]) expect(c.evidence).toMatch(/Young|ZEXALL|Zilog/);
+    for (const c of ALL) expect(c.evidence).toMatch(/Young|ZEXALL|Zilog/);
     expect(new Set(CLASS_NAMES).size).toBe(CLASS_NAMES.length);
   });
 });
@@ -137,6 +138,29 @@ describe.skipIf(trsjsSkip !== null)(`compareRun against trsjs${trsjsSkip === nul
     expect(m.system.cpu.halted).toBe(false);
   });
 
+  it('makes trsjs run what a DD before LD B,C leaves to run, and checks our result against it', () => {
+    const m = setup([0x01, 0x11, 0x00, 0xdd, 0x41, 0x00]); // LD BC,$0011 / LD B,C (DD-prefixed) / NOP
+    expect(run(m, 2).divergence).toBeNull();
+    expect(m.cpu.regs.b).toBe(0x11);
+    expect(ref.regs().b).toBe(0x11);
+    expect(ref.cycles).toBe(m.cycles); // 10 + 8
+  });
+
+  it('a bug in our instruction after an ignored DD is a divergence, not a known difference', () => {
+    // The reviewer's case: our LD B,C (test-only) flips B's bit 7, sets SP, and takes 7 more T-states.
+    const m = setup([0x01, 0x11, 0x00, 0xdd, 0x41, 0x00]);
+    const cpu = m.system.cpu;
+    const ldbc = cpu.opcodeHandlers[0x41];
+    cpu.opcodeHandlers[0x41] = () => {
+      const t = ldbc();
+      cpu.registers.B ^= 0x80;
+      cpu.registers.SP = 0x1234;
+      return t + 7;
+    };
+    const r = run(m, 3);
+    expect(r.divergence).toMatchObject({ index: 1, pc: 0x4003, known: null, fields: ['b', 'cycles', 'sp'] });
+  });
+
   it('with strict, stops on the first known difference and names it', () => {
     const m = setup([0x3e, 0x80, 0xcb, 0x7f, 0xcb, 0x47, 0x00]);
     const r = run(m, 4, { strict: true });
@@ -144,6 +168,15 @@ describe.skipIf(trsjsSkip !== null)(`compareRun against trsjs${trsjsSkip === nul
     expect(r.divergence).toMatchObject({ index: 1, pc: 0x4002, known: name('bit') });
     expect(r.divergence.fields).toContain('f.S');
     expect(r.known).toEqual({ [name('bit')]: 1 });
+  });
+
+  it('strict passes flag bits 3 and 5 by; strict \'all\' stops on them too', () => {
+    const program = [0x3e, 0xff, 0xb7, 0x37, 0x3f, 0x00]; // LD A,$FF / OR A / SCF / CCF / NOP
+    const r = run(setup(program), 4, { strict: true });
+    expect(r.divergence).toBeNull();
+    expect(r.known).toEqual({ [name('xy')]: 1 });
+    const all = run(setup(program), 4, { strict: 'all' });
+    expect(all.divergence).toMatchObject({ known: name('xy') });
   });
 
   /** NOPs to $400F, LD A,5 at $400F, AND A at $4011, then NOPs. */
@@ -173,6 +206,18 @@ describe.skipIf(trsjsSkip !== null)(`compareRun against trsjs${trsjsSkip === nul
     const at = d.context.find((l) => l.index === 16);
     expect(at).toMatchObject({ pc: 0x4011, text: 'AND A' });
     expect(d.context.find((l) => l.index === 15)).toMatchObject({ pc: 0x400f, text: 'LD A,05H' });
+  });
+
+  it('shows each context instruction as it ran, though the code rewrote itself after', () => {
+    // $4000 LD A,0 / $4002 LD ($4002),A (overwrites its own first byte with NOP) / three NOPs /
+    // LD A,5 / AND A / NOPs
+    const program = [0x3e, 0x00, 0x32, 0x02, 0x40, 0x00, 0x00, 0x00, 0x3e, 0x05, 0xa7, ...new Array(20).fill(0x00)];
+    const m = setup(program);
+    plantAndBug(m);
+    const d = run(m, 30).divergence;
+    expect(d.index).toBe(6);
+    expect(m.mem.read(0x4002, 1)[0]).toBe(0x00);
+    expect(d.context.find((l) => l.pc === 0x4002)).toMatchObject({ text: 'LD (4002H),A' });
   });
 
   it('catches a memory write that differs', () => {

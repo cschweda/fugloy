@@ -59,6 +59,7 @@ const PUTBYTE_MARKER = 'function putbyte(z,addr,val)\n{\n';
  *   alignRtc(phaseTStates: number): void,
  *   syncFrom(machine: Machine): void,
  *   syncRegs(machine: Machine): void,
+ *   redoDroppedPrefix(pc: number, r: number): number,
  *   writes(): Write[],
  *   readonly prefixedOps: ReadonlySet<number>,
  *   readonly cycles: number,
@@ -227,17 +228,33 @@ export function loadTrsjs({ path = TRSJS_PATH } = {}) {
       ref.poke(0x3c00, machine.mem.read(0x3c00, 0x10000 - 0x3c00));
       const rows = sys.keyboard.rows;
       for (let row = 0; row < 8; row++) for (let bit = 0; bit < 8; bit++) ref.setKeyBit(row, bit, ((rows[row] >> bit) & 1) === 1);
-      // The port latches trsjs models: the interrupt mask and status ($E0), the mode register
-      // ($EC), the NMI mask ($E4, its top three bits, as out_fdnmi keeps them), and the cassette
-      // port ($FF): the input bits in_cass reads (bit 7 the pulse latch, bit 0 the tape level, read without
-      // advancing our deck) and the output latch.
+      // The output latches trsjs models: the interrupt mask ($E0), the mode register ($EC), the
+      // NMI mask ($E4, its top three bits, as out_fdnmi keeps them), and the cassette output ($FF).
+      // syncRegs has set the inputs: port $E0's status and port $FF's input bits.
       z.port_latch[0xe0] = io.intMask & 0xff;
-      z.port_status[0xe0] = ~io.intLatch & 0xff;
       z.port_latch[0xec] = io.modeRegister & 0xff;
       z.port_latch[0xe4] = io.nmiMask & 0xe0;
-      z.port_status[0xff] = (io.cassette.pulseLatch ? 0x80 : 0) | (io.cassette.inputLevel ? 0x01 : 0);
       z.port_latch[0xff] = io.cassetteOut & 0xff;
       wlog.length = 0;
+    },
+
+    redoDroppedPrefix(pc, r) {
+      // Undo trsjs's skip of `DD/FD xx` (opx_default) and run it as the Z80 does (Young §3.2,
+      // §3.7): the prefix is one M1 (4 T-states, R + 1); then, unless xx is another prefix or ED
+      // (a lone prefix, which ends the instruction there), xx runs as an unprefixed instruction.
+      const reg = z.reg;
+      reg.PC = (pc + 1) & 0xffff;
+      reg.R = (r + 1) & 0x7f;
+      z.cycles -= 4;
+      let cycles = 4;
+      const next = z.mem[reg.PC];
+      if (next !== 0xdd && next !== 0xfd && next !== 0xed) {
+        const before = z.cycles;
+        x.stepz80(z);
+        cycles += before - z.cycles;
+      }
+      total += cycles;
+      return cycles;
     },
 
     syncRegs(machine) {
@@ -257,6 +274,12 @@ export function loadTrsjs({ path = TRSJS_PATH } = {}) {
       r.IFF2 = o.iff2 || ei ? 1 : 0;
       alignRtc(sys.nextRtcAt - machine.cycles);
       total = machine.cycles;
+      // The inputs the CPU reads that change without a CPU write: port $E0's interrupt status
+      // (active low) and port $FF's input bits (bit 7 the pulse latch, bit 0 the tape level, read
+      // without advancing our deck).
+      const io = sys.io;
+      z.port_status[0xe0] = ~io.intLatch & 0xff;
+      z.port_status[0xff] = (io.cassette.pulseLatch ? 0x80 : 0) | (io.cassette.inputLevel ? 0x01 : 0);
     },
 
     writes() {

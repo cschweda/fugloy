@@ -2,14 +2,15 @@
  * Run a program in @fugloy/emu and in trsjs in lockstep and report the first divergence no known
  * class explains (emu phase 7; test/diff/compare.js, test/diff/known.js).
  *
- *   pnpm diff <program> [--keys <script.json>] [--instructions N] [--from-cycle C] [--strict]
+ *   pnpm diff <program> [--keys <script.json>] [--instructions N] [--from-cycle C] [--strict | --strict-all]
  *
  * Boots the Model III ROM from fugloy.mcp.json to READY, loads the program (.CMD or .BAS, told
  * apart by content; a .BAS is RUN by typing), runs our machine alone to `--from-cycle` T-states
  * after the load (default 0), then compares N instructions (default 1,000,000). `--keys` names a
  * JSON file of key presses, `[{ "at": <T-states after the load>, "key": "ENTER", "hold": <T-states> }]`
  * (keys as for m.keyboard.press), sent to both machines' matrices at the same boundary. `--strict`
- * stops on a known difference as well.
+ * stops on a known difference as well, except flag bits 3 and 5 (which differ within a few
+ * instructions in most programs); `--strict-all` stops on those too.
  *
  * Prints the report (the counts per class, the divergence with ten instructions disassembled on
  * each side). Exit status: 0 no divergence, 1 a divergence, 2 a usage or setup error.
@@ -23,9 +24,13 @@ import { bootToReady } from '../test/integration/boot-helpers.js';
 import { compareRun, formatReport, keyEvents } from '../test/diff/compare.js';
 import { loadTrsjs } from '../test/diff/trsjs-adapter.js';
 
-const USAGE = 'usage: pnpm diff <program> [--keys <script.json>] [--instructions N] [--from-cycle C] [--strict]';
+const USAGE = 'usage: pnpm diff <program> [--keys <script.json>] [--instructions N] [--from-cycle C] [--strict | --strict-all]';
 
-/** @param {string} msg */
+/**
+ * Print `msg` and exit 2 (a usage or setup error; 1 means a divergence).
+ * @param {string} msg
+ * @returns {never}
+ */
 function fail(msg) {
   console.error(msg);
   process.exit(2);
@@ -33,7 +38,7 @@ function fail(msg) {
 
 /** @param {string[]} argv */
 function parseArgs(argv) {
-  /** @type {{ program: string | null, keys: string | null, instructions: number, fromCycle: number, strict: boolean }} */
+  /** @type {{ program: string | null, keys: string | null, instructions: number, fromCycle: number, strict: boolean | 'all' }} */
   const o = { program: null, keys: null, instructions: 1_000_000, fromCycle: 0, strict: false };
   for (let k = 0; k < argv.length; k++) {
     const a = argv[k];
@@ -50,7 +55,8 @@ function parseArgs(argv) {
     if (a === '--keys') o.keys = value();
     else if (a === '--instructions') o.instructions = count(value());
     else if (a === '--from-cycle') o.fromCycle = count(value());
-    else if (a === '--strict') o.strict = true;
+    else if (a === '--strict') o.strict = o.strict === 'all' ? 'all' : true;
+    else if (a === '--strict-all') o.strict = 'all';
     else if (a.startsWith('--')) fail(`unknown option ${a}\n${USAGE}`);
     else if (o.program === null) o.program = a;
     else fail(`one program only\n${USAGE}`);
@@ -71,10 +77,28 @@ try {
   fail(/** @type {Error} */ (e).message);
 }
 
-const bytes = new Uint8Array(readFileSync(resolve(cwd, /** @type {string} */ (opts.program))));
+/** @param {string} path @param {string} what */
+function readOrFail(path, what) {
+  try {
+    return readFileSync(resolve(cwd, path));
+  } catch (e) {
+    return fail(`cannot read the ${what} ${path}: ${/** @type {Error} */ (e).message}`);
+  }
+}
+
+const bytes = new Uint8Array(readOrFail(/** @type {string} */ (opts.program), 'program'));
 /** @type {{ at: number, key: string, hold?: number }[]} */
-let script = opts.keys === null ? [] : JSON.parse(readFileSync(resolve(cwd, opts.keys), 'utf8'));
-if (!Array.isArray(script)) fail(`${opts.keys}: expected a JSON array of { at, key, hold }`);
+let script = [];
+if (opts.keys !== null) {
+  const text = readOrFail(opts.keys, 'key script').toString('utf8');
+  try {
+    script = JSON.parse(text);
+  } catch (e) {
+    fail(`${opts.keys} is not JSON: ${/** @type {Error} */ (e).message}`);
+  }
+  const ok = Array.isArray(script) && script.every((e) => e !== null && typeof e === 'object' && Number.isFinite(e.at) && e.at >= 0 && typeof e.key === 'string' && (e.hold === undefined || (Number.isFinite(e.hold) && e.hold > 0)));
+  if (!ok) fail(`${opts.keys}: expected a JSON array of { "at": T-states, "key": "ENTER", "hold": T-states (optional) }`);
+}
 
 const m = bootToReady(/** @type {Uint8Array} */ (rom));
 const format = detectFormat(bytes);
@@ -87,7 +111,13 @@ else if (format === 'bas') {
 
 // Times in the script count from the load.
 const start = m.cycles;
-const events = keyEvents(script.map((e) => ({ ...e, at: e.at + start })));
+/** @type {import('../test/diff/compare.js').KeyEvent[]} */
+let events = [];
+try {
+  events = keyEvents(script.map((e) => ({ ...e, at: e.at + start })));
+} catch (e) {
+  fail(`${opts.keys}: ${/** @type {Error} */ (e).message}`);
+}
 let next = 0;
 // Our machine alone up to --from-cycle, its keys straight into the matrix as compareRun sends them.
 while (m.cycles - start < opts.fromCycle) {
