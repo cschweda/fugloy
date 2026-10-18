@@ -4,7 +4,7 @@ A stdio MCP server that puts a running TRS-80 (`@fugloy/emu`) in front of
 Claude Code or any MCP client: load a program, run it, inspect memory and
 registers, type on its keyboard, read the screen, set breakpoints and
 watches, and record labels and coverage in the file the Fugløy disassembler
-reads. Version 0.1.0, MCP phases A–F (spec §11): the tools of phases A–C
+reads. Version 0.1.1 (first released 2026-10-18; 0.1.0 is the version on npm until it is published), MCP phases A–F (spec §11): the tools of phases A–C
 (built as the emulator's phase 4), with which an assistant can load a game,
 find its print routine, and label it on its own; snapshots, `diff`, `search`,
 and `callees` (D); resources and prompts (E); and the guardrail tests, golden
@@ -18,7 +18,7 @@ public-domain games on its own (story 7, below).
 
 ## Set up
 
-`@fugloy/mcp` is on npm (0.1.0, 2026-10-18): run it from npm with Node 22 or later
+`@fugloy/mcp` is on npm (0.1.0 since 2026-10-18; 0.1.1, with disk images and the Model I, is being released and is not on npm until published): run it from npm with Node 22 or later
 (`npx -y @fugloy/mcp`; for development, use the clone setup below,
 `node packages/mcp/bin/fugloy-mcp.js`). Write a `fugloy.mcp.json` that names
 your Model III ROM, and your Model I Level II ROM if you have one (paths in it
@@ -328,7 +328,7 @@ then review the diff.
 ## Releasing
 
 `./publish.sh check mcp` on `main` packs the package (pnpm turns the
-`workspace:^` dependencies into `^` ranges: `@fugloy/emu` `^0.2.0`,
+`workspace:^` dependencies into `^` ranges: `@fugloy/emu` `^0.3.0`,
 `@fugloy/disasm` and `@fugloy/z80` `^1.2.0`), checks the tarball, installs it
 in a scratch project, and checks that `npx fugloy-mcp` answers `initialize`
 and `tools/list` over a pipe. It needs those `@fugloy` versions on npm, so
@@ -337,8 +337,7 @@ rehearsal that stages nothing.
 
 Disk images (emu phase 5) make `load` call emu APIs that `@fugloy/emu` 0.2.0
 does not have (`m.fdc`, `m.load.dsk`, `DiskImage`, `CPU_CLOCK_HZ`), so emu is
-bumped to 0.3.0 and released before the next mcp release, whose range then
-reads `^0.3.0`. The Model I (emu phase 6) needs the same release: `new
+bumped to 0.3.0 and released before mcp 0.1.1, whose range reads `^0.3.0`. The Model I (emu phase 6) needs the same release: `new
 Machine({ model: 1 })`, `m.model`, `m.clockHz`, and `JV1_MODEL1_SD_TRACKS` are
 not in emu 0.2.0.
 

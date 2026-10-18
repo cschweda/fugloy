@@ -34,6 +34,104 @@ creates and pushes the tag.
 
 ## [Unreleased]
 
+## [mcp 0.1.1] - 2026-10-18
+
+Disk images and the Model I for the MCP server. `load` accepts a disk image
+(DMK, JV3, or JV1, detected from the content) and `load { model: 1 }` builds a
+Model I on the config's `roms.model1`; timing now follows each machine's clock
+(`m.clockHz`), `suggest` knows the Model I's range, and a label merge or sidecar
+from the other model is refused. It needs `@fugloy/emu` 0.3.0 (the dependency
+packs to `^0.3.0`) and nothing newer than core 1.2.0: `@fugloy/disasm` and
+`@fugloy/z80` are unchanged since 1.2.0. Emu 0.3.0 is released first.
+
+### Added
+
+- `@fugloy/mcp` runs the Model I (MCP spec §3, §5):
+  - `load { model: 1 }` builds a Model I (48K, the Expansion Interface) on the
+    config's `roms.model1` and boots it to READY, answering MEMORY SIZE? with
+    ENTER; the manifest adds a `Model: Model I (48K, with the Expansion
+    Interface)` line (a Model III's manifest is unchanged). A disk on the
+    Model I boots toward `$4200` (track 0, sector 0). Without `roms.model1`
+    the sentence names the entry to set; a Model III ROM named there is
+    refused naming its model; `model: 4` says the Model 4 comes in its own
+    plan; `reset: false` with a model other than the running machine's is
+    refused.
+  - The config's `defaultModel` takes 1 or 3 (it took only 3); 4 and any
+    other value are refused with a sentence. `reset` keeps the running
+    machine's model; `status` names the running machine's model and that
+    model's ROM.
+  - Emulated time counts on the machine's own clock (1,774,080 Hz on the
+    Model I): `run seconds`, the `limits.runSecondsEmulated` cap, `settled`'s
+    0.5 s, `key`'s 0.2 s tail, and every `N s emulated` the tools print. They
+    all used the Model III's clock.
+  - `key` types at 10 characters a second by default on a Model I, 20 on the
+    Model III: the Level II ROM drops every other key typed at 20.
+  - `disasm` and `callees` name from the Model I's ROM and hardware tables on
+    a Model I; `fugloy://rom/1/symbols` serves them (it read as a sentence
+    naming emu phase 6), and `fugloy://rom/4/symbols` says the Model 4 is not
+    here. `poke` refuses the Model I's ROM as `0000h`–`2FFFh` without `force`
+    and its Expansion Interface space, `3000h`–`37FFh`, outright.
+    `coverage export` refuses to write over either configured ROM.
+  - `load` detects a disk image by the sizes the model it builds takes: on a
+    Model I a JV1 may have 35 to 42, 77, or 80 single-density tracks, as
+    `m.fdc.mount` accepts there (a 36-track JV1 loaded on a Model I was
+    refused as not a disk); the Model III's sizes are unchanged.
+  - A sidecar written on another model (its `program.model` differs from the
+    machine's) is ignored at `load`, reported, and never merged or
+    overwritten, as one for another program is.
+  - `suggest` leaves out only the Model I's ROM, `0000h`–`2FFFh`, on a Model I
+    (it skipped everything below `3800h`).
+  - `resources/list` lists `fugloy://rom/1/symbols` beside
+    `fugloy://rom/3/symbols`. The tools read the clock from `m.clockHz`.
+  - Tests: `packages/mcp/test/model1.test.js` on a synthetic 12K ROM (in CI);
+    `model1-rom.test.js` on the Level II ROM (Eliminator to its title and
+    ENTER, BASIC typed at the default rate, Scarfman's disk to `4200h` and its
+    title, and the wrong-ROM sentence).
+- `@fugloy/mcp` `load` takes a disk image (MCP spec §5; the
+  phase 5 plan's Ruling 4):
+  - Detected from the content as `m.fdc.mount` does (`DiskImage`): a DMK
+    header or a JV3 sector table before the program formats, a JV1, which is
+    only a size, after them all, so every committed example `.CMD` stays a
+    program. `formatOf` returns `'dsk'`, and `diskContainer(bytes)` names
+    the container.
+  - With `reset` (the default) the image goes into drive 0 of a fresh
+    machine, and `load` runs until the ROM jumps to the boot sector at
+    `4300h`, for at most 5 s emulated; the `Boot:` line says when, or that it
+    did not get there and where the PC is, and tells the agent to follow with
+    `run until: "settled"`, repeated, since a disk loader takes seconds of
+    emulated time. The screen baseline and coverage start there.
+  - The manifest names the container and geometry (`Format: disk image (DMK,
+    40 tracks, 1 side, sectors a track varying), in drive 0`), with no blocks
+    and no entry. `coverage` says why a disk has no blocks (what it ran
+    counts as outside them) instead of blaming ASCII BASIC.
+  - With `reset: false` the image is only put in drive 0 of the running
+    machine (`Boot: none`), and `reset` boots from it.
+  - A file that is neither is refused with a sentence naming both kinds.
+  - Tests (`packages/mcp/test/disk.test.js`): on a synthetic disk-boot ROM
+    and a JV1 built by the test, the committed DMK and JV3 samples, and the
+    synthetic ROM that never boots, in CI; with the Model III ROM and the
+    local Rear Guard dual-boot DMK, `load`, `run until: "settled"`, ENTER,
+    and the title. `test/helpers.js` gained `diskBootRom` and `bootJv1`.
+
+### Release coupling
+
+`@fugloy/mcp`'s disk support needs emu APIs that `@fugloy/emu` 0.2.0 does not
+have (`m.fdc`, `m.load.dsk`, `DiskImage`, `CPU_CLOCK_HZ`), and its Model I support
+needs `new Machine({ model: 1 })`, `m.model`, and `m.system.clockHz`. The
+dependency is `workspace:^`, which publishes as `^0.3.0`, so `@fugloy/emu` 0.3.0
+must be on npm before this release; mcp 0.1.1 against emu 0.2.0 would install an
+emu without the disk controller.
+
+## [emu 0.3.0] - 2026-10-18
+
+Disks and the Model I, checked against a second emulator. Emu phase 5 adds the
+WD1793 floppy controller (`m.fdc`) and `m.load.dsk` for JV1, JV3, and DMK images;
+phase 6 adds the Model I (`models.js`, the WD1771, `m.clockHz`,
+`JV1_MODEL1_SD_TRACKS`); phase 7 compares the Z80 core and the Model III devices
+with trsjs instruction by instruction, and its two core fixes ship here (R is
+counted while halted; a Model III port `$FF` read). The harness itself is test
+and script code and is not in the package. No change to the existing API.
+
 ### Added
 
 Emu phase 7 (the differential harness against trsjs; emu spec §10, §11, §12;
@@ -114,7 +212,7 @@ the `emu-phase7` branch:
   is Model III only.
 
 Emu phase 6 (the Model I; emu spec §3, §5, §11), `@fugloy/emu` and
-`@fugloy/mcp`, unreleased, on the `emu-phase6` branch. The Model 4 half of the
+`@fugloy/mcp` (the mcp half is under mcp 0.1.1), merged from the `emu-phase6` branch. The Model 4 half of the
 phase is split off into its own plan, for when a Model 4 ROM and boot disk are
 supplied (`model: 4` refuses with a sentence saying so):
 
@@ -251,50 +349,9 @@ supplied (`model: 4` refuses with a sentence saying so):
   measured 12–15× against about 40× alone, and failed. `./publish.sh check`
   runs it by itself after the suite; `node packages/emu/scripts/benchmark.mjs
   off` (or `debug`) measures it by hand.
-- `@fugloy/mcp` (unreleased) runs the Model I (MCP spec §3, §5):
-  - `load { model: 1 }` builds a Model I (48K, the Expansion Interface) on the
-    config's `roms.model1` and boots it to READY, answering MEMORY SIZE? with
-    ENTER; the manifest adds a `Model: Model I (48K, with the Expansion
-    Interface)` line (a Model III's manifest is unchanged). A disk on the
-    Model I boots toward `$4200` (track 0, sector 0). Without `roms.model1`
-    the sentence names the entry to set; a Model III ROM named there is
-    refused naming its model; `model: 4` says the Model 4 comes in its own
-    plan; `reset: false` with a model other than the running machine's is
-    refused.
-  - The config's `defaultModel` takes 1 or 3 (it took only 3); 4 and any
-    other value are refused with a sentence. `reset` keeps the running
-    machine's model; `status` names the running machine's model and that
-    model's ROM.
-  - Emulated time counts on the machine's own clock (1,774,080 Hz on the
-    Model I): `run seconds`, the `limits.runSecondsEmulated` cap, `settled`'s
-    0.5 s, `key`'s 0.2 s tail, and every `N s emulated` the tools print. They
-    all used the Model III's clock.
-  - `key` types at 10 characters a second by default on a Model I, 20 on the
-    Model III: the Level II ROM drops every other key typed at 20.
-  - `disasm` and `callees` name from the Model I's ROM and hardware tables on
-    a Model I; `fugloy://rom/1/symbols` serves them (it read as a sentence
-    naming emu phase 6), and `fugloy://rom/4/symbols` says the Model 4 is not
-    here. `poke` refuses the Model I's ROM as `0000h`–`2FFFh` without `force`
-    and its Expansion Interface space, `3000h`–`37FFh`, outright.
-    `coverage export` refuses to write over either configured ROM.
-  - `load` detects a disk image by the sizes the model it builds takes: on a
-    Model I a JV1 may have 35 to 42, 77, or 80 single-density tracks, as
-    `m.fdc.mount` accepts there (a 36-track JV1 loaded on a Model I was
-    refused as not a disk); the Model III's sizes are unchanged.
-  - A sidecar written on another model (its `program.model` differs from the
-    machine's) is ignored at `load`, reported, and never merged or
-    overwritten, as one for another program is.
-  - `suggest` leaves out only the Model I's ROM, `0000h`–`2FFFh`, on a Model I
-    (it skipped everything below `3800h`).
-  - `resources/list` lists `fugloy://rom/1/symbols` beside
-    `fugloy://rom/3/symbols`. The tools read the clock from `m.clockHz`.
-  - Tests: `packages/mcp/test/model1.test.js` on a synthetic 12K ROM (in CI);
-    `model1-rom.test.js` on the Level II ROM (Eliminator to its title and
-    ENTER, BASIC typed at the default rate, Scarfman's disk to `4200h` and its
-    title, and the wrong-ROM sentence).
 
 Emu phase 5 (disk controller and images; emu spec §3, §5, §6), `@fugloy/emu`,
-unreleased, on the `emu-phase5` branch:
+merged from the `emu-phase5` branch:
 
 - `m.fdc`, the four floppy drives behind `Machine`: `mount(drive, bytes |
   DiskImage, { writeProtect })` detects JV1, JV3, or DMK from the content and
@@ -451,31 +508,6 @@ unreleased, on the `emu-phase5` branch:
     to 0.43 s (`ELIMATOR.dsk`, Scarfman) after the reset.
   - `test/rom.js` gained `configuredFixtures(pattern)`, the files under the
     config's `fixtures` folder.
-- `@fugloy/mcp` (unreleased) `load` takes a disk image (MCP spec §5; the
-  phase 5 plan's Ruling 4):
-  - Detected from the content as `m.fdc.mount` does (`DiskImage`): a DMK
-    header or a JV3 sector table before the program formats, a JV1, which is
-    only a size, after them all, so every committed example `.CMD` stays a
-    program. `formatOf` returns `'dsk'`, and `diskContainer(bytes)` names
-    the container.
-  - With `reset` (the default) the image goes into drive 0 of a fresh
-    machine, and `load` runs until the ROM jumps to the boot sector at
-    `4300h`, for at most 5 s emulated; the `Boot:` line says when, or that it
-    did not get there and where the PC is, and tells the agent to follow with
-    `run until: "settled"`, repeated, since a disk loader takes seconds of
-    emulated time. The screen baseline and coverage start there.
-  - The manifest names the container and geometry (`Format: disk image (DMK,
-    40 tracks, 1 side, sectors a track varying), in drive 0`), with no blocks
-    and no entry. `coverage` says why a disk has no blocks (what it ran
-    counts as outside them) instead of blaming ASCII BASIC.
-  - With `reset: false` the image is only put in drive 0 of the running
-    machine (`Boot: none`), and `reset` boots from it.
-  - A file that is neither is refused with a sentence naming both kinds.
-  - Tests (`packages/mcp/test/disk.test.js`): on a synthetic disk-boot ROM
-    and a JV1 built by the test, the committed DMK and JV3 samples, and the
-    synthetic ROM that never boots, in CI; with the Model III ROM and the
-    local Rear Guard dual-boot DMK, `load`, `run until: "settled"`, ENTER,
-    and the title. `test/helpers.js` gained `diskBootRom` and `bootJv1`.
 - Docs: emu spec §3 (an export lays a JV1 or JV3 out with standard gaps, so
   rotational positions and timing change; the four local images are DMKs and
   export as themselves), §5 (a DMK is detected only at its exact length; a
@@ -544,17 +576,6 @@ From the emu phase 5 final review, `@fugloy/emu`, on `emu-phase5`:
   `docs/label-format.md` (a disk loaded with `m.load.dsk` contributes no
   `load` blocks, and `labelFile()` needs a `name` for one). MCP `formatOf`
   notes that a JV1 that also parses as a `.CMD` loads as a program.
-
-### Release coupling
-
-`@fugloy/mcp`'s disk support needs emu APIs that `@fugloy/emu` 0.2.0 does not
-have (`m.fdc`, `m.load.dsk`, `DiskImage`, `CPU_CLOCK_HZ`). Its dependency is
-`workspace:^`, which publishes as `^` the emu version in the workspace, so
-`@fugloy/emu` must be bumped to 0.3.0 and released before the next
-`@fugloy/mcp` release; an mcp published against emu 0.2.0 would install an
-emu without the disk controller. The same holds for its Model I support
-(emu phase 6), which needs `new Machine({ model: 1 })`, `m.model`, and
-`m.system.clockHz`.
 
 ## [1.2.0] - 2026-10-18
 
@@ -1737,6 +1758,8 @@ listing of any `.BAS`. `@fugloy/z80`, `@fugloy/disasm`, and `@fugloy/cli` are
 
 [Unreleased]: https://github.com/cschweda/fugloy/compare/v1.2.0...HEAD
 [1.2.0]: https://github.com/cschweda/fugloy/releases/tag/v1.2.0
+[emu 0.3.0]: https://github.com/cschweda/fugloy/releases/tag/emu-v0.3.0
+[mcp 0.1.1]: https://github.com/cschweda/fugloy/releases/tag/mcp-v0.1.1
 [emu 0.2.0]: https://github.com/cschweda/fugloy/releases/tag/emu-v0.2.0
 [mcp 0.1.0]: https://github.com/cschweda/fugloy/releases/tag/mcp-v0.1.0
 [1.1.0]: https://github.com/cschweda/fugloy/releases/tag/v1.1.0

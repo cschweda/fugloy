@@ -11,7 +11,7 @@ later phases follow, in the Roadmap's order. The recompiler and
 bundler stay in Part 2 until the plan's kill criteria have been reviewed. If a
 task seems to need machinery from a later step, stop and say so.
 
-Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.2.0, `@fugloy/emu` 0.2.0, and `@fugloy/mcp` 0.1.0 on npm (2026-10-18); emu phases 2 and 3 merged to `main` (2026-10-18); emu phase 4 (`@fugloy/mcp` v0.1, MCP phases A–C) merged to `main` (2026-10-18); MCP phases A–F done; emu phases 5 (disk controller and images) and 6 (Model I) merged (2026-10-18), unreleased, with the Model 4 split off into its own plan, planned next now that a Model 4 ROM is local (native mode still needs an LS-DOS 6 / TRSDOS 6 disk); emu phase 7 (the differential harness against trsjs) done for the Model III and merged (2026-10-18); next: release emu 0.3.0, then the Model 4.**
+Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.2.0, `@fugloy/emu` 0.2.0, and `@fugloy/mcp` 0.1.0 on npm (2026-10-18); emu phases 2 and 3 merged to `main` (2026-10-18); emu phase 4 (`@fugloy/mcp` v0.1, MCP phases A–C) merged to `main` (2026-10-18); MCP phases A–F done; emu phases 5 (disk controller and images) and 6 (Model I) merged (2026-10-18), unreleased, with the Model 4 split off into its own plan, planned next now that a Model 4 ROM is local (native mode still needs an LS-DOS 6 / TRSDOS 6 disk); emu phase 7 (the differential harness against trsjs) done for the Model III and merged (2026-10-18); emu 0.3.0 and mcp 0.1.1 prepared 2026-10-18 (versions bumped, CHANGELOG sections written; not on npm until `publish.sh` runs); next: publish them, then the Model 4.**
 v1 is disassembler phases 1–4: the core decoder and loaders (v0.1.0), Pass 1
 and Pass 2 (v0.2.0), the cited symbol tables (phase 3: eight JSON tables, 634
 entries, in `packages/disasm/data/symbols/`, compiled by `pnpm symbols`), and
@@ -68,8 +68,8 @@ TRSDOS 1.3 image is present, so the emu spec §10 TRSDOS row stays open.
 Disk images stay in the gitignored `fixtures/real/`; synthetic ones are in
 `fixtures/synthetic/disk/`. Release coupling: the MCP server now needs emu's
 `m.fdc`, `m.load.dsk`, `DiskImage`, `JV1_MODEL1_SD_TRACKS`, and `m.clockHz`, which emu 0.2.0 lacks,
-so emu must be bumped to 0.3.0 and released before the next `@fugloy/mcp`
-release. Emu phase 6 is done for the Model I and merged (plan
+so emu 0.3.0 (versions bumped 2026-10-18, first released then, not on npm until
+published) must be on npm before `@fugloy/mcp` 0.1.1. Emu phase 6 is done for the Model I and merged (plan
 `docs/superpowers/plans/2026-10-18-emu-phase6-model1.md`): `new Machine({
 model: 1, ram, expansion, lowercase })` (models described in
 `src/machine/models.js`; the Model III's save state is byte-identical to
@@ -120,7 +120,7 @@ The Model I waits for a Model I reference (MAME or xtrs, ask the user first).
   Plain JavaScript ESM, no build step; the bin is `bin/fugloy-mcp.js`, which
   imports disasm and z80 from their `dist/` (run `pnpm build` or
   `pnpm typecheck` first). Depends on emu, disasm, and z80 as `workspace:^`
-  (pnpm pack rewrites them to `^0.2.0` and `^1.2.0`), and on the MCP SDK and
+  (pnpm pack rewrites them to `^0.3.0` and `^1.2.0`), and on the MCP SDK and
   zod at exact versions. Phases A–F are built: one machine per process
   (a Model III, or a Model I from `load { model: 1 }` on `roms.model1`),
   every result text, errors as sentences,

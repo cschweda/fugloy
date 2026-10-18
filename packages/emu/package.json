@@ -1,6 +1,6 @@
 {
   "name": "@fugloy/emu",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Headless, deterministic TRS-80 emulator core, Model III today (see docs/fugloy-emu-spec.md)",
   "license": "MIT",
   "type": "module",

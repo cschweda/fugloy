@@ -33,8 +33,8 @@ and an MCP server that lets an AI assistant drive the emulator.
 | --- | --- | --- | --- |
 | **Disassembler** | Loads `.CMD`, `.BAS`, and raw files by content; recursive descent; labels; cited ROM, hardware, and DOS names; hint files; hidden code in BASIC; rebasing and relocation; zmac source that reassembles byte for byte; JSON IR; reads the emulator's label files | Released, 1.2.0 on npm | `@fugloy/disasm`, the `fugloy` command in `@fugloy/cli`, opcode tables in `@fugloy/z80` |
 | **Web workbench** | The disassembler in the browser: facing pages, the four public-domain games one click away, editing by keyboard, the **Explain** tab, block comments, exports | Live | [app.fugloy.dev](https://app.fugloy.dev/), source in `apps/web` |
-| **Emulator** | A headless, deterministic Model III and Model I that passes ZEXDOC and ZEXALL, runs `.CMD`, `.BAS`, and `.CAS` programs and disk images, and has a debugger that writes label and coverage files | 0.2.0 on npm, phases 0–4 of 8; disks (5) and the Model I (6) built, unreleased | `packages/emu` (`@fugloy/emu`) |
-| **MCP server** | Lets an AI assistant such as Claude Code load a program, run it, set breakpoints and watches, read the screen, and name what it finds in the same label file | 0.1.0 on npm, MCP phases A–F | `packages/mcp` (`@fugloy/mcp`) |
+| **Emulator** | A headless, deterministic Model III and Model I that passes ZEXDOC and ZEXALL, runs `.CMD`, `.BAS`, and `.CAS` programs and disk images, and has a debugger that writes label and coverage files | 0.2.0 on npm; 0.3.0 (disks and the Model I, phases 5–7) first released 2026-10-18, not on npm until published | `packages/emu` (`@fugloy/emu`) |
+| **MCP server** | Lets an AI assistant such as Claude Code load a program, run it, set breakpoints and watches, read the screen, and name what it finds in the same label file | 0.1.0 on npm, MCP phases A–F; 0.1.1 (disk images, the Model I) is being released, not on npm until published | `packages/mcp` (`@fugloy/mcp`) |
 | **Ahead** | An assembler and IDE in the workbench, a course in assembly for non-programmers, and, later, recompiling games to TypeScript | Planned | [Roadmap](#whats-ahead) |
 
 Its core libraries have no runtime dependencies and use no Node or browser
@@ -322,7 +322,7 @@ releases: phase 2, Pass 1 and Pass 2, as
 core decoder and loaders, as
 [v0.1.0](https://github.com/cschweda/fugloy/releases/tag/v0.1.0).
 
-The emulator, `@fugloy/emu` 0.2.0 (on npm since 2026-10-18), has phases 0–4 of eight
+The emulator, `@fugloy/emu` 0.2.0 (on npm since 2026-10-18; 0.3.0, with disks and the Model I, is being released), has phases 0–4 of eight
 done: the core of [trs80-emulator](https://github.com/cschweda/trs80-emulator)
 booting the Model III ROM to `READY` in Node (0); a Z80 core that passes
 ZEXDOC and ZEXALL (1); the Model III as a `Machine`, with video, sound,
