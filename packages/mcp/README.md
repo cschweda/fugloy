@@ -18,7 +18,9 @@ public-domain games on its own (story 7, below).
 
 ## Set up
 
-With Node 22 or later, run it from npm. Write a `fugloy.mcp.json` that names
+Once `@fugloy/mcp` is published (its first npm release is pending; until
+then, use the clone setup below, `node packages/mcp/bin/fugloy-mcp.js`), run
+it from npm with Node 22 or later. Write a `fugloy.mcp.json` that names
 your Model III ROM (paths in it are relative to the file):
 
 ```json
@@ -244,7 +246,7 @@ tree, the MCP tools its only tools) got the prompt with `minCalls` 5 for each
 of the three public-domain games in `examples/` that run under the emulator,
 each on a scratch copy:
 
-| Game | Turns, time | Labelled | What a reviewer would keep |
+| Game | Turns, time | Labelled | On the spot-check, a reviewer would keep |
 | --- | --- | --- | --- |
 | Sea Dragon (`seadrg01.cmd`) | 90, 5 min | 18 of 22 listed; left 4 whose object tables stayed empty, so their code never ran | All 18. Twelve are routines the hand-made [`seadrg01.hints`](https://github.com/cschweda/fugloy/blob/main/examples/sea-dragon/seadrg01.hints) names, with the same meaning (`PrintText` for `PRINT_TEXT`, `BlitSprite` for `DRAW_SHAPE`, `SurfaceAndAir` for `AIR_SUPPLY`, `UnpackLevelObjects` for `SETUP_OBJECTS`, …); three are title routines the hints describe; three the code bears out |
 | Eliminator (`elimin8c.cmd`) | 119, 4 min | All 17 listed (`RenderFrame`, confirmed by a trace; `DrawObject`, 12,234 calls; `HitTestPlayerShip`; `SpawnWave`; …) | All, perhaps renaming the three it marked as weaker readings (`InitHumanoids`, `ShotMoveUp`, `ShotMoveDown`) |
@@ -253,7 +255,7 @@ each on a scratch copy:
 Each session played, went down `suggest`'s list with `disasm` and `callers`
 (and watches, breakpoints, or a trace where reading was not enough), wrote
 a note with the evidence for every label, exported the file, and said which
-names were guesses. Every label was checked against the code. Rear Guard's
+names were guesses. Every label carries the agent's evidence note; a sample (Sea Dragon's 12 names shared with the hints and 3 more routines against the hints and code, 4 of Eliminator's 17, 4 of Rear Guard's 24) was checked against the code and agreed. Rear Guard's
 build writes the Model I's keyboard driver address (`03E3h`) into the
 keyboard vector at `4016h`, so the Model III ROM's key wait hung at
 "1 or 2 Players?"; the agent worked that out and poked `4016h` to the Model

@@ -11,8 +11,8 @@ Phases 0–4 of the spec's eight are done: the Z80 core passes ZEXDOC and
 ZEXALL, the `Machine` below runs real programs, `m.debug` writes the label
 and coverage file, and phase 4, the MCP server
 [`@fugloy/mcp`](https://github.com/cschweda/fugloy/blob/main/packages/mcp/README.md),
-drives it for an AI assistant. Version 0.2.0, its first npm release
-(`npm i @fugloy/emu`; Node 22 or later, or any browser bundler: it has no
+drives it for an AI assistant. Version 0.2.0, its first npm release pending
+(once published, `npm i @fugloy/emu`; until then, use it from a clone; Node 22 or later, or any browser bundler: it has no
 dependencies).
 
 The renderer, the WebAudio driver, the turbo throttle, the web UI, and every

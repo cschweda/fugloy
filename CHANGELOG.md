@@ -14,10 +14,10 @@ The repository holds parts that are versioned and released separately:
   published as GitHub releases only.
 - **The emulator**, `@fugloy/emu`, is versioned 0.x on its own. Its
   releases have `## [emu X.Y.Z]` headings and are tagged `emu-vX.Y.Z`; 0.2.0,
-  emu phases 0–4, is the first on npm.
+  emu phases 0–4, is its first npm release (pending).
 - **The MCP server**, `@fugloy/mcp`, is versioned 0.x on its own. Its
   releases have `## [mcp X.Y.Z]` headings and are tagged `mcp-vX.Y.Z`; 0.1.0,
-  MCP phases A–F, is the first on npm. It depends on `@fugloy/emu`, so emu
+  MCP phases A–F, is its first npm release (pending, after emu's). It depends on `@fugloy/emu`, so emu
   is published first.
 - **The web workbench**, `apps/web`, is not on npm and has no version of its
   own: Netlify builds it from `main` and serves it at fugloy.netlify.app
@@ -40,10 +40,10 @@ emu 0.2.0 below). It ships with the next core release.
 
 ## [mcp 0.1.0] - 2026-10-18
 
-`@fugloy/mcp` 0.1.0, the MCP server's first npm release: MCP phases A–F
+`@fugloy/mcp` 0.1.0, the MCP server's first npm release (pending): MCP phases A–F
 (MCP spec §11), 29 tools, four prompts, and five resources over
-`@fugloy/emu` 0.2.0. Install it with `npx -y @fugloy/mcp` as a Claude Code
-MCP server (`packages/mcp/README.md`). It depends on `@fugloy/emu` `^0.2.0`,
+`@fugloy/emu` 0.2.0. Once published, install it with `npx -y @fugloy/mcp` as a Claude Code
+MCP server; until then, run `node packages/mcp/bin/fugloy-mcp.js` from a clone (`packages/mcp/README.md`). It depends on `@fugloy/emu` `^0.2.0`,
 `@fugloy/disasm` and `@fugloy/z80` `^1.1.0`, the MCP SDK 1.32.0, and zod
 4.6.5.
 
@@ -52,8 +52,10 @@ Agent acceptance (MCP spec §10), the release check: story 7, the
 public-domain games that run under `Machine`, each on a scratch copy
 (`claude -p`, the server from the working tree, the MCP tools its only tools,
 nobody helping). All three finished, exported the sidecar, and said what they
-left alone and which names were guesses. Every label was spot-checked
-against the code.
+left alone and which names were guesses. Every label carries the agent's
+evidence note; a sample (Sea Dragon's 12 names shared with the hints and 3
+more routines against the hints and code, 4 of Eliminator's 17, 4 of Rear
+Guard's 24) was checked against the code and agreed.
 
 - **Sea Dragon** (`seadrg01.cmd`; 90 turns, 5 min): 18 labels of the 22
   routines `suggest` listed, each with a note giving its evidence (code, plus
@@ -68,7 +70,7 @@ against the code.
   (`OneShotTone`, `ReadFireKeys`, `LaunchTorpedo`) the code bears out. It
   left `$57C4`, `$5525`, `$586D`, and `$557C` alone: their object tables
   stayed empty in a minute of play, so the code that would show what they
-  are never ran. A reviewer would keep all 18.
+  are never ran. On the spot-check, a reviewer would keep all 18.
 - **Eliminator** (`elimin8c.cmd`; 119 turns, 4 min): all 17 listed routines,
   among them `RenderFrame` (confirmed with a trace from call to return),
   `DrawObject` (12,234 calls), `HitTestPlayerShip`, `PlayToneOnce` (a
@@ -76,8 +78,8 @@ against the code.
   print routine as Sea Dragon's), `SpawnObjects` and `SpawnWave`, and
   `ResetPlayerShip`. It marked three as weaker readings in their notes:
   `InitHumanoids` (a *Defender*-style name for objects enemies carry up),
-  and `ShotMoveUp`/`ShotMoveDown`. The spot-checked code agrees with every
-  note; a reviewer would keep them all, perhaps renaming the three it
+  and `ShotMoveUp`/`ShotMoveDown`. The four sampled routines agree with
+  their notes; on the spot-check, a reviewer would keep them all, perhaps renaming the three it
   flagged.
 - **Rear Guard** (`reargrd5.cmd`; 93 turns, 5 min): all 24 listed routines,
   from `PlayTone`, `SoundUpdate`, and `PrintToScreen` to `UpdateEnemies`,
@@ -87,7 +89,7 @@ against the code.
   the Model I's keyboard driver, into the keyboard vector at `$4016`, so the
   Model III ROM's key wait never returns, and poked `$4016` to the Model III
   driver at `$3024` in the running machine. The notes agree with the
-  spot-checked code; a reviewer would keep the names, checking which terrain
+  four sampled routines; on the spot-check, a reviewer would keep the names, checking which terrain
   layer is the "slow" one.
 
 Two of the three answers pointed out that `coverage` counts only the loaded
@@ -373,7 +375,7 @@ MCP phases A–C, built as emu phase 4 (MCP spec §5, §11):
 
 ## [emu 0.2.0] - 2026-10-18
 
-`@fugloy/emu` 0.2.0, the emulator's first npm release: phases 0–4 of the
+`@fugloy/emu` 0.2.0, the emulator's first npm release (pending): phases 0–4 of the
 eight in the emu spec (§11). It goes from 0.1.0 to 0.2.0 because phases 2–4
 changed its API (the `Machine` facade, `m.debug`, the hooks' `pc` argument).
 It has no dependencies. Phases 0 and 1 were merged while core 1.0.0 was being

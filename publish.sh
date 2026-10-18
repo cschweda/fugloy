@@ -82,10 +82,13 @@ read_fugloy_deps() {
   ' "$1")
 }
 
-# The staged tarball of name@version, if `check` staged it and it is unchanged since; else nothing.
+# The staged tarball of name@version, if `check emu` staged it at this commit and it is unchanged
+# since; else nothing. Always returns 0, so a miss never stops the script under set -e.
 staged_tarball() {
   local name="$1" version="$2"
   [[ -f "$STAGE/manifest" ]] || return 0
+  [[ "$(sed -n 's/^set=//p' "$STAGE/manifest")" == emu ]] || return 0
+  [[ "$(sed -n 's/^commit=//p' "$STAGE/manifest")" == "$(git rev-parse HEAD)" ]] || return 0
   [[ "$(sed -n 's/^version=//p' "$STAGE/manifest")" == "$version" ]] || return 0
   local e
   while IFS= read -r e; do
@@ -93,6 +96,7 @@ staged_tarball() {
     [[ -f "$t" && "$(shasum -a 256 "$t" | cut -d' ' -f1)" == "$sum" ]] || continue
     [[ "$(tar -xzOf "$t" package/package.json | node --input-type=commonjs -e 'const p = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log(p.name + "@" + p.version)')" == "$name@$version" ]] && { echo "$PWD/$t"; return 0; }
   done < <(sed -n 's/^tarball=//p' "$STAGE/manifest")
+  return 0
 }
 
 # The mcp smoke test: start `npx fugloy-mcp` over a pipe and check that it answers initialize (its
