@@ -31,7 +31,7 @@ try {
   const root = load(entry);
   await root.link(link);
   await root.evaluate();
-  const { TRS80System, serializeState, restoreState } = root.namespace;
+  const { TRS80System, Machine, serializeState, restoreState } = root.namespace;
   if (typeof TRS80System === 'function') {
     // 0000 DI / LD SP,5000H / LD HL,3C00H / LD DE,0020H / LD B,5 / copy "READY" to the screen /
     // LD A,04H / OUT (0E0H),A / IM 1 / EI / JR $ ; 0038 IN A,(0ECH) / EI / RETI.
@@ -47,6 +47,14 @@ try {
     if (!sys.screenText()[0].startsWith('READY')) throw new Error(`the synthetic ROM did not reach the screen: ${JSON.stringify(sys.screenText()[0])}`);
     restoreState(sys, serializeState(sys));
     sys.runTStates(100_000);
+    if (typeof Machine === 'function') {
+      const m = new Machine({ roms: { level2: rom } });
+      m.step(10);
+      m.run({ cycles: 200_000, until: (mm) => mm.cpu.regs.pc === 0x19 });
+      m.mem.write(0x4000, m.mem.read(0x3c00, 5));
+      m.io.out(0xec, 0);
+      if (m.rom.sha256.length !== 64 || m.cpu.flags === undefined) throw new Error('the Machine facade did not run');
+    }
   }
   console.log('no platform globals: ok');
 } catch (e) {

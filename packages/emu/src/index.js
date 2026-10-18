@@ -2,6 +2,8 @@
  * @fugloy/emu — headless, deterministic TRS-80 Model III emulator core.
  * Extracted in emu phase 0 from cschweda/trs80-emulator at 11612849 (v1.6.0); see NOTICE.md.
  */
+export { Machine } from './machine/machine.js';
+export { ROM_HASHES } from './machine/rom-hashes.js';
 export { TRS80System, CPU_CLOCK_HZ, RTC_HZ, RTC_INTERVAL_TSTATES } from './machine/trs80-system.js';
 export { Z80CPU } from './cpu/z80cpu.js';
 export { MemorySystem } from './machine/memory.js';

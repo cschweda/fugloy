@@ -78,25 +78,45 @@ export class TRS80System {
     const target = start + budget;
 
     while (this.cpu.cycles < target) {
-      if (this.cpu.cycles >= this.nextRtcAt) {
-        this.io.raiseRTC();
-        this.nextRtcAt += RTC_INTERVAL_TSTATES;
-      }
-      if (this.io.pendingInterrupt()) {
-        this.cpu.interrupt();
-      }
-      // FDC INTRQ -> NMI, edge-triggered so one assertion fires one NMI
-      const nmiNow = this.io.nmiPending();
-      if (nmiNow && !this._nmiWasPending) {
-        this.cpu.nmi();
-      }
-      this._nmiWasPending = nmiNow;
-
-      const before = this.cpu.cycles;
-      this.cpu.executeInstruction();
-      this.io.fdc.tick(this.cpu.cycles - before);
+      this.stepInstruction();
     }
 
+    return this.cpu.cycles - start;
+  }
+
+  /**
+   * One instruction boundary, the only place the machine advances: raise
+   * the RTC heartbeat when its T-state is due, deliver a pending
+   * interrupt or NMI edge, then call `beforeExecute` (if given) and
+   * execute one instruction, ticking the disk controller by its cost.
+   * `runTStates` and the Machine facade both step through here, so the
+   * RTC keeps one schedule however the machine is driven. Returns the
+   * T-states consumed, an interrupt response included.
+   * @param {() => void} [beforeExecute] called after interrupt delivery, with PC at the instruction about to run
+   * @returns {number}
+   */
+  stepInstruction(beforeExecute) {
+    const start = this.cpu.cycles;
+    if (this.cpu.cycles >= this.nextRtcAt) {
+      this.io.raiseRTC();
+      this.nextRtcAt += RTC_INTERVAL_TSTATES;
+    }
+    if (this.io.pendingInterrupt()) {
+      this.cpu.interrupt();
+    }
+    // FDC INTRQ -> NMI, edge-triggered so one assertion fires one NMI
+    const nmiNow = this.io.nmiPending();
+    if (nmiNow && !this._nmiWasPending) {
+      this.cpu.nmi();
+    }
+    this._nmiWasPending = nmiNow;
+
+    if (beforeExecute !== undefined) {
+      beforeExecute();
+    }
+    const before = this.cpu.cycles;
+    this.cpu.executeInstruction();
+    this.io.fdc.tick(this.cpu.cycles - before);
     return this.cpu.cycles - start;
   }
 
