@@ -49,7 +49,7 @@ describe('Sea Dragon goldens (Model III, TRSDOS 1.3, seadrg01.hints)', () => {
       'HL holds whatever it held when L5FC4 was reached: by falling through from $5FC3, or by the jumps at $5FD6 and $5FDE.',
     ]);
     expect(e.previews).toEqual([]);
-    expect(e.label).toEqual({ name: 'L5FC4', callers: [], jumpers: [0x5fd6, 0x5fde], entry: false });
+    expect(e.label).toEqual({ name: 'L5FC4', callers: [], jumpers: [0x5fd6, 0x5fde], entry: false, pointers: [], rewritten: [] });
     const links = e.sentences[1]!.filter((p) => p.addr !== undefined).map((p) => p.addr);
     expect(links).toEqual([0x5fc4, 0x5fc3, 0x5fd6, 0x5fde]);
   });
@@ -170,7 +170,7 @@ describe('line sentences on synthetic code', () => {
     const e = explainLine(raw([0x21, 0x09, 0x70, 0x22, 0x07, 0x70, 0xc3, 0x09, 0x70, 0xc9]), 0x7006);
     expect(lead(e)).toEqual([
       'Jump to $7009 (L7009).',
-      'The program rewrites part of this instruction as it runs (DATA_7007, written at $7003), so the numbers shown are only where they start.',
+      'The program rewrites part of this instruction as it runs (DATA_7007 and $7008, written at $7003), so the numbers shown are only where they start.',
     ]);
     expect(e.previews).toEqual([]);
   });

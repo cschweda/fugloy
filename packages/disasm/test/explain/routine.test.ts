@@ -161,7 +161,7 @@ describe('summarizeRoutine facts', () => {
     // 7000: LD A,0C9H / LD (7007H),A / LD B,3 / 7007: NOP (becomes RET) / LD (3C00H),A / RET
     const s = raw([0x3e, 0xc9, 0x32, 0x07, 0x70, 0x06, 0x03, 0x00, 0x32, 0x00, 0x3c, 0xc9]);
     const t = text(must(summarizeRoutine(s, 0x7000)));
-    expect(t).toMatch(/It ends by returning, or by whatever the instruction at \$7007 becomes \(the program rewrites its first byte\)\./);
+    expect(t).toMatch(/It ends by returning, or by whatever the instruction at \$7007 becomes \(the program rewrites it\)\./);
   });
 
   it('Sea Dragon $525E: a JP NZ whose first byte is rewritten is followed to its target, and is an unproven exit, not a rewritten target', () => {

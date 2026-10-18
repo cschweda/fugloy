@@ -90,7 +90,10 @@ These would make it a failure even if it technically works:
 - **Before anything is clicked.** Explain shows a one-line prompt:
   "Click a line to have it explained."
 - A **label row** explains the label: who calls it or jumps to it (links),
-  and whether it is the entry point.
+  where its address is held as a number (so it may be reached through a
+  pointer), and whether it is the entry point. A call or jump whose bytes
+  the program rewrites is not listed as a way in; the row says it only
+  starts out leading there.
 - A **data row** says these are bytes the code is not known to run, and
   then explains the **data region** the row belongs to (see below). It
   reminds the reader of the key that turns data into code, and back.
@@ -128,13 +131,31 @@ Explain runs a small, local value tracker. My call on its scope:
   If anything in the body can leave the loop without passing the `DJNZ`
   (an early exit), the count is only a bound ("at most N times").
 - **Rewritten instructions.** When the program refers to a byte inside an
-  instruction, it may rewrite that operand, so the instruction proves
-  nothing it writes. When an instruction provably stores into an
-  instruction's first byte (`LD (nn),r` or `LD (nn),rr` covering it), that
-  instruction may be a different one at run time: the walk forgets every
-  register there, the line says so, and the routine summary and loop counts
-  treat it as an exit whose destination is not proven. A mere pointer to an
-  instruction start (an address the program loads) is not enough.
+  instruction, or provably stores into one, it may rewrite that operand, so
+  the instruction proves nothing it writes. When an instruction provably
+  stores into an instruction's opcode byte, that instruction may be a
+  different one at run time: the walk forgets every register there, the
+  line says so, and the routine summary and loop counts treat it as an exit
+  whose destination is not proven. The opcode bytes are the first, the
+  second after a `CB`, `ED`, `DD` or `FD` prefix, and the fourth of
+  `DD CB d op` and `FD CB d op`. A store is proven either by its own operand
+  (`LD (nn),r`, or `LD (nn),rr` covering the byte) or through a register
+  whose value is proven at the store (`LD (HL),n`, `LD (IX+d),r`,
+  `INC (HL)`, `SET b,(IX+d)` and the other single-byte writes through
+  (HL), (BC), (DE) or (IX/IY+d)). Those register values come from one
+  forward pass over the program with the walk's stopping rules but without
+  its cap, computed on first need and cached; while it runs, only the
+  operand stores count, so the pass cannot depend on itself. The repeating
+  block moves (`LDIR`, `LDDR`, `INIR`, `INDR`) are not counted: a loader's
+  `LDIR` copies the whole program to where it runs. Writes through SP
+  (`PUSH`, the return address a `CALL` or `RST` pushes, `EX (SP),HL` and
+  its IX/IY forms) and stores through a register whose value is not proven
+  are not counted either: Explain assumes they do not land in code. A
+  program that patches itself that way can leave a line without its
+  caveat. A call or jump whose
+  bytes the program may rewrite is not stated as a way into its target.
+  A mere pointer to an instruction start (an address the program loads) is
+  not enough.
   Inside the loop, the head is still a merge point, so the body's
   registers stay unknown. (This narrower rule replaced a general "skip the
   loop" exception while the plan was written: a forward branch inside a

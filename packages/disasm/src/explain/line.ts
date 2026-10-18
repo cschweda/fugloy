@@ -13,7 +13,7 @@ import type { ListRow, Rows } from './listing.js';
 import { dataRegion } from './region.js';
 import type { Analysis } from '../pipeline.js';
 import type { Session } from '../session.js';
-import { knownBefore, opcodeRewritten, patchedBytes, pointerUses, walkBack, written } from './track.js';
+import { knownBefore, opcodeRewritten, patchedBytes, pointerUses, rewrittenOpcodeBytes, sourceRewritten, storesInto, walkBack, written } from './track.js';
 import { dataReference } from '../analysis/symbols.js';
 import { addrPiece, andList, loaded, say, screenText, tableName, word$ } from './machine.js';
 import type { Ctx } from './machine.js';
@@ -33,16 +33,23 @@ function linesFrom(r: Rows, i: number, n: number): string[] {
   return out;
 }
 
-/** Callers and jumpers of `addr`, from the xrefs. */
-function into(a: Analysis, addr: number): { callers: number[]; jumpers: number[] } {
+/**
+ * Callers and jumpers of `addr`, from the xrefs, leaving out (into
+ * `rewritten`) the ones whose bytes the program may rewrite (`sourceRewritten`):
+ * they only start out leading here. `pointers` are the instructions that hold
+ * `addr` as a number, through which it may also be reached.
+ */
+function into(a: Analysis, addr: number): { callers: number[]; jumpers: number[]; pointers: number[]; rewritten: number[] } {
   const callers = new Set<number>();
   const jumpers = new Set<number>();
+  const rewritten = new Set<number>();
   for (const x of a.pass1.xrefs) {
     if (x.to !== addr) continue;
-    (x.kind === 'jump' || x.kind === 'cjump' ? jumpers : callers).add(x.from);
+    if (sourceRewritten(a, x.from)) rewritten.add(x.from);
+    else (x.kind === 'jump' || x.kind === 'cjump' ? jumpers : callers).add(x.from);
   }
   const sorted = (s: Set<number>): number[] => [...s].sort((p, q) => p - q);
-  return { callers: sorted(callers), jumpers: sorted(jumpers) };
+  return { callers: sorted(callers), jumpers: sorted(jumpers), pointers: pointerUses(a, addr), rewritten: sorted(rewritten) };
 }
 
 function roots(a: Analysis): Set<number> {
@@ -68,11 +75,16 @@ function ways(c: Ctx, w: ReturnType<typeof walkBack>): Piece[][] {
     out.push(isCall ? [{ text: 'by coming back from the call at ' }, addrPiece(c, w.pred)] : [{ text: 'by falling through from ' }, addrPiece(c, w.pred)]);
   }
   const from = w.from!;
-  if (from.callers.length > 0) out.push([{ text: from.callers.length === 1 ? 'by the call at ' : 'by the calls at ' }, ...addrList(c, from.callers)]);
-  const jumps = from.jumpers.filter((j) => a.pass1.instructions.has(j));
-  const table = from.jumpers.filter((j) => !a.pass1.instructions.has(j));
+  // A call or jump the program may rewrite only starts out leading here.
+  const callers = from.callers.filter((f) => !sourceRewritten(a, f));
+  const jumpers = from.jumpers.filter((f) => !sourceRewritten(a, f));
+  const rewritten = [...from.callers, ...from.jumpers].filter((f) => sourceRewritten(a, f)).sort((p, q) => p - q);
+  if (callers.length > 0) out.push([{ text: callers.length === 1 ? 'by the call at ' : 'by the calls at ' }, ...addrList(c, callers)]);
+  const jumps = jumpers.filter((j) => a.pass1.instructions.has(j));
+  const table = jumpers.filter((j) => !a.pass1.instructions.has(j));
   if (jumps.length > 0) out.push([{ text: jumps.length === 1 ? 'by the jump at ' : 'by the jumps at ' }, ...addrList(c, jumps)]);
   if (table.length > 0) out.push([{ text: table.length === 1 ? 'through the jump table entry at ' : 'through the jump table entries at ' }, ...addrList(c, table)]);
+  if (rewritten.length > 0) out.push([{ text: rewritten.length === 1 ? 'perhaps by the instruction at ' : 'perhaps by the instructions at ' }, ...addrList(c, rewritten), { text: rewritten.length === 1 ? ', which starts out leading here but which the program rewrites' : ', which start out leading here but which the program rewrites' }]);
   return out;
 }
 
@@ -129,22 +141,12 @@ function fromSentences(c: LineCtx, isRoot: boolean): { sentences: Sentence[]; en
   return { sentences: out, entry: w.stop === 'root' && w.at === c.addr && isRoot };
 }
 
-/** The instructions that store into `b` ((nn) operands of LD, a 16-bit store covering it), and the ones that only refer to it. */
+/** The instructions that provably store into `b` (`storesInto`: LD (nn), or through a register whose value knownBefore proves there), and the others that only refer to it. */
 function usersOf(a: Analysis, b: number): { writers: number[]; refs: number[] } {
-  const writers: number[] = [];
+  const writers = storesInto(a, b);
   const refs: number[] = [];
-  for (const [at, ins] of a.pass1.instructions) {
-    const [d] = ins.operands;
-    if (ins.mnemonic === 'LD' && d?.kind === 'mem') {
-      const wide = ins.operands[1]?.kind === 'reg16';
-      if (d.addr === b || (wide && ((d.addr + 1) & 0xffff) === b)) {
-        writers.push(at);
-        continue;
-      }
-    }
-    if (dataReference(ins) === b) refs.push(at);
-  }
-  return { writers: writers.sort((p, q) => p - q), refs: refs.sort((p, q) => p - q) };
+  for (const [at, ins] of a.pass1.instructions) if (!writers.includes(at) && dataReference(ins) === b) refs.push(at);
+  return { writers, refs: refs.sort((p, q) => p - q) };
 }
 
 /** Who stores into or refers to the bytes `bytes`: their writers, else the instructions that refer to them. */
@@ -162,30 +164,38 @@ function usersOfAll(a: Analysis, bytes: readonly number[]): { writers: number[];
 
 /**
  * The caveats for an instruction the program may rewrite: when it stores into
- * the first byte, the instruction itself may be a different one at run time;
- * when a label lies in its other bytes, its numbers are only where they start.
+ * an opcode byte (the first, or the one after a CB, ED, DD or FD prefix), the
+ * instruction itself may be a different one at run time; when a label lies in
+ * its other bytes, or it stores into them, its numbers are only where they start.
  */
 function patchedSentences(c: LineCtx): Sentence[] {
   const out: Sentence[] = [];
   const name = (b: number): Piece[] => [{ text: c.a.symbols.get(b)?.name ?? word$(b), addr: b }];
-  if (opcodeRewritten(c.a, c.addr)) {
-    const u = usersOfAll(c.a, [c.addr]);
+  const ops = rewrittenOpcodeBytes(c.a, c.addr);
+  if (ops.length > 0) {
+    const u = usersOfAll(c.a, ops);
+    const which = ops.length === 1 && ops[0] === c.addr ? 'the first byte' : ops.length === 1 ? 'an opcode byte' : 'the opcode bytes';
+    // A store found only by the rewrite rules' wider sweep is not named: its address is not proven where it stands.
+    const written: Piece[] = u.writers.length > 0 ? [{ text: ', written at ' }, ...addrList(c, u.writers)] : [];
     out.push(
       say(
-        'The program stores into the first byte of this instruction as it runs (',
-        name(c.addr),
-        ', written at ',
-        addrList(c, u.writers),
+        `The program ${u.writers.length > 0 ? 'stores' : 'may store'} into ${which} of this instruction as it runs (`,
+        andList(ops, name),
+        written,
         '), so at run time it may be a different instruction; this line shows only what it starts as.',
       ),
     );
   }
-  const operand = c.patched.filter((b) => b !== c.addr);
+  const operand = c.patched.filter((b) => !ops.includes(b));
   if (operand.length === 0) return out;
   const names = andList(operand, name);
   const u = usersOfAll(c.a, operand);
   if (u.writers.length > 0) {
     out.push(say('The program rewrites part of this instruction as it runs (', names, ', written at ', addrList(c, u.writers), '), so the numbers shown are only where they start.'));
+    return out;
+  }
+  if (u.refs.length === 0 && operand.every((b) => !c.a.symbols.has(b))) {
+    out.push(say('The program may store into part of this instruction as it runs (', names, '), so the numbers shown are only where they start.'));
     return out;
   }
   const used = u.refs.length > 0 ? [{ text: ', used at ' }, ...addrList(c, u.refs)] : [];
