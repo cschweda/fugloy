@@ -68,6 +68,30 @@ the Model III ROM to `READY` in Node.
 
 ### Added
 
+Emu phase 5 (disk controller and images; emu spec §3, §5, §6), in progress
+on the `emu-phase5` branch:
+
+- `m.fdc`, the four floppy drives behind `Machine`: `mount(drive, bytes |
+  DiskImage, { writeProtect })` detects JV1, JV3, or DMK from the content and
+  returns `{ drive, container, tracks, sides, sectorsPerTrack?,
+  writeProtected }` (`sectorsPerTrack` only when every track side holds the
+  same count); `unmount(drive)` returns whether the drive held a disk;
+  `drives` lists the four drives' info or null, read from the controller so
+  it follows a snapshot restore. A non-image, a drive outside 0–3, and a
+  `writeProtect` that is not a boolean are refused. With nothing mounted the
+  controller's ports float and the machine boots to cassette BASIC as before.
+- `m.load.dsk(bytes, { drive = 0, boot = true })` mounts and, with `boot`,
+  resets so the ROM boots from drive 0 (it reads track 0, sector 1 to `$4300`
+  and jumps there, ROM `$34D9`–`$3516`); its manifest is `{ format: 'dsk',
+  container, drive, boot, blocks: [] }`, recorded in `m.debug.loaded`.
+  Booting with drive 0 empty throws.
+- Tests (`test/unit/fdc-api.test.js`) on synthetic JV1, JV3, and DMK images
+  from a new writer (`test/unit/disk-writers.js`, which also builds a boot
+  sector): each container mounts and boots, through a small ROM that boots
+  the way the Model III ROM does (in CI) and through the real ROM when one is
+  configured; a snapshot with disks mounted restores their bytes and write
+  protection.
+
 Emu phase 4 (`@fugloy/mcp` 0.1.0, MCP phases A–C; MCP spec §5, §11):
 
 - The stdio server (`bin/fugloy-mcp.js`, MCP SDK 1.32.0, zod 4.6.5, plain

@@ -10,6 +10,7 @@
 import { parseCmd, fastLoadCmd } from './cmd-format.js';
 import { parseCas, fastLoadBasic, fastLoadSystem } from './cas-format.js';
 import { casToPulses } from '../devices/cassette-tape.js';
+import { DiskImage } from '../devices/disk-image.js';
 
 /**
  * @typedef {{ addr: number, len: number, why: string, predicted?: true }} ManifestBlock
@@ -17,6 +18,11 @@ import { casToPulses } from '../devices/cassette-tape.js';
  * @typedef {{ format: 'cmd', name: string, entry: number, blocks: ManifestBlock[] }} CmdManifest
  * @typedef {{ format: 'cas', kind: 'basic' | 'system', name: string, entry?: number, blocks: ManifestBlock[],
  *   baud: 500 | 1500 | null, via: 'rom' | 'fast' }} CasManifest
+ * @typedef {{ drive: number, container: 'jv1' | 'jv3' | 'dmk', tracks: number, sides: number,
+ *   sectorsPerTrack?: number, writeProtected: boolean }} DriveInfo
+ *   `sectorsPerTrack` is present only when every track side holds the same number of sectors
+ * @typedef {{ format: 'dsk', container: 'jv1' | 'jv3' | 'dmk', drive: number, boot: boolean, blocks: ManifestBlock[] }} DskManifest
+ *   `blocks` is empty: mounting writes nothing to memory (what the ROM or a DOS reads lands later)
  */
 
 const TXTTAB_PTR = 0x40a4;
@@ -132,4 +138,116 @@ export function loadCas(machine, bytes, { baud = 500, via = 'rom' } = {}) {
   const head = { format: /** @type {'cas'} */ ('cas'), kind: parsed.kind, name: parsed.name };
   const tail = { blocks, baud: via === 'rom' ? baud : null, via };
   return parsed.kind === 'system' ? { ...head, entry: parsed.entry, ...tail } : { ...head, ...tail };
+}
+
+/**
+ * What a mounted disk looks like from outside: its container and geometry, as `DiskImage` parsed
+ * them, and whether writes are refused.
+ * @param {number} drive
+ * @param {DiskImage} disk
+ * @returns {DriveInfo}
+ */
+function driveInfo(drive, disk) {
+  const container = /** @type {'jv1' | 'jv3' | 'dmk'} */ (disk.format);
+  const tracks = disk.trackCount();
+  let sides = 1;
+  if (container === 'dmk') sides = disk.dmk.sides;
+  else if (container === 'jv3' && disk.jv3Map.some((/** @type {any} */ e) => e.side === 1)) sides = 2;
+  /** @type {Set<number>} */
+  const counts = new Set();
+  if (container === 'jv1') counts.add(disk.sectorsPerTrack);
+  else {
+    for (let t = 0; t < tracks; t++) for (let side = 0; side < sides; side++) counts.add(disk.sectorsOn(t, side).length);
+  }
+  const info = { drive, container, tracks, sides };
+  const [spt] = counts;
+  return counts.size === 1 && spt > 0 ? { ...info, sectorsPerTrack: spt, writeProtected: disk.writeProtected } : { ...info, writeProtected: disk.writeProtected };
+}
+
+function checkDrive(op, drive) {
+  if (!Number.isInteger(drive) || drive < 0 || drive > 3) throw new Error(`${op}: drive must be 0, 1, 2, or 3, not ${String(drive)}`);
+}
+
+/**
+ * The four floppy drives of the Model III's WD1793 controller (spec §3, §6), over
+ * `TRS80System.mountDisk` and `ejectDisk`. With no disk in any drive the controller's ports float
+ * (read $FF), which is what sends the ROM to cassette BASIC at reset, so a machine with nothing
+ * mounted boots as it did before disks existed.
+ * @param {import('../machine/machine.js').Machine} machine
+ */
+export function diskDrives(machine) {
+  const system = machine.system;
+  return {
+    /**
+     * Put a disk in a drive, replacing what was there. Bytes are copied into a new `DiskImage`
+     * (the container is detected from the content: DMK, then JV3, then JV1 by size); a
+     * `DiskImage` is mounted as it is, so writes the machine makes show in it.
+     * @param {number} drive 0..3
+     * @param {Uint8Array | DiskImage} image
+     * @param {{ writeProtect?: boolean }} [opts] `writeProtect` overrides the image's own flag (the DMK or JV3 header's)
+     * @returns {DriveInfo}
+     */
+    mount(drive, image, { writeProtect } = {}) {
+      checkDrive('fdc.mount', drive);
+      if (writeProtect !== undefined && typeof writeProtect !== 'boolean') throw new Error(`fdc.mount: writeProtect must be true or false, not ${String(writeProtect)}`);
+      let disk;
+      if (image instanceof DiskImage) disk = image;
+      else if (ArrayBuffer.isView(image) && image.BYTES_PER_ELEMENT === 1) {
+        try {
+          disk = new DiskImage(/** @type {Uint8Array} */ (image), `drive ${drive}`);
+        } catch (e) {
+          throw new Error(`fdc.mount: ${/** @type {Error} */ (e).message}`);
+        }
+      } else throw new Error('fdc.mount: the image must be a Uint8Array of a JV1, JV3, or DMK file, or a DiskImage');
+      if (writeProtect !== undefined) disk.writeProtected = writeProtect;
+      system.mountDisk(drive, disk);
+      return driveInfo(drive, disk);
+    },
+    /**
+     * Take the disk out of a drive.
+     * @param {number} drive 0..3
+     * @returns {boolean} true when there was a disk to take out
+     */
+    unmount(drive) {
+      checkDrive('fdc.unmount', drive);
+      const had = system.io.fdc.drives[drive] !== null;
+      system.ejectDisk(drive);
+      return had;
+    },
+    /**
+     * The four drives, in order: each one's mount info, or null when empty. Read from the
+     * controller each time, so it follows a snapshot restore.
+     * @returns {(DriveInfo | null)[]}
+     */
+    get drives() {
+      return system.io.fdc.drives.map((/** @type {DiskImage | null} */ d, i) => (d === null ? null : driveInfo(i, d)));
+    },
+  };
+}
+
+/**
+ * Load a disk image: mount it, and with `boot` reset the machine so the ROM boots from drive 0
+ * (it reads track 0, sector 1 to $4300 and jumps there; ROM $34D9-$3516). Nothing is in memory
+ * when this returns, so the manifest's `blocks` is empty. Booting needs a disk in drive 0, this one
+ * or one mounted before. A reset clears the keyboard queue; without `boot` it is left alone.
+ * @param {import('../machine/machine.js').Machine} machine
+ * @param {Uint8Array} bytes
+ * @param {{ drive?: number, boot?: boolean }} [opts]
+ * @returns {DskManifest}
+ */
+export function loadDsk(machine, bytes, { drive = 0, boot = true } = {}) {
+  checkDrive('load.dsk', drive);
+  if (typeof boot !== 'boolean') throw new Error(`load.dsk: boot must be true or false, not ${String(boot)}`);
+  if (!(ArrayBuffer.isView(bytes) && bytes.BYTES_PER_ELEMENT === 1)) throw new Error('load.dsk: bytes must be a Uint8Array of a JV1, JV3, or DMK file');
+  if (boot && drive !== 0 && machine.system.io.fdc.drives[0] === null) {
+    throw new Error(`load.dsk: the ROM boots from drive 0, which is empty; mount a disk there first, or load into drive 0, or pass boot: false`);
+  }
+  let info;
+  try {
+    info = machine.fdc.mount(drive, bytes);
+  } catch (e) {
+    throw new Error(/** @type {Error} */ (e).message.replace(/^fdc\.mount/, 'load.dsk'));
+  }
+  if (boot) machine.reset();
+  return { format: 'dsk', container: info.container, drive, boot, blocks: [] };
 }

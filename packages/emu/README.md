@@ -47,8 +47,18 @@ m.run({ cycles: 5 * second })
 console.log(m.video.text().join('\n'))     // the screen, 16 lines
 ```
 
+A disk image (JV1, JV3, or DMK, detected from its content) goes in a drive
+with `m.fdc.mount(drive, bytes)`, or through `m.load.dsk(bytes)`, which mounts
+it in drive 0 and resets so the ROM boots from it:
+
+```js
+m.load.dsk(readFileSync('game.dmk'))       // → { format: 'dsk', container: 'dmk', drive: 0, boot: true, blocks: [] }
+m.fdc.drives                               // [{ drive: 0, container: 'dmk', tracks, sides, sectorsPerTrack, writeProtected }, null, null, null]
+```
+
 `step`, `run`, the registers, memory, the keyboard (matrix typing and a ROM
-keyboard hook), sound events, and the three loaders are described in spec §3.
+keyboard hook), sound events, the loaders, and the disk drives are described
+in spec §3.
 
 ## Debugging
 

@@ -9,7 +9,7 @@ import { sha256Hex } from './sha256.js';
 import { Video } from '../devices/video.js';
 import { Sound } from '../devices/sound.js';
 import { loadBas } from '../loaders/bas.js';
-import { cassetteDeck, loadCas, loadCmd } from '../loaders/load.js';
+import { cassetteDeck, diskDrives, loadCas, loadCmd, loadDsk } from '../loaders/load.js';
 import { Debugger } from '../debug/debugger.js';
 import { KeyQueue, romKeyReturn } from '../devices/key-queue.js';
 
@@ -41,12 +41,15 @@ export class Machine {
   keyboard;
   /**
    * @type {{ bas(bytes: Uint8Array): ReturnType<typeof loadBas>, cmd(bytes: Uint8Array): ReturnType<typeof loadCmd>,
-   *   cas(bytes: Uint8Array, opts?: { baud?: 500 | 1500, via?: 'rom' | 'fast' }): ReturnType<typeof loadCas> }}
+   *   cas(bytes: Uint8Array, opts?: { baud?: 500 | 1500, via?: 'rom' | 'fast' }): ReturnType<typeof loadCas>,
+   *   dsk(bytes: Uint8Array, opts?: { drive?: number, boot?: boolean }): ReturnType<typeof loadDsk> }}
    * Program loaders; each returns a manifest of where the bytes land and why.
    */
   load;
   /** @type {ReturnType<typeof cassetteDeck>} The cassette deck: insert a .CAS at a baud, rewind, read the motor relay. */
   cassette;
+  /** @type {ReturnType<typeof diskDrives>} The four floppy drives: mount a JV1, JV3, or DMK image, unmount, list what is in each. */
+  fdc;
   /** @type {Debugger} Breakpoints, watchpoints, hooks, coverage, the instruction trace, snapshots, labels, and the label file (spec §7, §8). */
   debug;
 
@@ -120,8 +123,10 @@ export class Machine {
       bas: (bytes) => record(loadBas(this, bytes), bytes),
       cmd: (bytes) => record(loadCmd(this, bytes), bytes),
       cas: (bytes, opts) => record(loadCas(this, bytes, opts), bytes),
+      dsk: (bytes, opts) => record(loadDsk(this, bytes, opts), bytes),
     };
     this.cassette = cassetteDeck(this);
+    this.fdc = diskDrives(this);
     this.io = {
       in: (port) => sys.io.readPort(port),
       out: (port, value) => sys.io.writePort(port, value),
