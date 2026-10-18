@@ -8,8 +8,11 @@ the Z80 CPU (`src/cpu/`), the Model III memory map, I/O ports, and system
 images, and printer (`src/devices/`), the `.CAS` and `.CMD` formats
 (`src/loaders/`), and save states (`src/debug/`). Emu phase 6 added the
 Model I with its Expansion Interface (unreleased; the Model 4 is split off into
-a plan of its own, for when a Model 4 ROM and boot disk are supplied).
-Phases 0–6 of the spec's eight are done (6 for the Model I): the Z80 core passes ZEXDOC and
+a plan of its own: a Model 4 ROM is now local, from the cpmarchives TRS32 ROM
+set, whose `MODEL4P.ROM` is an emulator's stand-in rather than Tandy's 4P ROM;
+the Model 4 phase is planned next, and its native mode still needs an LS-DOS 6
+or TRSDOS 6 boot disk).
+Phases 0–7 of the spec's eight are done (6 for the Model I, 7 for the Model III): the Z80 core passes ZEXDOC and
 ZEXALL, the `Machine` below runs real programs, `m.debug` writes the label
 and coverage file, and phase 4, the MCP server
 [`@fugloy/mcp`](https://github.com/cschweda/fugloy/blob/main/packages/mcp/README.md),
@@ -169,6 +172,51 @@ and 29× (debug); Sea Dragon on the Model I runs at about 48×.
 - Label and coverage file shared with `mcp` and `disasm`: [`docs/label-format.md`](https://github.com/cschweda/fugloy/blob/main/docs/label-format.md)
 - ROM images are never bundled or committed; `roms/` here is gitignored and
   paths are supplied by the caller.
+
+## Differential testing
+
+Emu phase 7 runs a program here and in [trsjs](https://trsjs.48k.ca/)
+(Peter Phillips's JavaScript conversion of George Phillips's trs80gp) in
+lockstep, and compares the two after every instruction: PC, every register
+(F bit by bit, R as 7 bits), IFF1/2, IM, the T-states, and every memory
+write, with video RAM at checkpoints and at the end. Keys go into both
+keyboard matrices at the same T-state. trsjs has no license, so it is never
+committed or bundled: `pnpm trsjs:install` fetches it into the gitignored
+`tools/trsjs/`, pinned by SHA-256, and the tests that need it are opt-in.
+
+```sh
+pnpm trsjs:install
+FUGLOY_TRSJS=1 pnpm vitest run packages/emu/test/diff                     # about a minute: the harness tests and six game sessions
+FUGLOY_TRSJS=1 FUGLOY_TRSJS_SWEEP=1 pnpm vitest run packages/emu/test/diff --silent=false # also every other .CMD in examples/ and fixtures/real/, logging each one's class counts and the sum
+pnpm diff examples/sea-dragon/seadrg01.cmd --instructions 10000000        # one program, with a report
+```
+
+`pnpm diff <program> [--keys <script.json>] [--instructions N] [--from-cycle C] [--strict | --strict-all]`
+boots the Model III ROM from `fugloy.mcp.json`, loads the `.CMD` or `.BAS`,
+and prints the count of each known difference and the first divergence, if
+any, with ten instructions disassembled on each side. Exit status 0 means no
+divergence, 1 a divergence, 2 a usage or setup error (an unexpected error,
+such as the ROM not reaching READY or trsjs throwing, counts as one).
+
+Where the two differ, trsjs is the inaccurate side, and the harness says so
+explicitly. Some differences it corrects in the reference (a write to ROM or
+the keyboard, a byte stored wider than 8 bits, PC running past `$FFFF`, a
+repeating CPDR's T-states, a DD or FD prefix trsjs skips); the rest are known classes in
+`test/diff/known.js`, each with the evidence for it, counted rather than
+reported (flag bits 3 and 5; BIT's S and P/V; R on an interrupt and on
+DDCB/FDCB; the HALT return address; carry after CPI/CPD/CPIR/CPDR; and three
+interrupt timings). Everything else is a divergence. On the six sessions
+(Sea Dragon, Eliminator c and e, Rear Guard 5 and 4, Armored Patrol, 10
+million instructions each) there is none. The harness found two bugs on our
+side, both now fixed: a halted CPU did not count R, and port `FF` did not
+read port `EC`'s bits back. After those fixes, every remaining difference is
+trsjs's. The harness cannot see a bug both machines share: where the two
+agree, both may be wrong, so behaviour such as EI's one-instruction delay is
+pinned by our own unit tests (against Zilog UM0080 and Young §5.5) as well as
+compared. One is a judgment call rather than a trsjs error: port `FF` bit 6,
+which the Model III Technical Reference Manual calls undefined; we read it as
+1, as trsjs and trs80gp do. Details in spec §10 and §11 (phase 7). The Model I waits
+for a Model I reference; trsjs is Model III only.
 
 ## Testing the Z80 core
 

@@ -15,7 +15,8 @@
  *              WAIT, bit 7 MFM
  *   0xF8-0xFB  line printer (read: status, write: data byte)
  *   0xFF       cassette port (write bits 0-1 = output level,
- *              read bit 7 = tape input)
+ *              read: bit 7 = 500-baud pulse latch, bit 0 = 1500-baud
+ *              level, bits 5-1 = port 0xEC's latch, bit 6 high)
  *
  * The RTC heartbeat interrupt fires at 30 Hz; its latch bit is RTC_IRQ_BIT.
  * The keyboard is memory-mapped at 0x3800-0x3BFF (see MemorySystem), not
@@ -261,11 +262,15 @@ export class IOSystem {
         //           does IN A,(0xFF) / AND 0x01 / CP E per edge);
         //   bit 7 — a rising-edge PULSE LATCH (the 500-baud reader
         //           polls it with RLA and resets it by OUT (0xFF),A).
+        // Bits 5-1 read port 0xEC's latch back (DISWAIT, ENEXTIO, ENALTSET,
+        // MODSEL, CASMOTORON), and bit 6 is undefined: Model III Technical
+        // Reference Manual p. 22 (CASIN*). Undriven, bit 6 floats high, as
+        // an absent port's bits do; trs80gp (and trsjs) read it as 1 too.
         // Reading also acks the edge interrupt sources: the ISR reads
         // 0xE0 then 0xFF and nothing else.
         this.intLatch &= ~(CASSETTE_RISE_IRQ_BIT | CASSETTE_FALL_IRQ_BIT);
         const level = this.cassette.tapeLevel(cycles);
-        return (this.cassette.pulseLatch ? 0x80 : 0x00) | (level ? 0x01 : 0x00);
+        return (this.cassette.pulseLatch ? 0x80 : 0x00) | 0x40 | (this.modeRegister & 0x3e) | (level ? 0x01 : 0x00);
       },
       write: (value) => {
         const cycles = this.getCycles ? this.getCycles() : 0;

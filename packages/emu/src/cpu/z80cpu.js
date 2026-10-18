@@ -243,6 +243,8 @@ export class Z80CPU {
   executeInstruction() {
     this.afterPrefix = false;
     if (this.halted) {
+      // A halted Z80 keeps running NOP M1 cycles for refresh (Zilog UM0080), and R counts every M1
+      this.incrementR();
       this.lastOpCycles = 4;
       this.cycles += 4;
       return 4;

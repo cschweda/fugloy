@@ -36,6 +36,83 @@ creates and pushes the tag.
 
 ### Added
 
+Emu phase 7 (the differential harness against trsjs; emu spec §10, §11, §12;
+plan `docs/superpowers/plans/2026-10-18-emu-phase7-differential.md`), test
+and tooling code in `@fugloy/emu` (nothing in `src/` depends on trsjs), on
+the `emu-phase7` branch:
+
+- `pnpm trsjs:install` (`scripts/install-trsjs.sh`) fetches trsjs
+  (`trsemu-1.6.js`, Peter Phillips's JavaScript conversion of trs80gp) into
+  the gitignored `tools/trsjs/` and refuses a file whose SHA-256 is not
+  `d6e5b270…ac052fc`. trsjs has no license: it is never committed, bundled,
+  or redistributed, and the tests that need it run only with
+  `FUGLOY_TRSJS=1`, so CI is unaffected.
+- `test/diff/trsjs-adapter.js`: `loadTrsjs()` checks the hash, runs the
+  script in `node:vm` with DOM stubs, and wraps its Z80 as a reference that
+  steps one instruction at a time (`step({ irq: 'auto' | 'hold' | 'force' })`),
+  logs each memory write, syncs from our machine (`syncFrom`, `syncRegs`:
+  RAM, video RAM, registers, IFF, IM, port latches, the 30 Hz phase), and
+  takes keys into its matrix (`setKeyBit`). The script's text is changed in
+  memory only, never on disk. The adapter corrects five places where trsjs
+  departs from the Z80 or the Model III, each with a test: a write below
+  `$3C00` (ROM and keyboard) is dropped, where trsjs stored writes from
+  `$3000` up (Eliminator d, f, g, and h write `$3723` and read it back); a
+  stored value is masked to 8 bits, where trsjs's RLD and RRD stored 12; PC
+  and the `(IX+d)` address wrap at 16 bits, where trsjs ran PC on to
+  `$10000`; a repeating CPDR takes 21 T-states, where trsjs counted none
+  (Zilog UM0080; found on Asylum 1g); and a DD or FD the next instruction
+  ignores is run as the Z80 runs it, where trsjs skipped both bytes in no
+  T-states.
+- `test/diff/compare.js`: `compareRun({ machine, reference, instructions,
+  keys, strict, progress })` compares after every instruction PC, every
+  register (F and F' bit by bit, R as 7 bits), IFF1/2, IM, the T-states, and
+  every write, and video RAM at the end; it returns the class counts and the
+  first divergence, with ten instructions of context on each side
+  (`formatReport`). Keys go into both matrices at the same boundary, never
+  through our ROM keyboard hook.
+- `test/diff/known.js`: the known differences, each with its predicate, the
+  exact fields it explains, and the evidence that trsjs is the inaccurate
+  side: flag bits 3 and 5 (ZEXALL); BIT's S and P/V (Young §4.1); R not
+  counted on an interrupt response (Young §5, §6.1); R counted three times on
+  DDCB/FDCB (Young §6.1); HALT: trsjs pushes the HALT's own address (Young
+  §5.4); CPI/CPD/CPIR/CPDR: trsjs sets C on a mismatch (Zilog UM0080: C is
+  not affected; trsjs saves C in a scratch its `cp` overwrites, found on
+  Asylum); and three interrupt timings (a request trsjs drops while DI, takes
+  right after EI, or takes after a lone prefix), which the comparator holds
+  and makes the reference take at the first boundary the instruction stream
+  allows (EI blocks only the boundary right after it, a lone DD or FD only the
+  one before its next byte; derived from the instructions that ran, never from
+  our CPU's `pendingEI` or `afterPrefix`), checking that our CPU takes the
+  request there and nowhere earlier (else a divergence, field `irq`; tests
+  plant a long and a short EI delay and a stuck lone-prefix hold), and compares
+  that step in full.
+- `pnpm diff <program> [--keys <script.json>] [--instructions N]
+  [--from-cycle C] [--strict | --strict-all]` (`packages/emu/scripts/diff.mjs`):
+  one program, booted on the Model III ROM, compared, and reported; exit 0, 1
+  (a divergence), or 2 (a usage or setup error; an unexpected error, such as
+  the ROM not reaching READY or trsjs throwing, exits 2 as well, never 1).
+- `test/diff/fixtures.test.js`: six scripted sessions of 10 million
+  instructions each (Sea Dragon `seadrg01`, Eliminator `elimin8c` and
+  `elimin8e`, Rear Guard `reargrd5` and `reargrd4`, Armored Patrol), the
+  phase 2 title-screen scripts carried on into play; each reaches the screens
+  it lists with no unexplained divergence, video RAM equal every 100,000
+  instructions, and exact class counts. With `FUGLOY_TRSJS_SWEEP=1`, every
+  other `.CMD` in `examples/` and `fixtures/real/` runs 10 million
+  instructions under one generic script: 57 programs (20 builds in `examples/`, 37 in `fixtures/real/`, Planetfall and Enchanter without their story disks), none with an unexplained divergence; class counts in all (the sum the sweep logs with `--silent=false`, beside each program's own), flag bits 3 and 5, 24,162,163; BIT's S and P/V, 2,964,829; CPI/CPD C, 24,098; DDCB/FDCB R, 23,696; interrupt-response R, 22,187; an interrupt held while DI, 189. 17 end at the BASIC prompt or a reboot on the Model III (Eliminator a, b, d, f, g, h; Rear Guard 1, 2, 3, 7; Sea Dragon 7, 9; Armored Patrol's `GO.CMD`; Asylum 1c, 1d; the two Infocom interpreters), the same on both machines. About 1.5 million
+  compared instructions a second.
+- Changed by the merge of `main` (emu phase 6): one unit test's expectation,
+  `test/unit/model1-devices.test.js`'s check that a Model III's port `FF`
+  keeps its own reading, is now `$40` (bit 6 set, bits 5–1 from port `EC`, 0
+  at reset), where it was `$00`, after this phase's port `FF` fix.
+- Open (emu spec §11, phase 7): Eliminator `elimin8c` and Rear Guard
+  `reargrd5` never take the 1 at "1 or 2 Players?", on either machine, even
+  with the key held 3 s: both point the keyboard DCB's driver at `$03E3`, the
+  Model I ROM's keyboard driver, which on the Model III ROM is the printer
+  driver's tail and returns no key.
+- Emu phase 7 is met for the Model III (emu spec §11). The Model I waits for
+  a Model I reference (MAME or xtrs, with the user's agreement), since trsjs
+  is Model III only.
+
 Emu phase 6 (the Model I; emu spec §3, §5, §11), `@fugloy/emu` and
 `@fugloy/mcp`, unreleased, on the `emu-phase6` branch. The Model 4 half of the
 phase is split off into its own plan, for when a Model 4 ROM and boot disk are
@@ -416,6 +493,25 @@ unreleased, on the `emu-phase5` branch:
   stays as a convenience for a bare controller.
 
 ### Fixed
+
+Found by the emu phase 7 differential harness, `@fugloy/emu`, on `emu-phase7`:
+
+- A halted CPU now increments R on every step it idles (4 T-states, R + 1,
+  bit 7 kept). The Z80 runs NOP M1 cycles while halted (Zilog UM0080, HALT)
+  and R counts every M1 (Young §6.1); before, R stood still, so a program
+  that read R after a HALT saw a different value than on the hardware.
+- On the Model III, port `FF` reads bits 5–1 as port `EC`'s latch (DISWAIT, ENEXTIO, ENALTSET,
+  MODSEL, CASMOTORON) and bit 6 as 1, as the Model III Technical Reference
+  Manual gives CASIN* (p. 22; bit 6 is undefined there, and an undriven bit
+  reads 1, as trs80gp has it); before, only bit 7 (the 500-baud latch) and
+  bit 0 (the 1500-baud level) could be set.
+- No committed golden or fixture changed with either fix: the MCP story
+  transcripts, the Sea Dragon label file
+  (`examples/sea-dragon/seadrg01.labels.json`), and the save-state tests all
+  pass unchanged. None captures R after a HALT; port `FF` is read, but every
+  Model III ROM site that reads it discards or masks bits 6–1 (`$31C5` loads
+  A over it, the 500-baud reader at `$3221` and `$3239` keeps only bit 7, the
+  1500-baud reader at `$336F` only bit 0).
 
 From the emu phase 5 final review, `@fugloy/emu`, on `emu-phase5`:
 

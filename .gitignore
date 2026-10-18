@@ -49,7 +49,8 @@ test-results/
 # Plan execution scratch (superpowers)
 .superpowers/
 
-# Pinned zmac built by scripts/install-zmac.sh
+# Fetched on demand, never committed: zmac (scripts/install-zmac.sh), the ZEX exercisers
+# (install-zex.sh), and trsjs, the unlicensed differential reference (install-trsjs.sh)
 /tools/
 
 # Web workbench (phase 4): Nuxt output and the examples copied in by prepare-assets

@@ -217,3 +217,23 @@ describe("R register on interrupt acknowledge", () => {
     expect(cpu.registers.R).toBe(0x80); // low 7 bits wrap, bit 7 sticks
   });
 });
+
+describe("R register while halted", () => {
+  // Zilog UM0080 (HALT, and "HALT Exit" p. 15): a halted CPU keeps executing
+  // NOP M1 cycles so that refresh continues; Young §6.1: R counts every M1.
+  it("counts each halted M1 cycle, keeping bit 7", () => {
+    const { cpu, ram } = makeCpuWithRam();
+    ram[0x0000] = 0x76; // HALT
+    cpu.registers.R = 0xfe;
+
+    cpu.executeInstruction(); // HALT's own fetch
+    expect(cpu.halted).toBe(true);
+    expect(cpu.registers.R).toBe(0xff);
+
+    expect(cpu.executeInstruction()).toBe(4);
+    expect(cpu.registers.R).toBe(0x80); // low 7 bits wrap, bit 7 sticks
+    cpu.executeInstruction();
+    expect(cpu.registers.R).toBe(0x81);
+    expect(cpu.registers.PC).toBe(0x0001);
+  });
+});

@@ -203,10 +203,11 @@ describe('the Model I port $FF', () => {
     expect(m.io.in(0xff) & 0x80).toBe(0);
   });
 
-  it('the Model III ports stay absent and the Model III port $FF is unchanged', () => {
+  it('the Model III ports stay absent and the Model III port $FF keeps its own reading', () => {
     const m = model1([0x76]);
     for (const port of [0xe0, 0xe4, 0xec, 0xf0, 0xf8]) expect(m.io.in(port)).toBe(0xff);
-    expect(model3().io.in(0xff)).toBe(0x00);
+    // The Model III port $FF reads bit 6 as 1 and bits 5-1 from port $EC (0 at reset): TRM p. 22.
+    expect(model3().io.in(0xff)).toBe(0x40);
   });
 });
 
