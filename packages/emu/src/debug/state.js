@@ -11,8 +11,13 @@
  */
 
 import { DiskImage } from "../devices/disk-image.js";
+import { MODELS } from "../machine/models.js";
+
+/** Model names by save-state machine id ("trs80-model1": "Model I"). */
+const MODELS_BY_STATE = Object.fromEntries(Object.values(MODELS).map((d) => [d.stateMachine, d.name]));
 
 export const STATE_VERSION = 1;
+/** The Model III's machine id; a state carries its system's model's (`model.stateMachine`, models.js). */
 export const STATE_MACHINE = "trs80-model3";
 
 // Base64 without platform APIs, so the core runs anywhere (spec §2.1).
@@ -97,7 +102,7 @@ export function serializeState(system) {
 
   const state = {
     version: STATE_VERSION,
-    machine: STATE_MACHINE,
+    machine: system.model?.stateMachine ?? STATE_MACHINE,
     cpu: { registers },
     memory: {
       ram: toBase64(system.memory.ram),
@@ -130,6 +135,10 @@ export function serializeState(system) {
     // restore neither fires it again nor loses one still pending.
     nmiWasPending: system._nmiWasPending,
   };
+  // The Model I's Expansion Interface latch at $37E0 (absent from Model III states, which stay as
+  // they were, and from a Model I's without the interface) and its lowercase modification
+  if (io.latch) state.latch = io.latch.bits;
+  if (system.model?.id === 1) state.lowercase = !!system.lowercase;
   for (const key of CPU_SCALARS) state.cpu[key] = cpu[key];
   for (const key of IO_SCALARS) state.io[key] = io[key];
   for (const key of FDC_SCALARS) state.fdc[key] = fdc[key];
@@ -158,11 +167,36 @@ export function serializeState(system) {
  * Throws on version/machine mismatch rather than resuming garbage.
  */
 export function restoreState(system, state) {
-  if (!state || state.machine !== STATE_MACHINE) {
-    throw new Error("Not a TRS-80 Model III save state");
+  const machine = system.model?.stateMachine ?? STATE_MACHINE;
+  if (!state || state.machine !== machine) {
+    const name = system.model?.name ?? "Model III";
+    const from = typeof state?.machine === "string" && Object.hasOwn(MODELS_BY_STATE, state.machine) ? MODELS_BY_STATE[state.machine] : undefined;
+    // A state of a model the emulator builds says which; anything else keeps the old sentence.
+    if (from !== undefined && name !== "Model III") {
+      throw new Error(`This is a ${from} save state; the machine is a ${name}, and a state restores only into the model that saved it.`);
+    }
+    throw new Error(`Not a TRS-80 ${name} save state`);
   }
   if (state.version !== STATE_VERSION) {
     throw new Error(`Unsupported save-state version ${state.version}`);
+  }
+  const ram = fromBase64(state.memory.ram);
+  if (ram.length !== system.memory.ram.length) {
+    throw new Error(`This ${system.model?.name ?? "Model III"} save state has ${ram.length / 1024}K of RAM; the machine has ${system.memory.ram.length / 1024}K, and a state restores only into a machine with the same RAM`);
+  }
+
+  // A Model I state restores only into a Model I fitted the same way: the Expansion Interface
+  // (its latch, its disk controller) and the lowercase modification (what video RAM holds).
+  if (system.model?.id === 1) {
+    const saved = Object.hasOwn(state, "latch");
+    const fitted = system.io.latch !== null;
+    if (saved !== fitted) {
+      throw new Error(`This Model I save state was saved ${saved ? "with" : "without"} the Expansion Interface; the machine has ${fitted ? "one" : "none"}, and a state restores only into a machine fitted the same way (expansion: ${saved}).`);
+    }
+    const lowercase = state.lowercase ?? false;
+    if (lowercase !== !!system.lowercase) {
+      throw new Error(`This Model I save state was saved ${lowercase ? "with" : "without"} the lowercase modification; the machine has ${system.lowercase ? "it" : "none"}, and a state restores only into a machine fitted the same way (lowercase: ${lowercase}).`);
+    }
   }
 
   const cpu = system.cpu;
@@ -177,7 +211,7 @@ export function restoreState(system, state) {
   cpu.afterPrefix ??= false; // likewise
   for (const key of IO_SCALARS) io[key] = state.io[key];
 
-  system.memory.ram.set(fromBase64(state.memory.ram));
+  system.memory.ram.set(ram);
   system.memory.videoRam.set(fromBase64(state.memory.videoRam));
   system.memory.videoDirty = true;
 
@@ -227,6 +261,7 @@ export function restoreState(system, state) {
     fdc.drives[entry.drive & 3] = disk;
   }
 
+  if (io.latch) io.latch.bits = state.latch ?? 0;
   system.nextRtcAt = state.nextRtcAt;
   system._nmiWasPending = state.nmiWasPending ?? false; // absent before emu phase 5
   system._fdcAhead = 0;

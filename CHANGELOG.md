@@ -97,6 +97,186 @@ the `emu-phase7` branch:
   a Model I reference (MAME or xtrs, with the user's agreement), since trsjs
   is Model III only.
 
+Emu phase 6 (the Model I; emu spec §3, §5, §11), `@fugloy/emu` and
+`@fugloy/mcp`, unreleased, on the `emu-phase6` branch. The Model 4 half of the
+phase is split off into its own plan, for when a Model 4 ROM and boot disk are
+supplied (`model: 4` refuses with a sentence saying so):
+
+- The machine is described by model (`src/machine/models.js`): clock, timer
+  rate, ROM sizes and top, RAM sizes, the ROMs each model runs, and the save
+  state's machine id. `MemorySystem`, `IOSystem`, and `TRS80System` take the
+  description (the Model III by default), so the Model III is laid out as
+  before; a synthetic-ROM Model III session committed as
+  `fixtures/synthetic/emu/model3-state.json` before the change ends
+  byte-identical after it (test `the Model III is unchanged`).
+- `new Machine({ model: 1, ram, roms: { level2 }, expansion, lowercase })`
+  builds the Model I's memory map: the 12 KB Level II ROM at `$0000`–`$2FFF`
+  (any other size refused), `$3000`–`$37FF` reading `$FF` with writes lost
+  (the Expansion Interface's `$37E0`–`$37EF` below), the keyboard
+  matrix at `$3800`, video RAM at `$3C00`, and 4, 16, 32, or 48 KB of RAM from
+  `$4000` (48 by default), with reads above it `$FF` and writes lost;
+  `m.mem.ram` is the fitted size. The Model III's ports float to `$FF` on a
+  Model I. `expansion` (default `true`) and `lowercase` (default `false`) are
+  checked, and refused on the Model III.
+- `m.model` (1 or 3) and `clockHz(model)` (1,774,080 or 2,027,520 Hz);
+  `CPU_CLOCK_HZ` stays the Model III's. The system runs, types (`cps`), and
+  clocks its disk controller at its model's clock.
+- `ROM_HASHES` names the Model I Level II ROM 1.2 and 1.3
+  (`model1-level2-1.2`, `model1-level2-1.3`). A recognised ROM given for the
+  other model is refused before its size is checked, with a sentence naming
+  the model it runs on.
+- A save state carries its model's machine id (`trs80-model1` for the Model I;
+  the Model III's stays `trs80-model3`), and a restore refuses another
+  model's state, or one whose RAM size differs from the machine's, with a
+  sentence.
+- Changed: `Machine` refusals are now sentences per model: `model: 4` says the Model 4
+  comes in its own plan, and the Model III's `ram: 16` or `32` says those
+  sizes come in a later phase (they were one "phase 2 builds the Model III
+  with 48K" message).
+- The Model I's timer: with the Expansion Interface (`expansion: true`, the
+  default) its 40 Hz clock raises bit 7 of the interrupt latch at `$37E0`
+  (`src/devices/interrupt-latch.js`, `IOSystem.latch`), which holds the INT
+  line low until a CPU read of `$37E0` (or `$37E1`–`$37E3`) clears the clock
+  bit; bit 6 is kept for the WD1771's INTRQ (Task 3: `raise`/`clear(DISK_BIT)`),
+  and a `$37E0` read leaves it. There is no mask. Without the Expansion
+  Interface there is no latch, no clock, and `$37E0` reads `$FF`. The Level II
+  ROM runs with interrupts disabled (its vector at `$4012` is `EI / RET`), so
+  the clock bit waits in the latch until a program enables interrupts with a
+  handler that reads `$37E0`. A Model I save state carries the latch
+  (`state.latch`; Model III states are unchanged).
+- The Model I's video RAM has no bit 6 (Technical Reference Handbook, p. 34):
+  a byte written to `$3C00`–`$3FFF` is kept, read back, and shown with bit 6
+  = NOT (bit 5 OR bit 7), so `$61` reads `$21`; `lowercase: true` keeps all
+  eight bits.
+- The Model I's port `$FF`: writes set the cassette output (bits 0–1, in
+  `m.sound` as on the Model III), the motor relay (bit 2), and MODESEL
+  (bit 3: 32 columns, so `m.video.columns` and `text()` follow `CHR$(23)`);
+  any write resets the cassette flip-flop, which reads in bit 7; bit 6 reads
+  MODESEL inverted and bits 0–5 read 1 (MAME's, unverified).
+- The cassette deck on the Model I plays at 500 baud only (1500 is refused
+  with a sentence, by `m.cassette.insert` and by `m.load.cas` via the ROM),
+  with the tape's times scaled to the Model I's clock so a bit cell stays
+  2 ms; the Level II ROM's SYSTEM and CLOAD read it, and a CSAVE recording
+  decodes (its times scaled back) and loads into another Model I.
+- The ROM keyboard-scan hook stands in on the Model I too: the Level II ROM's
+  `$002B` and `$0049` keep the Model III's contract (`CP $01` at `$0453`, the
+  KDCB in DE, BC, HL, and IX restored by `CIO`), so `m.keyboard.feed` and
+  `.BAS` text loads work there (phase 6 Ruling 6). Matrix typing is timed at
+  the Model I clock.
+- Changed: `m.mem.read` peeks: reading the Model I's `$37E0` through it does
+  not clear the latch, as a CPU read does (`MemorySystem.peekByte`). On the
+  Model III nothing changes.
+- Changed: a save state of one model restored into a Model I says which
+  ("This is a Model III save state; the machine is a Model I, …"); into a
+  Model III the sentence is unchanged.
+- The Model I's disk: the Expansion Interface's WD1771
+  (`src/devices/fdc-wd1771.js`, the phase 5 controller with the 1771's
+  differences from the FD1771-01 data sheet) at `$37EC`–`$37EF`, the drive
+  select at `$37E1` (bits 0–3), INTRQ on the interrupt latch's bit 6 (cleared
+  by a status read or a command load, never an NMI). Single density only, no
+  side compare, the `b` flag's lengths, the data mark read into status bits
+  6–5 and written by a1 a0 (`FB`, `FA`, `F9`, `F8`), Read Address loading the
+  sector register with the ID's sector, the 1 MHz step rates and 20 ms
+  settling, a two-revolution search, a command loaded while Busy overriding
+  the one running (the dual-boot disks' loader needs it), and a Restore at
+  reset when a disk is mounted. `m.fdc` and `m.load.dsk` work on the Model I:
+  the Level II ROM boots track 0, sector 0 to `$4200`. With no disk mounted
+  `$37EC`–`$37EF` read `$FF` and the ROM starts Level II BASIC, as before. The
+  four local disk images boot on the Model I: the Duo-Loader menu of the
+  dual-boot Eliminator and Rear Guard disks and `ELIMATOR.dsk`, then each
+  game's title after ENTER, and Scarfman's title.
+- The Model I's printer at `$37E8`–`$37EB`: status `$30` (ready, as the ROM's
+  `PRTAVL` expects), bytes to the printout.
+- On a Model I a 10-sector JV1 may have 35 to 42 tracks as well as 77 or 80
+  (`JV1_MODEL1_SD_TRACKS`); any other length is still refused, with a
+  sentence listing the Model I's sizes. The Model III's sizes are unchanged.
+- A Model I built with `expansion: false` refuses `m.fdc.mount` and
+  `m.load.dsk` with a sentence.
+- Changed (visible on the Model III): a 10-sector JV1's synthesized
+  directory marks are `FA` (the mark the Model I DOSes write their directory
+  with), not `F8`, so a DMK export writes `FA` there, and the Model III's
+  WD1793 now reads an `FA` mark (any container) as normal data, not deleted
+  (Record Type clear), as the Super Utility Tech Manual (p. 2) says the 1793
+  does; so a 10-sector JV1's directory reads as normal on the Model III. `F9`
+  and `F8` still read as deleted. An 18-sector JV1 keeps `F8`.
+- The Model I's drive select at `$37E1` keeps a value written with no disk
+  mounted, and a disk mounted later finds that drive selected.
+- Changed: a Model I save state records the lowercase modification, and a
+  restore refuses a Model I state saved with another Expansion Interface or
+  lowercase fitting, with a sentence (it used to restore and drop the latch).
+- Fixed: the debugger's own reads (a watched write's old value, the
+  instruction look-ahead, the trace, the label file) peek, so a watched write
+  to `$37E1` no longer clears the latch's clock bit, and one to `$37EC` does
+  not read the WD1771's status (which would drop INTRQ). The Model III's
+  reads are as before. `MemorySystem.getMemoryView` shows `$37E0`–`$37EF` as
+  `m.mem.read` does.
+- Real programs on the Model I (`test/integration/model1-programs.test.js`,
+  on the Level II ROM; skipped without `roms.model1`): from `examples/`,
+  Eliminator's Model I-only build `elimin8a` and the `$4900` build
+  `elimin8c`, Sea Dragon, and Rear Guard reach their titles (in capitals: the
+  stock Model I has no lowercase) and answer ENTER, and Armored Patrol
+  (`ARMOUR.III`) reaches its players screen; from `fixtures/real`, Space Warp
+  1 and 3, Asylum 16K and 32K, Crazy Painter, Deathmaze 5000, Pirate's
+  Adventure, and Volcano reach their title or first question, and Super Nova
+  shows its lowercase credits as punctuation on the stock machine and as
+  written with `lowercase: true`. A scripted Model I session (Eliminator:
+  title, ENTER, one player) repeats byte for byte.
+- Fixed: `m.debug.labelFile` records the machine's model as `program.model`
+  (it wrote 3 on a Model I too).
+- `m.clockHz`, the machine's own CPU clock (`clockHz(m.model)`); `m.cycles`,
+  `run`'s budgets, and the `m.sound` stamps count its T-states (spec §3).
+  `JV1_MODEL1_SD_TRACKS` (35 to 42, 77, and 80 tracks), the JV1 sizes a Model I
+  mount takes, is exported.
+- `mergeLabelFiles` refuses two files whose `program.model` differs, with a
+  sentence naming both models, as it refuses two programs: their coverage of
+  `$0000`–`$37FF` is of two different ROMs (§8 and `docs/label-format.md`).
+- Changed: the Sea Dragon speed test (`test/integration/benchmark.test.js`)
+  runs only with `FUGLOY_BENCH=1`: beside the rest of the parallel suite it
+  measured 12–15× against about 40× alone, and failed. `./publish.sh check`
+  runs it by itself after the suite; `node packages/emu/scripts/benchmark.mjs
+  off` (or `debug`) measures it by hand.
+- `@fugloy/mcp` (unreleased) runs the Model I (MCP spec §3, §5):
+  - `load { model: 1 }` builds a Model I (48K, the Expansion Interface) on the
+    config's `roms.model1` and boots it to READY, answering MEMORY SIZE? with
+    ENTER; the manifest adds a `Model: Model I (48K, with the Expansion
+    Interface)` line (a Model III's manifest is unchanged). A disk on the
+    Model I boots toward `$4200` (track 0, sector 0). Without `roms.model1`
+    the sentence names the entry to set; a Model III ROM named there is
+    refused naming its model; `model: 4` says the Model 4 comes in its own
+    plan; `reset: false` with a model other than the running machine's is
+    refused.
+  - The config's `defaultModel` takes 1 or 3 (it took only 3); 4 and any
+    other value are refused with a sentence. `reset` keeps the running
+    machine's model; `status` names the running machine's model and that
+    model's ROM.
+  - Emulated time counts on the machine's own clock (1,774,080 Hz on the
+    Model I): `run seconds`, the `limits.runSecondsEmulated` cap, `settled`'s
+    0.5 s, `key`'s 0.2 s tail, and every `N s emulated` the tools print. They
+    all used the Model III's clock.
+  - `key` types at 10 characters a second by default on a Model I, 20 on the
+    Model III: the Level II ROM drops every other key typed at 20.
+  - `disasm` and `callees` name from the Model I's ROM and hardware tables on
+    a Model I; `fugloy://rom/1/symbols` serves them (it read as a sentence
+    naming emu phase 6), and `fugloy://rom/4/symbols` says the Model 4 is not
+    here. `poke` refuses the Model I's ROM as `0000h`–`2FFFh` without `force`
+    and its Expansion Interface space, `3000h`–`37FFh`, outright.
+    `coverage export` refuses to write over either configured ROM.
+  - `load` detects a disk image by the sizes the model it builds takes: on a
+    Model I a JV1 may have 35 to 42, 77, or 80 single-density tracks, as
+    `m.fdc.mount` accepts there (a 36-track JV1 loaded on a Model I was
+    refused as not a disk); the Model III's sizes are unchanged.
+  - A sidecar written on another model (its `program.model` differs from the
+    machine's) is ignored at `load`, reported, and never merged or
+    overwritten, as one for another program is.
+  - `suggest` leaves out only the Model I's ROM, `0000h`–`2FFFh`, on a Model I
+    (it skipped everything below `3800h`).
+  - `resources/list` lists `fugloy://rom/1/symbols` beside
+    `fugloy://rom/3/symbols`. The tools read the clock from `m.clockHz`.
+  - Tests: `packages/mcp/test/model1.test.js` on a synthetic 12K ROM (in CI);
+    `model1-rom.test.js` on the Level II ROM (Eliminator to its title and
+    ENTER, BASIC typed at the default rate, Scarfman's disk to `4200h` and its
+    title, and the wrong-ROM sentence).
+
 Emu phase 5 (disk controller and images; emu spec §3, §5, §6), `@fugloy/emu`,
 unreleased, on the `emu-phase5` branch:
 
@@ -304,7 +484,7 @@ Found by the emu phase 7 differential harness, `@fugloy/emu`, on `emu-phase7`:
   bit 7 kept). The Z80 runs NOP M1 cycles while halted (Zilog UM0080, HALT)
   and R counts every M1 (Young §6.1); before, R stood still, so a program
   that read R after a HALT saw a different value than on the hardware.
-- Port `FF` reads bits 5–1 as port `EC`'s latch (DISWAIT, ENEXTIO, ENALTSET,
+- On the Model III, port `FF` reads bits 5–1 as port `EC`'s latch (DISWAIT, ENEXTIO, ENALTSET,
   MODSEL, CASMOTORON) and bit 6 as 1, as the Model III Technical Reference
   Manual gives CASIN* (p. 22; bit 6 is undefined there, and an undriven bit
   reads 1, as trs80gp has it); before, only bit 7 (the 500-baud latch) and
@@ -353,7 +533,9 @@ have (`m.fdc`, `m.load.dsk`, `DiskImage`, `CPU_CLOCK_HZ`). Its dependency is
 `workspace:^`, which publishes as `^` the emu version in the workspace, so
 `@fugloy/emu` must be bumped to 0.3.0 and released before the next
 `@fugloy/mcp` release; an mcp published against emu 0.2.0 would install an
-emu without the disk controller.
+emu without the disk controller. The same holds for its Model I support
+(emu phase 6), which needs `new Machine({ model: 1 })`, `m.model`, and
+`m.system.clockHz`.
 
 ## [1.2.0] - 2026-10-18
 

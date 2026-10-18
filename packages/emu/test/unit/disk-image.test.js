@@ -146,13 +146,16 @@ describe("DiskImage - data address marks", () => {
     expect(disk.readSectorEx(50, 0, 0)).toBeNull();
   });
 
-  it("JV3 treats any single-density non-FB DAM code as deleted", () => {
-    // Model I TRSDOS 2.3 marks its directory 0xFA (SD flag 0x20)
+  it("JV3 single-density marks as the Model III's 1793 reads them: FA normal, F9 and F8 deleted", () => {
+    // Model I TRSDOS 2.3 marks its directory 0xFA (SD flag 0x20), which the 1793 reads as
+    // standard data (Super Utility Tech Manual p. 2); F9 (0x40) and F8 (0x60) as deleted
     const disk = new DiskImage(
-      buildJV3({ tracks: 18, spt: 10, flagFor: (t) => (t === 17 ? 0x20 : 0x00) })
+      buildJV3({ tracks: 18, spt: 10, flagFor: (t) => (t === 17 ? 0x20 : t === 16 ? 0x40 : t === 15 ? 0x60 : 0x00) })
     );
 
-    expect(disk.readSectorEx(17, 0, 1).deleted).toBe(true);
+    expect(disk.readSectorEx(17, 0, 1)).toMatchObject({ dam: 0xfa, deleted: false });
+    expect(disk.readSectorEx(16, 0, 1)).toMatchObject({ dam: 0xf9, deleted: true });
+    expect(disk.readSectorEx(15, 0, 1)).toMatchObject({ dam: 0xf8, deleted: true });
     expect(disk.readSectorEx(3, 0, 1).deleted).toBe(false);
   });
 
@@ -300,7 +303,7 @@ describe("JV3 exactly", () => {
   it("the data marks: single density FA, F9, F8 by flag code; double density F8", () => {
     const dams = disk.trackIds(1, 0).map((id) => id.dam);
     expect(dams.slice(2, 7)).toEqual([0xfb, 0xfa, 0xf9, 0xf8, 0xfb]);
-    expect(disk.trackIds(1, 0).map((id) => id.deleted).slice(2, 7)).toEqual([false, true, true, true, false]);
+    expect(disk.trackIds(1, 0).map((id) => id.deleted).slice(2, 7)).toEqual([false, false, true, true, false]);
     expect(disk.readSectorEx(3, 1, 2)).toMatchObject({ dam: 0xf8, deleted: true });
     expect(disk.readSectorEx(3, 1, 3)).toMatchObject({ dam: 0xfb, deleted: false });
   });
@@ -357,7 +360,7 @@ describe("DMK exactly", () => {
       expect(ids.map((id) => id.sector)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
       expect(ids.every((id) => id.mfm === false && id.dataGap === 25 && id.idCrcOk && id.dataCrcOk)).toBe(true);
     }
-    expect(sample("dmk-sd.dmk").readSectorEx(2, 0, 9)).toMatchObject({ dam: 0xfa, deleted: true });
+    expect(sample("dmk-sd.dmk").readSectorEx(2, 0, 9)).toMatchObject({ dam: 0xfa, deleted: false });
     expect(sample("dmk-sd.dmk").rawTrack(0, 0).doubled).toBe(true);
     expect(sample("dmk-sd-single.dmk").rawTrack(0, 0).doubled).toBe(false);
   });
@@ -477,7 +480,7 @@ describe("m.fdc.export: DMK bytes", () => {
   it("JV1's 10-sector tracks export in FM and its 18-sector tracks in MFM", () => {
     const sd = new DiskImage(new DiskImage(DISK_SAMPLES["jv1-sd-35x10.dsk"].build()).toDMK());
     expect(sd.trackIds(3, 0).every((id) => id.mfm === false)).toBe(true);
-    expect(sd.trackIds(17, 0).every((id) => id.deleted)).toBe(true); // the synthesized directory marks
+    expect(sd.trackIds(17, 0).every((id) => id.dam === 0xfa)).toBe(true); // the synthesized directory marks (FA: normal on the 1793)
     const dd = new DiskImage(new DiskImage(writeJv1({ tracks: 40, spt: 18 })).toDMK());
     expect(dd.trackIds(3, 0).every((id) => id.mfm === true)).toBe(true);
     expect(dd.dmk.trackLen).toBe(0x1900);

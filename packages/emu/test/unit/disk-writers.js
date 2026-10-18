@@ -178,18 +178,23 @@ export function writeDmk({ tracks = 40, spt = 18, sides = 1, base = 1, writeProt
 
 /** Where the Model III ROM puts the boot sector, and where it jumps once the read ends cleanly. */
 export const BOOT_ORG = 0x4300;
+/** Where the Model I Level II ROM loads the boot sector (track 0, sector 0). */
+export const MODEL1_BOOT_ORG = 0x4200;
 
 /**
  * A boot sector (track 0, sector 1) that copies `message` to the top line of video RAM ($3C00)
  * and spins. The Model III ROM reads that sector to $4300 and jumps there (ROM $34DD-$34FF loads
  * HL with $4300 and reads sector 1 with INI; the NMI that ends the read lands at $3502, which
- * jumps to $4300 when the status has no CRC, not-found, or lost-data bit, `AND 1CH`).
+ * jumps to $4300 when the status has no CRC, not-found, or lost-data bit, `AND 1CH`). The Model I
+ * Level II ROM reads track 0, sector 0 to $4200 instead (MDL1LEV2.Z80, BOOT at $069F): pass
+ * `org` $4200 (MODEL1_BOOT_ORG).
  * @param {string} message
+ * @param {number} [org]
  */
-export function bootSector(message) {
+export function bootSector(message, org = BOOT_ORG) {
   const at = 0x20;
   const code = [
-    0x21, (BOOT_ORG + at) & 0xff, (BOOT_ORG + at) >> 8, // LD HL,message
+    0x21, (org + at) & 0xff, (org + at) >> 8, // LD HL,message
     0x11, 0x00, 0x3c, // LD DE,3C00H
     0x01, message.length, 0x00, // LD BC,length
     0xed, 0xb0, // LDIR

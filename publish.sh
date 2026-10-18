@@ -35,7 +35,8 @@ set -euo pipefail
 #   - you're logged in to npm, and no package of the set already has this version on npm;
 #   - the set's packages share one version (core) and CHANGELOG.md has its entry;
 #   - CI finished and passed for this commit (needs the GitHub CLI, logged in);
-#   - typecheck, tests, and build pass;
+#   - typecheck, tests, and build pass, and then, alone, Sea Dragon's speed benchmark (FUGLOY_BENCH=1,
+#     the emu's ≥ 20× real time; it skips without the Model III ROM in fugloy.mcp.json);
 #   - every runtime dependency is another @fugloy package of the same release (no third-party code),
 #     except in the mcp set, whose @fugloy dependencies are ^ ranges on the local versions (which
 #     must be on npm, or emu staged) and whose third-party ones (the MCP SDK, zod) are exact versions;
@@ -233,6 +234,9 @@ cmd_check() {
   pnpm install --frozen-lockfile
   pnpm typecheck
   pnpm test
+  # The benchmark is opt-in: beside the rest of the parallel suite it measures well under what it
+  # gets alone, so it runs here by itself, once the suite is done.
+  FUGLOY_BENCH=1 pnpm exec vitest run packages/emu/test/integration/benchmark.test.js
   pnpm clean
   pnpm build
   [[ -z "$(git status --porcelain)" ]] || {

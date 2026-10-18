@@ -6,8 +6,8 @@
  * give, not as a protocol error.
  *
  * `fugloy://rom/{model}/symbols` (Ruling 5) is generated from @fugloy/disasm's cited symbol
- * tables, the Model III ROM and hardware ones (the machine 3, no-DOS selection, as the disasm
- * tool uses), one line per entry: address (or port), kind, name, and purpose.
+ * tables, the ROM and hardware ones of the model (the machine 3 or machine 1, no-DOS selection,
+ * as the disasm tool uses), one line per entry: address (or port), kind, name, and purpose.
  */
 import { selectSymbols } from '@fugloy/disasm';
 import { hex4, MODELS } from './args.js';
@@ -21,21 +21,26 @@ function where(/** @type {import('@fugloy/disasm').TableEntry} */ e) {
   return e.length > 1 ? `${hex4(e.key)}–${hex4(e.key + e.length - 1)}` : hex4(e.key);
 }
 
-/** @type {string | undefined} */
-let model3Symbols;
+/** @type {Map<number, string>} The symbols text by model, built once each. */
+const symbolsText = new Map();
 
-/** The Model III ROM and hardware symbols as text, built once. */
-export function romSymbolsText() {
-  if (model3Symbols !== undefined) return model3Symbols;
-  const entries = selectSymbols({ machine: 3, dos: 'none' }).entries();
-  const rom = entries.filter((e) => e.table === 'rom-model3');
-  const hardware = entries.filter((e) => e.table !== 'rom-model3');
+/**
+ * The ROM and hardware symbols of model `model` (3, the Model III, or 1, the Model I) as text, built once.
+ * @param {1 | 3} [model]
+ */
+export function romSymbolsText(model = 3) {
+  const built = symbolsText.get(model);
+  if (built !== undefined) return built;
+  const entries = selectSymbols({ machine: model, dos: 'none' }).entries();
+  const table = `rom-model${model}`;
+  const rom = entries.filter((e) => e.table === table);
+  const hardware = entries.filter((e) => e.table !== table);
   const width = Math.max(...entries.map((e) => where(e).length));
   const nameWidth = Math.max(...entries.map((e) => e.name.length));
   const row = (/** @type {import('@fugloy/disasm').TableEntry} */ e) =>
     `${where(e).padEnd(width)}  ${e.kind.padEnd(8)}  ${e.name.padEnd(nameWidth)}  ${e.purpose}`;
-  model3Symbols = [
-    `Model III ROM and hardware symbols (${entries.length} entries), from @fugloy/disasm's cited tables; addresses are hex.`,
+  const text = [
+    `Model ${MODELS[model]} ROM and hardware symbols (${entries.length} entries), from @fugloy/disasm's cited tables; addresses are hex.`,
     'A CALL or RST to one of these addresses is a call into the ROM; callers on the address shows who made it.',
     '',
     `ROM: entry points and the RAM variables it keeps (${rom.length}):`,
@@ -44,7 +49,8 @@ export function romSymbolsText() {
     `Hardware: memory-mapped regions and ports (${hardware.length}):`,
     ...hardware.map(row),
   ].join('\n');
-  return model3Symbols;
+  symbolsText.set(model, text);
+  return text;
 }
 
 /** A handler's text, or the sentence it threw. */
@@ -99,14 +105,14 @@ export const RESOURCES = [
 export const ROM_SYMBOLS = {
   uriTemplate: 'fugloy://rom/{model}/symbols',
   name: 'rom-symbols',
-  description: 'Known ROM entry points, memory-mapped regions, and ports of a model (only 3, the Model III, until emu phase 6), with their names and purposes, so ROM calls can be recognized: fugloy://rom/3/symbols.',
+  description: 'Known ROM entry points, memory-mapped regions, and ports of a model (3, the Model III, or 1, the Model I), with their names and purposes, so ROM calls can be recognized: fugloy://rom/3/symbols, fugloy://rom/1/symbols.',
   /** @param {string} model */
   read(model) {
-    if (model === '3') return romSymbolsText();
-    const n = Number(model);
-    if (/^\d+$/.test(model) && MODELS[n] !== undefined) {
-      return `There are no Model ${MODELS[n]} symbols here yet: only the Model III exists until emu phase 6 adds the Model I and the Model 4; read fugloy://rom/3/symbols.`;
+    if (model === '3') return romSymbolsText(3);
+    if (model === '1') return romSymbolsText(1);
+    if (model === '4') {
+      return 'There are no Model 4 symbols here yet: the Model 4 comes in its own plan once a Model 4 ROM and boot disk are supplied; read fugloy://rom/3/symbols (the Model III) or fugloy://rom/1/symbols (the Model I).';
     }
-    return `${JSON.stringify(model)} is not a model; read fugloy://rom/3/symbols (the Model III).`;
+    return `${JSON.stringify(model)} is not a model; read fugloy://rom/3/symbols (the Model III) or fugloy://rom/1/symbols (the Model I).`;
   },
 };

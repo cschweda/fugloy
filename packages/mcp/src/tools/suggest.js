@@ -1,12 +1,13 @@
 /**
  * `suggest`: the call targets worth naming next (docs/fugloy-mcp-spec.md §5, Ruling 4). Raw
  * counts first (calls, distinct call sites), then what the routine's instructions were seen
- * doing, attributed by address (src/attribution.js). ROM routines are left out: the Model III
- * table names them.
+ * doing, attributed by address (src/attribution.js). ROM routines are left out: the ROM symbol
+ * tables name them. The ROM ends at $37FF on the Model III and at $2FFF on the Model I, whose
+ * $3000-$37FF is not ROM (like poke).
  */
 import { SYNTH_NAME } from '@fugloy/disasm';
 import { z } from 'zod';
-import { hex4, parseCount, ROM_END } from '../args.js';
+import { hex4, parseCount, romEndOf } from '../args.js';
 import { routineNotes } from '../attribution.js';
 import { sharedNote } from './coverage.js';
 
@@ -28,8 +29,9 @@ export default {
     const callerMap = m.debug.callerMap();
     /** @type {{ addr: number, calls: number, sites: number }[]} */
     const targets = [];
+    const romEnd = romEndOf(m.model);
     for (const [addr, edges] of callerMap) {
-      if (addr < ROM_END) continue;
+      if (addr < romEnd) continue;
       const label = session.labels.get(addr);
       if (label !== undefined && !SYNTH_NAME.test(label.name)) continue;
       let calls = 0;

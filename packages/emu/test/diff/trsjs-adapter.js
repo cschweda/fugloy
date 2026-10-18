@@ -248,6 +248,8 @@ export function loadTrsjs({ path = TRSJS_PATH } = {}) {
     alignRtc,
 
     syncFrom(machine) {
+      // trsjs is a Model III; its ports and memory map are the Model III's (emu spec §11, phase 7).
+      if (machine.model !== 3) throw new Error(`trsjs is a Model III only; this machine is a Model ${machine.model}`);
       const sys = machine.system;
       const io = sys.io;
       ref.syncRegs(machine);

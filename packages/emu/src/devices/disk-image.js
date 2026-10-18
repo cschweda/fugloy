@@ -8,9 +8,11 @@
  *         format is single density with 10 sectors per track numbered 0-9 (Model I); the
  *         Model III images of TRSDOS 1.3 are the same dump with 18 double-density sectors
  *         numbered 1-18. The file size is the only evidence, so only 35, 40, 77, or 80 tracks
- *         of 10 or 18 sectors count, and the geometry fixes the numbering. JV1 records no
- *         density, data mark, or CRC: its IDs read in either density, and the directory
- *         track's deleted marks are synthesized.
+ *         of 10 or 18 sectors count, and the geometry fixes the numbering (a Model I's drives
+ *         take 10-sector JV1s of 35 to 42 tracks too: `jv1SdTracks`). JV1 records no density,
+ *         data mark, or CRC: its IDs read in either density, and the directory track's marks
+ *         are synthesized: FA on a 10-sector disk, the mark Model I TRSDOS writes its
+ *         directory with for the WD1771, F8 on an 18-sector one.
  *
  *   JV3 — blocks of 2,901 three-byte sector headers (track, sector, flags) and a write-protect
  *         byte (FF writable, anything else protected), each block followed by the data of its
@@ -42,6 +44,28 @@ const JV3_ENTRIES = 2901;
 // 40-track 5.25" drives, 77-track 8", 80-track 5.25").
 const JV1_SPT = [18, 10];
 const JV1_TRACKS = [35, 40, 77, 80];
+
+/**
+ * The track counts a 10-sector JV1 may have on a Model I (`jv1SdTracks`, passed by `m.fdc.mount`
+ * on a Model I). Model I archives hold single-density JV1s of 35 tracks (TRSDOS 2.3's 35, Super
+ * Utility Tech Manual p. 3, "TRSDOS 2.3") and of up to 40 and beyond, as drives and DOSes that
+ * format 36 to 42 tracks wrote them; xtrs takes any whole number of 2,560-byte tracks. Accepted
+ * here: 35 to 42, 77, and 80, single-sided. A file of another length still refuses, so a .CMD
+ * does not mount as a short JV1 (phase 6 plan, Task 3 ruling; spec §5).
+ */
+export const JV1_MODEL1_SD_TRACKS = Object.freeze([35, 36, 37, 38, 39, 40, 41, 42, 77, 80]);
+
+/** "35, 40, 77, 80" or, for a run of consecutive counts, "35-42, 77, 80". */
+function trackList(list) {
+  const out = [];
+  for (let i = 0; i < list.length; ) {
+    let j = i;
+    while (j + 1 < list.length && list[j + 1] === list[j] + 1) j++;
+    out.push(j - i >= 2 ? `${list[i]}-${list[j]}` : list.slice(i, j + 1).join(", "));
+    i = j + 1;
+  }
+  return out.join(", ");
+}
 const JV3_HEADER_SIZE = JV3_ENTRIES * 3 + 1;
 const JV3_FREE = 0xff;
 
@@ -74,11 +98,14 @@ function jv3DamBits(dam, dd) {
 }
 
 // The WD1793 sets Record Type (status bit 5) for a deleted data mark,
-// F8 ("Status Register Summary"). The sheet names only FB and F8; the
-// FM marks FA and F9 (Model I TRSDOS writes its directory FA) are
-// reported as deleted too, so DOSes that verify the directory's mark
-// on every read find it (unverified for the 1793: spec §5).
-const isDeleted = (dam) => dam !== 0xfb;
+// F8 ("Status Register Summary"); the sheet names only FB and F8. Of the
+// FM marks the WD1771 also writes, the Model III's 1793 "recognizes 'Read
+// Protected' [FA] and 'Standard Data' both as 'Standard Data'" and
+// "'Deleted Data' and 'User Defined' [F8, F9] as 'Read Protected'"
+// (Super Utility Tech Manual, Breeze/QSD 1982, p. 2): FA reads as normal,
+// F9 as deleted (F9 unverified: spec §5). The WD1771 model reads `dam`
+// itself (fdc-wd1771.js), not this.
+const isDeleted = (dam) => dam === 0xf8 || dam === 0xf9;
 
 // TRSDOS-family boot sectors name the directory cylinder in byte 2.
 const DEFAULT_DIR_TRACK = 17;
@@ -212,14 +239,16 @@ export class DiskImage {
   /**
    * @param {Uint8Array} bytes - raw .dsk contents
    * @param {string} name - display name (file name)
-   * @param {{ format?: "dmk" | "jv3" | "jv1", dirTrack?: number }} [opts] - for a save state's
+   * @param {{ format?: "dmk" | "jv3" | "jv1", dirTrack?: number, jv1SdTracks?: readonly number[] }} [opts] - `jv1SdTracks`: the
+   *   track counts a 10-sector JV1 may have (35, 40, 77, 80 by default; a Model I passes
+   *   JV1_MODEL1_SD_TRACKS); for a save state's
    *   disk, whose container is known: `format` parses the bytes as that container only, without
    *   the detection's plausibility floor (a JV3 of fewer than ten sectors, which a format of a
    *   blank disk can leave, is a valid disk the session made); `dirTrack` restores a JV1's
    *   directory track as it was mounted (a guest rewrite of track 0, sector 0 changes byte 2, which
    *   is read only at mount).
    */
-  constructor(bytes, name = "disk", { format, dirTrack } = {}) {
+  constructor(bytes, name = "disk", { format, dirTrack, jv1SdTracks = JV1_TRACKS } = {}) {
     this.name = name;
     this.bytes = new Uint8Array(bytes); // private working copy
     this.writeProtected = false;
@@ -228,7 +257,13 @@ export class DiskImage {
 
     if (format !== undefined) {
       const parsed =
-        format === "dmk" ? this._tryParseDMK() : format === "jv3" ? this._tryParseJV3(false) : format === "jv1" ? this._tryParseJV1() : false;
+        format === "dmk"
+          ? this._tryParseDMK()
+          : format === "jv3"
+            ? this._tryParseJV3(false)
+            : format === "jv1"
+              ? this._tryParseJV1(JV1_MODEL1_SD_TRACKS) // a mounted JV1: any geometry a mount took
+              : false;
       if (!parsed) throw new Error(`Disk image (${bytes.length} bytes) does not parse as ${String(format)}`);
       this.format = format;
       if (format === "jv1" && dirTrack !== undefined) this.dirTrack = dirTrack;
@@ -236,11 +271,15 @@ export class DiskImage {
       this.format = "dmk";
     } else if (this._tryParseJV3()) {
       this.format = "jv3";
-    } else if (this._tryParseJV1()) {
+    } else if (this._tryParseJV1(jv1SdTracks)) {
       this.format = "jv1";
     } else {
+      const sizes =
+        trackList(jv1SdTracks) === trackList(JV1_TRACKS)
+          ? `${trackList(JV1_TRACKS)} tracks of ${JV1_SPT.join(" or ")} 256-byte sectors`
+          : `${trackList(JV1_TRACKS)} tracks of 18 256-byte sectors, or ${trackList(jv1SdTracks)} tracks of 10`;
       throw new Error(
-        `Unrecognized disk image (${bytes.length} bytes): no DMK header, no JV3 sector table, and not a JV1 size (${JV1_TRACKS.join(", ")} tracks of ${JV1_SPT.join(" or ")} 256-byte sectors)`
+        `Unrecognized disk image (${bytes.length} bytes): no DMK header, no JV3 sector table, and not a JV1 size (${sizes})`
       );
     }
   }
@@ -432,17 +471,19 @@ export class DiskImage {
     return new DiskImage(new Uint8Array(JV3_HEADER_SIZE).fill(0xff), name);
   }
 
-  _tryParseJV1() {
+  /** @param {readonly number[]} [sdTracks] the track counts a 10-sector JV1 may have */
+  _tryParseJV1(sdTracks = JV1_TRACKS) {
     // JV1 has no header, so its size is the only evidence: accept only
     // a geometry a real disk has, 10 sectors per track (Model I single
     // density) or 18 (Model III double density) on 35, 40, 77, or 80
-    // tracks. Anything else (a .CMD, a text file) would otherwise mount
-    // as a short JV1 whose garbage the ROM then boots. No two of these
-    // sizes coincide, so the geometry is never ambiguous.
+    // tracks (10-sector: `sdTracks`). Anything else (a .CMD, a text file)
+    // would otherwise mount as a short JV1 whose garbage the ROM then
+    // boots. No two of these sizes coincide (10-sector tracks 35-42, 77,
+    // 80 and 18-sector 35, 40, 77, 80), so the geometry is never ambiguous.
     const size = this.bytes.length;
     let chosen = null;
     for (const spt of JV1_SPT) {
-      for (const tracks of JV1_TRACKS) {
+      for (const tracks of spt === 10 ? sdTracks : JV1_TRACKS) {
         if (size === tracks * spt * 256) chosen = { spt, tracks };
       }
     }
@@ -455,7 +496,16 @@ export class DiskImage {
     this.sectorBase = chosen.spt === 18 ? 1 : 0;
     // JV1 carries no DAM info, but DOSes verify the deleted mark on
     // directory reads — synthesize it for the directory track the boot
-    // sector names (byte 2), as xtrs does for its fixed track 17.
+    // sector names (byte 2), as xtrs does for its fixed track 17. A
+    // 10-sector (single-density, Model I) disk's directory is FA: the
+    // Model I DOSes write data "STANDARD" and the directory "READ
+    // PROTECTED", the WD1771 write command A9H, a1 a0 = 01, FA (Super
+    // Utility Tech Manual, Breeze/QSD 1982, p. 20 "@WRTYPE" and p. 61;
+    // FD1771-01 data sheet, Table 4). The 1771 reports it as written
+    // (record type 01); the WD1793 model reads it as normal (isDeleted,
+    // above), as the Model III's 1793 does. An 18-sector
+    // disk's is F8, the only MFM deleted mark (Model III TRSDOS: A1H).
+    this.dirDam = chosen.spt === 10 ? 0xfa : 0xf8;
     const bootDir = this.bytes[2];
     this.dirTrack =
       bootDir >= 1 && bootDir < this.tracks ? bootDir : DEFAULT_DIR_TRACK;
@@ -533,7 +583,7 @@ export class DiskImage {
     if (this.format === "jv1") {
       if (side !== 0 || track >= this.tracks) return [];
       const n = this.sectorsPerTrack;
-      const dam = track === this.dirTrack ? 0xf8 : 0xfb;
+      const dam = track === this.dirTrack ? this.dirDam : 0xfb;
       return Array.from({ length: n }, (_, i) => ({
         track,
         side,
@@ -646,7 +696,7 @@ export class DiskImage {
     const dam = loc.entry
       ? jv3Dam(this.bytes[loc.entry.flagsAt])
       : track === this.dirTrack
-        ? 0xf8
+        ? this.dirDam
         : 0xfb;
     return {
       data: this.bytes.slice(loc.offset, loc.offset + loc.size),
@@ -718,8 +768,8 @@ export class DiskImage {
     return true;
   }
 
-  /** Write into the raw track bytes in place, CRCs recomputed. */
-  _dmkWriteSector(track, side, sector, data, deleted, index) {
+  /** Write into the raw track bytes in place, CRCs recomputed; `mark` is the data mark, F8-FB. */
+  _dmkWriteSector(track, side, sector, data, mark, index) {
     const hit = this._dmkHit(track, side, sector, index);
     if (!hit) return false;
     const base = this._dmkTrackBase(track, side);
@@ -729,7 +779,6 @@ export class DiskImage {
       if (hit.step === 2 && rawOff + 1 < trackLen) this.bytes[base + rawOff + 1] = v;
     };
 
-    const mark = deleted ? 0xf8 : 0xfb;
     let dataOff = hit.dataOff;
     if (hit.noData) {
       // No data field yet: lay it where Write Sector puts it ("Write Sector"): after the ID's
@@ -780,7 +829,7 @@ export class DiskImage {
       for (let i = 0; i < this.sectorsPerTrack; i++) {
         let flags = 0x00; // size code 0 = 256 bytes
         if (dd) flags |= F_DD;
-        if (t === this.dirTrack) flags |= jv3DamBits(0xf8, dd); // keep the DAM synthesis
+        if (t === this.dirTrack) flags |= jv3DamBits(this.dirDam, dd); // keep the DAM synthesis
         const offset = (t * this.sectorsPerTrack + i) * 256;
         entries.push({
           track: t,
@@ -839,18 +888,20 @@ export class DiskImage {
   }
 
   /**
-   * @param {{deleted?: boolean, index?: number}} [opts] - record type to
-   *   write (WD1793 write-sector bit a0: F8 or FB). JV3 stores it in the
+   * @param {{deleted?: boolean, dam?: number, index?: number}} [opts] - record type to
+   *   write (WD1793 write-sector bit a0: F8 or FB; `dam`, when given, the
+   *   mark itself, F8-FB, as the WD1771's a1 a0 choose it). JV3 stores it in the
    *   header flags — in the image bytes, so exports keep it — and clears
    *   the CRC error flag, since the write leaves a good CRC; JV1 has
    *   nowhere to put one and keeps synthesizing by directory track.
    *   `index` picks the ID by its place in `trackIds`, as `readSectorEx`.
    * @returns {boolean} true if written
    */
-  writeSector(track, side, sector, data, { deleted = false, index } = {}) {
+  writeSector(track, side, sector, data, { deleted = false, dam, index } = {}) {
     if (this.writeProtected) return false;
+    const mark = dam ?? (deleted ? 0xf8 : 0xfb);
     if (this.format === "dmk") {
-      return this._dmkWriteSector(track, side, sector, data, deleted, index);
+      return this._dmkWriteSector(track, side, sector, data, mark, index);
     }
     const loc = this._locate(track, side, sector, index);
     if (!loc) return false;
@@ -858,7 +909,7 @@ export class DiskImage {
     const entry = loc.entry;
     if (entry) {
       const flags = this.bytes[entry.flagsAt] & ~(F_DAM | F_CRC_ERROR);
-      this.bytes[entry.flagsAt] = flags | jv3DamBits(deleted ? 0xf8 : 0xfb, (flags & F_DD) !== 0);
+      this.bytes[entry.flagsAt] = flags | jv3DamBits(mark, (flags & F_DD) !== 0);
     }
     return true;
   }

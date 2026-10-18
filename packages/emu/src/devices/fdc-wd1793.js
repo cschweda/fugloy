@@ -29,9 +29,7 @@
  * apply; READY is true when the selected drive holds a disk; HLT is always true.
  */
 
-// io.js imports this module too; the cycle is safe because each side uses the other's exports
-// only when called, never while the modules evaluate.
-import { decodeModel3Select } from "../machine/io.js";
+import { decodeModel3Select } from "../machine/drive-select.js";
 
 // Status bits (data sheet, "Status Register Summary", Table 6)
 const ST_BUSY = 0x01;
@@ -110,15 +108,18 @@ function crc16(bytes, crc = 0xffff) {
  * normal/deleted data field, 0xF7 writes the CRC. FM (single density)
  * uses the bare marks after a run of 0x00 sync bytes. The density latch
  * is only a guess about what the DOS meant, so a parse that finds no
- * sectors retries as the other density.
+ * sectors retries as the other density. With `fmMarks` (the WD1771) the FM
+ * data marks FA and F9 start a data field too, and each sector carries
+ * its mark as `dam` (FD1771-01 data sheet, "Control Bytes for
+ * Initialization": F8, F9, FA, FB are data address marks).
  *
  * @returns {{track:number, side:number, sector:number, size:number,
  *            deleted:boolean, data:Uint8Array, mfm:boolean}[]}
  */
-export function parseWriteTrackStream(bytes, mfmGuess = true) {
-  const first = mfmGuess ? scanMfm(bytes) : scanFm(bytes);
+export function parseWriteTrackStream(bytes, mfmGuess = true, fmMarks = false) {
+  const first = mfmGuess ? scanMfm(bytes) : scanFm(bytes, fmMarks);
   if (first.length) return first;
-  return mfmGuess ? scanFm(bytes) : scanMfm(bytes);
+  return mfmGuess ? scanFm(bytes, fmMarks) : scanMfm(bytes);
 }
 
 function scanMfm(bytes) {
@@ -157,7 +158,7 @@ function scanMfm(bytes) {
   return sectors;
 }
 
-function scanFm(bytes) {
+function scanFm(bytes, fmMarks = false) {
   const sectors = [];
   let i = 0;
   let id = null;
@@ -181,10 +182,11 @@ function scanFm(bytes) {
         i += 5;
         continue;
       }
-      if ((b === 0xfb || b === 0xf8) && id) {
+      if ((b === 0xfb || b === 0xf8 || (fmMarks && (b === 0xfa || b === 0xf9))) && id) {
         sectors.push({
           ...id,
           deleted: b === 0xf8,
+          ...(fmMarks ? { dam: b } : {}),
           data: bytes.slice(i + 1, i + 1 + id.size),
           mfm: false,
         });
@@ -289,6 +291,14 @@ export class FDC1793 {
     this.trackWrite = null; // WRITE TRACK capture (array of bytes)
 
     this.indexClock = 0;
+
+    // What differs on the WD1771 (fdc-wd1771.js), at the WD1793's values: index pulses to an ID
+    // search's end and to the head's unloading, the sector register's source in Read Address (0,
+    // the ID's track), and whether Write Track takes the FM marks FA and F9.
+    this.searchPulses = SEARCH_INDEX_PULSES;
+    this.headUnloadPulses = HEAD_UNLOAD_PULSES;
+    this.readAddressField = 0;
+    this.fmMarks = false;
   }
 
   attachDrive(n, image) {
@@ -340,7 +350,7 @@ export class FDC1793 {
   /**
    * The drive-select latch, decoded: `drive` 0-3, or -1 for none; `side` 0 or 1; `mfm` the density
    * (true double, false single). Each model's I/O decodes its own select port into this (the
-   * Model III's port F4: machine/io.js, decodeModel3Select).
+   * Model III's port F4: machine/drive-select.js, decodeModel3Select, applied in machine/io.js).
    * @param {number} drive
    * @param {number} side
    * @param {boolean} mfm
@@ -378,7 +388,7 @@ export class FDC1793 {
    */
   waitForDrq() {
     let total = 0;
-    const cap = (SEARCH_INDEX_PULSES + 2) * this.indexPeriod;
+    const cap = (this.searchPulses + 2) * this.indexPeriod;
     while (this.pending !== null && !(this.status & ST_DRQ && this.commandType !== 1) && !this.intrq && total < cap) {
       const d = Math.max(0, this.pending.delay);
       this.tick(d);
@@ -423,7 +433,7 @@ export class FDC1793 {
 
   _indexPulse() {
     if (!this._ready()) return; // no disk turning, no index pulses
-    if (!(this.status & ST_BUSY) && this.headLoaded && ++this.idlePulses >= HEAD_UNLOAD_PULSES) {
+    if (!(this.status & ST_BUSY) && this.headLoaded && ++this.idlePulses >= this.headUnloadPulses) {
       this.headLoaded = false;
     }
     if (this.intrqCond & 0x04) this.intrq = true; // Force Interrupt I2: every index pulse
@@ -441,7 +451,7 @@ export class FDC1793 {
 
   /** T-states until the fifth index pulse from now: where an ID search gives up. */
   _searchWindow() {
-    return this.indexPeriod - this.indexClock + (SEARCH_INDEX_PULSES - 1) * this.indexPeriod;
+    return this.indexPeriod - this.indexClock + (this.searchPulses - 1) * this.indexPeriod;
   }
 
   /** The IDs the head can read now, in the order they pass: this track side, this density. */
@@ -483,6 +493,11 @@ export class FDC1793 {
    */
   readStatus() {
     if (!(this.intrqCond & 0x08)) this.intrq = false;
+    return this.peekStatus();
+  }
+
+  /** The status register as a read returns it, leaving INTRQ alone (for the debugger). */
+  peekStatus() {
     if (this.commandType === 1) return this._type1Status();
     return (this.status & ~ST_NOT_READY) | (this._ready() ? 0 : ST_NOT_READY);
   }
@@ -827,8 +842,10 @@ export class FDC1793 {
         return;
       }
       case "wcrc":
+        // `p.dam` is the WD1771's a1 a0 mark (fdc-wd1771.js); the WD1793 writes FB or F8 by a0
         this.currentDisk()?.writeSector(this._track, this.side, p.sector, this.buffer, {
           deleted: this.writeDeleted,
+          dam: p.dam,
           index: p.index,
         });
         this._nextRecord(p);
@@ -895,6 +912,8 @@ export class FDC1793 {
         // flags the error, which is what the status reports.
         this.buffer = Uint8Array.from([id.track, id.side, id.sector, id.sizeCode, crc >> 8, crc & 0xff]);
         p.crcOk = id.idCrcOk;
+        // No longer read (the sector register takes buffer[readAddressField]); kept so a Read
+        // Address in flight serializes as it did before emu phase 6
         p.idTrack = id.track;
         p.phase = "data";
         p.delay = at + 2 * B;
@@ -908,9 +927,9 @@ export class FDC1793 {
           p.delay = B;
           return;
         }
-        // "The Track Address of the ID field is written into the sector register"; the CRC is
-        // checked.
-        this.sectorReg = p.idTrack;
+        // "The Track Address of the ID field is written into the sector register" (the WD1771
+        // writes the sector address: `readAddressField`); the CRC is checked.
+        this.sectorReg = this.buffer[this.readAddressField];
         if (!p.crcOk) this.status |= ST_CRC_ERROR;
         this._finish();
         return;
@@ -987,7 +1006,7 @@ export class FDC1793 {
       return;
     }
     // The next index pulse: the track is written. The byte stream becomes sectors on the image.
-    const sectors = parseWriteTrackStream(new Uint8Array(this.trackWrite), this.mfm);
+    const sectors = parseWriteTrackStream(new Uint8Array(this.trackWrite), this.mfm, this.fmMarks);
     const disk = this.currentDisk();
     if (disk && sectors.length) disk.formatTrack(this._track, this.side, sectors);
     this.status &= ~ST_DRQ;

@@ -1,10 +1,14 @@
 /**
- * TRS-80 Model III System
+ * TRS-80 System, Model III or Model I
  *
  * Owns and wires the machine: Z80 CPU, memory map, I/O ports, and the
- * keyboard matrix. Runs the CPU in T-state-budgeted slices at the real
- * 2.02752 MHz clock and raises the 30 Hz RTC heartbeat interrupt the
- * ROM's clock/cursor services depend on.
+ * keyboard matrix, laid out by the model description (models.js). Runs the
+ * CPU in T-state-budgeted slices at the model's clock (the Model III's real
+ * 2.02752 MHz) and raises the Model III's 30 Hz RTC heartbeat interrupt the
+ * ROM's clock/cursor services depend on, or the Model I Expansion
+ * Interface's 40 Hz clock, through its latch at $37E0
+ * (devices/interrupt-latch.js); a Model I without the Expansion Interface
+ * has no clock and takes no interrupts.
  *
  * Rendering is the caller's concern: read `memory.videoRam` (or
  * `screenText()`) and consult `memory.videoDirty`. Keyboard input goes
@@ -13,17 +17,37 @@
 
 import { Z80CPU } from "../cpu/z80cpu.js";
 import { MemorySystem } from "./memory.js";
-import { IOSystem, MODE_32COL_BIT } from "./io.js";
+import { IOSystem, MODE_32COL_BIT, M1_MODESEL_BIT } from "./io.js";
+import { TIMER_BIT } from "../devices/interrupt-latch.js";
 import { KeyboardMatrix } from "../devices/keyboard.js";
+import { MODEL_III, modelOf } from "./models.js";
 
-export const CPU_CLOCK_HZ = 2027520;
-export const RTC_HZ = 30;
+/** The Model III's clock and RTC; a system's own are `clockHz` and `rtcInterval`. */
+export const CPU_CLOCK_HZ = MODEL_III.clockHz;
+export const RTC_HZ = MODEL_III.timerHz;
 export const RTC_INTERVAL_TSTATES = CPU_CLOCK_HZ / RTC_HZ; // 67,584
 
 export class TRS80System {
-  constructor({ romData, log }) {
-    this.memory = new MemorySystem();
-    this.io = new IOSystem();
+  /**
+   * @param {{ romData: Uint8Array, log?: (level: string, text: string) => void,
+   *   model?: 1 | 3 | import('./models.js').Model, ram?: number, expansion?: boolean, lowercase?: boolean }} opts
+   *   the model (a number or a description; the Model III by default), its RAM in K (the model's
+   *   default), and the Model I's Expansion Interface (fitted by default) and lowercase modification
+   *   (not fitted by default); the Machine checks them
+   */
+  constructor({ romData, log, model = MODEL_III, ram, expansion = true, lowercase = false }) {
+    const desc = typeof model === "number" ? modelOf(model) : model;
+    this.model = desc;
+    this.clockHz = desc.clockHz;
+    this.rtcInterval = desc.clockHz / desc.timerHz;
+    this.expansion = expansion;
+    this.lowercase = lowercase;
+    this.memory = new MemorySystem({ model: desc, ram: ram ?? desc.defaultRam, lowercase });
+    this.io = new IOSystem({ model: desc, expansion });
+    // The Model I's Expansion Interface addresses go to the I/O decode
+    if (this.io.latch !== null) this.memory.expansion = this.io;
+    // The 32-column bit: port $EC bit 2 on the Model III, port $FF bit 3 (MODESEL) on the Model I
+    this._mode32Bit = desc.id === 1 ? M1_MODESEL_BIT : MODE_32COL_BIT;
     this.keyboard = new KeyboardMatrix();
     this.cpu = new Z80CPU();
     if (log !== undefined) {
@@ -62,7 +86,7 @@ export class TRS80System {
 
     this.memory.loadROM(romData);
 
-    this.nextRtcAt = RTC_INTERVAL_TSTATES;
+    this.nextRtcAt = this.rtcInterval;
     this.reset();
   }
 
@@ -76,7 +100,7 @@ export class TRS80System {
     this.io.reset();
     this.keyboard.reset();
     this.memory.clearVideoRAM();
-    this.nextRtcAt = this.cpu.cycles + RTC_INTERVAL_TSTATES;
+    this.nextRtcAt = this.cpu.cycles + this.rtcInterval;
     this._nmiWasPending = false;
   }
 
@@ -111,8 +135,9 @@ export class TRS80System {
   stepInstruction(beforeExecute) {
     const start = this.cpu.cycles;
     if (this.cpu.cycles >= this.nextRtcAt) {
-      this.io.raiseRTC();
-      this.nextRtcAt += RTC_INTERVAL_TSTATES;
+      if (this.model.id === 3) this.io.raiseRTC();
+      else if (this.io.latch !== null) this.io.latch.raise(TIMER_BIT);
+      this.nextRtcAt += this.rtcInterval;
     }
     if (this.io.pendingInterrupt()) {
       this.cpu.interrupt();
@@ -161,12 +186,13 @@ export class TRS80System {
   }
 
   /**
-   * True when the machine is in 32-character mode (mode register bit 2,
-   * set by the ROM for CHR$(23), cleared by CLS). The ROM lays 32-column
-   * text at even video addresses; hardware shows them double-wide.
+   * True when the machine is in 32-character mode (on the Model III the
+   * mode register's bit 2, on the Model I port $FF's MODESEL, bit 3; set by
+   * the ROM for CHR$(23), cleared by CLS). The ROM lays 32-column text at
+   * even video addresses; hardware shows them double-wide.
    */
   get columns32() {
-    return (this.io.modeRegister & MODE_32COL_BIT) !== 0;
+    return (this.io.modeRegister & this._mode32Bit) !== 0;
   }
 
   /** Mount a .dsk image (DiskImage) in drive 0-3. */
@@ -207,7 +233,7 @@ export class TRS80System {
 
   /** Convenience for tests: run N emulated seconds. */
   runSeconds(seconds) {
-    return this.runTStates(Math.round(seconds * CPU_CLOCK_HZ));
+    return this.runTStates(Math.round(seconds * this.clockHz));
   }
 
   /**

@@ -1,10 +1,12 @@
 /**
- * The spec §3 `Machine`: the public face of the emulator, over a TRS80System. Phase 2 builds
- * the Model III with 48K; execution, state access, and ROM identification live here, and the
- * device, loader, and debug surfaces arrive in later tasks.
+ * The spec §3 `Machine`: the public face of the emulator, over a TRS80System. It builds the
+ * Model III with 48K, or (emu phase 6) the Model I with 4, 16, 32, or 48K, as the model
+ * descriptions in models.js lay them out; execution, state access, ROM identification, the
+ * devices, the loaders, and the debugger live here.
  */
 import { TRS80System } from './trs80-system.js';
 import { ROM_HASHES } from './rom-hashes.js';
+import { modelOf, ramProblem, romModelProblem } from './models.js';
 import { sha256Hex } from './sha256.js';
 import { Video } from '../devices/video.js';
 import { Sound } from '../devices/sound.js';
@@ -65,18 +67,32 @@ export class Machine {
   #stopped = false;
 
   /**
-   * @param {{ model?: 3, ram?: 48, roms: { level2: Uint8Array }, log?: (level: string, text: string) => void }} opts
+   * @param {{ model?: 1 | 3, ram?: 4 | 16 | 32 | 48, roms: { level2: Uint8Array }, expansion?: boolean, lowercase?: boolean,
+   *   log?: (level: string, text: string) => void }} opts
+   *   `ram` defaults to 48 (the Model III takes only 48 for now); `expansion` (the Expansion Interface, default
+   *   true) and `lowercase` (the lowercase modification, default false) are Model I options
    */
-  constructor({ model = 3, ram = 48, roms, log } = /** @type {any} */ ({})) {
-    if (model !== 3 || ram !== 48) {
-      throw new Error(`phase 2 builds the Model III with 48K; got model ${model} with ${ram}K (the Model I, the Model 4, and other RAM sizes come in later phases)`);
+  constructor({ model = 3, ram, roms, expansion, lowercase, log } = /** @type {any} */ ({})) {
+    const desc = modelOf(model);
+    const kb = ram ?? desc.defaultRam;
+    const badRam = ramProblem(desc, kb);
+    if (badRam !== null) throw new Error(badRam);
+    for (const [name, value] of /** @type {const} */ ([['expansion', expansion], ['lowercase', lowercase]])) {
+      if (value === undefined) continue;
+      if (desc.id !== 1) throw new Error(`${name} is a Model I option; the ${desc.name} has no ${name === 'expansion' ? 'Expansion Interface' : 'lowercase modification (its lowercase is built in)'}.`);
+      if (typeof value !== 'boolean') throw new Error(`${name} must be true or false, not ${String(value)}.`);
     }
     const level2 = roms?.level2;
     if (!ArrayBuffer.isView(level2) || level2.BYTES_PER_ELEMENT !== 1) throw new Error('Machine needs roms.level2, the ROM image as a Uint8Array');
 
-    this.system = new TRS80System({ romData: level2, log });
+    // A ROM recognised as the other model's is refused by name before its size is checked, so the
+    // sentence says which model it needs rather than only that its length is wrong.
     const sha256 = sha256Hex(level2);
-    this.rom = { bytes: level2.length, sha256, recognized: ROM_HASHES[sha256] ?? null };
+    const recognized = ROM_HASHES[sha256] ?? null;
+    const problem = romModelProblem(recognized, desc.id);
+    if (problem !== null) throw new Error(problem);
+    this.system = new TRS80System({ romData: level2, log, model: desc, ram: kb, expansion: expansion ?? true, lowercase: lowercase ?? false });
+    this.rom = { bytes: level2.length, sha256, recognized };
 
     const sys = this.system;
     const cpu = sys.cpu;
@@ -98,7 +114,8 @@ export class Machine {
     this.mem = {
       read(addr, len) {
         const out = new Uint8Array(len);
-        for (let k = 0; k < len; k++) out[k] = sys.memory.readByte((addr + k) & 0xffff);
+        // Peeked: reading the Model I's interrupt latch here does not clear it, as a CPU read would.
+        for (let k = 0; k < len; k++) out[k] = sys.memory.peekByte((addr + k) & 0xffff);
         return out;
       },
       write(addr, bytes) {
@@ -112,7 +129,7 @@ export class Machine {
     this.sound = new Sound();
     sys.io.onSoundWrite = (cycle, value) => this.sound.record(cycle, value);
     sys.io.onSoundReset = () => this.sound.clear();
-    this.keyboard = new KeyQueue(sys.keyboard, () => sys.cpu.cycles);
+    this.keyboard = new KeyQueue(sys.keyboard, () => sys.cpu.cycles, sys.clockHz);
     this.debug = new Debugger(this);
     // Each load records its manifest and the bytes' hash for the label file (the last one wins).
     const record = (/** @type {any} */ manifest, /** @type {Uint8Array} */ bytes) => {
@@ -131,6 +148,20 @@ export class Machine {
       in: (port) => sys.io.readPort(port),
       out: (port, value) => sys.io.writePort(port, value),
     };
+  }
+
+  /** @returns {1 | 3} The model built: 1 (the Model I) or 3 (the Model III). */
+  get model() {
+    return this.system.model.id;
+  }
+
+  /**
+   * The model's CPU clock in Hz: 2,027,520 on the Model III, 1,774,080 on the Model I (models.js).
+   * T-state counts (`cycles`, `run`'s budget, `m.sound` stamps) are in this clock's states.
+   * @returns {number}
+   */
+  get clockHz() {
+    return this.system.clockHz;
   }
 
   /** Total T-states since the last reset. */
@@ -162,8 +193,10 @@ export class Machine {
    * delivery, before the instruction executes) by both `step` and `run`: deliver the matrix key
    * events now due, then, with a fed character waiting and the PC at the ROM's keyboard scan
    * ($002B) or wait-for-key ($0049), return from that routine with the character as the ROM
-   * would (spec §6, "Keyboard-scan hook"). That return stands in for the boundary's instruction,
-   * as one RET (10 T-states); a halted CPU idles instead, as it does for any instruction, so the next boundary is at the caller's return address.
+   * would (spec §6, "Keyboard-scan hook"). The Model I Level II ROM has the same two entries with
+   * the same contract (romKeyReturn), so the hook serves both models. That return stands in for
+   * the boundary's instruction, as one RET (10 T-states); a halted CPU idles instead, as it does
+   * for any instruction, so the next boundary is at the caller's return address.
    * Between draining and the keyboard hook, a breakpoint hit (only while `debug.active`, and
    * never in `step`) stops the boundary: nothing executes. Last, with memory accesses watched or
    * hooked, the debugger is told an instruction starts at PC, so its fetches are not taken for
