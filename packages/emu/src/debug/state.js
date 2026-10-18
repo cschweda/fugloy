@@ -13,6 +13,7 @@
 import { DiskImage } from "../devices/disk-image.js";
 
 export const STATE_VERSION = 1;
+/** The Model III's machine id; a state carries its system's model's (`model.stateMachine`, models.js). */
 export const STATE_MACHINE = "trs80-model3";
 
 // Base64 without platform APIs, so the core runs anywhere (spec §2.1).
@@ -97,7 +98,7 @@ export function serializeState(system) {
 
   const state = {
     version: STATE_VERSION,
-    machine: STATE_MACHINE,
+    machine: system.model?.stateMachine ?? STATE_MACHINE,
     cpu: { registers },
     memory: {
       ram: toBase64(system.memory.ram),
@@ -158,11 +159,16 @@ export function serializeState(system) {
  * Throws on version/machine mismatch rather than resuming garbage.
  */
 export function restoreState(system, state) {
-  if (!state || state.machine !== STATE_MACHINE) {
-    throw new Error("Not a TRS-80 Model III save state");
+  const machine = system.model?.stateMachine ?? STATE_MACHINE;
+  if (!state || state.machine !== machine) {
+    throw new Error(`Not a TRS-80 ${system.model?.name ?? "Model III"} save state`);
   }
   if (state.version !== STATE_VERSION) {
     throw new Error(`Unsupported save-state version ${state.version}`);
+  }
+  const ram = fromBase64(state.memory.ram);
+  if (ram.length !== system.memory.ram.length) {
+    throw new Error(`This ${system.model.name} save state has ${ram.length / 1024}K of RAM; the machine has ${system.memory.ram.length / 1024}K, and a state restores only into a machine with the same RAM`);
   }
 
   const cpu = system.cpu;
@@ -177,7 +183,7 @@ export function restoreState(system, state) {
   cpu.afterPrefix ??= false; // likewise
   for (const key of IO_SCALARS) io[key] = state.io[key];
 
-  system.memory.ram.set(fromBase64(state.memory.ram));
+  system.memory.ram.set(ram);
   system.memory.videoRam.set(fromBase64(state.memory.videoRam));
   system.memory.videoDirty = true;
 

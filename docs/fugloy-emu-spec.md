@@ -64,15 +64,16 @@ Phase 0 kept upstream's file names inside these folders (`cpu/z80cpu.js`, `machi
 
 ### Public API
 
-Emu phases 2, 3, and 5 built the part below marked **built**; anything later (the Model I and Model 4 of phase 6) is still the sketch, and nothing in it is promised to the letter until it is built.
+Emu phases 2, 3, and 5 built the part below marked **built**, and phase 6 is adding the Model I (its memory map is built; its timer, video gate, keyboard, cassette, and disk are not yet); anything later is still the sketch, and nothing in it is promised to the letter until it is built.
 
 ```js
-import { Machine, ROM_HASHES } from '@fugloy/emu'                     // built
+import { Machine, ROM_HASHES, clockHz } from '@fugloy/emu'            // built
 
 const m = new Machine({ model: 3, ram: 48, roms: { level2: romBytes }, log })   // built
+const m1 = new Machine({ model: 1, ram: 48, roms: { level2: model1Rom }, expansion: true, lowercase: false })   // built: the memory map
 ```
 
-`model` is 3 and `ram` is 48: anything else throws, naming the phase that will add it. `roms.level2` is the ROM image as a `Uint8Array`. `log` is an optional `(level, text) => void`; without it the core is silent. The caller supplies the ROM; nothing is bundled.
+`model` is 1 (the Model I) or 3 (the Model III, the default); 4 throws, naming its own later plan, and anything else throws. `ram` is in K: the Model I takes 4, 16, 32, or 48, the Model III 48 only for now (16 and 32 throw, naming a later phase); the default is 48. `expansion` (the Expansion Interface, default `true`) and `lowercase` (the lowercase modification, default `false`) are Model I options, refused on the Model III. `roms.level2` is the ROM image as a `Uint8Array`: 12 KB for the Model I; 14 KB, or a 16 KB padded image, for the Model III. A ROM `ROM_HASHES` recognises as the other model's is refused with a sentence naming the model it runs on. `log` is an optional `(level, text) => void`; without it the core is silent. The caller supplies the ROM; nothing is bundled. `m.model` is the model built (1 or 3), and `clockHz(model)` its CPU clock in Hz (1,774,080 or 2,027,520; `CPU_CLOCK_HZ` stays the Model III's).
 
 **Execution (built)**
 
@@ -89,7 +90,7 @@ m.cycles                   // total T-states since reset
 - Both limits are checked after each instruction, so `until` is not checked before the first one. When the `until` condition (`'halt'` or the predicate) and the cycle budget are both met at the same boundary, the condition wins and `reason` is `'halt'` or `'predicate'`.
 - `'break'` and `'watch'` come from the debugger (§7); `id` names the breakpoint or the watch. A breakpoint stops before its instruction; after an instruction the order is a watch stop, then `until`, then the budget.
 - `step` and `run` cannot be called from inside a `when`, `until`, or hook callback: they throw.
-- `m.rom` is `{ bytes, sha256, recognized }`: the image's length, its SHA-256 as hex, and the name of the known ROM it matches or `null`. `ROM_HASHES` is the table behind it, `{ sha256: name }`. It includes the FreHD-patched Model III Rev C image, labelled as patched.
+- `m.rom` is `{ bytes, sha256, recognized }`: the image's length, its SHA-256 as hex, and the name of the known ROM it matches or `null`. `ROM_HASHES` is the table behind it, `{ sha256: name }`, each name starting with its model: the Model I Level II ROM 1.2 and 1.3 (`model1-level2-1.2`, `model1-level2-1.3`) and the Model III Rev C ROM, with its FreHD-patched image labelled as patched.
 
 **State (built)**
 
@@ -246,7 +247,16 @@ Verified in emu phase 2, on the Model III (the rest of the table is not yet):
 - **Keyboard `3800–3BFF` matrix, and the ROM's scan entries `$002B` and `$0049`:** against the commented ROM disassembly and the Model III manual (§6, "Keyboard-scan hook").
 - **Port `FF` as the sound port:** recorded, not verified. `m.sound` keeps every write with its T-state stamp, raw (`test/unit/sound.test.js`, on synthetic ROMs); which bits a given game toggles is the game's business, and the port's bit layout stays as listed in the table.
 
-Unverified: **ENALTSET, port `EC` bit 3,** which selects the alternate character set, and all of the Model I and Model 4 columns.
+Unverified: **ENALTSET, port `EC` bit 3,** which selects the alternate character set, and the Model 4 column.
+
+**The Model I memory map (emu phase 6).** `src/machine/models.js` describes each model, and `memory.js` and `io.js` lay the machine out from it. Checked against the Model I Level II ROM sources in github.com/kiwisincebirth/TRS-80-ROMS (`MDL1LEV2.Z80`, `CONSTANTS.Z80`, and the 12,288-byte `test-roms/M1L2_1.2.bin` and `M1L2_1.3.bin`), and tested on synthetic ROMs (`test/unit/model1.test.js`):
+
+- **ROM `0000–2FFF`, 12 KB:** the size of both Level II images; any other size is refused.
+- **Keyboard `3800–3BFF`, video RAM `3C00–3FFF`, RAM from `4000`:** `CONSTANTS.Z80` ("Memory Mapped Hardware", "RAM Communications Area").
+- **The Expansion Interface at `37E0–37EF`** (drive select `37E1`, cassette select `37E4`, printer `37E8`, disk controller `37EC–37EF`): `CONSTANTS.Z80`, "Memory Mapped Hardware, Model 1". Not built yet: the whole of `3000–37FF` reads `FF` and ignores writes, which is what the ROM sees with no Expansion Interface (`MDL1LEV2.Z80` at `$0069`: "$FF if no expansion interface present"; at `$0696`–`$069C` it takes `FF` or `00` at `37EC` as no disk controller and starts Level II BASIC).
+- **RAM 4, 16, 32, or 48 KB from `4000`:** the ROM's MEMORY SIZE? probe (`$00C4`–`$00D4`: complement, compare, restore, from `$434C` up) finds the top of each size.
+
+Unverified (to check against the Model I Technical Reference Manual): the **clock**, 1,774,080 Hz (the table's 1.774 MHz taken as a 10.6445 MHz crystal divided by 6, as xtrs runs it; the ROM's PAUSE loop at `$0060`, 26 T-states a pass, is commented as 14.65 µs a count at `$06AF`, which puts it at 1.775 MHz); that **`3000–37DF` and the addresses above the fitted RAM read `FF`** (the probe needs only that they do not hold what was written); and the **RAM sizes** themselves, from this table. The Model I's port `FF` is, for now, the Model III's handler, and the Model III's other ports float to `FF` on a Model I; a Model I takes no interrupts yet.
 
 **The Model III disk controller (emu phase 5).** The WD1793 model follows the Western Digital FD179X data sheet, read in its FD179X-01 edition (October 1979, bitsavers `components/westernDigital`), whose commands, flags, status bits, and formats the FD179X-02 shares; `src/devices/fdc-wd1793.js` names the sheet's sections where it decides, and `test/unit/fdc-wd1793.test.js` checks each behaviour on synthetic images through the ports. Verified against that sheet:
 

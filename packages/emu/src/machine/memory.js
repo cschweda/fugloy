@@ -1,26 +1,45 @@
 /**
- * TRS-80 Model III Memory Management System
+ * TRS-80 memory map, by model (src/machine/models.js holds the sources for the Model I facts):
  *
- * Real Model III address map (non-disk machine):
- *   0x0000-0x37FF  14K ROM (write-protected)
- *   0x3800-0x3BFF  keyboard matrix (memory-mapped, read-only;
- *                  low 8 address bits select rows, A8/A9 undecoded)
- *   0x3C00-0x3FFF  1K video RAM (64 cols x 16 rows)
- *   0x4000-0xFFFF  48K RAM
+ *   Model III (non-disk machine):
+ *     0x0000-0x37FF  14K ROM (write-protected)
+ *     0x3800-0x3BFF  keyboard matrix (memory-mapped, read-only;
+ *                    low 8 address bits select rows, A8/A9 undecoded)
+ *     0x3C00-0x3FFF  1K video RAM (64 cols x 16 rows)
+ *     0x4000-0xFFFF  48K RAM
+ *
+ *   Model I:
+ *     0x0000-0x2FFF  12K Level II ROM (write-protected)
+ *     0x3000-0x37FF  nothing mapped yet: reads float to 0xFF, writes are
+ *                    lost (0x37E0-0x37EF are the Expansion Interface's)
+ *     0x3800-0x3BFF  keyboard matrix, as on the Model III
+ *     0x3C00-0x3FFF  1K video RAM
+ *     0x4000-...     4, 16, 32, or 48K RAM; above it reads float to 0xFF
+ *                    and writes are lost
  */
 
-const ROM_LIMIT = 0x3800;
+import { MODEL_III } from "./models.js";
+
+const KEYBOARD_BASE = 0x3800;
 const KEYBOARD_LIMIT = 0x3c00;
 const RAM_BASE = 0x4000;
 
 export class MemorySystem {
-  constructor() {
-    // ROM storage is 16K so padded 16K images can be loaded verbatim,
-    // but only 0x0000-0x37FF is ever mapped as ROM.
-    this.rom = new Uint8Array(0x4000);
+  /**
+   * @param {{ model?: import('./models.js').Model, ram?: number }} [opts] the model (the Model III
+   *   by default) and its RAM in K (checked by the Machine against the model's sizes)
+   */
+  constructor({ model = MODEL_III, ram = model.defaultRam } = {}) {
+    this.model = model;
 
-    // 48K RAM (0x4000 - 0xFFFF)
-    this.ram = new Uint8Array(0xc000);
+    // ROM storage is 16K so padded 16K images can be loaded verbatim,
+    // but only 0x0000 up to the model's ROM top is ever mapped as ROM.
+    this.rom = new Uint8Array(0x4000);
+    this.romLimit = model.romTop;
+
+    // RAM from 0x4000: 48K reaches 0xFFFF
+    this.ram = new Uint8Array(ram * 1024);
+    this.ramLimit = RAM_BASE + this.ram.length;
 
     // 1K video RAM (0x3C00 - 0x3FFF)
     this.videoRam = new Uint8Array(0x400);
@@ -51,18 +70,19 @@ export class MemorySystem {
   }
 
   /**
-   * Load a ROM image: the real 14K (0x3800) Model III ROM, or a 16K
-   * (0x4000) padded image of it. Anything else is a wrong file — reject
-   * it rather than guessing.
+   * Load a ROM image of a size the model takes: the Model III's real 14K
+   * (0x3800) ROM or a 16K (0x4000) padded image of it; the Model I's 12K
+   * (0x3000) Level II ROM. Anything else is a wrong file — reject it
+   * rather than guessing.
    */
   loadROM(romData) {
     if (!romData || romData.length === 0) {
       throw new Error("ROM data is required");
     }
 
-    if (romData.length !== 0x3800 && romData.length !== 0x4000) {
+    if (!this.model.romSizes.includes(romData.length)) {
       throw new Error(
-        `Invalid ROM size: ${romData.length} bytes. Expected 14KB (0x3800) or a 16KB (0x4000) padded image`
+        `Invalid ROM size: ${romData.length} bytes. ${this.model.romSizeText}`
       );
     }
 
@@ -80,8 +100,12 @@ export class MemorySystem {
   readByte(address) {
     address = address & 0xffff;
 
-    if (address < ROM_LIMIT) {
+    if (address < this.romLimit) {
       return this.rom[address];
+    }
+    if (address < KEYBOARD_BASE) {
+      // The Model I's 0x3000-0x37FF: nothing decodes here yet (models.js)
+      return 0xff;
     }
     if (address < KEYBOARD_LIMIT) {
       // Keyboard matrix: reading with no keys down yields 0x00
@@ -90,12 +114,16 @@ export class MemorySystem {
     if (address < RAM_BASE) {
       return this.videoRam[address - KEYBOARD_LIMIT];
     }
-    return this.ram[address - RAM_BASE];
+    if (address < this.ramLimit) {
+      return this.ram[address - RAM_BASE];
+    }
+    return 0xff; // above the fitted RAM (models.js)
   }
 
   /**
    * Write a byte to memory
-   * ROM and the keyboard region ignore writes; video RAM and RAM accept them.
+   * ROM, the Model I's unmapped 0x3000-0x37FF, the keyboard region, and
+   * addresses above the fitted RAM ignore writes; video RAM and RAM accept them.
    */
   writeByte(address, value) {
     address = address & 0xffff;
@@ -109,7 +137,9 @@ export class MemorySystem {
       this.videoDirty = true;
       return;
     }
-    this.ram[address - RAM_BASE] = value;
+    if (address < this.ramLimit) {
+      this.ram[address - RAM_BASE] = value;
+    }
   }
 
   /**
@@ -198,8 +228,10 @@ export class MemorySystem {
    */
   getMemoryView() {
     const view = new Uint8Array(0x10000);
-    view.set(this.rom.subarray(0, ROM_LIMIT), 0);
-    // Keyboard region reads as idle (0x00) in the debug view
+    // Unmapped addresses read 0xFF; the keyboard region reads as idle (0x00) in the debug view
+    view.fill(0xff, this.romLimit, KEYBOARD_BASE);
+    view.fill(0xff, this.ramLimit);
+    view.set(this.rom.subarray(0, this.romLimit), 0);
     view.set(this.videoRam, KEYBOARD_LIMIT);
     view.set(this.ram, RAM_BASE);
     return view;

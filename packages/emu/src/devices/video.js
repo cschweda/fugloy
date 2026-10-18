@@ -1,7 +1,9 @@
 /**
- * The Model III video as a text readout: 16 lines over video RAM at $3C00-$3FFF, 64 columns, or
- * 32 in 32-column mode (port $EC bit 2), where the hardware shows the even-address bytes
- * double-wide. It reads the live video RAM; it draws nothing.
+ * The video as a text readout: 16 lines over video RAM at $3C00-$3FFF, 64 columns, or 32 in
+ * 32-column mode (on the Model III, port $EC bit 2), where the hardware shows the even-address
+ * bytes double-wide. It reads the live video RAM; it draws nothing. The Model I's video RAM sits
+ * at the same addresses (models.js); its missing bit 6 and its 32-column bit (port $FF) are not
+ * modeled yet, so a Model I reads back every byte as written and always shows 64 columns.
  */
 
 import { fromBase64 } from '../debug/state.js';

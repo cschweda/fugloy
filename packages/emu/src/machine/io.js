@@ -20,11 +20,19 @@
  * The RTC heartbeat interrupt fires at 30 Hz; its latch bit is RTC_IRQ_BIT.
  * The keyboard is memory-mapped at 0x3800-0x3BFF (see MemorySystem), not
  * an I/O port.
+ *
+ * The Model I has only port 0xFF (cassette, sound, and the video mode): its
+ * other devices are memory-mapped by the Expansion Interface at
+ * 0x37E0-0x37EF (src/machine/models.js), so a Model I gets port 0xFF alone,
+ * and every other port floats to 0xFF. The controller object exists on both
+ * models, clocked at the model's CPU clock; the Model I does not reach it
+ * through ports.
  */
 
 import { CassetteSystem } from "../devices/cassette.js";
 import { FDC1793 } from "../devices/fdc-wd1793.js";
 import { Printer } from "../devices/printer.js";
+import { MODEL_III } from "./models.js";
 
 export const RTC_IRQ_BIT = 0x04;
 // Cassette-edge interrupt sources (from the ROM's ISR at 0x35C2: E0
@@ -59,9 +67,11 @@ export function decodeModel3Select(value) {
 }
 
 export class IOSystem {
-  constructor() {
+  /** @param {{ model?: import('./models.js').Model }} [opts] the model whose ports to install (the Model III by default) */
+  constructor({ model = MODEL_III } = {}) {
+    this.model = model;
     this.cassette = new CassetteSystem();
-    this.fdc = new FDC1793();
+    this.fdc = new FDC1793({ cpuHz: model.clockHz });
     this.printer = new Printer();
     this.keyboardBuffer = []; // legacy internal buffer (not a Model III port)
     this.portHandlers = new Map();
@@ -100,7 +110,10 @@ export class IOSystem {
     // by TRS80System. Unwired, port F4 does not wait.
     this.onWait = null;
 
-    this.initializeModelIIIPorts();
+    if (model.id === 3) {
+      this.initializeModelIIIPorts();
+    }
+    this.initializeCassettePort();
   }
 
   initializeModelIIIPorts() {
@@ -209,7 +222,14 @@ export class IOSystem {
         write: (v) => this.printer.write(v),
       });
     }
+  }
 
+  /**
+   * Port 0xFF, on both models. The Model III's bits are modeled; the Model
+   * I's own layout (its motor and 32-column bits) is not yet, so it gets the
+   * same handler for now.
+   */
+  initializeCassettePort() {
     // 0xFF: cassette data port. Reads return the input latch in bit 7
     // (set by tape transitions while the motor runs); ANY write clears
     // the latch — that's the Model III's latch circuit, and it's how

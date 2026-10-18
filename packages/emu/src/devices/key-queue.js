@@ -113,6 +113,8 @@ export class KeyQueue {
   #matrix;
   /** @type {() => number} */
   #now;
+  /** @type {number} */
+  #clockHz;
   /** @type {KeyEvent[]} Matrix events in time order. */
   #events = [];
   /** @type {number} Index of the next undelivered matrix event. */
@@ -130,9 +132,15 @@ export class KeyQueue {
    * @param {import('./keyboard.js').KeyboardMatrix} matrix
    * @param {() => number} now the current T-state
    */
-  constructor(matrix, now) {
+  /**
+   * @param {import('./keyboard.js').KeyboardMatrix} matrix
+   * @param {() => number} now the CPU's T-state count
+   * @param {number} [clockHz] the CPU clock `type`'s cps counts in (the Model III's by default)
+   */
+  constructor(matrix, now, clockHz = CPU_CLOCK_HZ) {
     this.#matrix = matrix;
     this.#now = now;
+    this.#clockHz = clockHz;
   }
 
   /**
@@ -173,7 +181,7 @@ export class KeyQueue {
     if (mode === 'hook') return this.feed(str);
     if (mode !== 'matrix') throw new Error(`type: mode must be 'matrix' or 'hook', not ${String(mode)}`);
     if (!(cps > 0) || !Number.isFinite(cps)) throw new Error(`type: cps must be a positive number, not ${String(cps)}`);
-    const period = Math.round(CPU_CLOCK_HZ / cps);
+    const period = Math.round(this.#clockHz / cps);
     const hold = Math.round(period / 2);
     const keys = Array.from(str, (ch) => this.#mapped(ch, 'type'));
     this.#compact();

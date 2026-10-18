@@ -36,6 +36,42 @@ creates and pushes the tag.
 
 ### Added
 
+Emu phase 6 (the Model I; emu spec §3, §5), `@fugloy/emu`, unreleased, in
+progress on the `emu-phase6` branch:
+
+- The machine is described by model (`src/machine/models.js`): clock, timer
+  rate, ROM sizes and top, RAM sizes, the ROMs each model runs, and the save
+  state's machine id. `MemorySystem`, `IOSystem`, and `TRS80System` take the
+  description (the Model III by default), so the Model III is laid out as
+  before; a synthetic-ROM Model III session committed as
+  `fixtures/synthetic/emu/model3-state.json` before the change ends
+  byte-identical after it (test `the Model III is unchanged`).
+- `new Machine({ model: 1, ram, roms: { level2 }, expansion, lowercase })`
+  builds the Model I's memory map: the 12 KB Level II ROM at `$0000`–`$2FFF`
+  (any other size refused), `$3000`–`$37FF` reading `$FF` with writes lost
+  (the Expansion Interface's `$37E0`–`$37EF` are not built yet), the keyboard
+  matrix at `$3800`, video RAM at `$3C00`, and 4, 16, 32, or 48 KB of RAM from
+  `$4000` (48 by default), with reads above it `$FF` and writes lost;
+  `m.mem.ram` is the fitted size. The Model III's ports float to `$FF` on a
+  Model I and it takes no interrupts yet. `expansion` (default `true`) and
+  `lowercase` (default `false`) are checked and stored, and refused on the
+  Model III; the devices that use them come next.
+- `m.model` (1 or 3) and `clockHz(model)` (1,774,080 or 2,027,520 Hz);
+  `CPU_CLOCK_HZ` stays the Model III's. The system runs, types (`cps`), and
+  clocks its disk controller at its model's clock.
+- `ROM_HASHES` names the Model I Level II ROM 1.2 and 1.3
+  (`model1-level2-1.2`, `model1-level2-1.3`). A recognised ROM given for the
+  other model is refused before its size is checked, with a sentence naming
+  the model it runs on.
+- A save state carries its model's machine id (`trs80-model1` for the Model I;
+  the Model III's stays `trs80-model3`), and a restore refuses another
+  model's state, or one whose RAM size differs from the machine's, with a
+  sentence.
+- Changed: `Machine` refusals are now sentences per model: `model: 4` says the Model 4
+  comes in its own plan, and the Model III's `ram: 16` or `32` says those
+  sizes come in a later phase (they were one "phase 2 builds the Model III
+  with 48K" message).
+
 Emu phase 5 (disk controller and images; emu spec §3, §5, §6), `@fugloy/emu`,
 unreleased, on the `emu-phase5` branch:
 

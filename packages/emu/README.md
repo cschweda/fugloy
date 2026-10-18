@@ -34,6 +34,8 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { Machine, CPU_CLOCK_HZ } from '@fugloy/emu'
 
 const m = new Machine({ roms: { level2: readFileSync('model3.rom') } })   // Model III, 48K; you supply the ROM
+// new Machine({ model: 1, ram: 16, roms: { level2: readFileSync('level2-model1.rom') } }) builds the
+// Model I's memory map (emu phase 6, in progress: its timer, video, keyboard, and disk come next)
 const shows = (text) => (mm) => mm.video.text().join('\n').includes(text)
 const second = CPU_CLOCK_HZ                                              // T-states per emulated second
 

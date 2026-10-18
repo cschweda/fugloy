@@ -1,10 +1,13 @@
 /**
- * TRS-80 Model III System
+ * TRS-80 System, Model III or Model I
  *
  * Owns and wires the machine: Z80 CPU, memory map, I/O ports, and the
- * keyboard matrix. Runs the CPU in T-state-budgeted slices at the real
- * 2.02752 MHz clock and raises the 30 Hz RTC heartbeat interrupt the
- * ROM's clock/cursor services depend on.
+ * keyboard matrix, laid out by the model description (models.js). Runs the
+ * CPU in T-state-budgeted slices at the model's clock (the Model III's real
+ * 2.02752 MHz) and raises the Model III's 30 Hz RTC heartbeat interrupt the
+ * ROM's clock/cursor services depend on. The Model I's 40 Hz timer is not
+ * delivered yet (its Expansion Interface latch is not built), so a Model I
+ * takes no interrupts.
  *
  * Rendering is the caller's concern: read `memory.videoRam` (or
  * `screenText()`) and consult `memory.videoDirty`. Keyboard input goes
@@ -15,15 +18,30 @@ import { Z80CPU } from "../cpu/z80cpu.js";
 import { MemorySystem } from "./memory.js";
 import { IOSystem, MODE_32COL_BIT } from "./io.js";
 import { KeyboardMatrix } from "../devices/keyboard.js";
+import { MODEL_III, modelOf } from "./models.js";
 
-export const CPU_CLOCK_HZ = 2027520;
-export const RTC_HZ = 30;
+/** The Model III's clock and RTC; a system's own are `clockHz` and `rtcInterval`. */
+export const CPU_CLOCK_HZ = MODEL_III.clockHz;
+export const RTC_HZ = MODEL_III.timerHz;
 export const RTC_INTERVAL_TSTATES = CPU_CLOCK_HZ / RTC_HZ; // 67,584
 
 export class TRS80System {
-  constructor({ romData, log }) {
-    this.memory = new MemorySystem();
-    this.io = new IOSystem();
+  /**
+   * @param {{ romData: Uint8Array, log?: (level: string, text: string) => void,
+   *   model?: 1 | 3 | import('./models.js').Model, ram?: number, expansion?: boolean, lowercase?: boolean }} opts
+   *   the model (a number or a description; the Model III by default), its RAM in K (the model's
+   *   default), and the Model I's Expansion Interface (fitted by default) and lowercase modification
+   *   (not fitted by default); the Machine checks them
+   */
+  constructor({ romData, log, model = MODEL_III, ram, expansion = true, lowercase = false }) {
+    const desc = typeof model === "number" ? modelOf(model) : model;
+    this.model = desc;
+    this.clockHz = desc.clockHz;
+    this.rtcInterval = desc.clockHz / desc.timerHz;
+    this.expansion = expansion;
+    this.lowercase = lowercase;
+    this.memory = new MemorySystem({ model: desc, ram: ram ?? desc.defaultRam });
+    this.io = new IOSystem({ model: desc });
     this.keyboard = new KeyboardMatrix();
     this.cpu = new Z80CPU();
     if (log !== undefined) {
@@ -62,7 +80,7 @@ export class TRS80System {
 
     this.memory.loadROM(romData);
 
-    this.nextRtcAt = RTC_INTERVAL_TSTATES;
+    this.nextRtcAt = this.rtcInterval;
     this.reset();
   }
 
@@ -76,7 +94,7 @@ export class TRS80System {
     this.io.reset();
     this.keyboard.reset();
     this.memory.clearVideoRAM();
-    this.nextRtcAt = this.cpu.cycles + RTC_INTERVAL_TSTATES;
+    this.nextRtcAt = this.cpu.cycles + this.rtcInterval;
     this._nmiWasPending = false;
   }
 
@@ -111,8 +129,8 @@ export class TRS80System {
   stepInstruction(beforeExecute) {
     const start = this.cpu.cycles;
     if (this.cpu.cycles >= this.nextRtcAt) {
-      this.io.raiseRTC();
-      this.nextRtcAt += RTC_INTERVAL_TSTATES;
+      if (this.model.id === 3) this.io.raiseRTC();
+      this.nextRtcAt += this.rtcInterval;
     }
     if (this.io.pendingInterrupt()) {
       this.cpu.interrupt();
@@ -207,7 +225,7 @@ export class TRS80System {
 
   /** Convenience for tests: run N emulated seconds. */
   runSeconds(seconds) {
-    return this.runTStates(Math.round(seconds * CPU_CLOCK_HZ));
+    return this.runTStates(Math.round(seconds * this.clockHz));
   }
 
   /**
