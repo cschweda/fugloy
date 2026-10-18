@@ -194,8 +194,10 @@ function sourceOf(c: LineCtx, at: number, ins: Instruction, regs: RegState, r: s
       return v === null ? [{ text: `the byte at the address in ${s.reg}` }] : [{ text: noun }, ...readFrom(c, v, 1, at)];
     }
     if (s.kind === 'idx') {
+      // A displacement the program rewrites is only where it starts: no number for it.
+      if (patched) return [{ text: `the byte at an offset from ${s.reg} that the program rewrites as it runs` }];
       const base = valueIn(regs, s.reg);
-      return base === null || patched ? [{ text: `the byte at ${s.reg}${s.disp < 0 ? '-' : '+'}${byte$(Math.abs(s.disp))}` }] : [{ text: noun }, ...readFrom(c, (base + s.disp) & 0xffff, 1, at)];
+      return base === null ? [{ text: `the byte at ${s.reg}${s.disp < 0 ? '-' : '+'}${byte$(Math.abs(s.disp))}` }] : [{ text: noun }, ...readFrom(c, (base + s.disp) & 0xffff, 1, at)];
     }
     if (s.kind === 'reg' || s.kind === 'reg16') {
       const v = valueIn(regs, s.reg);
@@ -216,9 +218,19 @@ function sourceOf(c: LineCtx, at: number, ins: Instruction, regs: RegState, r: s
   return null;
 }
 
-/** `, where it shows as "X"`: what a byte put in screen memory draws as. */
-function shows(v: number | null): string {
+/**
+ * `, where it shows as "X"`: what a byte put in screen memory draws as. A
+ * stock Model I has no lowercase: it shows $60-$7F as $40-$5F, so there the
+ * uppercase form is named; with no machine selected, $60-$7F are not named.
+ */
+function shows(c: Ctx, v: number | null): string {
   if (v === null) return '';
+  const machine = c.s.selection?.machine;
+  if (v >= 0x60 && v <= 0x7f && machine !== 3 && machine !== 4) {
+    if (machine !== 1) return '';
+    const up = trsGlyph(v - 0x20);
+    return up.kind === 'text' ? `, where it shows as "${up.char}" (a stock Model I has no lowercase)` : '';
+  }
   const g = trsGlyph(v);
   if (g.kind === 'text') return `, where it shows as "${g.char}"`;
   if (g.kind === 'block') return ', where it shows as a block graphic';
@@ -290,7 +302,7 @@ function outPort(c: Ctx, at: number, ins: Instruction, regs: RegState): number |
 
 /** `$3C45 (VIDEO+0045H, the screen, row 1, column 5)` and where it shows, or a named variable. */
 function destPieces(c: Ctx, addr: number, v: number | null): { pieces: Piece[]; tail: string } {
-  return { pieces: addrPhrase(c, addr), tail: screenCell(addr) === null ? '' : shows(v) };
+  return { pieces: addrPhrase(c, addr), tail: screenCell(addr) === null ? '' : shows(c, v) };
 }
 
 /** What the next use does with the value: `its next use is the INC A at $7003`, with the address it points at when that is how it is used. */
@@ -426,7 +438,7 @@ function backward(c: LineCtx): Sentence[] {
     if (addr === null || p === undefined) return [];
     const cell = screenCell(addr);
     if (cell !== null) {
-      const tail = PAIRS.has(s.reg) ? '' : shows(valueIn(c.regs, s.reg));
+      const tail = PAIRS.has(s.reg) ? '' : shows(c, valueIn(c.regs, s.reg));
       return [say(`${s.reg} carries `, from(p), ` to the screen here, at row ${cell.row}, column ${cell.column}${tail}.`)];
     }
     if (!loaded(c, addr) && nameOf(c, addr, 'data') === undefined) return [];
@@ -440,7 +452,7 @@ function backward(c: LineCtx): Sentence[] {
   }
   if (m === 'CP' && !(d?.kind === 'reg' && d.reg === 'A')) {
     const p = producer(c, 'A');
-    // Only the result of the line before: the lead and that line already say it.
+    // A value that is only some earlier instruction's result (an add, an INC) adds nothing to the lead.
     if (p === undefined || p.own) return [];
     const key = p.call !== undefined && returnsKey(p.call.entry.entry.purpose) ? keyTest(c, ins, c.addr) : '';
     return [say('A holds ', from(p, false), key === '' ? '.' : `, and this ${spelled(c, ins)} tests it for ${key}.`)];
@@ -469,26 +481,18 @@ function djnzCount(c: LineCtx): Sentence[] {
   return [say(`B holds ${byte$(loop.count)} when the loop from `, addrPiece(c, loop.head), ' is entered', where, ', so it runs ', times(c, loop), '.')];
 }
 
-/** What the routine summary says the routine touches, as `writes to the screen` and the like. */
-const TOUCHES: readonly [RegExp, (m: RegExpMatchArray) => string][] = [
-  [/^It writes to the screen\b/, () => 'writes to the screen'],
-  [/^It reads the keyboard\b/, () => 'reads the keyboard'],
-  [/^It writes to port (\$[0-9A-F]{2})/, (m) => `writes to port ${m[1]}`],
-  [/^It reads from port (\$[0-9A-F]{2})/, (m) => `reads from port ${m[1]}`],
-];
-
 /** `It is part of the routine at $6140, which writes to the screen.`, when the summary finds the screen, keyboard or a port. */
-function routineRef(c: LineCtx): Sentence[] {
+export function routineWhy(c: LineCtx): Sentence[] {
+  if (opcodeRewritten(c.a, c.addr)) return [];
   const r = summarizeRoutine(c.s, c.addr);
   if (r === null || r.start === c.addr) return [];
-  const facts: string[] = [];
-  for (const s of r.sentences) {
-    const text = s.map((p) => p.text).join('');
-    for (const [re, f] of TOUCHES) {
-      const m = text.match(re);
-      if (m !== null && !facts.includes(f(m))) facts.push(f(m));
-    }
-  }
+  const t = r.touches;
+  const facts: string[] = [
+    ...(t.screen ? ['writes to the screen'] : []),
+    ...(t.keyboard ? ['reads the keyboard'] : []),
+    ...t.portsOut.map((n) => `writes to port ${byte$(n)}`),
+    ...t.portsIn.map((n) => `reads from port ${byte$(n)}`),
+  ];
   if (facts.length === 0) return [];
   const name: Piece[] = c.a.symbols.has(r.start) ? [{ text: 'the routine ' }, { text: r.name, addr: r.start }, { text: ` (${word$(r.start)})` }] : [{ text: 'the routine at ' }, addrPiece(c, r.start)];
   return [say('It is part of ', name, ', which ', andList(facts, (f) => [{ text: f }]), '.')];
@@ -499,6 +503,5 @@ export function purposeWhy(c: LineCtx): Sentence[] {
   // An instruction the program may turn into another one is not proven to be this form.
   if (opcodeRewritten(c.a, c.addr)) return [];
   const dest = destOf(c);
-  const flow = dest !== undefined && c.ins.mnemonic !== 'DJNZ' ? forward(c, dest) : backward(c);
-  return [...flow, ...routineRef(c)];
+  return dest !== undefined && c.ins.mnemonic !== 'DJNZ' ? forward(c, dest) : backward(c);
 }

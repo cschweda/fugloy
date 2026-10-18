@@ -6,6 +6,8 @@ import { openProgram } from '../../src/session.js';
 const raw = (bytes: number[]) => openProgram(new Uint8Array(bytes), { base: 0x7000, selection: { machine: 3, dos: 'trsdos' } });
 /** The "what it does here" sentences for the line at `at` (default: the first) of a program `bytes`. */
 const why = (bytes: number[], at = 0x7000): string[] => (explainLine(raw(bytes), at).why?.purpose ?? []).map(sentenceText);
+/** The routine reference for the line at `at`. */
+const routine = (bytes: number[], at = 0x7000): string[] => (explainLine(raw(bytes), at).why?.routine ?? []).map(sentenceText);
 const RET = 0xc9;
 
 describe('what it does here: proven flow', () => {
@@ -13,12 +15,38 @@ describe('what it does here: proven flow', () => {
     // 7000 LD A,(5A20H); 7003 LD (3C45H),A; 7006 RET
     const bytes = [0x3a, 0x20, 0x5a, 0x32, 0x45, 0x3c, RET];
     expect(why(bytes)).toEqual(['A carries the byte read from $5A20 to $3C45 (VIDEO+0045H, the screen, row 1, column 5): the LD (VIDEO+0045H),A at $7003 stores it there.']);
-    expect(why(bytes, 0x7003)).toEqual(['A carries the byte read from $5A20, set at $7000, to the screen here, at row 1, column 5.', 'It is part of the routine at $7000, which writes to the screen.']);
+    expect(why(bytes, 0x7003)).toEqual(['A carries the byte read from $5A20, set at $7000, to the screen here, at row 1, column 5.']);
+    // The routine reference is its own field, not part of the purpose.
+    expect(routine(bytes, 0x7003)).toEqual(['It is part of the routine at $7000, which writes to the screen.']);
+    expect(routine(bytes)).toEqual([]); // the routine's own start
     // A known character: where it shows.
     // 7000 LD A,58H; 7002 LD (3C45H),A; 7005 RET
     const x = [0x3e, 0x58, 0x32, 0x45, 0x3c, RET];
     expect(why(x)).toEqual(['A carries $58 to $3C45 (VIDEO+0045H, the screen, row 1, column 5): the LD (VIDEO+0045H),A at $7002 stores it there, where it shows as "X".']);
-    expect(why(x, 0x7002)[0]).toBe('A carries $58, set at $7000, to the screen here, at row 1, column 5, where it shows as "X".');
+    expect(why(x, 0x7002)).toEqual(['A carries $58, set at $7000, to the screen here, at row 1, column 5, where it shows as "X".']);
+  });
+
+  it('lowercase shows as lowercase only where the machine has it', () => {
+    // 7000 LD A,61H ("a"); 7002 LD (3C45H),A; 7005 RET
+    const bytes = [0x3e, 0x61, 0x32, 0x45, 0x3c, RET];
+    expect(why(bytes)[0]).toMatch(/, where it shows as "a"\.$/); // Model III
+    const m1 = openProgram(new Uint8Array(bytes), { base: 0x7000, selection: { machine: 1, dos: 'none' } });
+    expect(sentenceText(explainLine(m1, 0x7000).why!.purpose[0]!)).toMatch(/, where it shows as "A" \(a stock Model I has no lowercase\)\.$/);
+    expect(sentenceText(explainLine(m1, 0x7002).why!.purpose[0]!)).toMatch(/, where it shows as "A" \(a stock Model I has no lowercase\)\.$/);
+    // No machine selected: $60-$7F are not named.
+    const none = openProgram(new Uint8Array(bytes), { base: 0x7000 });
+    expect(sentenceText(explainLine(none, 0x7000).why!.purpose[0]!)).not.toMatch(/shows as/);
+  });
+
+  it('a rewritten displacement gives no number', () => {
+    // 7000 LD (7005H),A; 7003 LD A,(IY+05H), whose displacement (7005) the program stores over; 7006 INC A; 7007 RET
+    const fwd = why([0x32, 0x05, 0x70, 0xfd, 0x7e, 0x05, 0x3c, RET], 0x7003);
+    expect(fwd).toEqual(['A holds the byte at an offset from IY that the program rewrites as it runs; its next use is the INC A at $7006.']);
+    // The store line: 7000 LD (7005H),A; 7003 LD A,(IX+05H) (rewritten); 7006 LD (3C00H),A; 7009 RET
+    const bytes = [0x32, 0x05, 0x70, 0xdd, 0x7e, 0x05, 0x32, 0x00, 0x3c, RET];
+    expect(why(bytes, 0x7003)[0]).toMatch(/^A carries the byte at an offset from IX that the program rewrites as it runs to \$3C00/);
+    expect(why(bytes, 0x7006)).toEqual(['A carries the byte at an offset from IX that the program rewrites as it runs, set at $7003, to the screen here, at row 0, column 0.']);
+    for (const at of [0x7003, 0x7006]) expect(why(bytes, at).join(' ')).not.toMatch(/\$05|IX\+/);
   });
 
   it('a key from the ROM tested for ENTER', () => {
@@ -86,8 +114,11 @@ describe('what it does here: proven flow', () => {
 
   it('names the routine when it writes to the screen', () => {
     // 7000 CALL 7004H; 7003 RET; 7004 LD A,2AH; 7006 LD (3C00H),A; 7009 RET
-    const s = why([0xcd, 0x04, 0x70, RET, 0x3e, 0x2a, 0x32, 0x00, 0x3c, RET], 0x7006);
-    expect(s.at(-1)).toBe('It is part of the routine SUB_7004 ($7004), which writes to the screen.');
+    const bytes = [0xcd, 0x04, 0x70, RET, 0x3e, 0x2a, 0x32, 0x00, 0x3c, RET];
+    expect(routine(bytes, 0x7006)).toEqual(['It is part of the routine SUB_7004 ($7004), which writes to the screen.']);
+    expect(why(bytes, 0x7006).join(' ')).not.toMatch(/It is part of/);
+    // Ports and the keyboard, from the summary's facts: 7000 CALL 7004H; 7003 RET; 7004 LD A,(3801H); 7007 OUT (0FFH),A; 7009 RET
+    expect(routine([0xcd, 0x04, 0x70, RET, 0x3a, 0x01, 0x38, 0xd3, 0xff, RET], 0x7007)).toEqual(['It is part of the routine SUB_7004 ($7004), which reads the keyboard and writes to port $FF.']);
   });
 
   it('addresses are links', () => {
