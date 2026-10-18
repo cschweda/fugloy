@@ -1,6 +1,6 @@
 /** The Machine's sound device: a ring of every port $FF write, stamped in T-states. */
 import { describe, expect, it } from 'vitest';
-import { Machine } from '../../src/index.js';
+import { Machine, serializeState, restoreState } from '../../src/index.js';
 
 const machine = () => new Machine({ roms: { level2: new Uint8Array(0x3800) } });
 // ROM is all zeros (NOP), so each step advances the cycle count.
@@ -63,5 +63,28 @@ describe('m.sound', () => {
     expect(m.sound.overflowed).toBe(0);
     out(m, 2);
     expect(m.sound.events().map((e) => e.value)).toEqual([2]);
+  });
+
+  it('events() returns a write stamped at cycle 0', () => {
+    const m = machine();
+    m.io.out(0xff, 3);
+    expect(m.sound.events()).toEqual([{ cycle: 0, value: 3 }]);
+  });
+
+  it('reset() clears the ring', () => {
+    const m = machine();
+    out(m, 1);
+    m.reset();
+    expect(m.sound.events()).toEqual([]);
+    out(m, 2);
+    expect(m.sound.events().map((e) => e.value)).toEqual([2]);
+  });
+
+  it('restoreState clears the ring', () => {
+    const m = machine();
+    const state = serializeState(m.system);
+    out(m, 1);
+    restoreState(m.system, state);
+    expect(m.sound.events()).toEqual([]);
   });
 });

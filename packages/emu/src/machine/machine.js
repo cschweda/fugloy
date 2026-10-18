@@ -81,6 +81,7 @@ export class Machine {
     this.video = new Video(sys);
     this.sound = new Sound();
     sys.io.onSoundWrite = (cycle, value) => this.sound.record(cycle, value);
+    sys.io.onSoundReset = () => this.sound.clear();
     this.io = {
       in: (port) => sys.io.readPort(port),
       out: (port, value) => sys.io.writePort(port, value),
@@ -95,6 +96,7 @@ export class Machine {
   /** Hardware reset: CPU to $0000, cycle count to 0, RAM kept (TRS80System.reset). */
   reset() {
     this.system.reset();
+    this.sound.clear();
   }
 
   /**

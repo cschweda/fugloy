@@ -72,6 +72,8 @@ export class IOSystem {
     this.SOUND_LOG_LIMIT = 100000;
     // Raw port 0xFF write sink (cycles, value): the Machine's sound ring.
     this.onSoundWrite = null;
+    // Called when the timeline restarts (state restore): the Machine clears its sound ring.
+    this.onSoundReset = null;
 
     this.initializeModelIIIPorts();
   }

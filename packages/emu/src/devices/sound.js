@@ -30,10 +30,10 @@ export class Sound {
 
   /**
    * Every port $FF write after a cycle, oldest first.
-   * @param {number} [sinceCycle] Only events with `cycle > sinceCycle`.
+   * @param {number} [sinceCycle] Only events with `cycle > sinceCycle`; the default -1 returns everything, including a write at cycle 0.
    * @returns {{ cycle: number, value: number }[]}
    */
-  events(sinceCycle = 0) {
+  events(sinceCycle = -1) {
     const out = [];
     const start = (this.#head - this.#count + SIZE) & (SIZE - 1);
     for (let k = 0; k < this.#count; k++) {
