@@ -103,6 +103,23 @@ describe("IOSystem - Mode register (port 0xEC write)", () => {
   });
 });
 
+describe("IOSystem - Cassette input port (0xFF read)", () => {
+  // Model III Technical Reference Manual (1981), p. 22, CASIN*: bit 7 the 500-baud
+  // cassette bit, bit 6 undefined, bits 5-1 read back port 0xEC's DISWAIT, ENEXTIO,
+  // ENALTSET, MODSEL, and CASMOTORON, bit 0 the 1500-baud cassette bit.
+  it("reads port 0xEC's bits 5-1 back, with undriven bit 6 high", () => {
+    const io = new IOSystem();
+    expect(io.readPort(0xff)).toBe(0x40);
+    io.writePort(0xec, 0xff);
+    expect(io.readPort(0xff)).toBe(0x7e);
+    io.writePort(0xec, 0x14); // ENEXTIO and MODSEL
+    expect(io.readPort(0xff)).toBe(0x54);
+    io.writePort(0xec, 0x00);
+    io.cassette.pulseLatch = true;
+    expect(io.readPort(0xff)).toBe(0xc0);
+  });
+});
+
 describe("IOSystem - Absent hardware floats high", () => {
   let io;
 
