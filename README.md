@@ -13,31 +13,124 @@
 [![Node](https://img.shields.io/badge/node-%E2%89%A522-339933.svg)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6.svg)](https://www.typescriptlang.org)
 
-**A TRS-80 disassembler that reads programs the way the machine stored them,
-finds the code, and proves that its output rebuilds the original byte for
-byte.**
+**A toolkit for taking apart TRS-80 Model I and Model III programs: a
+disassembler that proves its output rebuilds the original byte for byte, a
+workbench in the browser that explains every line, and a headless emulator
+with a debugger whose runs feed back into the listing.**
 
 ## What is it?
 
-Fugløy takes a program for the TRS-80 Model I or Model III, a `.CMD` load
-module or a tokenized BASIC program saved to disk, and turns it into:
+Fugløy started as a disassembler and has grown into a reverse-engineering
+toolkit for the TRS-80, built to read old programs faithfully and keep what
+you learn about them. It reads a program the way the machine stored it, a
+`.CMD` load module or a tokenized BASIC program, works out which bytes are
+code, names what it can, and gives back source that reassembles to the same
+bytes. Around that core sit a web workbench for reading and annotating
+listings, an emulator that runs the program and records what really executed,
+and, being built now, an MCP server that lets an AI assistant drive the
+emulator.
+
+| Part | What it does | Status | Where |
+| --- | --- | --- | --- |
+| **Disassembler** | Loads `.CMD`, `.BAS`, and raw files by content; recursive descent; labels; cited ROM, hardware, and DOS names; hint files; hidden code in BASIC; rebasing and relocation; zmac source that reassembles byte for byte; JSON IR; reads the emulator's label files | Released, 1.1.0 on npm | `@fugloy/disasm`, the `fugloy` command in `@fugloy/cli`, opcode tables in `@fugloy/z80` |
+| **Web workbench** | The disassembler in the browser: facing pages, the four public-domain games one click away, editing by keyboard, the **Explain** tab, block comments, exports | Live | [fugloy.netlify.app](https://fugloy.netlify.app/), source in `apps/web` |
+| **Emulator** | A headless, deterministic Model III that passes ZEXDOC and ZEXALL, runs `.CMD`, `.BAS`, and `.CAS` programs, and has a debugger that writes label and coverage files | 0.1.0, phases 0–3 of 8 done; not yet on npm | `packages/emu` (`@fugloy/emu`) |
+| **MCP server** | Will let an AI assistant such as Claude Code load a program, run it, set breakpoints and watches, and name what it finds in the same label file | Being built (emu phase 4) | `packages/mcp` (`@fugloy/mcp`) |
+| **Ahead** | An assembler and IDE in the workbench, a course in assembly for non-programmers, and, later, recompiling games to TypeScript | Planned | [Roadmap](#whats-ahead) |
+
+Its core libraries have no runtime dependencies and use no Node or browser
+APIs, so the same code runs in the command line, the browser, and the tests.
+
+Named after the island in *Voyage of the Valkyrie*; spelled `fugloy` in code.
+
+### The disassembler
+
+Give it a program for the Model I or Model III and it turns it into:
 
 - a **listing** that separates code from data, names every jump, call, and
-  data reference, names the ROM, hardware, and DOS addresses a program uses,
-  and shows machine code hidden in BASIC at the address it really occupies;
+  data reference, names the ROM, hardware, and DOS addresses a program uses
+  from eight cited tables of 634 entries, and shows machine code hidden in
+  BASIC at the address it really occupies;
 - **zmac assembler source** that assembles back into exactly the same bytes;
 - a **JSON description** of the program (regions, basic blocks,
   cross-references, symbols) for other tools to build on.
 
-It is a command-line tool for Node 22, published on npm as `@fugloy/cli`, and
-a web workbench at [fugloy.netlify.app](https://fugloy.netlify.app/). Its core
-library has no runtime dependencies and uses no Node or browser APIs, so the
-same code runs in both. A headless TRS-80 emulator in the same repository runs
-a program and records which bytes ran, which the disassembler can read back.
+Your names, comments, and code and data decisions live in a plain-text
+[hint file](#hint-files), and a [label file](#label-files) from the emulator
+turns the code a run reached into code in the listing. It is a command-line
+tool for Node 22, published on npm as `@fugloy/cli`; see [Install](#install)
+and [Use](#use).
 
-Named after the island in *Voyage of the Valkyrie*; spelled `fugloy` in code.
+### The web workbench
+
+[fugloy.netlify.app](https://fugloy.netlify.app/) runs the same disassembler
+in the browser, with nothing to install and no server. Open a program of your
+own or one of the four public-domain Westmoreland and Gilman games, and the
+listing appears on the left of two facing pages, beside tabs for symbols, an
+index, a spec sheet of the program, and manuals. You name, comment, and mark
+code or data from the keyboard, and each edit lands as a line in the hint
+file. Work saves in your browser, backs up and restores between browsers, and
+exports as zmac
+source, hints, IR, a `.CMD` load module, or a `.CAS` tape. Bring your own
+copies of the cited manuals and a citation opens at its page.
+
+The **Explain** tab is a tutor for every machine-code line: what it does in
+plain English, from register values proven on every path to it and never
+from a guess; the patterns it belongs to, such as block copies, delay loops,
+and a loader moving the program to where it runs; a summary of the routine
+around it; and, for data, the code that reads it and a picture of its bytes
+in the TRS-80 character set, block graphics included. Block comments (the
+hint file's `note`, the **:** key) sit above any line. The workbench opens
+Sea Dragon already annotated, from
+[`seadrg01.hints`](examples/sea-dragon/seadrg01.hints).
+
+### The emulator
+
+`@fugloy/emu` is a headless TRS-80 Model III in plain JavaScript, built on the
+core of [trs80-emulator](https://github.com/cschweda/trs80-emulator). It has
+no DOM and no Node APIs, and the same inputs give the same run every time, so
+a scripted session repeats byte for byte. Its Z80 core passes ZEXDOC and
+ZEXALL. It loads `.CMD`, `.BAS`, and `.CAS` programs, takes keys on a
+cycle-timed queue, reports sound as events and the screen as text, and Sea
+Dragon, Eliminator, and Rear Guard reach their title screens on it. Its
+debugger, `m.debug`, has breakpoints, watches, hooks, coverage, callers, a
+trace, and snapshots, and writes the [label and coverage
+file](docs/label-format.md) that the disassembler reads with `--labels`. You
+bring the ROM. Usage is in its [README](packages/emu/README.md).
+
+### The MCP server
+
+`@fugloy/mcp` is being built now, as the emulator's phase 4. It is a stdio
+MCP server over the emulator, so that an assistant such as Claude Code can
+load a game, find the routine that prints text, label it, and leave that
+label in the file the disassembler reads. Its design is in
+[docs/fugloy-mcp-spec.md](docs/fugloy-mcp-spec.md); it is not available yet.
+
+### What's ahead
+
+From the roadmap in [CLAUDE.md](CLAUDE.md) and the
+[project plan](docs/Fugloy-Project-Plan.md):
+
+- **The emulator's later phases:** disk images, the Model I and the Model 4,
+  and a differential harness.
+- **An assembler and IDE** (plan phase 5): write Z80 assembly in the
+  workbench, assemble it to a `.CMD`, and run it on an emulated Model I or
+  Model III beside its listing, an IDE in the way Inform 7 has one for its
+  language.
+- **Learn assembly with Fugløy** (phase 6): an introduction to assembly for
+  people who have never programmed, on the small and regular Z80, with
+  Explain's tutor voice on each line written and a tutorial that builds a
+  Space Invaders-style game from a blank page.
+- **Recompilation** (the plan's Part 2): turning a game into readable
+  TypeScript that plays the same in a browser, checked frame by frame against
+  the emulator, and bundling the public-domain games for one arcade page.
+  Part 2 is outlined, not designed; it gets its own design document, and the
+  plan's kill criteria are reviewed before it starts.
 
 ## Why Fugløy
+
+The disassembler is the part the rest builds on, and it is where Fugløy
+differs most from the tools that came before it.
 
 ### How the usual tools work
 
@@ -110,7 +203,7 @@ the bytes it came from.
   written for a different program is refused, and the hint file wins where
   both speak.
 
-Next on the roadmap is an MCP server over the emulator, so that an AI
+Next is the [MCP server](#the-mcp-server) over the emulator, so that an AI
 assistant can run a program, watch it, and record what it learns in the same
 label file.
 
@@ -234,7 +327,9 @@ fugloy GAME.CMD --format zmac -o game.z
 The libraries are `@fugloy/disasm` (loaders, analysis, emitters; runs in a
 browser) and `@fugloy/z80` (the opcode table and decoder). The examples below
 use `pnpm fugloy` from a clone, which runs the same CLI; with the package
-installed, write `fugloy` instead.
+installed, write `fugloy` instead. The emulator, `@fugloy/emu`, is not on npm
+yet; use it from a clone (`pnpm install`), as its
+[README](packages/emu/README.md) shows. The workbench needs no install.
 
 ## Requirements
 
