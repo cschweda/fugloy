@@ -96,6 +96,34 @@ export function detailsText(d: Details): string {
   return parts.join(' · ');
 }
 
+/** One labelled part of the "Why it’s here" section. */
+export interface WhyPart {
+  key: 'register' | 'purpose' | 'idiom';
+  title: string;
+  sentences: Sentence[];
+}
+
+/**
+ * The "Why it’s here" section of a code line: up to three labelled parts, each
+ * only when it has sentences — "Why A" (the register the Z80 makes the line
+ * use; "Why this register" when the facts speak of several), "What it does
+ * here" (proven flow), "Why write it this way" (the idiom) — and the routine
+ * reference, which the tab shows last and muted because it repeats on most
+ * lines of a routine; it is left out (`routine` empty) when `summaryShown`,
+ * since the routine section below then names the routine. Null when all three
+ * parts are empty: the routine reference alone makes no section (the routine
+ * section below says as much).
+ */
+export function whyParts(e: Explanation, summaryShown = false): { parts: WhyPart[]; routine: Sentence[] } | null {
+  const w = e.why;
+  if (w === undefined) return null;
+  const parts: WhyPart[] = [];
+  if (w.register.length > 0) parts.push({ key: 'register', title: `Why ${w.registerName ?? 'this register'}`, sentences: w.register });
+  if (w.purpose.length > 0) parts.push({ key: 'purpose', title: 'What it does here', sentences: w.purpose });
+  if (w.idiom.length > 0) parts.push({ key: 'idiom', title: 'Why write it this way', sentences: w.idiom });
+  return parts.length === 0 ? null : { parts, routine: summaryShown ? [] : w.routine };
+}
+
 /** The most bytes a region picture draws (16K). */
 export const PICTURE_MAX = 0x4000;
 

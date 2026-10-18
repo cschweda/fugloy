@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { openProgram, sentenceText, withHintText } from '@fugloy/disasm';
 import type { Row } from '@fugloy/disasm';
-import { detailsText, explainAt, explainRowAt, labelSentences, patternSentences, pictureBytes, PICTURE_MAX, summaryAt, summaryParts, thinLinks, warmExplain } from '../app/utils/explain-view';
+import { detailsText, explainAt, explainRowAt, labelSentences, patternSentences, pictureBytes, PICTURE_MAX, summaryAt, summaryParts, thinLinks, warmExplain, whyParts } from '../app/utils/explain-view';
 
 const ex = (p: string): string => fileURLToPath(new URL(`../../../examples/${p}`, import.meta.url));
 const open = () =>
@@ -139,5 +139,44 @@ describe('explain-view helpers', () => {
     // 7000 LD HL,7006H; 7003 JP 7006H; 7006 RET
     const r = openProgram(new Uint8Array([0x21, 0x06, 0x70, 0xc3, 0x06, 0x70, 0xc9]), { base: 0x7000 });
     expect(labelSentences(r, explainAt(r, 0x7006))!.map(sentenceText)).toEqual(['Jumped to from $7003.', 'Its address is also used at $7000, so it may also be reached through a pointer.']);
+  });
+});
+
+describe('whyParts: the "Why it’s here" section', () => {
+  const view = (at: number) => {
+    const w = whyParts(explainAt(open(), at));
+    return w === null ? null : { parts: w.parts.map((p) => [p.key, p.title, p.sentences.map(sentenceText)]), routine: w.routine.map(sentenceText) };
+  };
+
+  it('a caller of PRINT_TEXT: only "What it does here", naming the screen', () => {
+    expect(view(0x4a91)).toEqual({
+      parts: [['purpose', 'What it does here', ['DE holds $3E8D (VIDEO+028DH, the screen, row 10, column 13); its next use is not certain: the call at $4A96 may use or change it.']]],
+      routine: [],
+    });
+  });
+
+  it('titles the register part with the register, or "this register" when the facts speak of several, in the order register, purpose, idiom', () => {
+    const xor = view(0x4983)!;
+    expect(xor.parts.map((p) => p[1])).toEqual(['Why A', 'What it does here', 'Why write it this way']);
+    expect(view(0x49ca)!.parts[0]!.slice(0, 2)).toEqual(['register', 'Why B']); // DJNZ
+    expect(view(0x49f9)!.parts[0]!.slice(0, 2)).toEqual(['register', 'Why this register']); // LDIR: HL, DE and BC
+  });
+
+  it('keeps the routine reference apart, to show last', () => {
+    const w = view(0x4b86)!;
+    expect(w.parts.map((p) => p[0])).toEqual(['purpose']);
+    expect(w.routine).toEqual(['It is part of the routine TITLE_FRAME ($4B5E), which writes to the screen and reads the keyboard.']);
+    // With the routine section shown below, the reference would repeat it: left out.
+    const shown = whyParts(explainAt(open(), 0x4b86), true)!;
+    expect(shown.parts.map((p) => p.key)).toEqual(['purpose']);
+    expect(shown.routine).toEqual([]);
+  });
+
+  it('is absent when all three parts are empty, even with a routine reference, and on rows that are not code', () => {
+    const s = open();
+    expect(explainAt(s, 0x4b8b).why?.routine.length).toBe(1); // CALL PRINT_TEXT
+    expect(whyParts(explainAt(s, 0x4b8b))).toBeNull();
+    expect(whyParts(explainAt(s, 0x6144))).toBeNull(); // JP Z,L614A
+    expect(whyParts(explainAt(s, 0x7399))).toBeNull(); // CAVERN_MAP, a data row
   });
 });

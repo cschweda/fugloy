@@ -98,6 +98,8 @@ These would make it a failure even if it technically works:
   then explains the **data region** the row belongs to (see below). It
   reminds the reader of the key that turns data into code, and back.
 - An **ORG or header row** gets a one-line explanation of what it is.
+- A **code line** also says why it is there, in a "Why it's here"
+  section after the lead and the details strip (see Why below).
 
 ## How the tutor knows values
 
@@ -299,6 +301,68 @@ surface and one routine as the air supply.
   go. When the cursor is inside a routine, the box offers "above the
   routine (L4A21)" and "above this line" as a choice; the default is the
   routine.
+
+## Why
+
+Added 2026-10-18 (plan `docs/superpowers/plans/2026-10-18-explain-why.md`).
+The lead says what a line does; **Why it's here** says why it is there. The
+engine returns it as `Explanation.why`, four lists of sentences built from
+three classes of evidence, each labelled so a reader can tell a fact from an
+inference. The anti-goal holds throughout: no unproven value or destination.
+
+- **Why A** (`why.register`, the heading names `why.registerName`, or says
+  "Why this register" when the facts speak of several, as LDIR's HL, DE and
+  BC do). *Facts about the Z80*, true of the instruction form wherever it
+  stands: 8-bit arithmetic, logic and compares work on A; only A loads or
+  stores at a fixed address or through BC or DE, or goes to a port named in
+  the instruction; a port picked by a register is in C; DJNZ counts in B; the
+  block instructions fix HL, DE and BC; the rotate-A and adjust instructions
+  work only on A; 16-bit adds land in HL, IX or IY; `JP (HL)` jumps only
+  through HL, IX or IY; `EX DE,HL` swaps a value kept in DE into HL, in one
+  step, because HL is the register most memory and 16-bit arithmetic
+  instructions use, so those instructions can use it. A line that loads a register a later ROM or DOS
+  call takes, by its table entry's purpose, cites that entry. Lines with no
+  forced choice get nothing (`why-register.ts`).
+- **What it does here** (`why.purpose`). *Proven flow*: from `track.ts`'s
+  facts and a straight-line scan that stops at branches, joins, writes to
+  the register, calls that do not take it, and unknown code. A value is
+  followed to its next use or back to where it was set, and a destination
+  gets its TRS-80 meaning: the screen (row and column, the character when
+  proven; $60–$7F only on the Model III and 4, which have lowercase), the
+  keyboard matrix, port $FF (sound and cassette), a ROM routine, a DJNZ
+  count. Past a branch or a join it says the next use is not certain and
+  where the code branches or other code arrives, but only when it can name
+  what the register holds (a source or a proven value): a bare "the result"
+  whose next use is not certain says nothing. `OR A` and `AND A` leave A as
+  it was, so, like `CP`, they are not followed as writing A. A line whose opcode
+  the program rewrites gets nothing, and no number comes from rewritten
+  bytes (`why-purpose.ts`).
+- **Why write it this way** (`why.idiom`). *Idioms with a computed motive*:
+  `XOR A`, `OR A`, `CP`, `LD B,n` with `DJNZ`, `ADD A,A`, `SLA`/`SRL`,
+  `INC (HL)`, `PUSH AF` around a call, `EX AF,AF'`, `RST`, `LD A,(HL)` with
+  `INC HL`, `LDIR`, each with the cost comparison against the usual
+  alternative. Every number is decoded from `@fugloy/z80`'s table at run
+  time, never typed into the prose. Phrased as the usual reason for the form,
+  never as a claim about the programmer's mind. The line itself is quoted as
+  the listing prints it, names and all (`why-idiom.ts`).
+- **The routine reference** (`why.routine`): "It is part of the routine
+  TITLE_FRAME ($4B5E), which writes to the screen and reads the keyboard."
+  It appears on most lines of a routine, so the tab shows it once, last in
+  the section and muted, rather than as a part of its own; the routine
+  section below carries the full summary. It is left out on the routine's
+  start line and when the routine touches neither the screen, the keyboard
+  nor a port, and the tab leaves it out whenever that routine section shows
+  on the same line, which already names the routine.
+- **The section** shows each part only when it has sentences, in the order
+  above, every address a link into the listing and every table name a link
+  to the Symbol tab, as in the lead. It is absent when the three parts are
+  empty; the routine reference alone makes no section. A label row on a
+  code line shows its line's section; data rows and BASIC get none.
+- **Sea Dragon.** PRINT_TEXT ($6140) takes DE as a parameter, so its own
+  lines name no screen cell; its callers' `LD DE,VIDEO+…` lines do ("DE
+  holds $3F15 (VIDEO+0315H, the screen, row 12, column 21)"). The test
+  `why-sea-dragon.test.ts` checks those and nine idioms across the program
+  by their exact text.
 
 ## Routine summary
 

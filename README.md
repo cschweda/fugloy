@@ -78,7 +78,12 @@ plain English, from register values proven on every path to it and never
 from a guess; the patterns it belongs to, such as block copies, delay loops,
 and a loader moving the program to where it runs; a summary of the routine
 around it; and, for data, the code that reads it and a picture of its bytes
-in the TRS-80 character set, block graphics included. Block comments (the
+in the TRS-80 character set, block graphics included. Each code line also
+says why it is there: why the Z80 makes it use the register it does, what it
+does for the program (a value followed to the screen cell, port, or loop it
+feeds, only as far as the flow is proven), and why a programmer would write
+it that way, with the byte and T-state costs of the alternative taken from
+the opcode table. Block comments (the
 hint file's `note`, the **:** key) sit above any line. The workbench opens
 Sea Dragon already annotated, from
 [`seadrg01.hints`](examples/sea-dragon/seadrg01.hints).

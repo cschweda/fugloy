@@ -25,6 +25,8 @@ describe('summarizeRoutine on Sea Dragon', () => {
   it('PRINT_TEXT (SUB_6140 before the hints named it): starts at $6140, loops with DJNZ, called from $4A96 and $4AA1', () => {
     const r = must(summarizeRoutine(sea, 0x6146));
     expect(r).toMatchObject({ start: 0x6140, name: 'PRINT_TEXT', instructions: 11, bytes: 15, truncated: false });
+    // Its screen address is a parameter (DE), so the summary proves no screen write.
+    expect(r!.touches).toEqual({ screen: false, keyboard: false, portsOut: [], portsIn: [] });
     const t = text(r);
     expect(t).toMatch(/DJNZ/);
     expect(t).toMatch(/called from/);

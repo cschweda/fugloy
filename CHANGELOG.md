@@ -34,8 +34,10 @@ creates and pushes the tag.
 
 ## [Unreleased]
 
-In the core packages since 1.1.0: the disassembler shows a label's `note`
-(emu phase 4, below). The emulator, `@fugloy/emu` 0.1.0 (not on npm), has
+In the core packages since 1.1.0: Explain's "why" layer (`@fugloy/disasm`
+says why each machine-code line is there, and the workbench's Explain tab
+shows it in a "Why it's here" section), and the disassembler shows a label's
+`note` (emu phase 4, below). The emulator, `@fugloy/emu` 0.1.0 (not on npm), has
 phases 0–4 of eight done, listed here until its first release. Phases 0 and 1
 were merged while core 1.0.0 was being built, and phases 2 and 3 between 1.0.0
 and 1.1.0. Phase 4 was merged after 1.1.0.
@@ -67,6 +69,52 @@ Emu phase 0: the core of `cschweda/trs80-emulator`, without its DOM, boots
 the Model III ROM to `READY` in Node.
 
 ### Added
+
+Core, Explain's "why" layer (design in
+`docs/superpowers/specs/2026-10-17-explain-tab-design.md`, section Why):
+
+- `Explanation.why` on every code line, four lists of sentences, each empty
+  when nothing applies:
+  - `register`: facts about the Z80 that make the line use the register it
+    does (8-bit arithmetic, logic and compares on A; only A at a fixed
+    address, through BC or DE, or to a port named in the instruction; a
+    register-picked port in C; DJNZ counting in B; the block instructions'
+    HL, DE and BC; the rotate-A and adjust instructions; 16-bit adds into HL,
+    IX or IY; `JP (HL)`; `EX DE,HL`), and, for a line that loads a register,
+    the ROM or DOS routine called next in straight-line code whose table
+    entry says it takes its input there, cited by entry. `registerName`
+    names the one register the sentences speak of (absent when several).
+  - `purpose`: what the line does for the program, from proven flow only. A
+    value is followed forward to its next use (a store to the screen with
+    row, column and, when proven, the character; a port, with port $FF's
+    sound and cassette; a DJNZ count with the loop's runs; a ROM routine that
+    takes it; a CP after a key routine, with the key's name) or back to where
+    it was set. The scan stops at a branch, a join, a call that does not take
+    the register, a jump or return, undecoded bytes, and a rewritten opcode,
+    and says the next use is not certain and why. Only the Model III and 4
+    show $60–$7F as lowercase; on a stock Model I (no bit 6 in video RAM, so
+    $61 shows as "!") and with no machine selected, those bytes are not
+    named.
+  - `idiom`: why a programmer usually writes the line this way: `XOR A` and
+    `SUB A`, `OR A` and `AND A` (and before `SBC HL`), `CP`, `LD B,n` with
+    `DJNZ`, `DJNZ`, `ADD A,A` and `ADD HL,HL`, `SLA` and `SRL`, the one-byte
+    rotates, `INC`/`DEC (HL)` and `(IX+d)`, `PUSH AF` and `POP AF` around a
+    call, `EX AF,AF'`, `RST`, `LD r,(HL)` with `INC HL`, and `LDIR`/`LDDR`,
+    each against the usual alternative. Every byte and T-state count is
+    decoded from `@fugloy/z80` at run time, and the line is quoted as the
+    listing prints it.
+  - `routine`: "It is part of the routine TITLE_FRAME ($4B5E), which writes
+    to the screen and reads the keyboard", from the routine summary's new
+    structured `touches` (`screen`, `keyboard`, `portsOut`, `portsIn`).
+  The package exports the `Why` type.
+- The workbench's Explain tab shows them in **Why it's here**, after the lead
+  and the details strip: **Why A** (or the register's name; "Why this
+  register" when the facts speak of several), **What it does here**, and
+  **Why write it this way**, each only when it has sentences, with the same
+  address and Symbol-tab links as the lead. The routine reference closes the
+  section in a muted line, since it repeats on most lines of a routine, and
+  only when the routine section below is not shown (that section already
+  names the routine). The section is absent when all three parts are empty.
 
 Emu phase 4 (`@fugloy/mcp` 0.1.0, MCP phases A–C; MCP spec §5, §11):
 

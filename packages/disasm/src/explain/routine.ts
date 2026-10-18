@@ -27,6 +27,8 @@ export interface RoutineSummary {
   bytes: number;
   sentences: Sentence[];
   truncated: boolean;
+  /** What the summary found the routine touching, for other explainers: it writes to the screen, reads the keyboard, and the ports it writes and reads (ascending). */
+  touches: { screen: boolean; keyboard: boolean; portsOut: number[]; portsIn: number[] };
 }
 
 /** The most instructions a routine is followed for. */
@@ -528,7 +530,9 @@ function summarize(c: Ctx, ix: Index, start: number): RoutineSummary {
 
   if (b.truncated) out.push(say(`It is longer than ${decimal(CAP)} instructions; this summary stopped there.`));
 
-  return { start, name, instructions: b.ins.length, bytes, sentences: out, truncated: b.truncated };
+  const sortedPorts = (m: Map<number, number>): number[] => [...m.keys()].sort((p, q) => p - q);
+  const touches = { screen: places.length > 0, keyboard: keys.length > 0, portsOut: sortedPorts(portsOut), portsIn: sortedPorts(portsIn) };
+  return { start, name, instructions: b.ins.length, bytes, sentences: out, truncated: b.truncated, touches };
 }
 
 /** The summary of the routine around the line at `addr`, or null when no routine reaches it. */

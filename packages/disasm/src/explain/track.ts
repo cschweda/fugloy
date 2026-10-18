@@ -171,6 +171,16 @@ function stopAt(a: Analysis, ix: Index, cur: number): Exclude<WalkStop, 'cap'> |
 }
 
 /**
+ * The one instruction that falls into `at` when nothing else may reach it
+ * (`stopAt` finds no reason to stop), else null. Forward scans step through
+ * straight-line code by it, so they stop where the backward walk would.
+ */
+export function straightFrom(a: Analysis, at: number): number | null {
+  const ix = index(a);
+  return stopAt(a, ix, at) === null ? fallThrough(a, ix, at)!.at : null;
+}
+
+/**
  * One forward pass over the instructions in address order, calling `visit`
  * with what is proven just before each: unknown where the backward walk would
  * stop (stopAt), else the state after the single instruction that falls into

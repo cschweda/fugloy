@@ -527,6 +527,9 @@ details.fg-menu > summary::-webkit-details-marker { display: none; }
 .fg-explain-details { color: var(--fg-muted); font-size: 12px; font-family: var(--fg-mono); }
 .fg-explain-range { margin-left: 6px; text-transform: none; letter-spacing: 0; font-size: 11px; color: var(--fg-text); }
 .fg-explain-addr { color: var(--fg-addr); }
+.fg-explain-why { display: flex; flex-direction: column; gap: 2px; }
+.fg-explain-why-title { color: var(--fg-text-strong); font-size: 12px; font-weight: 600; margin-top: 2px; }
+.fg-explain-why-routine { color: var(--fg-muted); font-size: 12px; }
 .fg-previews { gap: 6px; }
 .fg-explain-more > summary { cursor: pointer; color: var(--fg-muted); font-size: 12px; border-radius: 2px; }
 .fg-explain-more > summary:hover { color: var(--fg-text-strong); }
