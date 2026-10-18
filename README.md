@@ -141,8 +141,9 @@ a clone), the tools, and those sessions are in its
 From the roadmap in [CLAUDE.md](CLAUDE.md) and the
 [project plan](docs/Fugloy-Project-Plan.md):
 
-- **The emulator's later phases:** disk images, the Model I and the Model 4,
-  and a differential harness.
+- **The emulator's later phases:** the Model I and the Model 4, and a
+  differential harness. Disk images (phase 5) are built on the
+  `emu-phase5` branch and not yet released.
 - **An assembler and IDE** (plan phase 5): write Z80 assembly in the
   workbench, assemble it to a `.CMD`, and run it on an emulated Model I or
   Model III beside its listing, an IDE in the way Inform 7 has one for its
@@ -327,7 +328,10 @@ Eliminator, and Rear Guard reach their title screens (2); and the debugger,
 `m.debug`, with breakpoints, watches, coverage, a trace, snapshots, and the
 label and coverage file (3); and the MCP server, `@fugloy/mcp` 0.1.0 (4),
 whose phases A–F are done, from the tools through snapshots and diffs,
-resources and prompts, and the npm release. Next are disk images, Model I and Model 4, and a differential
+resources and prompts, and the npm release. Disk images (5) are built on
+a branch, unreleased: the WD1793 controller, JV1, JV3, and DMK images, and
+MCP `load` booting a disk, on which Eliminator, Rear Guard, and Scarfman
+load from their disks to their titles. Next are the Model I and Model 4, and a differential
 harness (see the roadmap in [CLAUDE.md](CLAUDE.md)). Later,
 phase 5 adds an assembler with an IDE in the workbench: write Z80 code,
 assemble it, and run it on an emulated Model I or Model III. Every change is

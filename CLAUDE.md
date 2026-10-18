@@ -11,7 +11,7 @@ phase 2 onward and the MCP server follow, in the Roadmap's order. The recompiler
 bundler stay in Part 2 until the plan's kill criteria have been reviewed. If a
 task seems to need machinery from a later step, stop and say so.
 
-Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.2.0, `@fugloy/emu` 0.2.0, and `@fugloy/mcp` 0.1.0 on npm (2026-10-18); emu phases 2 and 3 merged to `main` (2026-10-18); emu phase 4 (`@fugloy/mcp` v0.1, MCP phases A–C) merged to `main` (2026-10-18); MCP phases A–F done; emu phase 5 in progress on branch `emu-phase5`.**
+Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.2.0, `@fugloy/emu` 0.2.0, and `@fugloy/mcp` 0.1.0 on npm (2026-10-18); emu phases 2 and 3 merged to `main` (2026-10-18); emu phase 4 (`@fugloy/mcp` v0.1, MCP phases A–C) merged to `main` (2026-10-18); MCP phases A–F done; emu phase 5 (disk controller and images) done on branch `emu-phase5`, not yet merged; after the merge, emu phase 6 is next.**
 v1 is disassembler phases 1–4: the core decoder and loaders (v0.1.0), Pass 1
 and Pass 2 (v0.2.0), the cited symbol tables (phase 3: eight JSON tables, 634
 entries, in `packages/disasm/data/symbols/`, compiled by `pnpm symbols`), and
@@ -56,7 +56,17 @@ the ROM symbols resource (E); guardrail tests, golden transcripts for stories
 unaided on Sea Dragon, Eliminator, and Rear Guard (the release check, MCP
 spec §10; results in the CHANGELOG and `packages/mcp/README.md`). Published
 (2026-10-18): core 1.2.0 (`v1.2.0`), emu 0.2.0 (`emu-v0.2.0`), mcp 0.1.0
-(`mcp-v0.1.0`). Next: emu phase 5, in progress on `emu-phase5`.
+(`mcp-v0.1.0`). Emu phase 5 is done on `emu-phase5` (unmerged, unreleased;
+plan `docs/superpowers/plans/2026-10-18-emu-phase5.md`): `m.fdc` (mount,
+unmount, drives, export as DMK) and `m.load.dsk`; the WD1793 follows the
+FD179X data sheet item by item, with what is unverified listed in emu spec
+§5; JV1, JV3, and DMK read exactly; MCP `load` detects a disk image by content
+and boots it from drive 0. The local dual-boot DMKs (Eliminator, Rear Guard)
+boot to their Duo-Loader menu and load each game to its title, and Scarfman
+boots to its title (`packages/emu/test/integration/disk-boot.test.js`); no
+TRSDOS 1.3 image is present, so the emu spec §10 TRSDOS row stays open.
+Disk images stay in the gitignored `fixtures/real/`; synthetic ones are in
+`fixtures/synthetic/disk/`. Next: merge `emu-phase5`, then emu phase 6.
 
 ## Stack and layout
 
@@ -118,8 +128,8 @@ spec §10; results in the CHANGELOG and `packages/mcp/README.md`). Published
    3: debugger API, coverage, the label file. 4: `@fugloy/mcp` v0.1. 5: FDC
    and disk images. 6: Model I, then Model 4. 7: differential harness. Phases 0,
    1, 2, and 3 are done and merged; phase 4, `@fugloy/mcp` v0.1, is done and
-   merged; emu 0.2.0 and mcp 0.1.0 are on npm (2026-10-18); phase 5 is in
-   progress on `emu-phase5`.
+   merged; emu 0.2.0 and mcp 0.1.0 are on npm (2026-10-18); phase 5 is done
+   on `emu-phase5` (unmerged); phase 6 is next.
 4. **mcp — phases A–F** (`docs/fugloy-mcp-spec.md` §11). A: lifecycle,
    execution, and inspection tools. B: break, watch, trace, callers, disasm.
    C: labels, coverage, sidecar file. D: snapshots, diff, search, callees.

@@ -176,6 +176,56 @@ unreleased, on the `emu-phase5` branch:
   register had counted below zero to 255 with u = 1); the controller now
   ticks for interrupt and NMI response T-states, so the disk's angle no
   longer drifts against the CPU's clock with each interrupt.
+- Real disks boot on the Model III (emu spec §5, "Checked on real disks";
+  §11 row 5 met as the phase 5 plan's Ruling 1 reads it), in
+  `test/integration/disk-boot.test.js` with the configured ROM, each image
+  skipped when it is missing from the gitignored `fixtures/real/`:
+  - The dual-boot Eliminator and Rear Guard DMKs and the Eliminator DMK
+    (`ELIMATOR.dsk`) boot to the menu of the loader they carry, Russ
+    Wetmore's "Model I/III Duo-Loader" (the DOS stand-in: no TRSDOS 1.3
+    image is present, so spec §10's TRSDOS row stays open).
+  - ENTER, held half a second, loads Eliminator and Rear Guard from their
+    dual-boot disks to their titles; Scarfman boots from its disk to its
+    title and into its attract play.
+  - Determinism: Scarfman for 16 s, and Rear Guard from its menu through
+    ENTER to its title, each end byte-identical in `m.debug.snapshot()` when
+    run twice.
+  - The ROM reaches the boot sector at `$4300` 0.23 s (the dual-boot DMKs)
+    to 0.43 s (`ELIMATOR.dsk`, Scarfman) after the reset.
+  - `test/rom.js` gained `configuredFixtures(pattern)`, the files under the
+    config's `fixtures` folder.
+- `@fugloy/mcp` (unreleased) `load` takes a disk image (MCP spec §5; the
+  phase 5 plan's Ruling 4):
+  - Detected from the content as `m.fdc.mount` does (`DiskImage`): a DMK
+    header or a JV3 sector table before the program formats, a JV1, which is
+    only a size, after them all, so every committed example `.CMD` stays a
+    program. `formatOf` returns `'dsk'`, and `diskContainer(bytes)` names
+    the container.
+  - With `reset` (the default) the image goes into drive 0 of a fresh
+    machine, and `load` runs until the ROM jumps to the boot sector at
+    `4300h`, for at most 5 s emulated; the `Boot:` line says when, or that it
+    did not get there and where the PC is, and tells the agent to follow with
+    `run until: "settled"`, repeated, since a disk loader takes seconds of
+    emulated time. The screen baseline and coverage start there.
+  - The manifest names the container and geometry (`Format: disk image (DMK,
+    40 tracks, 1 side, sectors a track varying), in drive 0`), with no blocks
+    and no entry. `coverage` says why a disk has no blocks (what it ran
+    counts as outside them) instead of blaming ASCII BASIC.
+  - With `reset: false` the image is only put in drive 0 of the running
+    machine (`Boot: none`), and `reset` boots from it.
+  - A file that is neither is refused with a sentence naming both kinds.
+  - Tests (`packages/mcp/test/disk.test.js`): on a synthetic disk-boot ROM
+    and a JV1 built by the test, the committed DMK and JV3 samples, and the
+    synthetic ROM that never boots, in CI; with the Model III ROM and the
+    local Rear Guard dual-boot DMK, `load`, `run until: "settled"`, ENTER,
+    and the title. `test/helpers.js` gained `diskBootRom` and `bootJv1`.
+- Docs: emu spec §3 (an export lays a JV1 or JV3 out with standard gaps, so
+  rotational positions and timing change; the four local images are DMKs and
+  export as themselves), §5 (a DMK is detected only at its exact length; a
+  field cut off by a DMK track's end, Scarfman's track 0 sector 15, moved to
+  the unverified list, with `_dmkWriteSector` dropping bytes past the end;
+  the real-disk checks), §10 and §11 row 5; MCP spec §5 `load`; the emu and
+  MCP READMEs, the root README, and CLAUDE.md.
 
 ## [1.2.0] - 2026-10-18
 

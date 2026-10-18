@@ -65,6 +65,11 @@ The WD1793 behind the drives follows the Western Digital FD179X data sheet in
 T-states (spec §5): heads step at the programmed rate, sectors come round at
 300 rpm, and bytes arrive one byte time apart, so a disk loads as slowly as it
 does on a real drive, and a program that misses a byte sees Lost Data.
+Give a disk session room: the ROM reaches the boot sector about a quarter
+second after the reset, a loader reading a game takes seconds (Scarfman's
+title is up about 8 s after the reset), and a sector that is not there costs
+about a second. Check the screen between slices of `run` rather than in an
+`until` callback, which reads it after every instruction.
 
 `step`, `run`, the registers, memory, the keyboard (matrix typing and a ROM
 keyboard hook), sound events, the loaders, and the disk drives are described
