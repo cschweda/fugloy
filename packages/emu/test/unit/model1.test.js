@@ -37,10 +37,12 @@ describe('model descriptions', () => {
     const m1 = model1();
     expect(m1.model).toBe(1);
     expect(m1.system.clockHz).toBe(1774080);
+    expect(m1.clockHz).toBe(1774080);
     expect(m1.system.io.fdc.cpuHz).toBe(1774080);
     const m3 = new Machine({ roms: { level2: new Uint8Array(0x3800) } });
     expect(m3.model).toBe(3);
     expect(m3.system.clockHz).toBe(2027520);
+    expect(m3.clockHz).toBe(2027520);
   });
 
   it('the Model 4 is refused, naming its own plan', () => {

@@ -1,11 +1,9 @@
 /** `poke`: write bytes into memory and show what they replaced (docs/fugloy-mcp-spec.md §4, §5, §7). */
 import { z } from 'zod';
-import { hex4, parseAddr, parseBytes, ROM_END } from '../args.js';
+import { hex4, MODEL1_ROM_END, parseAddr, parseBytes, ROM_END, romEndOf } from '../args.js';
 import { h2 } from '../format/hex.js';
 
 const KEYBOARD_END = 0x3c00;
-/** The top of the Model I's 12K Level II ROM; $3000-$37FF holds the Expansion Interface's registers ($37E0-$37EF) and nothing else. */
-const MODEL1_ROM_END = 0x3000;
 
 export default {
   name: 'poke',
@@ -30,7 +28,7 @@ export default {
       throw new Error(`${hex4(Math.max(start, ROM_END))} is in the keyboard matrix (3800h-3BFFh), which cannot be written; nothing was written.`);
     }
     const model1 = m.model === 1;
-    const romEnd = model1 ? MODEL1_ROM_END : ROM_END;
+    const romEnd = romEndOf(m.model);
     if (model1 && start < ROM_END && end >= MODEL1_ROM_END) {
       throw new Error(`${hex4(Math.max(start, MODEL1_ROM_END))} is in the Model I's Expansion Interface space (3000h-37FFh: its registers at 37E0h-37EFh, nothing else), which cannot be poked; nothing was written.`);
     }

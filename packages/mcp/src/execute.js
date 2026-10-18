@@ -14,7 +14,7 @@ export const SLICE = 2000;
  * The machine's CPU clock in Hz: 2,027,520 on the Model III, 1,774,080 on the Model I. Every
  * emulated second the tools count or report is seconds of this clock.
  */
-export const clockOf = (/** @type {import('@fugloy/emu').Machine} */ m) => m.system.clockHz;
+export const clockOf = (/** @type {import('@fugloy/emu').Machine} */ m) => m.clockHz;
 
 /** T-states video RAM must stay unchanged for `until: "settled"`: 0.5 s emulated. */
 export const settleCycles = (/** @type {import('@fugloy/emu').Machine} */ m) => Math.round(0.5 * clockOf(m));

@@ -322,7 +322,8 @@ function labelKey(l) {
 }
 
 /**
- * Merge two label files by the §8 rule: coverage unioned per key; labels by address with `user`
+ * Merge two label files by the §8 rule (refused when both name a `program.sha256` and they differ,
+ * or their `program.model`s differ): coverage unioned per key; labels by address with `user`
  * over `observed` over `disasm` over `loader` (`b` wins a tie); `load` unioned without duplicates;
  * `entry` is `a`'s unless null; callers unioned with counts summed per `(from, kind)`; sessions
  * appended, `a`'s first. Unknown top-level keys are kept, `a`'s winning.
@@ -336,6 +337,10 @@ export function mergeLabelFiles(a, b) {
   const sa = fa.program.sha256;
   const sb = fb.program.sha256;
   if (sa !== undefined && sb !== undefined && sa !== sb) throw new Error(`mergeLabelFiles: the files are for different programs (sha256 ${sa} and ${sb})`);
+  // Two models' files would union the coverage of two different ROMs at the same addresses.
+  const ma = fa.program.model;
+  const mb = fb.program.model;
+  if (ma !== mb) throw new Error(`mergeLabelFiles: the files are for different models (${ma} and ${mb}), whose ROMs and hardware differ`);
 
   const { name, sha256: _s, model, ...programRest } = fa.program;
   const sha256 = sa ?? sb;

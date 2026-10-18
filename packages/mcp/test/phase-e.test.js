@@ -47,7 +47,7 @@ describe('phase E resources', () => {
   it('resources/list names the four resources and the Model III symbols; the template is listed', async () => {
     const { client, close } = await server();
     const { resources } = await client.listResources();
-    expect(resources.map((r) => r.uri)).toEqual(['fugloy://status', 'fugloy://screen', 'fugloy://labels', 'fugloy://program/manifest', 'fugloy://rom/3/symbols']);
+    expect(resources.map((r) => r.uri)).toEqual(['fugloy://status', 'fugloy://screen', 'fugloy://labels', 'fugloy://program/manifest', 'fugloy://rom/3/symbols', 'fugloy://rom/1/symbols']);
     for (const r of resources) expect(r.description).toMatch(/\S/);
     const { resourceTemplates } = await client.listResourceTemplates();
     expect(resourceTemplates.map((t) => t.uriTemplate)).toEqual(['fugloy://rom/{model}/symbols']);

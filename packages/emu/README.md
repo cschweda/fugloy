@@ -94,10 +94,10 @@ fits the lowercase modification. Its clock is 1,774,080 Hz, `clockHz(1)`
 (`CPU_CLOCK_HZ` stays the Model III's):
 
 ```js
-import { Machine, clockHz } from '@fugloy/emu'
+import { Machine } from '@fugloy/emu'
 
 const m1 = new Machine({ model: 1, roms: { level2: readFileSync('level2-model1.rom') } })
-const sec = clockHz(1)                                     // 1,774,080 T-states an emulated second
+const sec = m1.clockHz                                     // clockHz(1): 1,774,080 T-states an emulated second
 m1.run({ until: shows('SIZE?'), cycles: sec })             // MEMORY SIZE? (MEM SIZE? in Level II 1.3); no Cass?
 m1.keyboard.type('\n')
 m1.run({ until: shows('READY'), cycles: 5 * sec })
@@ -108,7 +108,9 @@ m1.load.dsk(readFileSync('rrgarddb.dmk'))                  // or a disk: the ROM
 
 Type at 10 characters a second on the Model I (`m1.keyboard.type(text, {
 cps: 10 })`): the Level II keyboard routine drops every other key at the
-default 20. Cassettes play at 500 baud only. Real programs that run on it, and
+default 20. T-states, `m.sound` stamps included, are the model's own
+(`m.clockHz`). A label file records its model, and `mergeLabelFiles` refuses
+a Model I file with a Model III one. Cassettes play at 500 baud only. Real programs that run on it, and
 what is still unverified against the Model I manual, are in spec §5.
 
 ## Debugging

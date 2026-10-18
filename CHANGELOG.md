@@ -162,6 +162,13 @@ supplied (`model: 4` refuses with a sentence saying so):
   title, ENTER, one player) repeats byte for byte.
 - Fixed: `m.debug.labelFile` records the machine's model as `program.model`
   (it wrote 3 on a Model I too).
+- `m.clockHz`, the machine's own CPU clock (`clockHz(m.model)`); `m.cycles`,
+  `run`'s budgets, and the `m.sound` stamps count its T-states (spec §3).
+  `JV1_MODEL1_SD_TRACKS` (35 to 42, 77, and 80 tracks), the JV1 sizes a Model I
+  mount takes, is exported.
+- `mergeLabelFiles` refuses two files whose `program.model` differs, with a
+  sentence naming both models, as it refuses two programs: their coverage of
+  `$0000`–`$37FF` is of two different ROMs (§8 and `docs/label-format.md`).
 - Changed: the Sea Dragon speed test (`test/integration/benchmark.test.js`)
   runs only with `FUGLOY_BENCH=1`: beside the rest of the parallel suite it
   measured 12–15× against about 40× alone, and failed. `./publish.sh check`
@@ -193,6 +200,17 @@ supplied (`model: 4` refuses with a sentence saying so):
     here. `poke` refuses the Model I's ROM as `0000h`–`2FFFh` without `force`
     and its Expansion Interface space, `3000h`–`37FFh`, outright.
     `coverage export` refuses to write over either configured ROM.
+  - `load` detects a disk image by the sizes the model it builds takes: on a
+    Model I a JV1 may have 35 to 42, 77, or 80 single-density tracks, as
+    `m.fdc.mount` accepts there (a 36-track JV1 loaded on a Model I was
+    refused as not a disk); the Model III's sizes are unchanged.
+  - A sidecar written on another model (its `program.model` differs from the
+    machine's) is ignored at `load`, reported, and never merged or
+    overwritten, as one for another program is.
+  - `suggest` leaves out only the Model I's ROM, `0000h`–`2FFFh`, on a Model I
+    (it skipped everything below `3800h`).
+  - `resources/list` lists `fugloy://rom/1/symbols` beside
+    `fugloy://rom/3/symbols`. The tools read the clock from `m.clockHz`.
   - Tests: `packages/mcp/test/model1.test.js` on a synthetic 12K ROM (in CI);
     `model1-rom.test.js` on the Level II ROM (Eliminator to its title and
     ENTER, BASIC typed at the default rate, Scarfman's disk to `4200h` and its

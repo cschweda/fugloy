@@ -13,7 +13,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, extname, isAbsolute, relative, resolve } from 'node:path';
 import { detectFormat } from '@fugloy/disasm';
-import { DiskImage } from '@fugloy/emu';
+import { DiskImage, JV1_MODEL1_SD_TRACKS } from '@fugloy/emu';
 import { z } from 'zod';
 import { hex4 } from '../args.js';
 import { bootToReady, BOOT_SECONDS, clockOf, seconds } from '../execute.js';
@@ -42,13 +42,17 @@ function isAsciiBas(/** @type {Uint8Array} */ b) {
 
 /**
  * The disk image container the emu reads `bytes` as, or null: the same rules `m.fdc.mount`
- * applies (DMK header, then JV3 sector table, then a JV1 size; docs/fugloy-emu-spec.md §5).
+ * applies (DMK header, then JV3 sector table, then a JV1 size; docs/fugloy-emu-spec.md §5). On the
+ * Model I (`model` 1) a JV1 may also have the single-density geometries its drives took (35 to
+ * 42, 77, or 80 ten-sector tracks: JV1_MODEL1_SD_TRACKS), as `m.fdc.mount` accepts on a Model I.
  * @param {Uint8Array} bytes
+ * @param {number} [model] the model the image goes into (default 3)
  * @returns {'dmk' | 'jv3' | 'jv1' | null}
  */
-export function diskContainer(bytes) {
+export function diskContainer(bytes, model = 3) {
   try {
-    return /** @type {'dmk' | 'jv3' | 'jv1'} */ (new DiskImage(bytes).format);
+    const options = model === 1 ? { jv1SdTracks: JV1_MODEL1_SD_TRACKS } : {};
+    return /** @type {'dmk' | 'jv3' | 'jv1'} */ (new DiskImage(bytes, 'drive 0', options).format);
   } catch {
     return null;
   }
@@ -60,11 +64,13 @@ export function diskContainer(bytes) {
  * after everything that has a signature of its own.
  * So a JV1 that also parses as a `.CMD` (or as BASIC) loads as a program, not a disk: the
  * program's signature wins over a size.
+ * @param {Uint8Array} bytes
+ * @param {number} [model] the model the program goes into (default 3); a Model I takes more JV1 sizes
  * @returns {'cmd' | 'bas' | 'cas' | 'dsk' | null}
  */
-export function formatOf(/** @type {Uint8Array} */ bytes) {
+export function formatOf(bytes, model = 3) {
   if (isCas(bytes)) return 'cas';
-  const disk = diskContainer(bytes);
+  const disk = diskContainer(bytes, model);
   if (disk === 'dmk' || disk === 'jv3') return 'dsk';
   const found = detectFormat(bytes);
   if (found === 'cmd' || found === 'bas') return found;
@@ -143,7 +149,10 @@ export default {
     if (!existsSync(file)) throw new Error(`There is no file at ${file}.`);
     if (!statSync(file).isFile()) throw new Error(`${file} is a folder, not a program file.`);
     const bytes = new Uint8Array(readFileSync(file));
-    const format = formatOf(bytes);
+    // The model the program goes into: a fresh machine's, else the running one's.
+    const fresh = reset || session.machine === null;
+    const target = fresh ? asked ?? config.defaultModel ?? 3 : session.requireMachine().model;
+    const format = formatOf(bytes, target);
     if (format === null) {
       throw new Error(`${file} is not a .CMD, .BAS, or .CAS program or a JV1, JV3, or DMK disk image as far as its content shows (the extension is not consulted); raw memory images cannot be loaded.`);
     }
@@ -151,8 +160,7 @@ export default {
     const lines = [];
     // A fresh machine is booted and loaded before it replaces the session's, so a load that
     // fails leaves the session as it was.
-    const fresh = reset || session.machine === null;
-    const m = fresh ? session.createMachine(undefined, asked ?? config.defaultModel ?? 3) : session.requireMachine();
+    const m = fresh ? session.createMachine(undefined, target) : session.requireMachine();
     let boot;
     let dropped = 0;
     if (fresh) {
@@ -207,7 +215,7 @@ export default {
     const sharesCoverageWith = fresh || earlier === null ? undefined : earlier.sha256 !== sha256 ? earlier.name : earlier.sharesCoverageWith;
     session.program = { path: file, name, bytes: bytes.length, manifest, sha256, ...(sharesCoverageWith === undefined ? {} : { sharesCoverageWith }) };
     // The program's labels are its sidecar's (Ruling 6); a sidecar that cannot be used is reported, not fatal.
-    const found = readSidecar(file, session.program.sha256, { fixtures: config.fixtures });
+    const found = readSidecar(file, session.program.sha256, { fixtures: config.fixtures, model: m.model });
     session.sidecar = sidecarState(file, found);
     session.labels = new Map(found !== null && 'labels' in found ? found.labels.map((l) => [l.addr, l]) : []);
 

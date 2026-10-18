@@ -339,7 +339,8 @@ Disk images (emu phase 5) make `load` call emu APIs that `@fugloy/emu` 0.2.0
 does not have (`m.fdc`, `m.load.dsk`, `DiskImage`, `CPU_CLOCK_HZ`), so emu is
 bumped to 0.3.0 and released before the next mcp release, whose range then
 reads `^0.3.0`. The Model I (emu phase 6) needs the same release: `new
-Machine({ model: 1 })`, `m.model`, and `m.system.clockHz` are not in emu 0.2.0.
+Machine({ model: 1 })`, `m.model`, `m.clockHz`, and `JV1_MODEL1_SD_TRACKS` are
+not in emu 0.2.0.
 
 ## Not yet
 

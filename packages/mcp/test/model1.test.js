@@ -6,10 +6,11 @@
  * disk boots to 4200h, `poke` knows its 12K ROM and the Expansion Interface's space, and
  * `reset: false` will not turn a running Model III into a Model I.
  */
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { diskContainer, formatOf } from '../src/tools/load.js';
 import { buildCmd, connect, syntheticRom, testConfig } from './helpers.js';
 
 /** The Model I's clock (emu models.js), and the Model III's. */
@@ -29,6 +30,9 @@ const SPIN = buildCmd([{ name: 'SPIN' }, { addr: 0x7000, data: [0x31, 0x00, 0x7f
 /** A 35-track, 10-sector JV1 (the Model I's single-density format), all zeros. */
 const JV1 = new Uint8Array(35 * 10 * 256);
 
+/** A 36-track one: the Model I's drives took 35 to 42 tracks, the Model III's JV1 sizes do not include it. */
+const JV1_36 = new Uint8Array(36 * 10 * 256);
+
 let dir = '';
 const at = (/** @type {string} */ name) => join(dir, name);
 
@@ -38,6 +42,9 @@ beforeAll(() => {
   writeFileSync(at('model3.rom'), syntheticRom());
   writeFileSync(at('spin.cmd'), SPIN);
   writeFileSync(at('blank.dsk'), JV1);
+  writeFileSync(at('blank36.dsk'), JV1_36);
+  // CALL 3000H, then a JR to itself.
+  writeFileSync(at('call3000.cmd'), buildCmd([{ addr: 0x7000, data: [0xcd, 0x00, 0x30, 0x18, 0xfe] }], 0x7000));
 });
 
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -169,6 +176,36 @@ describe('the Model I through the MCP server', () => {
     await close();
   });
 
+  it('a 36-track JV1 loads on the Model I and is refused on the Model III', async () => {
+    const { call, close } = await server();
+    const text = await ok(call, 'load', { path: at('blank36.dsk'), model: 1 });
+    expect(text).toContain('Format: disk image (JV1, 36 tracks, 1 side, 10 sectors a track), in drive 0');
+    expect(await call('load', { path: at('blank36.dsk'), model: 3 })).toEqual({
+      text: `${at('blank36.dsk')} is not a .CMD, .BAS, or .CAS program or a JV1, JV3, or DMK disk image as far as its content shows (the extension is not consulted); raw memory images cannot be loaded.`,
+      isError: true,
+    });
+    expect(formatOf(JV1_36, 1)).toBe('dsk');
+    expect(diskContainer(JV1_36, 1)).toBe('jv1');
+    expect(formatOf(JV1_36)).toBe(null);
+    await close();
+  });
+
+  it('a sidecar written on the Model III is ignored on the Model I, and the other way round', async () => {
+    const { call, close } = await server();
+    writeFileSync(at('side.cmd'), SPIN);
+    await ok(call, 'load', { path: at('side.cmd'), model: 3 });
+    await ok(call, 'run', { cycles: 1000 });
+    expect(await ok(call, 'coverage', { mode: 'export' })).toContain(`Wrote ${at('side.fugloy.json')}`);
+    const before = readFileSync(at('side.fugloy.json'), 'utf8');
+    const manifest = await ok(call, 'load', { path: at('side.cmd'), model: 1 });
+    expect(manifest).toContain(`Sidecar: ${at('side.fugloy.json')} ignored: it was written on the Model III, and this machine is the Model I, whose ROM and hardware differ (its coverage would merge with another ROM's); label and coverage export leave it as it is`);
+    expect((await call('coverage', { mode: 'export' })).isError).toBe(true);
+    expect(readFileSync(at('side.fugloy.json'), 'utf8')).toBe(before);
+    // Back on the Model III it is the program's sidecar again.
+    expect(await ok(call, 'load', { path: at('side.cmd'), model: 3 })).toMatch(/Sidecar: \S+side\.fugloy\.json: 1 label, 1 recorded session/);
+    await close();
+  });
+
   it('poke knows the Model I\'s 12K ROM and the Expansion Interface\'s space', async () => {
     const { call, close } = await server();
     await ok(call, 'load', { path: at('spin.cmd'), model: 1 });
@@ -181,6 +218,18 @@ describe('the Model I through the MCP server', () => {
       isError: true,
     });
     expect((await ok(call, 'poke', { addr: '2FFF', bytes: 'AA', force: true })).split('\n')[0]).toBe('Wrote 1 byte at 2FFFh (into ROM, forced):');
+    await close();
+  });
+
+  it('suggest leaves out the Model I\'s 12K ROM only, since 3000h-37FFh is not ROM there', async () => {
+    const { call, close } = await server();
+    for (const model of [1, 3]) {
+      await ok(call, 'load', { path: at('call3000.cmd'), model });
+      await ok(call, 'run', { cycles: 40 });
+      const text = await ok(call, 'suggest', { minCalls: 1 });
+      if (model === 1) expect(text.split('\n')[2]).toMatch(/^3000h\s+1\s+1\b/);
+      else expect(text).toBe('No unlabelled call target has 1 or more calls since load.');
+    }
     await close();
   });
 

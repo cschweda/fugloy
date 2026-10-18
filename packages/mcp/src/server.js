@@ -177,7 +177,12 @@ function registerContext(server, session, promptsDir) {
     server.registerResource(r.name, r.uri, { description: r.description, mimeType: 'text/plain' }, (uri) => textResource(uri, r.read(session)));
   }
   const template = new ResourceTemplate(ROM_SYMBOLS.uriTemplate, {
-    list: () => ({ resources: [{ uri: 'fugloy://rom/3/symbols', name: 'rom-3-symbols', description: 'The Model III ROM and hardware symbols.', mimeType: 'text/plain' }] }),
+    list: () => ({
+      resources: [
+        { uri: 'fugloy://rom/3/symbols', name: 'rom-3-symbols', description: 'The Model III ROM and hardware symbols.', mimeType: 'text/plain' },
+        { uri: 'fugloy://rom/1/symbols', name: 'rom-1-symbols', description: 'The Model I ROM and hardware symbols (the Level II ROM and the Expansion Interface).', mimeType: 'text/plain' },
+      ],
+    }),
   });
   server.registerResource(ROM_SYMBOLS.name, template, { description: ROM_SYMBOLS.description, mimeType: 'text/plain' }, (uri, vars) =>
     textResource(uri, ROM_SYMBOLS.read(String(Array.isArray(vars.model) ? vars.model[0] : vars.model))));

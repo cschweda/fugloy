@@ -15,7 +15,7 @@ export { KeyboardMatrix } from './devices/keyboard.js';
 export { CassetteSystem } from './devices/cassette.js';
 export { casToPulses, pulsesToBytes, ensureLeader } from './devices/cassette-tape.js';
 export { FDC1793, parseWriteTrackStream } from './devices/fdc-wd1793.js';
-export { DiskImage } from './devices/disk-image.js';
+export { DiskImage, JV1_MODEL1_SD_TRACKS } from './devices/disk-image.js';
 export { Printer } from './devices/printer.js';
 export { parseCas, fastLoadBasic, fastLoadSystem } from './loaders/cas-format.js';
 export { parseBas } from './loaders/bas.js';

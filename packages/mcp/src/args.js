@@ -13,6 +13,12 @@ export const hex4 = (n) => `${n.toString(16).toUpperCase().padStart(4, '0')}h`;
 /** The first address above the ROM ($0000-$37FF on the Model III). */
 export const ROM_END = 0x3800;
 
+/** The top of the Model I's 12K Level II ROM; $3000-$37FF holds the Expansion Interface's registers ($37E0-$37EF) and nothing else. */
+export const MODEL1_ROM_END = 0x3000;
+
+/** The first address above model `n`'s ROM. */
+export const romEndOf = (/** @type {number} */ n) => (n === 1 ? MODEL1_ROM_END : ROM_END);
+
 /** Model numbers as the TRS-80 names them (`Model ${MODELS[n]}`). */
 export const MODELS = /** @type {Record<number, string>} */ ({ 1: 'I', 3: 'III', 4: '4' });
 

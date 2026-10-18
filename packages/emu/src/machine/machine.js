@@ -155,6 +155,15 @@ export class Machine {
     return this.system.model.id;
   }
 
+  /**
+   * The model's CPU clock in Hz: 2,027,520 on the Model III, 1,774,080 on the Model I (models.js).
+   * T-state counts (`cycles`, `run`'s budget, `m.sound` stamps) are in this clock's states.
+   * @returns {number}
+   */
+  get clockHz() {
+    return this.system.clockHz;
+  }
+
   /** Total T-states since the last reset. */
   get cycles() {
     return this.system.cpu.cycles;
