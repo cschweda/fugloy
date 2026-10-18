@@ -52,6 +52,19 @@ export interface Explanation {
    */
   label?: { name: string; callers: number[]; jumpers: number[]; entry: boolean; pointers: number[]; rewritten: number[] };
   region?: DataRegion;
+  /**
+   * Why a code line is there: `register`, facts about the Z80 that make it use
+   * the register it does (and a later routine call that takes that register);
+   * `purpose`, what it does for the program, from proven flow; `idiom`, why a
+   * programmer usually writes it this way. Each is empty when nothing applies.
+   */
+  why?: Why;
+}
+
+export interface Why {
+  register: Sentence[];
+  purpose: Sentence[];
+  idiom: Sentence[];
 }
 
 export const sentenceText = (s: Sentence): string => s.map((p) => p.text).join('');
