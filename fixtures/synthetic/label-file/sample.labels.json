@@ -1,0 +1,143 @@
+{
+  "fugloy": 1,
+  "program": {
+    "name": "SAMPLE",
+    "sha256": "07902b0ba7720894694e46ca3f64106598afe3bbae362ba84fea8aa9f6f585c0",
+    "model": 3
+  },
+  "load": [
+    {
+      "addr": 28672,
+      "len": 64,
+      "source": "cmd-block-0"
+    },
+    {
+      "addr": 28736,
+      "len": 2,
+      "source": "cmd-block-1"
+    }
+  ],
+  "entry": 28672,
+  "labels": [
+    {
+      "addr": 28672,
+      "name": "ENTRY",
+      "kind": "code",
+      "source": "loader"
+    },
+    {
+      "addr": 28704,
+      "name": "SUB_7020",
+      "kind": "code",
+      "source": "observed",
+      "evidence": "called 3× from 1 site"
+    },
+    {
+      "addr": 28720,
+      "name": "SUB_7030",
+      "kind": "code",
+      "source": "observed",
+      "evidence": "called 2× from 2 sites"
+    },
+    {
+      "addr": 28724,
+      "name": "BUMP",
+      "kind": "code",
+      "source": "user"
+    },
+    {
+      "addr": 28736,
+      "name": "SCORE",
+      "kind": "data",
+      "size": 2,
+      "source": "user"
+    }
+  ],
+  "coverage": {
+    "0:0": {
+      "encoding": "rle-hex",
+      "exec": "8,1,6FF7,2,2,1,1,1,2,1,1,2,2,1,2,1,2,1,2,1,7,1,2,2,B,1,3,1,8FCB",
+      "operand": "7002,2,1,1,1,2,1,1,2,2,1,2,1,2,1,2,9,2,E,2,8FCD",
+      "read": "7040,1,EBD,2,8100",
+      "write": "7041,1,EBC,2,8100",
+      "jump": "7006,1,2D,1,8FCB",
+      "call": "8,1,7017,1,F,1,8FCF"
+    }
+  },
+  "callers": {
+    "8": [
+      {
+        "from": 28683,
+        "kind": "rst",
+        "count": 1
+      }
+    ],
+    "28678": [
+      {
+        "from": 28681,
+        "kind": "jr",
+        "count": 2
+      }
+    ],
+    "28681": [
+      {
+        "from": 28708,
+        "kind": "ret-to",
+        "count": 3
+      }
+    ],
+    "28684": [
+      {
+        "from": 8,
+        "kind": "ret-to",
+        "count": 1
+      }
+    ],
+    "28693": [
+      {
+        "from": 28724,
+        "kind": "ret-to",
+        "count": 1
+      }
+    ],
+    "28696": [
+      {
+        "from": 28724,
+        "kind": "ret-to",
+        "count": 1
+      }
+    ],
+    "28704": [
+      {
+        "from": 28678,
+        "kind": "call",
+        "count": 3
+      }
+    ],
+    "28720": [
+      {
+        "from": 28690,
+        "kind": "call",
+        "count": 1
+      },
+      {
+        "from": 28693,
+        "kind": "call",
+        "count": 1
+      }
+    ],
+    "28724": [
+      {
+        "from": 28720,
+        "kind": "jp",
+        "count": 2
+      }
+    ]
+  },
+  "sessions": [
+    {
+      "cycles": 312,
+      "input": "none: the program reads no keys"
+    }
+  ]
+}

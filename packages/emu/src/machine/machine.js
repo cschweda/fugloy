@@ -47,7 +47,7 @@ export class Machine {
   load;
   /** @type {ReturnType<typeof cassetteDeck>} The cassette deck: insert a .CAS at a baud, rewind, read the motor relay. */
   cassette;
-  /** @type {Debugger} Breakpoints, watchpoints, hooks, coverage, the instruction trace, and snapshots (spec §7). */
+  /** @type {Debugger} Breakpoints, watchpoints, hooks, coverage, the instruction trace, snapshots, labels, and the label file (spec §7, §8). */
   debug;
 
   /** True inside `run`, false inside `step`, which ignores breakpoints. */
@@ -110,13 +110,18 @@ export class Machine {
     sys.io.onSoundWrite = (cycle, value) => this.sound.record(cycle, value);
     sys.io.onSoundReset = () => this.sound.clear();
     this.keyboard = new KeyQueue(sys.keyboard, () => sys.cpu.cycles);
+    this.debug = new Debugger(this);
+    // Each load records its manifest and the bytes' hash for the label file (the last one wins).
+    const record = (/** @type {any} */ manifest, /** @type {Uint8Array} */ bytes) => {
+      this.debug.recordLoad(manifest, bytes);
+      return manifest;
+    };
     this.load = {
-      bas: (bytes) => loadBas(this, bytes),
-      cmd: (bytes) => loadCmd(this, bytes),
-      cas: (bytes, opts) => loadCas(this, bytes, opts),
+      bas: (bytes) => record(loadBas(this, bytes), bytes),
+      cmd: (bytes) => record(loadCmd(this, bytes), bytes),
+      cas: (bytes, opts) => record(loadCas(this, bytes, opts), bytes),
     };
     this.cassette = cassetteDeck(this);
-    this.debug = new Debugger(this);
     this.io = {
       in: (port) => sys.io.readPort(port),
       out: (port, value) => sys.io.writePort(port, value),

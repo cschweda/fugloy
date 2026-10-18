@@ -11,7 +11,9 @@
  * every instruction's bytes first, in order; a test checks that for every opcode).
  */
 import { instructionInfo } from './instr.js';
-import { fromBase64, serializeState, restoreState } from './state.js';
+import { serializeState, restoreState } from './state.js';
+import { writeLabelFile } from './label-file.js';
+import { sha256Hex } from '../machine/sha256.js';
 
 /** The hit log keeps the newest this many hits. */
 const RING = 65536;
@@ -40,7 +42,11 @@ const { EXEC, OPERAND, READ, WRITE, JUMP_TARGET, CALL_TARGET } = COVERAGE;
  * @typedef {((port: number, value: number, dir: 'in' | 'out') => void) | null} PortHook
  * @typedef {{ pc: number, bytes: number[], cycles: number, regs?: any }} TraceEntry
  * @typedef {{ from: number, kind: 'call' | 'jp' | 'jr' | 'rst' | 'ret-to', count: number }} CallerEdge
+ * @typedef {{ addr: number, name: string, kind: 'code' | 'data', size?: number, source: 'user' }} UserLabel
  */
+
+/** A label name: an identifier of up to 32 characters, as the disassembler's hint file takes. */
+const LABEL_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,31}$/;
 
 export class Debugger {
   /** @type {boolean} True while anything needs per-instruction work. */
@@ -138,6 +144,11 @@ export class Debugger {
   /** @type {Hit[]} The hit log, a ring once full: `#ringHead` is the oldest entry. */
   #ring = [];
   #ringHead = 0;
+
+  /** @type {Map<number, UserLabel>} User labels by address. */
+  #labels = new Map();
+  /** @type {{ manifest: any, sha256: string } | null} The last `m.load.*` call's manifest and the SHA-256 of the bytes it was given. */
+  #loaded = null;
 
   /** @param {any} machine */
   constructor(machine) {
@@ -253,6 +264,63 @@ export class Debugger {
     this.#inInstr = false;
     this.#tOpen = false;
     this.#machine.newTimeline();
+  }
+
+  /**
+   * Name an address (a `source: 'user'` label in the label file, which wins over an observed one
+   * there). A second label at the same address replaces the first.
+   * @param {number} addr 0..$FFFF
+   * @param {string} name an identifier: a letter or `_`, then letters, digits, or `_`, up to 32 characters
+   * @param {{ kind?: 'code' | 'data', size?: number }} [opts] `size` is how many bytes the label covers (1..65536)
+   */
+  label(addr, name, { kind = 'code', size } = {}) {
+    if (!Number.isInteger(addr) || addr < 0 || addr > 0xffff) throw new Error(`label: address must be an integer 0..65535 ($0000..$FFFF), not ${String(addr)}`);
+    if (typeof name !== 'string' || !LABEL_NAME.test(name)) throw new Error(`label: name must be an identifier (a letter or _, then letters, digits, or _, up to 32 characters), not ${JSON.stringify(name)}`);
+    if (kind !== 'code' && kind !== 'data') throw new Error(`label: kind must be 'code' or 'data', not ${String(kind)}`);
+    if (size !== undefined && (!Number.isInteger(size) || size < 1 || size > 0x10000)) throw new Error(`label: size must be an integer 1..65536, not ${String(size)}`);
+    /** @type {UserLabel} */
+    const l = size === undefined ? { addr, name, kind, source: 'user' } : { addr, name, kind, size, source: 'user' };
+    this.#labels.set(addr, l);
+  }
+
+  /** @returns {UserLabel[]} the user labels, copies, sorted by address */
+  get labels() {
+    return [...this.#labels.values()].sort((a, b) => a.addr - b.addr).map((l) => ({ ...l }));
+  }
+
+  /** @returns {{ manifest: any, sha256: string } | null} the last `m.load.*` call's manifest and the SHA-256 (hex) of the bytes it was given, or null */
+  get loaded() {
+    return this.#loaded === null ? null : JSON.parse(JSON.stringify(this.#loaded));
+  }
+
+  /**
+   * Internal: called by each `m.load.*` after it succeeds.
+   * @param {any} manifest
+   * @param {Uint8Array} bytes the bytes the loader was given
+   */
+  recordLoad(manifest, bytes) {
+    this.#loaded = { manifest: JSON.parse(JSON.stringify(manifest)), sha256: sha256Hex(bytes) };
+  }
+
+  /**
+   * The spec §8 label and coverage file for this session: the program (named by `name`, else by
+   * the last load's manifest), its loaded blocks and entry, labels (`ENTRY`, observed call
+   * targets in the loaded blocks, user labels), the six coverage fields, the callers map, and one
+   * session. The core reads no clock: `started` is recorded only when the caller passes it.
+   * @param {{ name?: string, started?: string, input?: string }} [opts]
+   * @returns {import('./label-file.js').LabelFile}
+   */
+  labelFile({ name, started, input } = {}) {
+    return writeLabelFile({
+      name,
+      started,
+      input,
+      loaded: this.#loaded,
+      userLabels: [...this.#labels.values()],
+      bits: this.#bits,
+      callerMap: this.callerMap(),
+      cycles: this.#cpu.cycles,
+    });
   }
 
   /** @param {number} n @returns {TraceEntry[]} the newest `n` entries, oldest first */
