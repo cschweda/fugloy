@@ -22,9 +22,9 @@ the web workbench in `apps/web` (phase 4: Nuxt 4 + Nuxt UI, static; design
 engine `packages/disasm/src/explain/`, UI
 `apps/web/app/components/side/ExplainTab.vue`), block comments (the hint
 file's `note` directive, the `:` key), and an annotated Sea Dragon
-(`examples/sea-dragon/seadrg01.hints`). The site is deployed on Netlify at
-fugloy.netlify.app from `main`; the custom domains `app.fugloy.dev`,
-`fugloy.dev`, and `www.fugloy.dev` wait on DNS (ask the user before any DNS
+(`examples/sea-dragon/seadrg01.hints`). The site is deployed on Netlify from `main` at
+`app.fugloy.dev` (live since 2026-10-18, Let's Encrypt; DNS at DNSimple);
+`fugloy.dev` and `www.fugloy.dev` 301 to it (ask the user before any DNS
 change). Emu phase 1 is done: the Z80 core in `packages/emu` passes ZEXDOC and
 ZEXALL, all 67 groups each (`pnpm zex:install`, then `FUGLOY_ZEX=1`), and its
 T-states match `@fugloy/z80` for every opcode. Emu phase 2 is done: the

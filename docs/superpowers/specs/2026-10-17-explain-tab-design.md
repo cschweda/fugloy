@@ -1,7 +1,7 @@
 # Explain tab: a tutor for each line of machine code
 
 Requested 2026-10-17, after phase 4 was merged and deployed to
-fugloy.netlify.app. An addition to the phase 4 workbench, before v1 ships.
+Netlify (now app.fugloy.dev). An addition to the phase 4 workbench, before v1 ships.
 
 ## Intent
 

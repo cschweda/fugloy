@@ -32,7 +32,7 @@ and an MCP server that lets an AI assistant drive the emulator.
 | Part | What it does | Status | Where |
 | --- | --- | --- | --- |
 | **Disassembler** | Loads `.CMD`, `.BAS`, and raw files by content; recursive descent; labels; cited ROM, hardware, and DOS names; hint files; hidden code in BASIC; rebasing and relocation; zmac source that reassembles byte for byte; JSON IR; reads the emulator's label files | Released, 1.1.0 on npm | `@fugloy/disasm`, the `fugloy` command in `@fugloy/cli`, opcode tables in `@fugloy/z80` |
-| **Web workbench** | The disassembler in the browser: facing pages, the four public-domain games one click away, editing by keyboard, the **Explain** tab, block comments, exports | Live | [fugloy.netlify.app](https://fugloy.netlify.app/), source in `apps/web` |
+| **Web workbench** | The disassembler in the browser: facing pages, the four public-domain games one click away, editing by keyboard, the **Explain** tab, block comments, exports | Live | [app.fugloy.dev](https://app.fugloy.dev/), source in `apps/web` |
 | **Emulator** | A headless, deterministic Model III that passes ZEXDOC and ZEXALL, runs `.CMD`, `.BAS`, and `.CAS` programs, and has a debugger that writes label and coverage files | 0.1.0, phases 0–3 of 8 done; not yet on npm | `packages/emu` (`@fugloy/emu`) |
 | **MCP server** | Lets an AI assistant such as Claude Code load a program, run it, set breakpoints and watches, read the screen, and name what it finds in the same label file | 0.1.0, MCP phases A–C (emu phase 4) on a branch; not yet on npm | `packages/mcp` (`@fugloy/mcp`) |
 | **Ahead** | An assembler and IDE in the workbench, a course in assembly for non-programmers, and, later, recompiling games to TypeScript | Planned | [Roadmap](#whats-ahead) |
@@ -62,7 +62,7 @@ and [Use](#use).
 
 ### The web workbench
 
-[fugloy.netlify.app](https://fugloy.netlify.app/) runs the same disassembler
+[app.fugloy.dev](https://app.fugloy.dev/) runs the same disassembler
 in the browser, with nothing to install and no server. Open a program of your
 own or one of the four public-domain Westmoreland and Gilman games, and the
 listing appears on the left of two facing pages, beside tabs for symbols, an
@@ -272,7 +272,7 @@ What people come to Fugløy for, and how each one is done today.
   label and coverage file, and `--labels` applies that file to the listing.
 - **As someone without a terminal,** I want to explore and annotate a listing
   in the browser. *Today:* the web workbench at
-  [fugloy.netlify.app](https://fugloy.netlify.app/).
+  [app.fugloy.dev](https://app.fugloy.dev/).
 
 - **As someone working with an AI assistant,** I want it to run the program,
   set breakpoints, and read the screen for me, so that it can find and name
@@ -294,7 +294,7 @@ the emulator's label and coverage file. It follows
 [v1.0.0](https://github.com/cschweda/fugloy/releases/tag/v1.0.0), v1: phases
 1–4 of the plan. Phase 3 names ROM, hardware, and DOS addresses from cited
 symbol tables, with `--machine` and `--dos` choosing them. Phase 4 is the web workbench, live at
-[fugloy.netlify.app](https://fugloy.netlify.app/): open a program or one of the
+[app.fugloy.dev](https://app.fugloy.dev/): open a program or one of the
 four public-domain games, read and annotate the listing, click any line for a
 plain-English explanation in the Explain tab, write block comments, save in
 your browser, and export zmac source, hints, IR, `.CMD`, or `.CAS`. Earlier
@@ -331,8 +331,8 @@ recorded in [CHANGELOG.md](CHANGELOG.md); releases are tagged `vX.Y.Z` on
 | `fixtures/synthetic` | Generated fixtures, one `.CMD` or `.BAS` per loader rule and analysis case plus their hint files, written by the test suite's own `.CMD` writer and BASIC tokenizer. |
 | `fixtures/hints` | Hint files for real programs; `asylum16.hints` carries Asylum's generated relocate lines, and `volcano.hints` relocates Volcano Hunter's game to its runtime address. |
 
-The workbench is live at [fugloy.netlify.app](https://fugloy.netlify.app/);
-the domains `app.fugloy.dev` and `fugloy.dev` will follow.
+The workbench is live at [app.fugloy.dev](https://app.fugloy.dev/); `fugloy.dev` and
+`www.fugloy.dev` redirect to it.
 
 ## Install
 

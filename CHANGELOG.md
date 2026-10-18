@@ -21,8 +21,8 @@ The repository holds parts that are versioned and released separately:
   work is listed under [Unreleased] until its first release, after MCP
   phase F, which gets a heading of its own as the emulator's will.
 - **The web workbench**, `apps/web`, is not on npm and has no version of its
-  own: Netlify builds it from `main` and serves it at fugloy.netlify.app
-  (app.fugloy.dev to follow). Its changes are listed under the core release
+  own: Netlify builds it from `main` and serves it at app.fugloy.dev
+  (live since 2026-10-18; `fugloy.dev` and `www.fugloy.dev` redirect to it). Its changes are listed under the core release
   they shipped with.
 
 A release is cut from `main`. An ordinary commit bumps the set's
@@ -389,8 +389,8 @@ bring-your-own manuals opened at the cited page, the **Explain** tab that
 explains each line in plain English from proven values, and block comments.
 Deliverable, met: asylum16 opens in Chromium with its hints under Model I,
 shows its ROM calls named, and keeps a rename and a comment across a reload;
-CI runs the same flow on Sea Dragon. The site is live at
-fugloy.netlify.app (app.fugloy.dev to follow). `@fugloy/z80`,
+CI runs the same flow on Sea Dragon. The site went live on Netlify
+(at app.fugloy.dev since 2026-10-18). `@fugloy/z80`,
 `@fugloy/disasm`, and `@fugloy/cli` are 1.0.0; the `@fugloy/emu` and
 `@fugloy/mcp` packages keep their own 0.1.0. Emu phases 0 and 1 were merged
 in this release's range and are listed under [Unreleased], since the
