@@ -223,7 +223,9 @@ export class Machine {
       return 'stop';
     }
     if (cpu.halted) return false;
-    if (kb.hasFeed && (pc === 0x002b || pc === 0x0049)) {
+    // On the Model 4 only map 0 has the ROM there; in maps 1-3 $002B and $0049 are RAM (memory.js,
+    // Model4Memory). Other models' memory has no `map`.
+    if (kb.hasFeed && (pc === 0x002b || pc === 0x0049) && !this.system.memory.map) {
       const debug = this.debug;
       if (debug.tracksAccess) {
         debug.standIn(true);

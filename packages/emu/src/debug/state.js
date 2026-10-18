@@ -187,6 +187,10 @@ export function restoreState(system, state) {
   if (ram.length !== system.memory.ram.length) {
     throw new Error(`This ${system.model?.name ?? "Model III"} save state has ${ram.length / 1024}K of RAM; the machine has ${system.memory.ram.length / 1024}K, and a state restores only into a machine with the same RAM`);
   }
+  const videoRam = fromBase64(state.memory.videoRam);
+  if (videoRam.length !== system.memory.videoRam.length) {
+    throw new Error(`This ${system.model?.name ?? "Model III"} save state has ${videoRam.length} bytes of video RAM; the machine has ${system.memory.videoRam.length}, and a state restores only into a machine with the same video RAM`);
+  }
 
   // A Model I state restores only into a Model I fitted the same way: the Expansion Interface
   // (its latch, its disk controller) and the lowercase modification (what video RAM holds).
@@ -215,7 +219,7 @@ export function restoreState(system, state) {
   for (const key of IO_SCALARS) io[key] = state.io[key];
 
   system.memory.ram.set(ram);
-  system.memory.videoRam.set(fromBase64(state.memory.videoRam));
+  system.memory.videoRam.set(videoRam);
   if (system.model?.id === 4) system.memory.setMapRegister(state.memory.map ?? 0);
   system.memory.videoDirty = true;
 

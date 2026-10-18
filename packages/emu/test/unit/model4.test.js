@@ -273,6 +273,39 @@ describe('Review Focus 3: the 128K page select aliases no bank', () => {
   });
 });
 
+describe('the ROM keyboard-scan hook', () => {
+  /** A ROM whose $0000 calls $002B, which returns $77 in A; `program` replaces the start. */
+  function hookRom(program) {
+    const rom = new Uint8Array(0x3800).fill(0xc9);
+    rom.set(program, 0);
+    rom.set([0x3e, 0x77, 0xc9], 0x2b); // LD A,77H / RET
+    return rom;
+  }
+  const CALL_SCAN = [0x31, 0x00, 0xf0, 0xcd, 0x2b, 0x00, 0x76]; // LD SP,0F000H / CALL 002BH / HALT
+
+  it('stands in at $002B in map 0, as on the Model III', () => {
+    const m = new Machine({ model: 4, roms: { level2: hookRom(CALL_SCAN) } });
+    m.keyboard.feed('C');
+    m.run({ until: 'halt' });
+    expect(m.cpu.regs.a).toBe(0x43);
+    expect(m.keyboard.hasFeed).toBe(false);
+  });
+
+  it('does not stand in at $002B in maps 1-3, where it is RAM', () => {
+    for (const map of [1, 2, 3]) {
+      // LD A,map / OUT (84H),A, then the same code continues in RAM (bank 0 at the same offsets)
+      const start = [0x3e, map, 0xd3, 0x84];
+      const m = new Machine({ model: 4, roms: { level2: hookRom(start) } });
+      m.mem.ram.set([...start, ...CALL_SCAN], 0);
+      m.mem.ram.set([0x3e, 0x77, 0xc9], 0x2b);
+      m.keyboard.feed('C');
+      m.run({ until: 'halt' });
+      expect(m.cpu.regs.a, `map ${map}`).toBe(0x77);
+      expect(m.keyboard.hasFeed).toBe(true);
+    }
+  });
+});
+
 describe('Review Focus 5: save states', () => {
   it('a state taken in map 3 with a page selected restores exactly', () => {
     const m = model4();
@@ -301,6 +334,8 @@ describe('Review Focus 5: save states', () => {
   it('refuses a state from another RAM size or another model', () => {
     const state = serializeState(model4().system);
     expect(() => restoreState(model4({ ram: 64 }).system, state)).toThrow(/has 128K of RAM; the machine has 64K/);
+    const short = { ...state, memory: { ...state.memory, videoRam: serializeState(new Machine({ model: 3, roms: { level2: rom14() } }).system).memory.videoRam } };
+    expect(() => restoreState(model4().system, short)).toThrow(/^This Model 4 save state has 1024 bytes of video RAM; the machine has 2048, /);
     const m3 = new Machine({ model: 3, roms: { level2: rom14() } });
     expect(() => restoreState(m3.system, state)).toThrow(/^Not a TRS-80 Model III save state$/);
     expect(() => restoreState(model4().system, serializeState(m3.system))).toThrow(/^This is a Model III save state; the machine is a Model 4/);
@@ -321,7 +356,7 @@ describe('the Model 4 ROM', () => {
     expect(romModelProblem('model3-rev-c-2ef8', 4)).toMatch(/^This ROM is the Model III ROM \(model3-rev-c-2ef8\); it runs on the Model III, not the Model 4: construct the Machine with model: 3\.$/);
   });
 
-  const level2 = configuredRom('model4-trs32');
+  const level2 = configuredRom('model4');
   it.skipIf(level2 === null)('the real Model 4 ROM is recognised on the Model 4 and refused as a Model III', () => {
     const m = new Machine({ model: 4, roms: { level2 } });
     expect(m.rom.recognized).toBe('model4-trs32');
