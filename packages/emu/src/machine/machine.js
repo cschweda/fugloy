@@ -7,6 +7,7 @@ import { TRS80System } from './trs80-system.js';
 import { ROM_HASHES } from './rom-hashes.js';
 import { sha256Hex } from './sha256.js';
 import { Video } from '../devices/video.js';
+import { Sound } from '../devices/sound.js';
 
 /**
  * @typedef {{ a: number, f: number, b: number, c: number, d: number, e: number, h: number, l: number,
@@ -30,6 +31,8 @@ export class Machine {
   io;
   /** @type {Video} The text readout of video RAM. */
   video;
+  /** @type {Sound} Every port $FF write, raw and stamped in T-states. */
+  sound;
 
   /**
    * @param {{ model?: 3, ram?: 48, roms: { level2: Uint8Array }, log?: (level: string, text: string) => void }} opts
@@ -76,6 +79,8 @@ export class Machine {
       },
     };
     this.video = new Video(sys);
+    this.sound = new Sound();
+    sys.io.onSoundWrite = (cycle, value) => this.sound.record(cycle, value);
     this.io = {
       in: (port) => sys.io.readPort(port),
       out: (port, value) => sys.io.writePort(port, value),
