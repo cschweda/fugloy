@@ -24,16 +24,17 @@ not implement.
 
 ```js
 import { readFileSync } from 'node:fs'
-import { Machine } from '@fugloy/emu'
+import { Machine, CPU_CLOCK_HZ } from '@fugloy/emu'
 
 const m = new Machine({ roms: { level2: readFileSync('model3.rom') } })   // Model III, 48K; you supply the ROM
-const second = 2_027_000                                                 // T-states per emulated second
+const shows = (text) => (mm) => mm.video.text().join('\n').includes(text)
+const second = CPU_CLOCK_HZ                                              // T-states per emulated second
 
-m.run({ cycles: second })           // boot to Cass?
-m.keyboard.type('\n')               // ENTER: 1500 baud
-m.run({ cycles: second })
-m.keyboard.type('\n')               // ENTER at Memory Size?
-m.run({ cycles: 2 * second })       // READY
+m.run({ until: shows('Cass?'), cycles: 5 * second })          // boot; stops at the prompt, or after 5 s
+m.keyboard.type('\n')                                          // ENTER: 1500 baud
+m.run({ until: shows('Memory Size?'), cycles: 5 * second })
+m.keyboard.type('\n')                                          // ENTER at Memory Size?
+m.run({ until: shows('READY'), cycles: 5 * second })
 
 m.load.cmd(readFileSync('seadrg01.cmd'))   // PC at the program's entry
 m.run({ cycles: 5 * second })
