@@ -150,9 +150,7 @@ export function loadCas(machine, bytes, { baud = 500, via = 'rom' } = {}) {
 function driveInfo(drive, disk) {
   const container = /** @type {'jv1' | 'jv3' | 'dmk'} */ (disk.format);
   const tracks = disk.trackCount();
-  let sides = 1;
-  if (container === 'dmk') sides = disk.dmk.sides;
-  else if (container === 'jv3' && disk.jv3Map.some((/** @type {any} */ e) => e.side === 1)) sides = 2;
+  const sides = disk.sideCount();
   /** @type {Set<number>} */
   const counts = new Set();
   if (container === 'jv1') counts.add(disk.sectorsPerTrack);
@@ -221,6 +219,20 @@ export function diskDrives(machine) {
      */
     get drives() {
       return system.io.fdc.drives.map((/** @type {DiskImage | null} */ d, i) => (d === null ? null : driveInfo(i, d)));
+    },
+    /**
+     * The disk in a drive as DMK bytes (spec §6: read JV1, JV3, and DMK; write DMK only), with
+     * every write the machine has made to it: a DMK as it now stands, a JV1 or JV3 laid out as
+     * raw tracks with each sector's ID, density, data mark, and CRCs (`DiskImage.toDMK`). The
+     * bytes mount back with the same sectors.
+     * @param {number} drive 0..3
+     * @returns {Uint8Array}
+     */
+    export(drive) {
+      checkDrive('fdc.export', drive);
+      const disk = system.io.fdc.drives[drive];
+      if (disk === null) throw new Error(`fdc.export: drive ${drive} is empty`);
+      return disk.toDMK();
     },
   };
 }

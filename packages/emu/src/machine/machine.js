@@ -48,7 +48,7 @@ export class Machine {
   load;
   /** @type {ReturnType<typeof cassetteDeck>} The cassette deck: insert a .CAS at a baud, rewind, read the motor relay. */
   cassette;
-  /** @type {ReturnType<typeof diskDrives>} The four floppy drives: mount a JV1, JV3, or DMK image, unmount, list what is in each. */
+  /** @type {ReturnType<typeof diskDrives>} The four floppy drives: mount a JV1, JV3, or DMK image, unmount, list what is in each, export one as DMK. */
   fdc;
   /** @type {Debugger} Breakpoints, watchpoints, hooks, coverage, the instruction trace, snapshots, labels, and the label file (spec §7, §8). */
   debug;

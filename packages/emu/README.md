@@ -29,7 +29,7 @@ not implement.
 ## Using the machine
 
 ```js
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { Machine, CPU_CLOCK_HZ } from '@fugloy/emu'
 
 const m = new Machine({ roms: { level2: readFileSync('model3.rom') } })   // Model III, 48K; you supply the ROM
@@ -54,7 +54,11 @@ it in drive 0 and resets so the ROM boots from it:
 ```js
 m.load.dsk(readFileSync('game.dmk'))       // → { format: 'dsk', container: 'dmk', drive: 0, boot: true, blocks: [] }
 m.fdc.drives                               // [{ drive: 0, container: 'dmk', tracks, sides, sectorsPerTrack, writeProtected }, null, null, null]
+writeFileSync('saved.dmk', m.fdc.export(0)) // the disk as DMK bytes, with what the program wrote to it
 ```
+
+Writes stay in memory; `m.fdc.export(drive)` returns the disk as a DMK file,
+whatever container it was mounted from (read JV1, JV3, and DMK; write DMK).
 
 The WD1793 behind the drives follows the Western Digital FD179X data sheet in
 T-states (spec §5): heads step at the programmed rate, sectors come round at

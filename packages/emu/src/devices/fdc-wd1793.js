@@ -214,7 +214,7 @@ function layTrack(ids, dataOf, mfm, ibm) {
     out.push(...sync, ...idField, idCrc >> 8, idCrc & 0xff);
     run(mfm ? 22 : 11, gapByte);
     run(mfm ? 12 : 6, 0x00);
-    const data = [id.deleted ? 0xf8 : 0xfb, ...(dataOf(id) ?? new Uint8Array(id.size))];
+    const data = [id.dam ?? (id.deleted ? 0xf8 : 0xfb), ...(dataOf(id) ?? new Uint8Array(id.size))];
     const dataCrc = crc16([...sync, ...data]);
     out.push(...sync, ...data, dataCrc >> 8, dataCrc & 0xff);
     run(ibm ? (mfm ? 54 : 27) : mfm ? 24 : 10, gapByte); // Gap III
@@ -696,12 +696,13 @@ export class FDC1793 {
         }
         const { id, at } = found;
         p.sector = id.sector;
+        p.index = id.index; // which ID, when two on the track share the sector number
         p.size = id.size;
         p.k = 0;
         if (p.kind === "read") {
           // "Read Sector": the data mark's type goes to status bit 5; the first data byte is in
           // the DR one byte time after it has passed the head.
-          const read = this.currentDisk().readSectorEx(this._track, this.side, id.sector);
+          const read = this.currentDisk().readSectorEx(this._track, this.side, id.sector, id.index);
           this.buffer = read ? read.data : new Uint8Array(id.size);
           p.crcOk = id.dataCrcOk;
           this.status = (this.status & ~ST_RECORD_TYPE) | (id.deleted ? ST_RECORD_TYPE : 0);
@@ -778,6 +779,7 @@ export class FDC1793 {
       case "wcrc":
         this.currentDisk()?.writeSector(this._track, this.side, p.sector, this.buffer, {
           deleted: this.writeDeleted,
+          index: p.index,
         });
         this._nextRecord(p);
         return;
@@ -939,7 +941,7 @@ export class FDC1793 {
     const ids = this._passingIds()
       .map((x) => x.id)
       .sort((a, b) => a.pos - b.pos);
-    return synthesizeTrack(ids, (id) => disk.readSector(this._track, this.side, id.sector), this.mfm, length);
+    return synthesizeTrack(ids, (id) => disk.readSectorEx(this._track, this.side, id.sector, id.index)?.data, this.mfm, length);
   }
 
   _event() {

@@ -210,8 +210,10 @@ export function restoreState(system, state) {
   fdc.drives = [null, null, null, null];
   for (const entry of state.disks) {
     const disk = new DiskImage(fromBase64(entry.bytes), entry.name);
-    // Carry over learned/derived flags the constructor can't know
-    disk.sectorBase = entry.sectorBase;
+    // Carry over flags the constructor can't know: write protection set at mount, and a JV1's
+    // sector base (fixed by its geometry since emu phase 5; older saves may hold null, meaning the
+    // geometry's, or a base learned by the fallback the reader then had).
+    if (entry.sectorBase != null) disk.sectorBase = entry.sectorBase;
     disk.writeProtected = entry.writeProtected;
     fdc.drives[entry.drive & 3] = disk;
   }

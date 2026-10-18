@@ -162,6 +162,52 @@ on the `emu-phase5` branch:
   Snapshots from before restore the latch as clear, as before. A snapshot
   taken mid-command also restores the controller's new state (the command
   byte, step direction, head load, idle count, and interrupt conditions).
+- The disk images read exactly (emu spec §5, "Disk images", after Tim
+  Mann's format notes in the xtrs distribution), and `m.fdc.export(drive)`
+  returns any mounted disk as DMK bytes (spec §6: write DMK only):
+  - `m.fdc.export(drive)` (and `DiskImage.toDMK()`): a DMK as it stands, its
+    write-protect byte following the drive's; a JV1 or JV3 laid out as raw
+    tracks, each ID in order with its track, side, sector, size code,
+    density, data mark, and CRCs (a JV3 CRC error stays one), JV1's
+    10-sector tracks in FM and 18-sector ones in MFM. The bytes mount back
+    with the same sectors, writes the program made included; an empty drive
+    throws. A blank disk exports as a DMK with no tracks, which a format
+    extends.
+  - JV3: a free header entry keeps its data area, so the sectors after it
+    are read from where the header puts them (they had been read from the
+    wrong offset once a free entry sat between sectors); a second header
+    block (more than 2,901 sectors) is read and written; the data marks
+    `FA`, `F9`, and `F8` are told apart (`DiskImage.trackIds` and
+    `readSectorEx` report `dam`); a write clears the CRC-error flag.
+  - DMK: any of `F8`–`FB` is a data mark (`FA` and `F9` had been missed in
+    FM, losing the sector), in MFM only after its `A1` sync; header flag
+    `80` (density ignored) is honoured; a sector whose data runs past the
+    track's end is kept with a data CRC error (it had vanished: Scarfman's
+    track 0 sector 15 now reads as a CRC error, not as missing); a Write
+    Track in FM lays the track out in FM (it had been written as MFM and
+    could not be read back in FM).
+  - Two IDs with one sector number on a track are kept apart: the
+    controller reads and writes the ID it found (`trackIds` gives each its
+    `index`, which `readSectorEx` and `writeSector` take).
+  - JV1: the geometry fixes the sector numbering (0–9 for 10 sectors, 1–18
+    for 18); a read of a sector outside it no longer falls back to the other
+    base and remaps the disk.
+  - Detection is stricter: a DMK header with a write-protect byte other than
+    `00` or `FF`, an undefined flag bit, or an IDAM pointer outside its
+    track is refused; tests check that the committed `.CMD` files and random
+    bytes are refused.
+  - Six synthetic images (`fixtures/synthetic/disk/`, written by
+    `pnpm fixtures` from `test/unit/disk-samples.js`): a 35×10 JV1, a mixed
+    JV3 (two sides, both densities, `FA`/`F9`/`F8`, a CRC error, free
+    entries), and double-sided MFM, doubled FM, single-byte FM, and
+    mixed-density DMKs; `test/unit/disk-image.test.js` reads every sector of
+    each, through the controller too.
+- WD1793 and machine fixes from the phase's review: a Step-Out, a Step
+  outward, or an outward Seek with Track 00 active issues no step pulse and
+  loads 0 into the track register (the data sheet's Type I flow chart; the
+  register had counted below zero to 255 with u = 1); the controller now
+  ticks for interrupt and NMI response T-states, so the disk's angle no
+  longer drifts against the CPU's clock with each interrupt.
 
 Emu phase 4 (`@fugloy/mcp` 0.1.0, MCP phases A–C; MCP spec §5, §11):
 
