@@ -12,14 +12,13 @@ The repository holds parts that are versioned and released separately:
   release that adds features raises the minor version. Core releases have the plain `## [X.Y.Z]` headings below and are tagged `vX.Y.Z` on
   `main`. 1.1.0 is the first on npm; 0.1.0, 0.2.0, and 1.0.0 were tagged and
   published as GitHub releases only.
-- **The emulator**, `@fugloy/emu`, is versioned 0.x on its own. It is at
-  0.1.0 and not yet on npm, so its phases are listed under [Unreleased]. Its
-  first release moves them to an `## [emu X.Y.Z]` heading, tagged
-  `emu-vX.Y.Z`.
-- **The MCP server**, `@fugloy/mcp`, is versioned 0.x on its own. It is at
-  0.1.0 (MCP phases A–C, built as emu phase 4) and not yet on npm, so its
-  work is listed under [Unreleased] until its first release, after MCP
-  phase F, which gets a heading of its own as the emulator's will.
+- **The emulator**, `@fugloy/emu`, is versioned 0.x on its own. Its
+  releases have `## [emu X.Y.Z]` headings and are tagged `emu-vX.Y.Z`; 0.2.0,
+  emu phases 0–4, is the first on npm.
+- **The MCP server**, `@fugloy/mcp`, is versioned 0.x on its own. Its
+  releases have `## [mcp X.Y.Z]` headings and are tagged `mcp-vX.Y.Z`; 0.1.0,
+  MCP phases A–F, is the first on npm. It depends on `@fugloy/emu`, so emu
+  is published first.
 - **The web workbench**, `apps/web`, is not on npm and has no version of its
   own: Netlify builds it from `main` and serves it at fugloy.netlify.app
   (app.fugloy.dev to follow). Its changes are listed under the core release
@@ -27,46 +26,107 @@ The repository holds parts that are versioned and released separately:
 
 A release is cut from `main`. An ordinary commit bumps the set's
 `package.json` versions and moves its entries out of [Unreleased] into the new
-heading; then `./publish.sh check core` (or `check emu`) runs every check,
+heading; then `./publish.sh check core` (or `check emu`, or `check mcp`) runs every check,
 installs and runs the packed tarballs, and stages them in `.release/`, and
 `./publish.sh publish` publishes those tarballs with npm's two-factor code and
 creates and pushes the tag.
 
+
 ## [Unreleased]
 
-In the core packages since 1.1.0: the disassembler shows a label's `note`
-(emu phase 4, below). The emulator, `@fugloy/emu` 0.1.0 (not on npm), has
-phases 0–4 of eight done, listed here until its first release. Phases 0 and 1
-were merged while core 1.0.0 was being built, and phases 2 and 3 between 1.0.0
-and 1.1.0. Phase 4 was merged after 1.1.0.
+In the core packages since 1.1.0: the disassembler shows a label's `note`,
+the remark the label and coverage file gained in emu phase 4 (listed under
+emu 0.2.0 below). It ships with the next core release.
 
-Emu phase 4: the MCP server, `@fugloy/mcp` 0.1.0 (not on npm), with MCP
-phases A–C. Phase 4's done-criterion is met: Claude Code loaded a game, found
-its print routine, and labelled it unaided. Given only story 1's prompt on Sea
-Dragon (`packages/mcp/prompts/story-01.md`), a headless session (`claude -p`, the server
-from the working tree, the MCP tools its only tools; 2026-10-18, 15 turns, 47
-s) watched video RAM, ran until the screen settled, read `hits` (the credits
-written at `$6141`, in the routine called at `$6140`), `suggest`, `callers`,
-and `disasm`, and labelled `$6140` `PRINT_TEXT` with a note that matches the
-hand annotation in `seadrg01.hints`. This is the first entry in the agent
-acceptance log of MCP spec §10.
+## [mcp 0.1.0] - 2026-10-18
 
-Emu phase 3: the debugger and the label and coverage file, which the
-disassembler reads from 1.1.0. Phase 3's done-criterion is met: a scripted
-session produces a label file Fugløy's disassembler consumes.
+`@fugloy/mcp` 0.1.0, the MCP server's first npm release: MCP phases A–F
+(MCP spec §11), 29 tools, four prompts, and five resources over
+`@fugloy/emu` 0.2.0. Install it with `npx -y @fugloy/mcp` as a Claude Code
+MCP server (`packages/mcp/README.md`). It depends on `@fugloy/emu` `^0.2.0`,
+`@fugloy/disasm` and `@fugloy/z80` `^1.1.0`, the MCP SDK 1.32.0, and zod
+4.6.5.
 
-Emu phase 2: the Model III as a `Machine`, with the devices and loaders that
-run real programs. Phase 2's done-criterion is met: Sea Dragon, Eliminator,
-and Rear Guard load and reach their title screens through `Machine` (Armored
-Patrol was tried and left out).
+Agent acceptance (MCP spec §10), the release check: story 7, the
+`label-pass` prompt with `minCalls` 5, run headless on 2026-10-18 on the three
+public-domain games that run under `Machine`, each on a scratch copy
+(`claude -p`, the server from the working tree, the MCP tools its only tools,
+nobody helping). All three finished, exported the sidecar, and said what they
+left alone and which names were guesses. Every label was spot-checked
+against the code.
 
-Emu phase 1: the Z80 core passes the ZEXDOC and ZEXALL instruction
-exercisers, and its timing matches `@fugloy/z80`.
+- **Sea Dragon** (`seadrg01.cmd`; 90 turns, 5 min): 18 labels of the 22
+  routines `suggest` listed, each with a note giving its evidence (code, plus
+  watches for the air supply and the arrow keys). Twelve name routines the
+  hand-annotated `seadrg01.hints` names, and agree with it: `PrintText`
+  (`PRINT_TEXT`), `BlitSprite` (`DRAW_SHAPE`), `DrawObject`, `PlayTone`
+  (`TONE`), `SoundStep` (`NEXT_NOTE`), `TitleShowPollEnter` (`TITLE_FRAME`),
+  `DrawTerrain` (`DRAW_CAVERN`), `SurfaceAndAir` (`AIR_SUPPLY`),
+  `DrawPlayerSub`, `UpdateEnemies` (`UPDATE_OBJECTS`), `ReadMoveKeys`
+  (`MOVE_PLAYER`), `UnpackLevelObjects` (`SETUP_OBJECTS`). Three are the
+  title routines the hints describe without naming, and three
+  (`OneShotTone`, `ReadFireKeys`, `LaunchTorpedo`) the code bears out. It
+  left `$57C4`, `$5525`, `$586D`, and `$557C` alone: their object tables
+  stayed empty in a minute of play, so the code that would show what they
+  are never ran. A reviewer would keep all 18.
+- **Eliminator** (`elimin8c.cmd`; 119 turns, 4 min): all 17 listed routines,
+  among them `RenderFrame` (confirmed with a trace from call to return),
+  `DrawObject` (12,234 calls), `HitTestPlayerShip`, `PlayToneOnce` (a
+  self-patching beeper), `CopyTextToScreen` (the same uppercase-fallback
+  print routine as Sea Dragon's), `SpawnObjects` and `SpawnWave`, and
+  `ResetPlayerShip`. It marked three as weaker readings in their notes:
+  `InitHumanoids` (a *Defender*-style name for objects enemies carry up),
+  and `ShotMoveUp`/`ShotMoveDown`. The spot-checked code agrees with every
+  note; a reviewer would keep them all, perhaps renaming the three it
+  flagged.
+- **Rear Guard** (`reargrd5.cmd`; 93 turns, 5 min): all 24 listed routines,
+  from `PlayTone`, `SoundUpdate`, and `PrintToScreen` to `UpdateEnemies`,
+  `SpawnEnemyBombs`, and `AnimateExplosions`, mostly from reading the code
+  (it said so) with the fire and movement paths confirmed in play. To get
+  past "1 or 2 Players?" it found on its own that this build writes `$03E3`,
+  the Model I's keyboard driver, into the keyboard vector at `$4016`, so the
+  Model III ROM's key wait never returns, and poked `$4016` to the Model III
+  driver at `$3024` in the running machine. The notes agree with the
+  spot-checked code; a reviewer would keep the names, checking which terrain
+  layer is the "slow" one.
 
-Emu phase 0: the core of `cschweda/trs80-emulator`, without its DOM, boots
-the Model III ROM to `READY` in Node.
+Two of the three answers pointed out that `coverage` counts only the loaded
+blocks: each game copies itself elsewhere before running, so the export
+reports 0.1% executed for Eliminator and Rear Guard (10.6% for Sea Dragon)
+though the labels sit at the addresses that ran.
+
+Phase E's check, also headless: given the `orient` prompt on Sea Dragon, a
+session (19 turns, 56 s) found that the entry only copies the game to `$497F`,
+read the ROM symbols resource, found with `callers` that the game calls no
+ROM routine, and proposed the drawing, keyboard, sound, and title routines
+to name first, labelling nothing.
 
 ### Added
+
+MCP phase F, part 2: the release (`@fugloy/mcp`; MCP spec §9–§11):
+
+- `@fugloy/mcp` 0.1.0 and `@fugloy/emu` 0.2.0 get their npm packaging: a
+  `LICENSE` in `packages/mcp`, `repository`, `homepage`, `bugs`, and
+  `publishConfig` as the core packages have, README links absolute so they
+  work on npmjs.com, and `files` that ship `bin`, `prompts`, and `src`. mcp
+  names its `@fugloy` dependencies `workspace:^`, which `pnpm pack` turns
+  into `^0.2.0` (emu) and `^1.1.0` (disasm, z80).
+- `./publish.sh check mcp`: the `mcp` set. It refuses unless the `@fugloy`
+  versions mcp needs are on npm, or emu is staged by `check emu`, in which
+  case the whole check runs with the staged emu tarball as a rehearsal and
+  stages nothing, keeping emu's staging for `publish`. The tarball check
+  accepts mcp's `^` ranges on the local versions and its exactly pinned
+  third-party dependencies. The smoke test installs the tarball (with the
+  staged emu, if that is the case) in a scratch project and checks that
+  `npx fugloy-mcp` answers `initialize`, with its name and version, and
+  `tools/list` over a pipe, printing nothing but JSON-RPC. `publish` refuses
+  an mcp release whose `@fugloy` dependencies are not on npm. Tags are
+  `mcp-vX.Y.Z`. The core and emu sets are unchanged.
+- The README's setup starts from npm (`npx -y @fugloy/mcp` in `.mcp.json`
+  or `claude mcp add`), with the clone setup after it.
+- The restart round trip in `test/guardrails.test.js` closes both servers in
+  `finally`, whatever failed, and prints each child's stderr when it fails.
+- Story 7 on three games, above.
 
 MCP phase D, snapshots and `diff` (`@fugloy/mcp`; MCP spec §3, §5 Snapshots):
 
@@ -180,7 +240,7 @@ spec §7, §10):
   not kept, never as no text; a test pins that `search` over `FFFE-FFFF`
   for three bytes finds nothing.
 
-Emu phase 4 (`@fugloy/mcp` 0.1.0, MCP phases A–C; MCP spec §5, §11):
+MCP phases A–C, built as emu phase 4 (MCP spec §5, §11):
 
 - The stdio server (`bin/fugloy-mcp.js`, MCP SDK 1.32.0, zod 4.6.5, plain
   JavaScript, no build step): one Model III per process, nothing running
@@ -310,6 +370,46 @@ Emu phase 4 (`@fugloy/mcp` 0.1.0, MCP phases A–C; MCP spec §5, §11):
   story 7's; MCP phase E moved them from the root `prompts/`), and `.mcp.json.example`, the dev config that runs the
   working tree (copy it to `.mcp.json`, now gitignored; a committed one
   would start the server in every contributor's session).
+
+## [emu 0.2.0] - 2026-10-18
+
+`@fugloy/emu` 0.2.0, the emulator's first npm release: phases 0–4 of the
+eight in the emu spec (§11). It goes from 0.1.0 to 0.2.0 because phases 2–4
+changed its API (the `Machine` facade, `m.debug`, the hooks' `pc` argument).
+It has no dependencies. Phases 0 and 1 were merged while core 1.0.0 was being
+built, phases 2 and 3 between 1.0.0 and 1.1.0, and phase 4 after 1.1.0.
+
+Emu phase 4 is the MCP server, `@fugloy/mcp` (above), with MCP phases A–C.
+Its done-criterion is met: Claude Code loaded a game, found its print
+routine, and labelled it unaided. Given only story 1's prompt on Sea Dragon
+(`packages/mcp/prompts/story-01.md`), a headless session (`claude -p`, the
+server from the working tree, the MCP tools its only tools; 2026-10-18, 15
+turns, 47 s) watched video RAM, ran until the screen settled, read `hits`
+(the credits written at `$6141`, in the routine called at `$6140`),
+`suggest`, `callers`, and `disasm`, and labelled `$6140` `PRINT_TEXT` with a
+note that matches the hand annotation in `seadrg01.hints`. This is the first
+entry in the agent acceptance log of MCP spec §10.
+
+Emu phase 3: the debugger and the label and coverage file, which the
+disassembler reads from 1.1.0. Phase 3's done-criterion is met: a scripted
+session produces a label file Fugløy's disassembler consumes.
+
+Emu phase 2: the Model III as a `Machine`, with the devices and loaders that
+run real programs. Phase 2's done-criterion is met: Sea Dragon, Eliminator,
+and Rear Guard load and reach their title screens through `Machine` (Armored
+Patrol was tried and left out).
+
+Emu phase 1: the Z80 core passes the ZEXDOC and ZEXALL instruction
+exercisers, and its timing matches `@fugloy/z80`.
+
+Emu phase 0: the core of `cschweda/trs80-emulator`, without its DOM, boots
+the Model III ROM to `READY` in Node.
+
+### Added
+
+Emu phase 4, the emulator's side (the server itself is `@fugloy/mcp` 0.1.0,
+above):
+
 - The label and coverage file (emu spec §8, `docs/label-format.md`) gains
   `note` on a label of any source: a remark for a human, without control
   characters. The emulator's `parseLabelFile` checks it, `m.debug.label`

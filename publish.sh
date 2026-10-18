@@ -13,11 +13,13 @@ set -euo pipefail
 #   core   @fugloy/z80, @fugloy/disasm, @fugloy/cli, released together at one version
 #          (disasm depends on z80, cli on both, so they publish in that order)
 #   emu    @fugloy/emu, versioned on its own (0.x)
-# @fugloy/mcp is not published until its phase F (docs/fugloy-mcp-spec.md §11).
+#   mcp    @fugloy/mcp, versioned on its own (0.x). It depends on @fugloy/emu (and the core's
+#          disasm and z80), so publish emu first: `check mcp` refuses unless the emu version it
+#          needs is on npm or staged, and only stages mcp once that emu is on npm.
 #
 # The version is whatever the packages' package.json files say: bump it, and add its CHANGELOG.md
-# entry, in an ordinary commit on main first (`## [1.1.0]` for core, `## [emu 0.2.0]` for emu), as
-# "p4: release 1.0.0" did. The script never edits a package.json.
+# entry, in an ordinary commit on main first (`## [1.1.0]` for core, `## [emu 0.2.0]` for emu,
+# `## [mcp 0.1.0]` for mcp), as "p4: release 1.0.0" did. The script never edits a package.json.
 #
 # Why two steps: npm asks every publish for a fresh two-factor code, which lasts about 30 seconds,
 # and the checks take minutes. `check` does all the slow work: it checks the tree and CI, installs,
@@ -34,7 +36,9 @@ set -euo pipefail
 #   - the set's packages share one version (core) and CHANGELOG.md has its entry;
 #   - CI finished and passed for this commit (needs the GitHub CLI, logged in);
 #   - typecheck, tests, and build pass;
-#   - every runtime dependency is another @fugloy package of the same release (no third-party code);
+#   - every runtime dependency is another @fugloy package of the same release (no third-party code),
+#     except in the mcp set, whose @fugloy dependencies are ^ ranges on the local versions (which
+#     must be on npm, or emu staged) and whose third-party ones (the MCP SDK, zod) are exact versions;
 #   - each tarball holds package.json, README.md, LICENSE, and only the files its "files" field
 #     names, has no workspace: specifiers left, and installs and runs from a scratch project.
 # If a publish stops part way (a code expired after the first package), run `publish` again with a
@@ -44,6 +48,7 @@ BRANCH="main"
 STAGE=".release"
 CORE_PACKAGES=(z80 disasm cli)
 EMU_PACKAGES=(emu)
+MCP_PACKAGES=(mcp)
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -58,7 +63,7 @@ die() {
 }
 
 usage() {
-  sed -n '4,16p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '4,19p' "$0" | sed 's/^# \{0,1\}//'
   exit "${1:-0}"
 }
 
@@ -67,8 +72,70 @@ pkg_field() {
   node --input-type=commonjs -e "const v = require('./packages/$1/package.json').$2; console.log(v === undefined ? '' : v)"
 }
 
+# The @fugloy packages a package depends on at run time, as folder names (emu, disasm, z80), in FUGLOY_DEPS.
+read_fugloy_deps() {
+  FUGLOY_DEPS=()
+  local d
+  while IFS= read -r d; do [[ -z "$d" ]] || FUGLOY_DEPS+=("$d"); done < <(node --input-type=commonjs -e '
+    const deps = require("./packages/" + process.argv[1] + "/package.json").dependencies || {};
+    for (const n of Object.keys(deps)) if (n.startsWith("@fugloy/")) console.log(n.slice(8));
+  ' "$1")
+}
+
+# The staged tarball of name@version, if `check` staged it and it is unchanged since; else nothing.
+staged_tarball() {
+  local name="$1" version="$2"
+  [[ -f "$STAGE/manifest" ]] || return 0
+  [[ "$(sed -n 's/^version=//p' "$STAGE/manifest")" == "$version" ]] || return 0
+  local e
+  while IFS= read -r e; do
+    local t="${e% *}" sum="${e##* }"
+    [[ -f "$t" && "$(shasum -a 256 "$t" | cut -d' ' -f1)" == "$sum" ]] || continue
+    [[ "$(tar -xzOf "$t" package/package.json | node --input-type=commonjs -e 'const p = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log(p.name + "@" + p.version)')" == "$name@$version" ]] && { echo "$PWD/$t"; return 0; }
+  done < <(sed -n 's/^tarball=//p' "$STAGE/manifest")
+}
+
+# The mcp smoke test: start `npx fugloy-mcp` over a pipe and check that it answers initialize (its
+# name and version) and tools/list (the tools of every phase), printing nothing but JSON-RPC.
+MCP_SMOKE='
+import { spawn } from "node:child_process";
+const version = process.argv[1];
+const child = spawn("npx", ["--no-install", "fugloy-mcp"], { stdio: ["pipe", "pipe", "inherit"] });
+const send = (m) => child.stdin.write(JSON.stringify({ jsonrpc: "2.0", ...m }) + "\n");
+const done = (code, text) => { child.removeAllListeners("exit"); child.kill(); (code ? console.error : console.log)(text); process.exit(code); };
+const timer = setTimeout(() => done(1, "fugloy-mcp did not answer within 20 s"), 20_000);
+child.on("exit", (code) => done(1, "fugloy-mcp exited (" + code + ") before answering"));
+let buf = "";
+child.stdout.on("data", (d) => {
+  buf += d;
+  for (let i; (i = buf.indexOf("\n")) >= 0; ) {
+    const line = buf.slice(0, i);
+    buf = buf.slice(i + 1);
+    let msg;
+    try { msg = JSON.parse(line); } catch { done(1, "fugloy-mcp printed a line that is not JSON-RPC: " + line); }
+    if (msg.id === 1) {
+      const info = msg.result && msg.result.serverInfo;
+      if (!info || info.name !== "fugloy-mcp" || info.version !== version) done(1, "initialize answered " + line);
+      send({ method: "notifications/initialized" });
+      send({ id: 2, method: "tools/list" });
+    } else if (msg.id === 2) {
+      const names = ((msg.result && msg.result.tools) || []).map((t) => t.name);
+      for (const n of ["load", "run", "screen", "break", "label", "suggest", "snapshot", "search"])
+        if (!names.includes(n)) done(1, "tools/list has no " + n + ": " + names.join(" "));
+      clearTimeout(timer);
+      done(0, "npx fugloy-mcp answered initialize (fugloy-mcp " + version + ") and tools/list (" + names.length + " tools).");
+    }
+  }
+});
+send({ id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "fugloy-publish", version } } });
+'
+
 SCRATCH=""
-cleanup() { [[ -z "$SCRATCH" ]] || rm -rf "$SCRATCH"; }
+REHEARSAL=""
+cleanup() {
+  [[ -z "$SCRATCH" ]] || rm -rf "$SCRATCH"
+  [[ -z "$REHEARSAL" ]] || rm -rf "$REHEARSAL"
+}
 trap cleanup EXIT
 
 # ─── Shared preflight ───────────────────────────────────────────────
@@ -99,7 +166,7 @@ cmd_check() {
   case "$set" in
     core) packages=("${CORE_PACKAGES[@]}") ;;
     emu) packages=("${EMU_PACKAGES[@]}") ;;
-    mcp) die "@fugloy/mcp is published in its phase F, not before." ;;
+    mcp) packages=("${MCP_PACKAGES[@]}") ;;
     *) usage 1 ;;
   esac
   preflight
@@ -121,12 +188,33 @@ cmd_check() {
   info "Releasing $set at $version: ${packages[*]/#/@fugloy/}"
 
   local heading="$version" tag="v$version"
-  if [[ "$set" == emu ]]; then heading="emu $version"; tag="emu-v$version"; fi
+  if [[ "$set" != core ]]; then heading="$set $version"; tag="$set-v$version"; fi
   grep -qF "## [$heading]" CHANGELOG.md || die "CHANGELOG.md has no '## [$heading]' entry. Add one (move items out of [Unreleased])."
   info "CHANGELOG.md has an entry for $heading."
   if git rev-parse -q --verify "refs/tags/$tag" >/dev/null &&
     [[ "$(git rev-list -n 1 "$tag")" != "$(git rev-parse HEAD)" ]]; then
     die "Tag $tag already exists on another commit."
+  fi
+
+  # The mcp set's @fugloy dependencies must already be on npm at the local versions, or staged
+  # (emu, by `check emu`, not yet published). In the second case the check is a rehearsal: it runs
+  # everything with the staged tarball but stages nothing, so emu's staging is kept for `publish`.
+  local deps_staged=()
+  if [[ "$set" == mcp ]]; then
+    read_fugloy_deps mcp
+    for dep in "${FUGLOY_DEPS[@]}"; do
+      local dname="@fugloy/$dep" dver
+      dver=$(pkg_field "$dep" version)
+      if npm view "$dname@$dver" version >/dev/null 2>&1; then
+        info "$dname@$dver is on npm."
+      else
+        local staged
+        staged=$(staged_tarball "$dname" "$dver")
+        [[ -n "$staged" ]] || die "@fugloy/mcp needs $dname@$dver, which is neither on npm nor staged. Publish ${dep} first (./publish.sh check emu, then ./publish.sh publish)."
+        warn "$dname@$dver is staged ($staged) but not on npm: this check is a rehearsal and stages nothing."
+        deps_staged+=("$staged")
+      fi
+    done
   fi
 
   # CI for this commit: only a run that finished and passed counts.
@@ -150,15 +238,22 @@ cmd_check() {
 
   # Pack each package with pnpm, which turns workspace:* into the real version and applies
   # publishConfig, then look inside.
-  rm -rf "$STAGE"
-  mkdir -p "$STAGE"
-  local tarballs=()
+  local dest="$STAGE"
+  if [[ ${#deps_staged[@]} -gt 0 ]]; then
+    REHEARSAL=$(mktemp -d)
+    dest="$REHEARSAL"
+  else
+    rm -rf "$STAGE"
+    mkdir -p "$STAGE"
+  fi
+  local tarballs=() dest_abs
+  dest_abs=$(cd "$dest" && pwd)
   for p in "${packages[@]}"; do
     local tgz
-    tgz=$(cd "packages/$p" && pnpm pack --pack-destination "../../$STAGE" | tail -1)
-    tgz="$STAGE/$(basename "$tgz")"
+    tgz=$(cd "packages/$p" && pnpm pack --pack-destination "$dest_abs" | tail -1)
+    tgz="$dest/$(basename "$tgz")"
     [[ -f "$tgz" ]] || die "pnpm pack made no tarball for $p."
-    check_tarball "$p" "$tgz" "$version"
+    check_tarball "$set" "$p" "$tgz" "$version"
     tarballs+=("$tgz")
   done
 
@@ -166,7 +261,7 @@ cmd_check() {
   info "Installing the packed tarballs in a scratch project..."
   SCRATCH=$(mktemp -d)
   local abs=()
-  for t in "${tarballs[@]}"; do abs+=("$PWD/$t"); done
+  for t in "${tarballs[@]}" ${deps_staged[@]+"${deps_staged[@]}"}; do [[ "$t" == /* ]] && abs+=("$t") || abs+=("$PWD/$t"); done
   (
     cd "$SCRATCH"
     npm init -y >/dev/null
@@ -180,6 +275,11 @@ cmd_check() {
   done
   info "npm publish --dry-run passed for every tarball."
 
+  if [[ ${#deps_staged[@]} -gt 0 ]]; then
+    info "Every check passed with the staged ${deps_staged[*]}, but $set is not staged: publish that first (./publish.sh publish), wait for npm to show it, then run ./publish.sh check $set again."
+    return
+  fi
+
   # Record what was checked, for `publish` to verify.
   {
     echo "set=$set"
@@ -190,7 +290,7 @@ cmd_check() {
   } >"$STAGE/manifest"
 
   local last
-  last=$(git describe --tags --abbrev=0 --match "$([[ $set == emu ]] && echo 'emu-v*' || echo 'v*')" 2>/dev/null || true)
+  last=$(git describe --tags --abbrev=0 --match "$([[ $set == core ]] && echo 'v*' || echo "$set-v*")" 2>/dev/null || true)
   if [[ -n "$last" ]]; then
     info "Commits since $last that touch the set:"
     git log --format='  %h  %an  %s' "$last"..HEAD -- "${packages[@]/#/packages/}" |
@@ -204,7 +304,7 @@ cmd_check() {
 }
 
 check_tarball() {
-  local p="$1" tgz="$2" version="$3"
+  local set="$1" p="$2" tgz="$3" version="$4"
   local files
   files=$(tar -tzf "$tgz" | sed 's|^package/||')
   for required in package.json README.md LICENSE; do
@@ -220,19 +320,26 @@ check_tarball() {
   local unexpected
   unexpected=$(grep -vE "^(package\.json|README\.md|LICENSE|CHANGELOG\.md)$" <<<"$files" | grep -vE "$allowed" || true)
   [[ -z "$unexpected" ]] || die "@fugloy/$p's tarball holds files it shouldn't:"$'\n'"$unexpected"
-  # Dependencies: only @fugloy packages, at exactly this release's version.
+  # Dependencies: only @fugloy packages, at exactly this release's version. The mcp set instead
+  # names its @fugloy dependencies as ^ the local version, and pins its third-party ones exactly.
   local bad
   bad=$(tar -xzOf "$tgz" package/package.json | node --input-type=commonjs -e '
     const pkg = JSON.parse(require("fs").readFileSync(0, "utf8"));
+    const [version, set] = process.argv.slice(1);
     const out = [];
-    if (pkg.version !== process.argv[1]) out.push("version is " + pkg.version);
+    if (pkg.version !== version) out.push("version is " + pkg.version);
     for (const [name, spec] of Object.entries(pkg.dependencies || {})) {
-      if (!name.startsWith("@fugloy/")) out.push("third-party dependency " + name);
-      else if (spec !== process.argv[1]) out.push(name + " is " + spec + ", not " + process.argv[1]);
+      if (set === "mcp") {
+        if (name.startsWith("@fugloy/")) {
+          const local = require("./packages/" + name.slice(8) + "/package.json").version;
+          if (spec !== "^" + local) out.push(name + " is " + spec + ", not ^" + local);
+        } else if (!/^\d+\.\d+\.\d+$/.test(spec)) out.push("third-party dependency " + name + " is " + spec + ", not an exact version");
+      } else if (!name.startsWith("@fugloy/")) out.push("third-party dependency " + name);
+      else if (spec !== version) out.push(name + " is " + spec + ", not " + version);
     }
     if (JSON.stringify(pkg).includes("workspace:")) out.push("a workspace: specifier is left");
     console.log(out.join("\n"));
-  ' "$version")
+  ' "$version" "$set")
   [[ -z "$bad" ]] || die "@fugloy/$p's packed package.json is wrong:"$'\n'"$bad"
   info "@fugloy/$p: $(wc -l <<<"$files" | tr -d ' ') files, nothing unexpected."
 }
@@ -249,8 +356,12 @@ smoke_test() {
       npx --no-install fugloy seadrg01.cmd >listing.txt
       grep -q "ENTRY\|ORG\|; entry" listing.txt || { echo "fugloy printed no listing for Sea Dragon" >&2; exit 1; }
       node --input-type=module -e 'import { decode } from "@fugloy/z80"; import { openProgram } from "@fugloy/disasm"; if (typeof decode !== "function" || typeof openProgram !== "function") process.exit(1);'
-    else
+    elif [[ "$set" == emu ]]; then
       node --input-type=module -e 'import { Machine, COVERAGE } from "@fugloy/emu"; if (typeof Machine !== "function" || COVERAGE.EXEC !== 1) process.exit(1);'
+    else
+      # The server over a pipe, as an MCP client starts it: initialize, then tools/list.
+      echo '{ "roms": {} }' >fugloy.mcp.json
+      FUGLOY_CONFIG="$PWD/fugloy.mcp.json" node --input-type=module -e "$MCP_SMOKE" "$version"
     fi
   ) || die "The packed tarballs installed but didn't run."
   info "The packed tarballs install and run."
@@ -281,6 +392,15 @@ cmd_publish() {
     local t="${e% *}" sum="${e##* }"
     [[ -f "$t" && "$(shasum -a 256 "$t" | cut -d' ' -f1)" == "$sum" ]] || die "$t changed or vanished since the check. Run ./publish.sh check $set again."
   done
+
+  if [[ "$set" == mcp ]]; then
+    read_fugloy_deps mcp
+    for dep in "${FUGLOY_DEPS[@]}"; do
+      local dver
+      dver=$(pkg_field "$dep" version)
+      npm view "@fugloy/$dep@$dver" version >/dev/null 2>&1 || die "@fugloy/$dep@$dver isn't on npm, and @fugloy/mcp needs it. Publish $dep first."
+    done
+  fi
 
   info "About to publish $set $version (public):"
   for e in "${entries[@]}"; do info "  ${e% *}"; done

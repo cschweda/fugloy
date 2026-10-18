@@ -33,8 +33,8 @@ and an MCP server that lets an AI assistant drive the emulator.
 | --- | --- | --- | --- |
 | **Disassembler** | Loads `.CMD`, `.BAS`, and raw files by content; recursive descent; labels; cited ROM, hardware, and DOS names; hint files; hidden code in BASIC; rebasing and relocation; zmac source that reassembles byte for byte; JSON IR; reads the emulator's label files | Released, 1.1.0 on npm | `@fugloy/disasm`, the `fugloy` command in `@fugloy/cli`, opcode tables in `@fugloy/z80` |
 | **Web workbench** | The disassembler in the browser: facing pages, the four public-domain games one click away, editing by keyboard, the **Explain** tab, block comments, exports | Live | [fugloy.netlify.app](https://fugloy.netlify.app/), source in `apps/web` |
-| **Emulator** | A headless, deterministic Model III that passes ZEXDOC and ZEXALL, runs `.CMD`, `.BAS`, and `.CAS` programs, and has a debugger that writes label and coverage files | 0.1.0, phases 0–3 of 8 done; not yet on npm | `packages/emu` (`@fugloy/emu`) |
-| **MCP server** | Lets an AI assistant such as Claude Code load a program, run it, set breakpoints and watches, read the screen, and name what it finds in the same label file | 0.1.0, MCP phases A–C (emu phase 4) on a branch; not yet on npm | `packages/mcp` (`@fugloy/mcp`) |
+| **Emulator** | A headless, deterministic Model III that passes ZEXDOC and ZEXALL, runs `.CMD`, `.BAS`, and `.CAS` programs, and has a debugger that writes label and coverage files | 0.2.0 on npm, phases 0–4 of 8 done | `packages/emu` (`@fugloy/emu`) |
+| **MCP server** | Lets an AI assistant such as Claude Code load a program, run it, set breakpoints and watches, read the screen, and name what it finds in the same label file | 0.1.0 on npm, MCP phases A–F | `packages/mcp` (`@fugloy/mcp`) |
 | **Ahead** | An assembler and IDE in the workbench, a course in assembly for non-programmers, and, later, recompiling games to TypeScript | Planned | [Roadmap](#whats-ahead) |
 
 Its core libraries have no runtime dependencies and use no Node or browser
@@ -100,28 +100,35 @@ bring the ROM. Usage is in its [README](packages/emu/README.md).
 ### The MCP server
 
 `@fugloy/mcp` is a stdio MCP server over the emulator, built as the
-emulator's phase 4. An assistant such as Claude Code gets 23 tools: load a
+emulator's phase 4. An assistant such as Claude Code gets 29 tools: load a
 program and boot the ROM, run it (for a number of cycles or seconds, to a
 breakpoint, or until the screen settles), step, type keys, read registers,
 memory, and the screen, disassemble with coverage marks, set breakpoints with
 conditions and memory watches, see which routine made each write, list a
-routine's callers, and keep labels in a `<program>.fugloy.json` beside the
-program, the label and coverage file the disassembler reads with `--labels`.
-`suggest` lists the routines worth naming next, with what each was seen
-doing (writing video RAM, reading the keyboard, making sound, looping).
+routine's callers and callees, snapshot the machine and diff memory against
+a snapshot, search memory for bytes or text, and keep labels in a
+`<program>.fugloy.json` beside the program, the label and coverage file the
+disassembler reads with `--labels`. `suggest` lists the routines worth
+naming next, with what each was seen doing (writing video RAM, reading the
+keyboard, making sound, looping). Prompts (`orient`, `find-writer`,
+`label-pass`, `explain`) carry the method, and resources give the screen,
+the labels, and the Model III ROM's symbols.
 
 Given only "load Sea Dragon and find the routine that writes text to the
 screen; label it", a headless Claude Code session watched the screen, ran
 the title, followed the writes to the routine at `$6140`, read its code and
-callers, and labelled it `PRINT_TEXT` with a correct note, in 15 turns. To
-try it from a clone: `pnpm install && pnpm build`, copy
-`fugloy.mcp.example.json` to `fugloy.mcp.json` and point it at your Model
-III ROM, copy `.mcp.json.example` to `.mcp.json`, and start Claude Code in
-the repository. The setup, the tools, and that session are in its
-[README](packages/mcp/README.md); the design is
-[docs/fugloy-mcp-spec.md](docs/fugloy-mcp-spec.md). It is not on npm yet:
-snapshots and memory diffs, protocol resources and prompts, and the release
-are its phases D–F.
+callers, and labelled it `PRINT_TEXT` with a correct note, in 15 turns. Given
+the `label-pass` prompt ("play for a minute, then label what you can
+justify"), it labelled three public-domain games on its own: 18 routines
+in Sea Dragon (twelve of them routines the hand-made hint file names, with
+the same meaning), all 17 that `suggest` listed in Eliminator, and all 24 in
+Rear Guard, each with a note saying how it knew.
+
+Install it with `npx -y @fugloy/mcp` as an MCP server, with a
+`fugloy.mcp.json` that names your Model III ROM; the setup (from npm or from
+a clone), the tools, and those sessions are in its
+[README](packages/mcp/README.md), and the design is in
+[docs/fugloy-mcp-spec.md](docs/fugloy-mcp-spec.md).
 
 ### What's ahead
 
@@ -276,9 +283,10 @@ What people come to Fugløy for, and how each one is done today.
 
 - **As someone working with an AI assistant,** I want it to run the program,
   set breakpoints, and read the screen for me, so that it can find and name
-  routines as I would. *Today:* the MCP server in `packages/mcp`, from a
-  clone; Claude Code found and labelled Sea Dragon's print routine with it
-  unaided.
+  routines as I would. *Today:* the MCP server, `npx -y @fugloy/mcp`;
+  Claude Code found and labelled Sea Dragon's print routine with it unaided,
+  and labelled 18 to 24 routines in each of Sea Dragon, Eliminator, and Rear
+  Guard from the `label-pass` prompt.
 
 Planned, per the roadmap:
 
@@ -303,22 +311,21 @@ releases: phase 2, Pass 1 and Pass 2, as
 core decoder and loaders, as
 [v0.1.0](https://github.com/cschweda/fugloy/releases/tag/v0.1.0).
 
-The emulator, `@fugloy/emu` 0.1.0 (not yet on npm), has phases 0–3 of eight
+The emulator, `@fugloy/emu` 0.2.0 (its first npm release), has phases 0–4 of eight
 done: the core of [trs80-emulator](https://github.com/cschweda/trs80-emulator)
 booting the Model III ROM to `READY` in Node (0); a Z80 core that passes
 ZEXDOC and ZEXALL (1); the Model III as a `Machine`, with video, sound,
 keyboard, and `.CMD`, `.BAS`, and `.CAS` loaders, on which Sea Dragon,
 Eliminator, and Rear Guard reach their title screens (2); and the debugger,
 `m.debug`, with breakpoints, watches, coverage, a trace, snapshots, and the
-label and coverage file (3). Its phase 4, the MCP server `@fugloy/mcp` v0.1
-(MCP phases A–C), is done and merged into `main`. Next
-are the MCP server's phases D–F (snapshots and diffs, resources and prompts,
-the npm release), then disk images, Model I and Model 4, and a differential
+label and coverage file (3); and the MCP server, `@fugloy/mcp` 0.1.0 (4),
+whose phases A–F are done, from the tools through snapshots and diffs,
+resources and prompts, and the npm release. Next are disk images, Model I and Model 4, and a differential
 harness (see the roadmap in [CLAUDE.md](CLAUDE.md)). Later,
 phase 5 adds an assembler with an IDE in the workbench: write Z80 code,
 assemble it, and run it on an emulated Model I or Model III. Every change is
-recorded in [CHANGELOG.md](CHANGELOG.md); releases are tagged `vX.Y.Z` on
-`main`.
+recorded in [CHANGELOG.md](CHANGELOG.md); core releases are tagged `vX.Y.Z`
+on `main`, the emulator's `emu-vX.Y.Z`, and the MCP server's `mcp-vX.Y.Z`.
 
 | Package | What it holds |
 | --- | --- |
@@ -326,7 +333,7 @@ recorded in [CHANGELOG.md](CHANGELOG.md); releases are tagged `vX.Y.Z` on
 | `packages/disasm` | 64K memory image with a load bitmap and block log, `.CMD` and `.BAS` loaders, content-based format detection, raw loader, a Level II BASIC parser and entry-point miner, pass 1 recursive descent, labels, the hint file, string and proposal heuristics, rebasing, relocation, the cited symbol tables (`data/symbols`, compiled by `pnpm symbols`), zmac emitter, JSON IR, linear sweep, plain-text listings. No Node or DOM APIs, so it runs in a browser. |
 | `packages/cli` | `fugloy <file> [--base <hex> \| --rebase <hex>] [--entry <hex>]... [--hints <path> \| --write-hints <path>] [--labels <path>] [--machine 1\|3\|4] [--dos trsdos\|ldos\|none] [--format listing\|zmac\|ir] [--sweep] [--color] [-o <path>]`, the only package that touches the file system. |
 | `packages/emu` | The headless, deterministic TRS-80 Model III emulator, built on the core of trs80-emulator: a Z80 CPU that passes ZEXALL, the `Machine` facade (`step`, `run`, registers, memory, video text, sound events, keyboard), `.CMD`, `.BAS`, and `.CAS` loaders with manifests, and the debugger `m.debug`, which writes the label and coverage file. No DOM, no Node APIs. Design in [docs/fugloy-emu-spec.md](docs/fugloy-emu-spec.md); usage in its [README](packages/emu/README.md). |
-| `packages/mcp` | The stdio MCP server that lets an AI assistant drive the emulator (`bin/fugloy-mcp.js`, plain JavaScript): MCP phases A–C, 23 tools for loading, running, typing, inspecting, breakpoints and watches, callers, a disassembly with coverage marks, labels, coverage, and `suggest`, with the `<program>.fugloy.json` sidecar. Design in [docs/fugloy-mcp-spec.md](docs/fugloy-mcp-spec.md); setup in its [README](packages/mcp/README.md). |
+| `packages/mcp` | The stdio MCP server that lets an AI assistant drive the emulator (`bin/fugloy-mcp.js`, plain JavaScript): MCP phases A–F, 29 tools for loading, running, typing, inspecting, breakpoints and watches, callers and callees, a disassembly with coverage marks, snapshots and diffs, search, labels, coverage, and `suggest`, with the `<program>.fugloy.json` sidecar, plus resources and prompts. Design in [docs/fugloy-mcp-spec.md](docs/fugloy-mcp-spec.md); setup in its [README](packages/mcp/README.md). |
 | `apps/web` | The web workbench (`@fugloy/web`, Nuxt 4 and Nuxt UI, static, deployed to Netlify), running the disassembler in the browser. |
 | `fixtures/synthetic` | Generated fixtures, one `.CMD` or `.BAS` per loader rule and analysis case plus their hint files, written by the test suite's own `.CMD` writer and BASIC tokenizer. |
 | `fixtures/hints` | Hint files for real programs; `asylum16.hints` carries Asylum's generated relocate lines, and `volcano.hints` relocates Volcano Hunter's game to its runtime address. |
@@ -348,11 +355,10 @@ fugloy GAME.CMD --format zmac -o game.z
 The libraries are `@fugloy/disasm` (loaders, analysis, emitters; runs in a
 browser) and `@fugloy/z80` (the opcode table and decoder). The examples below
 use `pnpm fugloy` from a clone, which runs the same CLI; with the package
-installed, write `fugloy` instead. The emulator, `@fugloy/emu`, is not on npm
-yet; use it from a clone (`pnpm install`), as its
-[README](packages/emu/README.md) shows. Nor is the MCP server; its
-[README](packages/mcp/README.md) shows how to run it from a clone with
-Claude Code. The workbench needs no install.
+installed, write `fugloy` instead. The emulator is `npm i @fugloy/emu` (its
+[README](packages/emu/README.md) shows the API), and the MCP server runs
+with `npx -y @fugloy/mcp` (its [README](packages/mcp/README.md) shows the
+Claude Code setup). The workbench needs no install.
 
 ## Requirements
 

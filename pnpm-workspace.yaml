@@ -3,7 +3,7 @@ packages:
   - 'apps/*'
 
 # A semver range naming a workspace package resolves to the local package, as npm
-# workspaces would. (packages/mcp now names its siblings as workspace:*.)
+# workspaces would. (packages/mcp names its siblings as workspace:^, which pnpm pack turns into ^X.Y.Z.)
 linkWorkspacePackages: true
 
 # Build scripts nobody needs: pdf.js's optional Node canvas (the site renders in
