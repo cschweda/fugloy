@@ -23,7 +23,8 @@
     "fugloy": "node packages/cli/bin/fugloy.js",
     "zmac:install": "bash scripts/install-zmac.sh",
     "zex:install": "bash scripts/install-zex.sh",
-    "trsjs:install": "bash scripts/install-trsjs.sh"
+    "trsjs:install": "bash scripts/install-trsjs.sh",
+    "diff": "node packages/emu/scripts/diff.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

@@ -15,7 +15,11 @@
  * has passed; on odd frames, with the beam interrupt enabled in port $E0's latch, trsjs raises it
  * and takes it in IM 1 when IFF1 is set (and drops it otherwise). That frame-end check runs at the
  * start of the next `step`, so an interrupt response counts with the instruction after it, as
- * `Machine.step` counts it.
+ * `Machine.step` counts it. The comparator (compare.js) can hold that response back (`irq: 'hold'`)
+ * or make the reference take a request it dropped earlier (`irq: 'force'`); known.js says when.
+ *
+ * Not modelled here: trsjs's NMI path (`x_stepz80`, `fdc_update`) is not run, so the reference never
+ * takes an NMI; the harness compares programs that run without a disk.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -39,16 +43,24 @@ const PUTBYTE_MARKER = 'function putbyte(z,addr,val)\n{\n';
  * @typedef {import('../../src/machine/machine.js').Regs} Regs
  * @typedef {import('../../src/machine/machine.js').Machine} Machine
  * @typedef {{ addr: number, value: number }} Write
+ * @typedef {'auto' | 'hold' | 'force'} IrqMode
+ *   auto: take the 30 Hz request at a frame end when IFF1 is set (trsjs's own rule);
+ *   hold: raise it at a frame end but do not take it (the request stays raised in port $E0);
+ *   force: take an interrupt now (IFF1 must be set), whether or not a frame ended.
+ * @typedef {{ cycles: number, irq: boolean, raised: boolean }} RefStep
+ *   irq: an interrupt response ran; raised: a frame end raised the 30 Hz request this step.
  * @typedef {{
  *   reset(): void,
- *   step(): { cycles: number, irq: boolean },
+ *   step(opts?: { irq?: IrqMode }): RefStep,
  *   regs(): Regs,
  *   peek(addr: number, len: number): Uint8Array,
  *   poke(addr: number, bytes: ArrayLike<number>): void,
  *   setKeyBit(row: number, bit: number, down: boolean): void,
  *   alignRtc(phaseTStates: number): void,
  *   syncFrom(machine: Machine): void,
+ *   syncRegs(machine: Machine): void,
  *   writes(): Write[],
+ *   readonly prefixedOps: ReadonlySet<number>,
  *   readonly cycles: number,
  *   readonly z: any,
  * }} Reference
@@ -90,6 +102,9 @@ function readChecked(path) {
 export function loadTrsjs({ path = TRSJS_PATH } = {}) {
   let src = readChecked(path);
   if (!src.includes(RETURN_MARKER) || !src.includes(PUTBYTE_MARKER)) throw new Error(`${path}: an injection point is missing (the pinned file should have both)`);
+  // The opcodes trsjs implements after DD or FD (its `opx` table); after any other byte its
+  // `opx_default` does nothing and takes no T-states, so the prefixed instruction is dropped.
+  const prefixedOps = new Set([...src.matchAll(/\bopx\[0x([0-9a-f]{2})\] = /g)].map((mm) => parseInt(mm[1], 16)));
   src = src.replace(RETURN_MARKER, RETURN_MARKER.replace('return api;',
     `api.__x = { ${EXPORTS.map((n) => `${n}: ${n}`).join(', ')}, cyclesPerFrame: function () { return cycles_per_frame; } };\n\treturn api;`));
   src = src.replace(PUTBYTE_MARKER, `${PUTBYTE_MARKER}   if (z.wlog) z.wlog.push(addr, val);\n`);
@@ -120,16 +135,21 @@ export function loadTrsjs({ path = TRSJS_PATH } = {}) {
   z.wlog = wlog;
   let total = 0;
 
-  /** The frame-end handling TRS80Field runs after the instruction that drove z.cycles below 0. */
-  function frameEnd() {
-    if (z.cycles >= 0) return { used: 0, irq: false };
+  /**
+   * The frame-end handling TRS80Field runs after the instruction that drove z.cycles below 0;
+   * with `hold`, a raised request is not taken.
+   * @param {boolean} hold
+   */
+  function frameEnd(hold) {
+    if (z.cycles >= 0) return { used: 0, irq: false, raised: false };
     z.frame_cnt++;
     z.cycles += cpf;
-    if (!x.BEAM_IRQ_ENABLED(z) || z.frame_cnt % 2 !== 1) return { used: 0, irq: false };
+    if (!x.BEAM_IRQ_ENABLED(z) || z.frame_cnt % 2 !== 1) return { used: 0, irq: false, raised: false };
     x.BEAM_IRQ_RAISE(z);
+    if (hold) return { used: 0, irq: false, raised: true };
     const before = z.cycles;
     const irq = !!x.mode_1_IRQ(z);
-    return { used: before - z.cycles, irq };
+    return { used: before - z.cycles, irq, raised: true };
   }
 
   /** @param {number} phase */
@@ -153,14 +173,21 @@ export function loadTrsjs({ path = TRSJS_PATH } = {}) {
       wlog.length = 0;
     },
 
-    step() {
+    step({ irq = 'auto' } = {}) {
       wlog.length = 0;
-      const fe = frameEnd();
+      const fe = frameEnd(irq === 'hold');
+      let used = fe.used;
+      let taken = fe.irq;
+      if (irq === 'force' && !taken) {
+        const before = z.cycles;
+        taken = !!x.mode_1_IRQ(z);
+        used += before - z.cycles;
+      }
       const before = z.cycles;
       x.stepz80(z);
-      const cycles = fe.used + (before - z.cycles);
+      const cycles = used + (before - z.cycles);
       total += cycles;
-      return { cycles, irq: fe.irq };
+      return { cycles, irq: taken, raised: fe.raised };
     },
 
     regs() {
@@ -193,6 +220,28 @@ export function loadTrsjs({ path = TRSJS_PATH } = {}) {
 
     syncFrom(machine) {
       const sys = machine.system;
+      const io = sys.io;
+      ref.syncRegs(machine);
+      // ROM, video RAM, and RAM; $3800-$3BFF is the keyboard, synced from the matrix below.
+      ref.poke(0x0000, machine.mem.read(0x0000, 0x3800));
+      ref.poke(0x3c00, machine.mem.read(0x3c00, 0x10000 - 0x3c00));
+      const rows = sys.keyboard.rows;
+      for (let row = 0; row < 8; row++) for (let bit = 0; bit < 8; bit++) ref.setKeyBit(row, bit, ((rows[row] >> bit) & 1) === 1);
+      // The port latches trsjs models: the interrupt mask and status ($E0), the mode register
+      // ($EC), the NMI mask ($E4, its top three bits, as out_fdnmi keeps them), and the cassette
+      // port ($FF): the input bits in_cass reads (bit 7 the pulse latch, bit 0 the tape level, read without
+      // advancing our deck) and the output latch.
+      z.port_latch[0xe0] = io.intMask & 0xff;
+      z.port_status[0xe0] = ~io.intLatch & 0xff;
+      z.port_latch[0xec] = io.modeRegister & 0xff;
+      z.port_latch[0xe4] = io.nmiMask & 0xe0;
+      z.port_status[0xff] = (io.cassette.pulseLatch ? 0x80 : 0) | (io.cassette.inputLevel ? 0x01 : 0);
+      z.port_latch[0xff] = io.cassetteOut & 0xff;
+      wlog.length = 0;
+    },
+
+    syncRegs(machine) {
+      const sys = machine.system;
       const cpu = sys.cpu;
       const o = machine.cpu.regs;
       const r = z.reg;
@@ -206,18 +255,8 @@ export function loadTrsjs({ path = TRSJS_PATH } = {}) {
       const ei = cpu.pendingEI > 0;
       r.IFF1 = o.iff1 || ei ? 1 : 0;
       r.IFF2 = o.iff2 || ei ? 1 : 0;
-      // ROM, video RAM, and RAM; $3800-$3BFF is the keyboard, synced from the matrix below.
-      ref.poke(0x0000, machine.mem.read(0x0000, 0x3800));
-      ref.poke(0x3c00, machine.mem.read(0x3c00, 0x10000 - 0x3c00));
-      const rows = sys.keyboard.rows;
-      for (let row = 0; row < 8; row++) for (let bit = 0; bit < 8; bit++) ref.setKeyBit(row, bit, ((rows[row] >> bit) & 1) === 1);
-      // The port latches trsjs models: the interrupt mask and status ($E0) and the mode register ($EC).
-      z.port_latch[0xe0] = sys.io.intMask & 0xff;
-      z.port_status[0xe0] = ~sys.io.intLatch & 0xff;
-      z.port_latch[0xec] = sys.io.modeRegister & 0xff;
       alignRtc(sys.nextRtcAt - machine.cycles);
       total = machine.cycles;
-      wlog.length = 0;
     },
 
     writes() {
@@ -230,6 +269,8 @@ export function loadTrsjs({ path = TRSJS_PATH } = {}) {
     get cycles() {
       return total;
     },
+
+    prefixedOps,
 
     z,
   };
