@@ -4,6 +4,8 @@
  * file, run the analysis, and render. Sessions are immutable; each `with...`
  * returns a new one, re-analyzed. Pure: bytes in, text out.
  */
+import { hex4 } from '@fugloy/z80';
+import { Kind } from './analysis/map.js';
 import { analyze } from './pipeline.js';
 import type { Analysis, HintsSummary } from './pipeline.js';
 import { loadBas } from './bas.js';
@@ -111,10 +113,33 @@ function build(p: Parts): Session {
     ...(summary === undefined ? {} : { hints: summary }),
     ...(p.rebasedFrom === undefined ? {} : { rebasedFrom: p.rebasedFrom }),
   });
+  // Notes that no row shows: the analysis decides where instructions start, so this is known only now.
+  const lost = lostNotes(analysis);
+  const applied = lost.length === 0 ? p.applied : { ...p.applied, warnings: [...p.applied.warnings, ...lost] };
+  if (lost.length > 0 && analysis.hints !== undefined) analysis.hints = { ...analysis.hints, warnings: applied.warnings };
   // A .BAS with neither hidden code nor a planted entry lists as plain BASIC unless pass 1 was asked for.
   const plainBasic =
     p.module.format === 'bas' && p.entries.length === 0 && p.hintFile.hints.length === 0 && p.rebasedFrom === undefined && analysis.entries.length === 0 && p.module.lines.every((l) => l.parsed);
-  return { ...p, analysis, plainBasic };
+  const session: Session = { ...p, applied, analysis, plainBasic };
+  if (applied !== p.applied) applyResult.set(session, p.applied);
+  return session;
+}
+
+/** The hint file's own result for a session whose warnings had notes added, so a rebuild adds them afresh. */
+const applyResult = new WeakMap<Session, Applied>();
+
+/** A warning for each note whose address is inside an instruction (not a row start): the listing does not show it. */
+function lostNotes(analysis: Analysis): string[] {
+  const { map, instructions } = analysis.pass1;
+  const out: string[] = [];
+  for (const addr of [...analysis.annotations.notes.keys()].sort((p, q) => p - q)) {
+    if (map.kind(addr) !== Kind.Tail) continue;
+    let owner = addr - 1;
+    while (owner > addr - 4 && !instructions.has(owner & 0xffff)) owner--;
+    const at = `$${hex4(addr)}`;
+    out.push(`note at ${at} is inside the instruction at $${hex4(owner & 0xffff)} and is not shown; move it with the block comment box`);
+  }
+  return out;
 }
 
 /** The parts a Session shares with the Parts it was built from. */
@@ -128,7 +153,7 @@ const partsOf = (s: Session, hinted: boolean): Parts => ({
   entries: s.entries,
   hintFile: s.hintFile,
   hintSource: s.hintSource,
-  applied: s.applied,
+  applied: applyResult.get(s) ?? s.applied,
   hinted,
   rebasedFrom: s.analysis.rebasedFrom,
 });

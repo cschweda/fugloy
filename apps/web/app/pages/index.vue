@@ -2,13 +2,14 @@
 // The workbench. With no program open, the first screen (drop zone and the
 // four games); with one, two facing pages: the listing on the left, the
 // companion tabs on the right, and the status line under them.
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { addressKey, withHintFile, withSelection } from '@fugloy/disasm';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
+import { addressKey, summaryNotes, withHintFile, withSelection } from '@fugloy/disasm';
 import { download } from '~/utils/exports';
 import { MODEL3_DEFAULT } from '~/composables/useWorkbench';
 import type { Row, TableEntry } from '@fugloy/disasm';
 import ListingView from '~/components/listing/ListingView.vue';
 import InlineEdit from '~/components/listing/InlineEdit.vue';
+import NotesEdit from '~/components/listing/NotesEdit.vue';
 import RowMenu from '~/components/listing/RowMenu.vue';
 import HintsTab from '~/components/HintsTab.vue';
 import FirstScreen from '~/components/FirstScreen.vue';
@@ -19,6 +20,10 @@ import StatusLine from '~/components/StatusLine.vue';
 import IndexTab from '~/components/side/IndexTab.vue';
 import ProgramTab from '~/components/side/ProgramTab.vue';
 import SymbolTab from '~/components/side/SymbolTab.vue';
+import ExplainTab from '~/components/side/ExplainTab.vue';
+import type { ExplainTarget } from '~/components/side/ExplainTab.vue';
+import { warmExplain } from '~/utils/explain-view';
+import { rowAddr } from '~/utils/row-classes';
 import ManualTab from '~/components/side/ManualTab.vue';
 import type { ManualRequest } from '~/components/side/ManualTab.vue';
 import { useManuals } from '~/composables/useManuals';
@@ -63,13 +68,14 @@ const wb = useWorkbench();
 const { session, rows, cursor, selection, example, facts } = wb;
 
 type LeftTab = 'listing' | 'hints' | 'source';
-type RightTab = 'symbol' | 'index' | 'program' | 'manual' | 'run';
+type RightTab = 'explain' | 'symbol' | 'index' | 'program' | 'manual' | 'run';
 const LEFT_TABS: PageTab<LeftTab>[] = [
   { id: 'listing', label: 'Listing' },
   { id: 'hints', label: 'Hints' },
   { id: 'source', label: 'Source ✎', later: true },
 ];
 const RIGHT_TABS: PageTab<RightTab>[] = [
+  { id: 'explain', label: 'Explain' },
   { id: 'symbol', label: 'Symbol' },
   { id: 'index', label: 'Index' },
   { id: 'program', label: 'Program' },
@@ -199,6 +205,46 @@ function onDocumentDrop(e: DragEvent): void {
   void receive(file);
 }
 
+// The Explain tab: a click on a row opens it on that row; while it shows, every
+// cursor move re-explains (arrow keys, G, a followed link). Before the first
+// click it shows a prompt. Other tabs stay put on arrow keys.
+const explainStarted = ref(false);
+/** The row last clicked, while the cursor is still on its address (a label or note row explains itself, not the line under it). */
+const clicked = shallowRef<Row | null>(null);
+const explainTarget = computed<ExplainTarget | null>(() => {
+  const at = cursor.value;
+  if (!explainStarted.value || at === null) return null;
+  const row = clicked.value;
+  return row !== null && rowAddr(row) === at ? { addr: at, row } : { addr: at };
+});
+watch(cursor, (at) => {
+  if (clicked.value !== null && rowAddr(clicked.value) !== at) clicked.value = null;
+});
+function onRowClick(row: Row): void {
+  clicked.value = row;
+  explainStarted.value = true;
+  rightTab.value = 'explain';
+}
+watch(wb.openCount, () => {
+  explainStarted.value = false;
+  clicked.value = null;
+});
+// Build the engine's routine index in idle time after a program opens or changes,
+// so the first step with Explain open does not pay for it.
+let cancelWarm: (() => void) | null = null;
+watch(
+  session,
+  (s) => {
+    cancelWarm?.();
+    cancelWarm = null;
+    clicked.value = null;
+    if (s === null || s.plainBasic || s.module.format === 'bas') return;
+    const at = facts.value?.entry ?? firstCodeAddr(rows.value);
+    if (at !== null) cancelWarm = warmExplain(s, at);
+  },
+  { immediate: true },
+);
+
 /** Where a shift-extended selection started; the cursor is its other end. */
 let anchor: number | null = null;
 
@@ -250,7 +296,7 @@ const editor = useListingEditor({
     leftTab.value = 'listing';
   },
 });
-const { editMessage, inline, inlineValue, inlineChoice, menu } = editor;
+const { editMessage, inline, inlineValue, inlineChoice, menu, notes, notesValue, notesScope } = editor;
 
 function onFollow(target: number, info: FollowInfo): void {
   if (info.span === 'table') {
@@ -410,6 +456,7 @@ function installTestHook(): void {
   };
 }
 onBeforeUnmount(() => {
+  cancelWarm?.();
   document.removeEventListener('drop', onDocumentDrop);
   if (__FUGLOY_E2E__) delete window.__fugloyTest;
 });
@@ -454,6 +501,7 @@ onBeforeUnmount(() => {
               :cursor="cursor"
               :selection="selection"
               @select="onSelect"
+              @row-click="onRowClick"
               @follow="onFollow"
               @context="editor.onContext"
               @context-key="editor.menuAtCursor"
@@ -467,6 +515,13 @@ onBeforeUnmount(() => {
         </template>
         <template #right>
           <PageTabs v-model="rightTab" :tabs="RIGHT_TABS" label="Right page" id-prefix="right" />
+          <div id="right-panel-explain" v-show="rightTab === 'explain'" role="tabpanel" aria-labelledby="right-tab-explain" class="fg-panel" data-testid="explain-panel">
+            <ExplainTab :target="explainTarget" :active="rightTab === 'explain'" @go="go" @table="showTable">
+              <template #summary-actions="{ summary }">
+                <button type="button" class="fg-button fg-explain-use" data-testid="explain-use-comment" @click="editor.openNotes({ start: summary.start, name: summary.name, text: summaryNotes(summary).join('\n') })">Use as comment</button>
+              </template>
+            </ExplainTab>
+          </div>
           <div id="right-panel-symbol" v-show="rightTab === 'symbol'" role="tabpanel" aria-labelledby="right-tab-symbol" class="fg-panel">
             <SymbolTab @go="go" @open-manual="openManual" />
           </div>
@@ -506,6 +561,19 @@ onBeforeUnmount(() => {
       :top="inline.top"
       @submit="editor.submitInline"
       @cancel="editor.closeInline"
+    />
+    <NotesEdit
+      v-if="notes !== null && session !== null"
+      v-model="notesValue"
+      v-model:scope="notesScope"
+      :title="notes.title"
+      :routine="notes.routine"
+      :error="notes.error"
+      :keeps="notes.keeps"
+      :left="notes.left"
+      :top="notes.top"
+      @submit="editor.submitNotes"
+      @cancel="editor.closeNotes"
     />
     <ConfirmDialog
       testid="saved-work-dialog"

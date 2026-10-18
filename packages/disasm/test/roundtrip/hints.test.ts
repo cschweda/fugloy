@@ -1,4 +1,6 @@
 /** The hint-paths fixture, with its hints applied and labels on, must reassemble to its image. */
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { expect } from 'vitest';
 import { loadCmd } from '../../src/cmd.js';
 import { emitZmac } from '../../src/emit/zmac.js';
@@ -6,6 +8,7 @@ import { applyHints } from '../../src/hints/apply.js';
 import { parseHints } from '../../src/hints/format.js';
 import { emptyAnnotations } from '../../src/hints/apply.js';
 import { analyze } from '../../src/pipeline.js';
+import { addressKey, openProgram, renderSession, withHintText } from '../../src/session.js';
 import { loadRaw } from '../../src/raw.js';
 import { CMD_FIXTURES, HINT_FIXTURES } from '../fixtures.js';
 import { assemble, expectSameImage, skipIfNoZmac } from './zmac.js';
@@ -55,4 +58,19 @@ test('a user name outside the image is defined by an EQU and reassembles to the 
   expect(source).toContain('SCORE\tEQU\t7F00H\t; player score\nLIVES\tEQU\t7F01H\n');
   expect(source).toContain('\tLD\tA,(SCORE)\n\tLD\t(LIVES),A\n');
   expectSameImage(assemble(source).module.image, mod.image);
+});
+
+test('a note at the relocated Sea Dragon routine reassembles to the same image', () => {
+  const dir = fileURLToPath(new URL('../../../../examples/sea-dragon/', import.meta.url));
+  const bytes = new Uint8Array(readFileSync(`${dir}seadrg01.cmd`));
+  const hints = readFileSync(`${dir}seadrg01.hints`, 'utf8');
+  const base = withHintText(openProgram(bytes, { name: 'seadrg01.cmd', selection: { machine: 3, dos: 'trsdos' } }), hints);
+  const key = addressKey(base, 0x497f)!;
+  const noted = withHintText(base, `${hints}\nblock ${key.block}:$${key.offset.toString(16).toUpperCase().padStart(4, '0')} note The relocated routine.\nblock ${key.block}:$${key.offset.toString(16).toUpperCase().padStart(4, '0')} note\n`);
+  const source = renderSession(noted, 'zmac');
+  expect(source).toContain('; The relocated routine.\n;\nL497F:\n');
+  // The committed hints may already note L497F; the added note follows theirs, in file order.
+  const existing = base.analysis.annotations.notes.get(0x497f) ?? [];
+  if (existing.length > 0) expect(source).toContain(`; ${existing.at(-1)}\n; The relocated routine.\n`);
+  expectSameImage(assemble(source).module.image, base.module.image);
 });

@@ -64,6 +64,8 @@ export interface Ir {
   relocations: Relocation[];
   /** `at` comments on addresses no name takes; present only when there are some. */
   outsideComments?: { addr: number; text: string }[];
+  /** Block comments from `note` hints, in address order; present only when there are some. */
+  notes?: { addr: number; lines: string[] }[];
   hints?: HintsSummary;
 }
 
@@ -101,6 +103,7 @@ export function buildIr(
           cite: e.cite,
         }));
   const outside = analysis === undefined ? [] : outsideComments(analysis.annotations, analysis.symbols, analysis.space.image);
+  const notes = analysis === undefined ? [] : [...analysis.annotations.notes].sort((x, y) => x[0] - y[0]).map(([addr, lines]) => ({ addr, lines }));
   return {
     fugloyIr: 1,
     ...(source === undefined ? {} : { source }),
@@ -121,6 +124,7 @@ export function buildIr(
     proposals: analysis?.proposals ?? [],
     relocations: analysis?.space.relocations ?? [],
     ...(outside.length === 0 ? {} : { outsideComments: outside }),
+    ...(notes.length === 0 ? {} : { notes }),
     ...(analysis?.hints === undefined ? {} : { hints: analysis.hints }),
   };
 }

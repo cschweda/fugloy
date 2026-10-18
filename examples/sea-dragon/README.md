@@ -23,7 +23,7 @@ software archives:
 | `seadrg01.cmd` | The game at `$5200`, then a stub at `$8881` that copies it down to `$497F` and jumps there |
 | `seadrg02.cmd`–`seadrg04.cmd` | The same game at `$8000`, with the stub at `$B681` |
 | `seadrg06.cmd`–`seadrg11.cmd` | Builds that load the game where it runs |
-| `seadrg01.hints` | The two hint lines Fugløy proposes for `seadrg01.cmd`, under the skeleton `--write-hints` writes |
+| `seadrg01.hints` | The two hint lines Fugløy proposes for `seadrg01.cmd`, under the skeleton `--write-hints` writes, then names and block comments for the game's main routines and data: an annotated listing |
 
 A build numbered 05 also exists. It was rebuilt with Zeta Microcomputer
 Software's OFFSET utility, and its loader carries Zeta's own copyright, which
@@ -35,7 +35,7 @@ the 1995 release does not cover, so it is not included here.
 pnpm build
 pnpm fugloy examples/sea-dragon/seadrg01.cmd            # pass 1 finds only the 15-byte stub, and proposes the move
 pnpm fugloy examples/sea-dragon/seadrg01.cmd --hints examples/sea-dragon/seadrg01.hints
-                                                         # the game at $497F, 45% of its bytes decoded as code
+                                                         # the game at $497F, 45% of its bytes decoded as code, annotated
 pnpm fugloy examples/sea-dragon/seadrg06.cmd --color    # a build that loads in place, in color on a terminal
 ```
 

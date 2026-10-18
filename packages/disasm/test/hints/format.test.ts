@@ -161,3 +161,17 @@ describe('the relocate directive', () => {
     expect(messages('block 0:$0000 relocate $FFF0 $20')).toEqual(['relocate destination $FFF0 plus 32 bytes runs past $FFFF']);
   });
 });
+
+describe('the note directive', () => {
+  it('keeps order within an address through write and parse, and round-trips an empty note', () => {
+    const f = ok(`${HEAD}block 0:$000A note Draws the sub\nblock 0:$000A note   second line # kept\nblock 0:$000A note\nblock 0:$0002 note earlier\n`);
+    expect(f.hints.map((h) => (h.directive === 'note' ? [h.offset, h.text] : null))).toEqual([[0x0a, 'Draws the sub'], [0x0a, 'second line # kept'], [0x0a, ''], [2, 'earlier']]);
+    const text = writeHints(f);
+    expect(text).toContain('\nblock 0:$0002 note earlier\nblock 0:$000A note Draws the sub\nblock 0:$000A note second line # kept\nblock 0:$000A note\n');
+    expect(writeHints(ok(text))).toBe(text);
+  });
+
+  it('refuses an at note', () => {
+    expect(parseHints('fugloy-hints 1\nat $7F00 note x\n').errors.map((e) => e.message)).toEqual(['notes describe loaded code; use block <i>:<offset> note']);
+  });
+});

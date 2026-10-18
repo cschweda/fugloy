@@ -18,6 +18,7 @@ import { hex4 } from '@fugloy/z80';
 import type { Instruction, Operand } from '@fugloy/z80';
 import { endsPath, targetOf } from './descent.js';
 import type { Pass1 } from './descent.js';
+import { pair, stepRegs, unknownRegs } from './regs.js';
 import type { Relocation } from './relocate.js';
 import type { BlockIdentity } from '../hints/identity.js';
 import type { MemoryImage } from '../memory.js';
@@ -34,41 +35,14 @@ export interface MoverProposal {
   hints: string[];
 }
 
-type Pair = 'BC' | 'DE' | 'HL';
-type Regs = Record<Pair, number | null>;
-const HALF: Readonly<Record<string, Pair>> = { B: 'BC', C: 'BC', D: 'DE', E: 'DE', H: 'HL', L: 'HL' };
-/** Mnemonics that write their first operand. */
-const WRITES_FIRST: ReadonlySet<string> = new Set(['LD', 'ADD', 'ADC', 'SBC', 'IN', 'EX', 'POP', 'INC', 'DEC', 'RLC', 'RRC', 'RL', 'RR', 'SLA', 'SRA', 'SLL', 'SRL']);
-/** After these nothing about HL, DE, or BC can be assumed. */
-const CLOBBERS_ALL: ReadonlySet<string> = new Set(['EXX', 'CALL', 'RST', 'LDI', 'LDD', 'LDDR', 'CPI', 'CPD', 'CPIR', 'CPDR', 'INI', 'IND', 'INIR', 'INDR', 'OUTI', 'OUTD', 'OTIR', 'OTDR']);
 /** A path is followed this many instructions at most. */
 const MAX_STEPS = 512;
 
-const pairOf = (o: Operand | undefined): Pair | null =>
-  o?.kind === 'reg16' && (o.reg === 'BC' || o.reg === 'DE' || o.reg === 'HL') ? o.reg : o?.kind === 'reg' ? (HALF[o.reg] ?? null) : null;
-
-/** How one instruction changes what is known about HL, DE, and BC (LDIR is handled by the caller). */
-function step(ins: Instruction, regs: Regs): void {
-  const [a, b] = ins.operands;
-  const forget = (o: Operand | undefined): void => {
-    const p = pairOf(o);
-    if (p !== null) regs[p] = null;
-  };
-  if (ins.mnemonic === 'LD' && a?.kind === 'reg16' && b?.kind === 'imm16' && pairOf(a) !== null) {
-    regs[a.reg as Pair] = b.value;
-  } else if (ins.mnemonic === 'EX' && pairOf(a) === 'DE' && pairOf(b) === 'HL') {
-    [regs.DE, regs.HL] = [regs.HL, regs.DE];
-  } else if (CLOBBERS_ALL.has(ins.mnemonic)) {
-    regs.BC = regs.DE = regs.HL = null;
-  } else if (ins.mnemonic === 'DJNZ') {
-    regs.BC = null;
-  } else if (ins.mnemonic === 'RES' || ins.mnemonic === 'SET') {
-    forget(b);
-  } else if (WRITES_FIRST.has(ins.mnemonic)) {
-    forget(a);
-    if (ins.mnemonic === 'EX') forget(b);
-  }
-}
+const pairOf = (o: Operand | undefined): 'BC' | 'DE' | 'HL' | null => {
+  if (o?.kind === 'reg16') return o.reg === 'BC' || o.reg === 'DE' || o.reg === 'HL' ? o.reg : null;
+  if (o?.kind !== 'reg') return null;
+  return o.reg === 'B' || o.reg === 'C' ? 'BC' : o.reg === 'D' || o.reg === 'E' ? 'DE' : o.reg === 'H' || o.reg === 'L' ? 'HL' : null;
+};
 
 interface Move {
   ldir: number;
@@ -83,7 +57,7 @@ export function proposeMovers(image: MemoryImage, pass1: Pass1, identities: Bloc
   const moves: Move[] = [];
   const seen = new Set<number>();
   for (const root of pass1.roots) {
-    const regs: Regs = { BC: null, DE: null, HL: null };
+    const regs = unknownRegs();
     const visited = new Set<number>();
     const open: Move[] = [];
     let addr: number | null = root;
@@ -92,20 +66,21 @@ export function proposeMovers(image: MemoryImage, pass1: Pass1, identities: Bloc
       if (ins === undefined || visited.has(addr)) break;
       visited.add(addr);
       if (ins.mnemonic === 'LDIR') {
-        if (regs.HL !== null && regs.DE !== null && regs.BC !== null && !seen.has(addr)) {
+        const [hl, de, bc] = [pair(regs, 'HL'), pair(regs, 'DE'), pair(regs, 'BC')];
+        if (hl !== null && de !== null && bc !== null && !seen.has(addr)) {
           seen.add(addr);
-          const move: Move = { ldir: addr, src: regs.HL, dst: regs.DE, length: regs.BC === 0 ? 0x10000 : regs.BC };
+          const move: Move = { ldir: addr, src: hl, dst: de, length: bc === 0 ? 0x10000 : bc };
           open.push(move);
           moves.push(move);
         }
-        regs.BC = regs.DE = regs.HL = null;
+        stepRegs(ins, regs);
       } else {
         if (ins.mnemonic === 'PUSH') {
           const p = pairOf(ins.operands[0]);
-          const value = p === null ? null : regs[p];
+          const value = p === null ? null : pair(regs, p);
           if (value !== null) for (const m of open) if (m.pushed === undefined && value >= m.dst && value < m.dst + m.length) m.pushed = value;
         }
-        step(ins, regs);
+        stepRegs(ins, regs);
       }
       const target = targetOf(ins);
       const unconditional = ins.flow.kind === 'jump' && !ins.flow.conditional && !ins.flow.indirect;

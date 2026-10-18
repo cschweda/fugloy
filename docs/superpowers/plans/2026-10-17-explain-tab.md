@@ -312,6 +312,7 @@
   - Previews are buttons that go to their address.
   - The details strip and the routine summary sit under the lead. The picture shows for data rows, with width buttons 8/16/32/64 and a number field.
   - Before any click, the tab shows "Click a line to have it explained."
+  - A label row (or a label inside an instruction) shows who calls it and jumps to it, as links, and whether it is the entry point; jump-table entries are "reached from the table entry at". (Added in the final whole-branch fix wave; the engine filled `label` from the start but the tab did not show it.)
 
 - [ ] **Step 1: Write failing tests.**
   - Unit: the cache returns the same object for the same session and address, and a new one after the session changes.

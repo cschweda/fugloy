@@ -25,6 +25,8 @@ export type Directive =
   | { directive: 'table'; count: number; width: number }
   | { directive: 'name'; name: string }
   | { directive: 'comment'; text: string }
+  /** A block comment printed above the address; the text may be empty (a blank `;` line). */
+  | { directive: 'note'; text: string }
   | { directive: 'relocate'; addr: number; length: number };
 
 /** `at` is set only on a `name` or `comment` keyed by a runtime address (an `at` line); `block` and `offset` are then both -1. */
@@ -127,6 +129,7 @@ export function parseHints(text: string): { file: HintFile; errors: HintError[] 
         hints.push({ ...base, directive: 'comment', text });
         continue;
       }
+      if (tokens[2] === 'note') { fail('notes describe loaded code; use block <i>:<offset> note'); continue; }
       if (tokens[2] !== 'name') { fail(`unknown directive "${tokens[2]}"`); continue; }
       const name = tokens[3];
       if (name === undefined) { fail('name needs an identifier'); continue; }
@@ -170,7 +173,7 @@ export function parseHints(text: string): { file: HintFile; errors: HintError[] 
     // A trailing `# comment` is allowed on every line except `comment`, whose text runs to the end.
     const rawArgs = tokens.slice(3);
     const hashAt = rawArgs.findIndex((t) => t.startsWith('#'));
-    const args = directive === 'comment' || hashAt < 0 ? rawArgs : rawArgs.slice(0, hashAt);
+    const args = directive === 'comment' || directive === 'note' || hashAt < 0 ? rawArgs : rawArgs.slice(0, hashAt);
     const base = { block: blockIndex, offset, line };
     const noExtra = (allowed: number): boolean => {
       if (args.length <= allowed) return true;
@@ -252,6 +255,11 @@ export function parseHints(text: string): { file: HintFile; errors: HintError[] 
         hints.push({ ...base, directive: 'comment', text: raw.slice(at + 'comment'.length).trim() });
         break;
       }
+      case 'note': {
+        const at = raw.indexOf('note', raw.indexOf(tokens[1]) + tokens[1].length);
+        hints.push({ ...base, directive: 'note', text: raw.slice(at + 'note'.length).trim() });
+        break;
+      }
       default:
         fail(directive === undefined ? 'unexpected line' : `unknown directive "${directive}"`);
     }
@@ -274,6 +282,7 @@ function directiveText(h: Hint): string {
     case 'relocate': return `relocate ${num(h.addr)} ${num(h.length)}`;
     case 'name': return `name ${h.name}`;
     case 'comment': return `comment ${h.text}`;
+    case 'note': return h.text === '' ? 'note' : `note ${h.text}`;
   }
 }
 

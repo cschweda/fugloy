@@ -1,4 +1,5 @@
 // Editing the listing from the keyboard and the right-click menu, in a browser against the generated site.
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 
@@ -157,4 +158,116 @@ test('the keyboard stays on the listing: links are not tab stops, arrows move th
   await (await row(page, 0x499f)).click({ modifiers: ['Shift'] });
   await expect(page.locator('.fg-row-code.fg-row-selected')).toHaveCount(3);
   expect(await page.evaluate(() => window.getSelection()?.toString() ?? '')).toBe('');
+});
+
+test(': writes a block comment above the routine, Undo removes it, and Use as comment prefills and saves only on Save', async ({ page }) => {
+  await open(page);
+  const before = await hintText(page);
+  await goTo(page, 0x49a7);
+  await page.keyboard.press(':');
+  const box = page.getByTestId('notes-edit');
+  const area = page.getByTestId('notes-edit-input');
+  await expect(area).toBeFocused();
+  await expect(page.getByTestId('notes-scope-routine')).toBeChecked();
+  await expect(box).toContainText('Above the routine (L497F)');
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await area.fill('first line\nsecond line');
+  await page.keyboard.press('Control+Enter');
+  await expect(box).toHaveCount(0);
+  const listing = page.locator('.fg-listing');
+  await expect(listing).toContainText('; first line');
+  await expect(listing).toContainText('; second line');
+  const text = await hintText(page);
+  expect(text).toMatch(/block 0:\$0000 note first line\n.*block 0:\$0000 note second line/s);
+  await page.keyboard.press('Control+z');
+  await expect(listing).not.toContainText('; first line');
+  expect(await hintText(page)).toBe(before);
+
+  // Use as comment opens the box prefilled with the summary; Esc leaves the hint file alone.
+  await (await row(page, 0x49a7)).click();
+  await page.getByTestId('explain-use-comment').click();
+  await expect(area).toBeFocused();
+  await expect(area).not.toHaveValue('');
+  await page.keyboard.press('Escape');
+  await expect(box).toHaveCount(0);
+  expect(await hintText(page)).toBe(before);
+  // Save writes the notes.
+  await page.getByTestId('explain-use-comment').click();
+  await page.getByTestId('notes-edit-save').click();
+  await expect(box).toHaveCount(0);
+  expect(await hintText(page)).toMatch(/block 0:\$0000 note /);
+
+  // The line choice keys the comment to the cursor's own address.
+  await goTo(page, 0x49a7);
+  await page.keyboard.press(':');
+  await page.getByTestId('notes-scope-line').check();
+  await expect(area).toHaveValue('');
+  await area.fill('here');
+  await page.getByTestId('notes-edit-save').click();
+  expect(await hintText(page)).toContain('note here');
+});
+
+test('the right-click menu lists Block comment… with its key', async ({ page }) => {
+  await open(page);
+  await (await row(page, 0x4b9e)).click({ button: 'right' });
+  await expect(page.getByTestId('row-menu').getByRole('menuitem', { name: 'Block comment… :' })).toBeVisible();
+});
+
+test('the block comment box survives focus leaving to nowhere, and mouse clicks on Save and the scope choice work', async ({ page }) => {
+  await open(page);
+  await goTo(page, 0x49a7);
+  await page.keyboard.press(':');
+  const box = page.getByTestId('notes-edit');
+  const area = page.getByTestId('notes-edit-input');
+  await expect(area).toBeFocused();
+  // Safari gives a clicked button or radio no focus, so focusout arrives with no relatedTarget.
+  await area.evaluate((el) => el.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null })));
+  await expect(box).toBeVisible();
+  await page.getByTestId('notes-scope-line').click();
+  await expect(page.getByTestId('notes-scope-line')).toBeChecked();
+  await area.fill('mouse saved');
+  await page.getByTestId('notes-edit-save').click();
+  await expect(box).toHaveCount(0);
+  expect(await hintText(page)).toContain('note mouse saved');
+});
+
+test('the scope choice keeps what was typed, and is not offered on the routine start', async ({ page }) => {
+  await open(page);
+  await goTo(page, 0x49a7);
+  await page.keyboard.press(':');
+  const area = page.getByTestId('notes-edit-input');
+  await area.fill('my draft');
+  await page.getByTestId('notes-scope-line').check();
+  await expect(area).toHaveValue('my draft');
+  await page.keyboard.press('Escape');
+  await goTo(page, 0x497f);
+  await page.keyboard.press(':');
+  await expect(area).toBeFocused();
+  await expect(page.getByTestId('notes-scope-routine')).toHaveCount(0);
+  await expect(page.getByTestId('notes-scope-line')).toHaveCount(0);
+});
+
+test(': typed in the G box does not open the block comment box', async ({ page }) => {
+  await open(page);
+  await page.keyboard.press('g');
+  await page.keyboard.type(':');
+  await expect(page.getByTestId('notes-edit')).toHaveCount(0);
+});
+
+test('Use as comment keeps notes already above the routine, first, and says so', async ({ page }) => {
+  await open(page);
+  await goTo(page, 0x497f);
+  await page.keyboard.press(':');
+  await page.getByTestId('notes-edit-input').fill('my own note');
+  await page.keyboard.press('Control+Enter');
+  await (await row(page, 0x49a7)).click();
+  await page.getByTestId('explain-use-comment').click();
+  const area = page.getByTestId('notes-edit-input');
+  await expect(area).toHaveValue(/^my own note\n\n./);
+  await expect(page.getByTestId('notes-edit')).toContainText('Keeps the 1 existing line above.');
+  await page.getByTestId('notes-edit-save').click();
+  const text = await hintText(page);
+  const notes = text.split('\n').filter((l) => /block 0:\$0000 note/.test(l));
+  expect(notes[0]).toContain('note my own note');
+  expect(notes.length).toBeGreaterThan(2);
 });

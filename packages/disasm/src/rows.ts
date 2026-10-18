@@ -115,6 +115,8 @@ export function listingRows(analysis: Analysis, opts: RenderOptions = {}): Row[]
     let addr = from;
     while (addr <= to) {
       const symbol = symbols.get(addr);
+      const lines = annotations.notes.get(addr);
+      if (lines !== undefined) out.push({ kind: 'blank' }, ...lines.map((line): Row => ({ kind: 'note', text: line === '' ? ';' : `; ${line}`, addr })));
       if (symbol !== undefined && map.kind(addr) !== Kind.Tail) out.push({ kind: 'label', addr, name: symbol.name, user: symbol.source === 'user' });
       const ins = instructions.get(addr);
       if (ins !== undefined && addr + ins.length - 1 <= to) {

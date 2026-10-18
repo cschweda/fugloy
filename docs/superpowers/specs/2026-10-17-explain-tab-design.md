@@ -125,6 +125,16 @@ Explain runs a small, local value tracker. My call on its scope:
   - nothing outside the loop jumps into its body;
   - nothing in the body changes B or calls out.
 
+  If anything in the body can leave the loop without passing the `DJNZ`
+  (an early exit), the count is only a bound ("at most N times").
+- **Rewritten instructions.** When the program refers to a byte inside an
+  instruction, it may rewrite that operand, so the instruction proves
+  nothing it writes. When an instruction provably stores into an
+  instruction's first byte (`LD (nn),r` or `LD (nn),rr` covering it), that
+  instruction may be a different one at run time: the walk forgets every
+  register there, the line says so, and the routine summary and loop counts
+  treat it as an exit whose destination is not proven. A mere pointer to an
+  instruction start (an address the program loads) is not enough.
   Inside the loop, the head is still a merge point, so the body's
   registers stay unknown. (This narrower rule replaced a general "skip the
   loop" exception while the plan was written: a forward branch inside a
@@ -153,7 +163,11 @@ My call, kept small; each pattern names the lines it spans:
   screen" (fill with $20) or "fills the screen with …".
 - **Counted loop:** `DJNZ` with B known on entry to the loop. Says "repeats
   the lines from L… to here N times". Without a known B, it says "repeats
-  B times".
+  B times". An early exit makes the count a bound: when anything in the body
+  can leave it without passing the `DJNZ` (a jump out of the loop or back
+  before its head, a return, an indirect jump, `HALT`, or an instruction
+  whose first byte the program rewrites), it says "at most N times, leaving
+  early at $X" (or "up to B times, …"), naming the exits.
 - **Wait loop:** a short loop of `DEC`, a test and a backward jump, with
   nothing else in it. Says it is a delay, with a T-state estimate when
   the count is known.
@@ -175,16 +189,22 @@ More patterns can be added later as one entry each.
 
 ## Data regions
 
-Added the same day. The user pointed at Sea Dragon's 1,988 data rows and
-asked what they are. They are one region, DATA_7399 ($7399–$8880). Its
-address is loaded at $4C42 and stored in DATA_624A, which serves as a
-pointer, and the loop at L5FB9 walks it. Bytes $00–$0F are control codes
-there. Explain says all of this without being told:
+Added the same day. The user pointed at Sea Dragon's long run of data
+rows and asked what they are. They are one region, DATA_7399, which runs
+from $7399 to $7FFF at the address the game runs at (3,175 bytes, 795
+listing rows; $7C1A–$8880 in the file, which loads it $881 higher).
+Corrected after the build: this paragraph first said $7399–$8880 and
+1,988 rows, mixing the runtime start with the file's end. Its address is
+loaded at $4C42 and stored in DATA_624A, which serves as a pointer, and
+the loop at L5FB9 walks it. Bytes $00–$0F are control codes there.
+Explain says all of this without being told. (The annotated hint file
+now names the two CAVERN_MAP and MAP_PTR; see the showcase below.)
 
 - **Extent.** The region is the run of data bytes containing the row,
   from the nearest label at or before it (or the start of the run) to
-  the next code or the next label that code refers to. It gets a name,
-  a size, and its first and last address.
+  the next code or the next label, any label: a generated one that code
+  refers to, or a name the user gave. It gets a name, a size, and its
+  first and last address.
 - **Who uses it.** Every instruction whose operand points into the
   region (`LD HL,DATA_7399`, `LD A,(…)`, DW words in tables), as links.
 - **Kept as a pointer.** When the instruction after a load of the
@@ -218,6 +238,17 @@ Explain tab, marked as interpretation where they are, and written in the
 same voice as the tutor. Sea Dragon is public domain, so the annotated
 listing ships as the example of a fully commented program. The other three
 games follow later.
+
+Done 2026-10-17: the hint file names 19 routines and labels and 22
+variables and tables (TITLE_LOOP, MAIN_LOOP, DRAW_CAVERN, AIR_SUPPLY, TONE, CAVERN_MAP,
+MAP_PTR, RESTARTS and others) and has block comments on 46 addresses: the
+loader, the title screen, the main loop and the routines it calls, sound,
+scoring, and the data. Generated names that many tests pin (L497F,
+SUB_4B9E, L49B1, L5FB9) are kept and explained in notes. One finding came from the data itself: leftover text
+of the authors' assembler source sits in two buffers the game clears
+before use, with their own label names (HITFLG, NOTEBUF, WATBEG, WATLEV,
+DECAIR), which supports reading the map's control codes as the water
+surface and one routine as the air supply.
 
 ## Block comments
 

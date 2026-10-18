@@ -27,6 +27,8 @@ const emit = defineEmits<{
   /** The context menu was asked for from the keyboard (the ContextMenu key, Shift+F10): open it on the cursor row. */
   'context-key': [];
   'toggle-header': [];
+  /** A mouse click on a row, not on a link in it and not shift-extended (it also emits select): the page opens Explain on it. */
+  'row-click': [row: Row];
 }>();
 
 /** Rows rendered above and below the visible ones, so a fast scroll does not show blank space before the next frame. */
@@ -51,7 +53,8 @@ const lineOf = (index: number): number | undefined => (index < toggleRows.value 
 /** The gutter is as wide as the last line number. */
 const gutter = computed(() => `${String(Math.max(1, (props.firstLine ?? 1) + props.rows.length - toggleRows.value - 1)).length}ch`);
 /** Row ids, by index in the listing, so the scroller can name the cursor row for assistive technology. */
-const rowId = (index: number): string => `fg-row-${index}`;
+const ROW_ID = 'fg-row-';
+const rowId = (index: number): string => `${ROW_ID}${index}`;
 /** The cursor row's id while it is rendered (aria-activedescendant must name an element in the document). */
 const activeId = computed(() => {
   const i = cursorIndex.value;
@@ -203,7 +206,13 @@ function onClick(e: MouseEvent): void {
     return;
   }
   const row = rowElement(e.target);
-  if (row !== null) emit('select', Number(row.dataset.addr), e.shiftKey);
+  if (row === null) return;
+  emit('select', Number(row.dataset.addr), e.shiftKey);
+  // A shift-click extends the selection; it does not open Explain.
+  if (e.shiftKey) return;
+  const index = Number(row.id.slice(ROW_ID.length));
+  const clicked = props.rows[index];
+  if (clicked !== undefined) emit('row-click', clicked);
 }
 
 function onContextMenu(e: MouseEvent): void {

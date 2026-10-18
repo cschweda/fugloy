@@ -91,7 +91,7 @@ describe('applyHints', () => {
   });
 
   it('starts from empty annotations', () => {
-    expect(emptyAnnotations()).toEqual({ entries: [], overrides: [], tables: [], names: new Map(), comments: new Map(), relocations: [] });
+    expect(emptyAnnotations()).toEqual({ entries: [], overrides: [], tables: [], names: new Map(), comments: new Map(), notes: new Map(), relocations: [] });
   });
 });
 
@@ -125,5 +125,16 @@ describe('relocate hints', () => {
     const applied = applyHints(file, mod.image);
     expect(applied.errors).toEqual(['relocate at $8000: the destination $8105-$810F overlaps loaded memory at $8105']);
     expect(applied.annotations.relocations).toEqual([]);
+  });
+});
+
+describe('notes', () => {
+  it('collects notes by runtime address in file order', () => {
+    const written = image({ 0x6000: pattern(100) });
+    const file = fileFor(written, [h(0, 5, 'note', { text: 'one' }), h(0, 5, 'note', { text: '' }), h(0, 5, 'note', { text: 'three' }), h(0, 6, 'note', { text: 'next' })]);
+    const applied = applyHints(file, image({ 0x7000: pattern(100) }));
+    expect(applied.annotations.notes.get(0x7005)).toEqual(['one', '', 'three']);
+    expect(applied.annotations.notes.get(0x7006)).toEqual(['next']);
+    expect(emptyAnnotations().notes.size).toBe(0);
   });
 });

@@ -10,6 +10,59 @@ Releases are tagged `vX.Y.Z` on `main`.
 
 ### Added
 
+- The workbench's **Explain** tab, first on the right page: a click on a
+  listing row opens it, and while it shows every cursor move re-explains, so
+  code can be stepped through a line at a time. A code line gets one or two
+  plain-English sentences with its real addresses, values, and names (`Copy
+  $3681 (13,953) bytes from $5200 (L5200) to $497F (L497F)`), from register
+  values proven on every path to the line and never from a guess; a "what's
+  at" preview for each address it uses (the listing lines there, or the
+  symbol-table entry with purpose and citation), each moving the cursor there;
+  the patterns it is part of (block copies and fills, counted loops, delay
+  loops, a loader moving the program to where it runs); and a quieter strip
+  with size, T-states, flags changed, and "undocumented". The **routine
+  summary** says what the routine around the line provably does: length,
+  callers and jumpers, how it ends, screen writes by row and column, keyboard
+  reads, ports, ROM and program calls, data read and written, and loops.
+  A data row explains its **data region**: its extent (to the next code or
+  label, user names included), the instructions that load its address, the
+  variable that address is kept in, the loop that reads it and the tests that
+  split its bytes into kinds, and a **picture** of its bytes in the TRS-80
+  character set, block graphics included, at a width of 8, 16, 32, 64 (the
+  default), or any other. A `.BAS` listing says Explain covers machine code.
+  `@fugloy/disasm` exports the engine (`explainLine`, `explainRow`,
+  `summarizeRoutine`, `summaryNotes`, `dataRegion`, `sentenceText`,
+  `screenCell`, `blockCells`, `trsGlyph`), which has no DOM and returns
+  structured sentences, not HTML.
+- Block comments: the `note <text>` hint directive (`block <i>:<offset> note
+  …`), printed as `; text` lines above an address in the listing and the zmac
+  source, and carried in the JSON IR as `notes`. An empty `note` is a blank `;`
+  line; several notes at one address print in file order. `at … note` is
+  refused. In the workbench, **:** or **Block comment…** on the right-click
+  menu opens a box prefilled with the notes there, offering "above the
+  routine" or "above this line" inside a routine; saving replaces the notes
+  as one undoable edit, and emptying the box removes them. **Use as comment**
+  under Explain's routine summary opens the box with the summary, after any
+  notes already there, for the user to rewrite before saving.
+- An annotated Sea Dragon: `examples/sea-dragon/seadrg01.hints` now names 19
+  routines and labels and 22 variables and tables, and carries block comments
+  on 46 addresses: the loader, the title screen, the main loop (`MAIN_LOOP`)
+  and what it calls (`DRAW_CAVERN`, `DRAW_PLAYER`, `MOVE_PLAYER`,
+  `AIR_SUPPLY`, `UPDATE_OBJECTS`), sound (`TONE`, `NEXT_NOTE`), scoring, lost
+  ships and restarts, and the data (`CAVERN_MAP`, `MAP_PTR`, `RESTARTS`,
+  `MAP_CHARS`, `ROW_OFFSETS`). Researched with Explain and the listing;
+  what is a reading of the code says "probably". It is the example of a fully
+  commented program, and its zmac source still rebuilds the identical image.
+  Among the findings: two buffers the game clears before use hold leftover
+  text of the authors' assembler source, with their own label names
+  (`HITFLG`, `NOTEBUF`, `WATBEG`, `WATLEV`, `DECAIR`).
+- `@fugloy/z80`: every template and decoded instruction has a generated
+  `flags` field, the flags it changes in `SZHPNC` order (`''` for none;
+  the undocumented bits 3 and 5 are not listed), covered by the exhaustion
+  test. The design also proposed an "opcode family" field; none was added,
+  since the mnemonic and operands already identify the family.
+- The workbench numbers every listing line in a gutter of its own (not part
+  of the text), and the status line gives the total.
 - `@fugloy/emu`, emu phase 0: the core of `cschweda/trs80-emulator` (v1.6.0)
   — Z80 CPU, Model III memory map and I/O, keyboard matrix, cassette, WD1793
   disk controller, disk images, printer, `.CAS`/`.CMD` formats, save states —

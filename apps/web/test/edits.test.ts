@@ -11,10 +11,17 @@ import { createEditing } from '../app/composables/useEditing';
 const repo = (path: string): string => fileURLToPath(new URL(`../../../${path}`, import.meta.url));
 const MODEL3 = { machine: 3, dos: 'trsdos' } as const;
 
-/** seadrg01 with its committed hints: the game relocated from $5200 to $497F, one block. */
+/**
+ * seadrg01 with its committed hints, less their names and notes: the game relocated from $5200 to $497F, one block.
+ * The annotations are dropped so these edits start from a hint file that names and notes nothing.
+ */
 function seaDragon(): Session {
   const s = openProgram(new Uint8Array(readFileSync(repo('examples/sea-dragon/seadrg01.cmd'))), { name: 'seadrg01.cmd', selection: MODEL3 });
-  return withHintText(s, readFileSync(repo('examples/sea-dragon/seadrg01.hints'), 'utf8'), 'seadrg01.hints');
+  const text = readFileSync(repo('examples/sea-dragon/seadrg01.hints'), 'utf8')
+    .split('\n')
+    .filter((l) => !/^block \d+:\$[0-9A-F]+ (name|note)\b/.test(l))
+    .join('\n');
+  return withHintText(s, text, 'seadrg01.hints');
 }
 
 /** Applies an edit that must succeed and returns the re-analyzed session. */
@@ -63,6 +70,36 @@ describe('applyEdit', () => {
     const named = edited(s, { op: 'name', addr: 0x9000, name: 'TOP' });
     expect(writeHints(named.hintFile)).toContain('at $9000 name TOP');
     expect(named.applied.rejected).toBe(0);
+  });
+
+  it('notes: adds block comment lines in order, replaces them, and an empty list removes them', () => {
+    const s0 = seaDragon();
+    const s1 = edited(s0, { op: 'notes', addr: 0x4b9e, lines: ['  first\tline ', '', 'third'] });
+    expect(s1.analysis.annotations.notes.get(0x4b9e)).toEqual(['first line', '', 'third']);
+    const text = writeHints(s1.hintFile);
+    expect(text).toMatch(/block 0:\$021F note first line\n.*block 0:\$021F note\n.*block 0:\$021F note third/s);
+    const s2 = edited(s1, { op: 'notes', addr: 0x4b9e, lines: ['only', '', ''] });
+    expect(s2.analysis.annotations.notes.get(0x4b9e)).toEqual(['only']);
+    expect(writeHints(edited(s2, { op: 'notes', addr: 0x4b9e, lines: [] }).hintFile)).toBe(writeHints(s0.hintFile));
+  });
+
+  it('notes: keeps internal spacing, and leaves other hints at the key and notes at other keys alone', () => {
+    let s = seaDragon();
+    s = edited(s, { op: 'comment', addr: 0x4b9e, text: 'a comment' });
+    s = edited(s, { op: 'name', addr: 0x4b9e, name: 'INIT' });
+    s = edited(s, { op: 'mark', from: 0x4b9e, to: 0x4b9e, as: 'code' });
+    s = edited(s, { op: 'notes', addr: 0x497f, lines: ['other'] });
+    const before = writeHints(s.hintFile).split('\n').filter((l) => l !== '');
+    s = edited(s, { op: 'notes', addr: 0x4b9e, lines: ['a  b\tc'] });
+    expect(s.analysis.annotations.notes.get(0x4b9e)).toEqual(['a  b c']);
+    const after = writeHints(s.hintFile);
+    for (const l of before) expect(after).toContain(l);
+    expect(s.analysis.annotations.notes.get(0x497f)).toEqual(['other']);
+    expect(s.analysis.annotations.comments.get(0x4b9e)).toBe('a comment');
+  });
+
+  it('notes: refuses an address the program does not load', () => {
+    expect(errorOf(seaDragon(), { op: 'notes', addr: 0x9000, lines: ['x'] })).toBe('notes describe loaded code');
   });
 
   it('refuses to mark an address the program does not load', () => {
