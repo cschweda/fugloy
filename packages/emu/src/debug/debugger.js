@@ -11,6 +11,7 @@
  * every instruction's bytes first, in order; a test checks that for every opcode).
  */
 import { instructionInfo } from './instr.js';
+import { fromBase64, serializeState, restoreState } from './state.js';
 
 /** The hit log keeps the newest this many hits. */
 const RING = 65536;
@@ -37,6 +38,7 @@ const { EXEC, OPERAND, READ, WRITE, JUMP_TARGET, CALL_TARGET } = COVERAGE;
  * @typedef {((addr: number, value: number) => void) | null} ReadHook
  * @typedef {((addr: number, value: number, prev: number) => void) | null} WriteHook
  * @typedef {((port: number, value: number, dir: 'in' | 'out') => void) | null} PortHook
+ * @typedef {{ pc: number, bytes: number[], cycles: number, regs?: any }} TraceEntry
  * @typedef {{ from: number, kind: 'call' | 'jp' | 'jr' | 'rst' | 'ret-to', count: number }} CallerEdge
  */
 
@@ -47,6 +49,8 @@ export class Debugger {
   stopId = null;
   /** @type {boolean} True while memory accesses are instrumented, so the Machine calls `startInstruction` before each instruction. */
   tracksAccess = false;
+  /** @type {boolean} True while the Machine must call `startInstruction` before each instruction: memory accesses are instrumented or the trace is on. */
+  startsInstruction = false;
   /** @type {boolean} True when the hit log dropped its oldest hits to stay at 65,536. */
   hitsOverflowed = false;
   /**
@@ -61,6 +65,13 @@ export class Debugger {
    * `disable` keeps what was recorded and `clear` empties both.
    */
   coverage;
+  /**
+   * @type {{ enable(opts: { depth: number, regs?: boolean }): void, disable(): void, clear(): void,
+   *   last(n: number): TraceEntry[], collapsed(n: number): { entries: TraceEntry[], repeat: number }[], readonly enabled: boolean }}
+   * The instruction trace (spec §7): a preallocated ring of the last `depth` executed instructions.
+   * `enable` allocates a fresh, empty ring; `disable` keeps what was recorded; `clear` empties it.
+   */
+  trace;
 
   #machine;
   /** @type {any} The Z80CPU whose accessors are swapped. */
@@ -106,6 +117,23 @@ export class Debugger {
   #kind = null;
   /** @type {number | null} The current instruction's static target. */
   #target = null;
+
+  /** True while the trace records. */
+  #traceOn = false;
+  #traceRegs = false;
+  #depth = 0;
+  /** The slot the next entry fills, and how many slots hold entries. */
+  #tHead = 0;
+  #tCount = 0;
+  #tPcs = new Uint16Array(0);
+  #tLens = new Uint8Array(0);
+  #tBytes = new Uint8Array(0);
+  #tCycles = new Uint16Array(0);
+  /** @type {any[]} */
+  #tRegs = [];
+  /** True between `startInstruction` and `afterInstruction` when an entry is open. */
+  #tOpen = false;
+  #tStart = 0;
 
   /** @type {Hit[]} The hit log, a ring once full: `#ringHead` is the oldest entry. */
   #ring = [];
@@ -168,6 +196,79 @@ export class Debugger {
         return dbg.#bits;
       },
     };
+    this.trace = {
+      enable({ depth, regs = false } = /** @type {any} */ ({})) {
+        if (!Number.isInteger(depth) || depth < 1 || depth > 1000000) throw new Error(`trace: depth must be an integer 1..1000000 (the trace is never unlimited), not ${String(depth)}`);
+        dbg.#depth = depth;
+        dbg.#traceRegs = !!regs;
+        dbg.#tPcs = new Uint16Array(depth);
+        dbg.#tLens = new Uint8Array(depth);
+        dbg.#tBytes = new Uint8Array(depth * 4);
+        dbg.#tCycles = new Uint16Array(depth);
+        dbg.#tRegs = regs ? new Array(depth) : [];
+        dbg.#tHead = 0;
+        dbg.#tCount = 0;
+        dbg.#tOpen = false;
+        dbg.#traceOn = true;
+        dbg.#refresh();
+      },
+      disable() {
+        dbg.#traceOn = false;
+        dbg.#tOpen = false;
+        dbg.#refresh();
+      },
+      clear() {
+        dbg.#tHead = 0;
+        dbg.#tCount = 0;
+        dbg.#tOpen = false;
+        if (dbg.#traceRegs) dbg.#tRegs = new Array(dbg.#depth);
+      },
+      last: (n) => dbg.#last(n),
+      collapsed: (n) => collapse(dbg.#last(n)),
+      get enabled() {
+        return dbg.#traceOn;
+      },
+    };
+  }
+
+  /**
+   * A serializable snapshot of the machine (spec §7): everything `serializeState` carries. It
+   * survives `JSON.stringify` and `parse`.
+   * @returns {any}
+   */
+  snapshot() {
+    return serializeState(this.#machine.system);
+  }
+
+  /**
+   * Restore the machine exactly from a snapshot, cycles included, then start a fresh timeline:
+   * the key queue and the sound ring are cleared, and the Machine forgets where the last run
+   * stopped and any watch stop pending. Breakpoints, watches, hooks, the hit log, coverage,
+   * callers, the trace, and labels stay as they were.
+   * @param {any} snap
+   */
+  restore(snap) {
+    restoreState(this.#machine.system, snap);
+    this.#stopHit = null;
+    this.#inInstr = false;
+    this.#tOpen = false;
+    this.#machine.newTimeline();
+  }
+
+  /** @param {number} n @returns {TraceEntry[]} the newest `n` entries, oldest first */
+  #last(n) {
+    const count = Math.min(Math.max(0, Math.floor(n) || 0), this.#tCount);
+    const out = [];
+    const depth = this.#depth;
+    for (let k = count; k > 0; k--) {
+      const i = (this.#tHead - k + depth) % depth;
+      const len = this.#tLens[i];
+      /** @type {TraceEntry} */
+      const e = { pc: this.#tPcs[i], bytes: Array.from(this.#tBytes.subarray(i * 4, i * 4 + len)), cycles: this.#tCycles[i] };
+      if (this.#traceRegs) e.regs = this.#tRegs[i];
+      out.push(e);
+    }
+    return out;
   }
 
   /**
@@ -322,6 +423,7 @@ export class Debugger {
     this.#inInstr = true;
     // Reset each instruction, so coverage enabled by a hook mid-instruction records no stale edge.
     this.#kind = null;
+    if (this.#traceOn) this.#traceStart(pc);
     if (!this.#readsOn) {
       this.#len = 0;
       return;
@@ -353,6 +455,10 @@ export class Debugger {
    * @returns {number | null} the lowest id of a stop watch hit since the last call, or null
    */
   afterInstruction() {
+    if (this.#tOpen) {
+      this.#tCycles[(this.#tHead - 1 + this.#depth) % this.#depth] = this.#cpu.cycles - this.#tStart;
+      this.#tOpen = false;
+    }
     if (this.#inInstr && this.#covOn && this.#kind !== null) this.#transfer();
     this.#inInstr = false;
     const id = this.#stopHit;
@@ -368,6 +474,21 @@ export class Debugger {
   standIn(on) {
     this.#inStandIn = on;
     this.#marking = this.#covOn && !on;
+  }
+
+  /** Open the next trace entry for the instruction at `pc`: its bytes and registers before it runs; `afterInstruction` adds its T-states. */
+  #traceStart(/** @type {number} */ pc) {
+    const i = this.#tHead;
+    const read = this.#plain.readMemory;
+    const len = instructionInfo(read, pc).len;
+    this.#tPcs[i] = pc;
+    this.#tLens[i] = len;
+    for (let k = 0; k < len; k++) this.#tBytes[i * 4 + k] = read((pc + k) & 0xffff);
+    if (this.#traceRegs) this.#tRegs[i] = this.#machine.cpu.regs;
+    this.#tHead = (i + 1) % this.#depth;
+    if (this.#tCount < this.#depth) this.#tCount++;
+    this.#tStart = this.#cpu.cycles;
+    this.#tOpen = true;
   }
 
   /** After a control-transfer instruction: when it was taken, mark where it landed (not for a return) and count the edge. */
@@ -486,12 +607,13 @@ export class Debugger {
     this.#readsOn = reads;
     this.#marking = this.#covOn && !this.#inStandIn;
     this.tracksAccess = reads || writes;
-    if (!this.tracksAccess) this.#inInstr = false;
+    this.startsInstruction = this.tracksAccess || this.#traceOn;
+    if (!this.startsInstruction) this.#inInstr = false;
   }
 
   #refresh() {
     this.#instrument();
-    this.active = this.#covOn || this.#breaks.size > 0 || this.#watches.size > 0 || this.#onMemRead !== null || this.#onMemWrite !== null || this.#onPort !== null;
+    this.active = this.#covOn || this.#traceOn || this.#breaks.size > 0 || this.#watches.size > 0 || this.#onMemRead !== null || this.#onMemWrite !== null || this.#onPort !== null;
   }
 }
 
@@ -503,4 +625,51 @@ function sortEdges(edges) {
   return [...edges.values()]
     .map((e) => ({ from: e.from, kind: e.kind, count: e.count }))
     .sort((a, b) => a.from - b.from || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0));
+}
+
+/**
+ * Merge consecutive repetitions of one PC sequence. Greedy from the oldest entry: at each
+ * position try periods 1..64 and take the one covering the most entries with at least 2
+ * repeats (the shortest on a tie); otherwise the entry stands alone with `repeat: 1`.
+ * @param {TraceEntry[]} list
+ * @returns {{ entries: TraceEntry[], repeat: number }[]}
+ */
+function collapse(list) {
+  const out = [];
+  const n = list.length;
+  let i = 0;
+  while (i < n) {
+    let bestP = 0;
+    let bestR = 0;
+    let bestCover = 0;
+    for (let p = 1; p <= 64 && i + 2 * p <= n; p++) {
+      let r = 1;
+      for (;;) {
+        const at = i + r * p;
+        if (at + p > n) break;
+        let same = true;
+        for (let k = 0; k < p; k++) {
+          if (list[at + k].pc !== list[i + k].pc) {
+            same = false;
+            break;
+          }
+        }
+        if (!same) break;
+        r++;
+      }
+      if (r >= 2 && r * p > bestCover) {
+        bestP = p;
+        bestR = r;
+        bestCover = r * p;
+      }
+    }
+    if (bestP === 0) {
+      out.push({ entries: [list[i]], repeat: 1 });
+      i++;
+    } else {
+      out.push({ entries: list.slice(i, i + bestP), repeat: bestR });
+      i += bestCover;
+    }
+  }
+  return out;
 }

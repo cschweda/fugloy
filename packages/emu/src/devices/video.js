@@ -4,6 +4,8 @@
  * double-wide. It reads the live video RAM; it draws nothing.
  */
 
+import { fromBase64 } from '../debug/state.js';
+
 export class Video {
   #system;
 
@@ -42,5 +44,23 @@ export class Video {
       rows.push(line);
     }
     return rows;
+  }
+
+  /**
+   * The cells of video RAM that differ from a snapshot's (`m.debug.snapshot()`), row-major, as
+   * byte values over the 64-column RAM layout (32-column mode shows only even columns).
+   * @param {any} snap
+   * @returns {{ row: number, col: number, was: number, now: number }[]}
+   */
+  diff(snap) {
+    const text = snap?.memory?.videoRam;
+    if (typeof text !== 'string') throw new Error('video.diff needs a snapshot from m.debug.snapshot()');
+    const was = fromBase64(text);
+    const now = this.raw;
+    const out = [];
+    for (let i = 0; i < now.length; i++) {
+      if (was[i] !== now[i]) out.push({ row: i >> 6, col: i & 63, was: was[i], now: now[i] });
+    }
+    return out;
   }
 }

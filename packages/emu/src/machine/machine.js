@@ -47,7 +47,7 @@ export class Machine {
   load;
   /** @type {ReturnType<typeof cassetteDeck>} The cassette deck: insert a .CAS at a baud, rewind, read the motor relay. */
   cassette;
-  /** @type {Debugger} Breakpoints, watchpoints, and memory and port hooks; coverage and trace follow (spec §7). */
+  /** @type {Debugger} Breakpoints, watchpoints, hooks, coverage, the instruction trace, and snapshots (spec §7). */
   debug;
 
   /** True inside `run`, false inside `step`, which ignores breakpoints. */
@@ -137,6 +137,17 @@ export class Machine {
   }
 
   /**
+   * Internal: a restore starts a fresh timeline, so the PC where the last run stopped for a
+   * breakpoint is forgotten, and the key queue and sound ring (whose cycle stamps belong to the
+   * old timeline) are cleared.
+   */
+  newTimeline() {
+    this.#resumePc = null;
+    this.sound.clear();
+    this.keyboard.clear();
+  }
+
+  /**
    * The internal per-instruction hook, run at every instruction boundary (after interrupt
    * delivery, before the instruction executes) by both `step` and `run`: deliver the matrix key
    * events now due, then, with a fed character waiting and the PC at the ROM's keyboard scan
@@ -178,7 +189,7 @@ export class Machine {
       } else romKeyReturn(cpu, pc, kb.takeFeed());
       return true;
     }
-    if (this.debug.tracksAccess) this.debug.startInstruction(pc);
+    if (this.debug.startsInstruction) this.debug.startInstruction(pc);
     return false;
   }
 
