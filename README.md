@@ -311,7 +311,7 @@ keyboard, and `.CMD`, `.BAS`, and `.CAS` loaders, on which Sea Dragon,
 Eliminator, and Rear Guard reach their title screens (2); and the debugger,
 `m.debug`, with breakpoints, watches, coverage, a trace, snapshots, and the
 label and coverage file (3). Its phase 4, the MCP server `@fugloy/mcp` v0.1
-(MCP phases A–C), is done on the `emu-phase4` branch and not yet merged. Next
+(MCP phases A–C), is done and merged into `main`. Next
 are the MCP server's phases D–F (snapshots and diffs, resources and prompts,
 the npm release), then disk images, Model I and Model 4, and a differential
 harness (see the roadmap in [CLAUDE.md](CLAUDE.md)). Later,

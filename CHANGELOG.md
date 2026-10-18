@@ -38,7 +38,7 @@ In the core packages since 1.1.0: the disassembler shows a label's `note`
 (emu phase 4, below). The emulator, `@fugloy/emu` 0.1.0 (not on npm), has
 phases 0–4 of eight done, listed here until its first release. Phases 0 and 1
 were merged while core 1.0.0 was being built, and phases 2 and 3 between 1.0.0
-and 1.1.0. Phase 4 is done on the `emu-phase4` branch and not yet merged.
+and 1.1.0. Phase 4 was merged after 1.1.0.
 
 Emu phase 4: the MCP server, `@fugloy/mcp` 0.1.0 (not on npm), with MCP
 phases A–C. Phase 4's done-criterion is met: Claude Code loaded a game, found

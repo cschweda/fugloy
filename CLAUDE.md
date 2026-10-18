@@ -11,7 +11,7 @@ phase 2 onward and the MCP server follow, in the Roadmap's order. The recompiler
 bundler stay in Part 2 until the plan's kill criteria have been reviewed. If a
 task seems to need machinery from a later step, stop and say so.
 
-Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.1.0 on npm (2026-10-18); emu phases 2 and 3 merged to `main` (2026-10-18); emu phase 4 (`@fugloy/mcp` v0.1, MCP phases A–C) done on branch `emu-phase4`, not merged; next are MCP phases D–F, then emu phase 5.**
+Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.1.0 on npm (2026-10-18); emu phases 2 and 3 merged to `main` (2026-10-18); emu phase 4 (`@fugloy/mcp` v0.1, MCP phases A–C) merged to `main` (2026-10-18); next are MCP phases D–F, then emu phase 5.**
 v1 is disassembler phases 1–4: the core decoder and loaders (v0.1.0), Pass 1
 and Pass 2 (v0.2.0), the cited symbol tables (phase 3: eight JSON tables, 634
 entries, in `packages/disasm/data/symbols/`, compiled by `pnpm symbols`), and
@@ -41,14 +41,13 @@ read by the disassembler and the CLI's `--labels`; a scripted session's label
 file feeds the disassembler (plan
 `docs/superpowers/plans/2026-10-18-emu-phase3.md`), and Sea Dragon's is
 committed as `examples/sea-dragon/seadrg01.labels.json`. Emu phase 4 is done
-on branch `emu-phase4`, not yet merged: `@fugloy/mcp` v0.1 with MCP phases
+(merged 2026-10-18): `@fugloy/mcp` v0.1 with MCP phases
 A–C, 23 tools (lifecycle, execution, inspection; break, watch, hits, trace,
 callers, disasm; label, labels, coverage, suggest, and the
 `<program>.fugloy.json` sidecar), plan
 `docs/superpowers/plans/2026-10-18-emu-phase4-mcp.md`. A headless Claude Code
 session found Sea Dragon's print routine (`$6140`) and labelled it unaided;
-`packages/mcp/test/story-7-rom.test.js` is the scripted form. Next: merge
-`emu-phase4`, then MCP phases D–F (snapshots, diff, search, callees;
+`packages/mcp/test/story-7-rom.test.js` is the scripted form. Next: MCP phases D–F (snapshots, diff, search, callees;
 resources and prompts; guardrail hardening and npm publish), then emu phase 5.
 
 ## Stack and layout
@@ -107,14 +106,14 @@ resources and prompts; guardrail hardening and npm publish), then emu phase 5.
    passes ZEXALL. 2: Model III devices and `.CMD`/`.BAS`/`.CAS` loaders.
    3: debugger API, coverage, the label file. 4: `@fugloy/mcp` v0.1. 5: FDC
    and disk images. 6: Model I, then Model 4. 7: differential harness. Phases 0,
-   1, 2, and 3 are done and merged; phase 4, `@fugloy/mcp` v0.1, is done on
-   `emu-phase4`, not merged; phase 5 follows MCP phases D–F.
+   1, 2, and 3 are done and merged; phase 4, `@fugloy/mcp` v0.1, is done and
+   merged; phase 5 follows MCP phases D–F.
 4. **mcp — phases A–F** (`docs/fugloy-mcp-spec.md` §11). A: lifecycle,
    execution, and inspection tools. B: break, watch, trace, callers, disasm.
    C: labels, coverage, sidecar file. D: snapshots, diff, search, callees.
    E: resources, prompts, ROM symbols. F: guardrails, golden transcripts, npm
    publish. A starts after emu phase 0; B and C need emu phase 3. A, B, and
-   C are done (emu phase 4, on `emu-phase4`); D is next.
+   C are done (emu phase 4, merged); D is next.
 
 The plan's phase 5 (assembler and IDE) is not placed in this sequence: it comes
 after v1 and needs phases 3 and 4 and emu phases 2–3. Phase 6, **Learn assembly
