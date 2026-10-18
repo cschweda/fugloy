@@ -79,11 +79,18 @@ the `emu-phase7` branch:
   not affected; trsjs saves C in a scratch its `cp` overwrites, found on
   Asylum); and three interrupt timings (a request trsjs drops while DI, takes
   right after EI, or takes after a lone prefix), which the comparator holds
-  and makes the reference take at our boundary, comparing that step in full.
+  and makes the reference take at the first boundary the instruction stream
+  allows (EI blocks only the boundary right after it, a lone DD or FD only the
+  one before its next byte; derived from the instructions that ran, never from
+  our CPU's `pendingEI` or `afterPrefix`), checking that our CPU takes the
+  request there and nowhere earlier (else a divergence, field `irq`; tests
+  plant a long and a short EI delay and a stuck lone-prefix hold), and compares
+  that step in full.
 - `pnpm diff <program> [--keys <script.json>] [--instructions N]
   [--from-cycle C] [--strict | --strict-all]` (`packages/emu/scripts/diff.mjs`):
   one program, booted on the Model III ROM, compared, and reported; exit 0, 1
-  (a divergence), or 2 (a usage error).
+  (a divergence), or 2 (a usage or setup error; an unexpected error, such as
+  the ROM not reaching READY or trsjs throwing, exits 2 as well, never 1).
 - `test/diff/fixtures.test.js`: six scripted sessions of 10 million
   instructions each (Sea Dragon `seadrg01`, Eliminator `elimin8c` and
   `elimin8e`, Rear Guard `reargrd5` and `reargrd4`, Armored Patrol), the
@@ -93,6 +100,15 @@ the `emu-phase7` branch:
   other `.CMD` in `examples/` and `fixtures/real/` runs 10 million
   instructions under one generic script: 57 programs (20 builds in `examples/`, 37 in `fixtures/real/`, Planetfall and Enchanter without their story disks), none with an unexplained divergence; class counts in all (the sum the sweep logs with `--silent=false`, beside each program's own), flag bits 3 and 5, 24,162,163; BIT's S and P/V, 2,964,829; CPI/CPD C, 24,098; DDCB/FDCB R, 23,696; interrupt-response R, 22,187; an interrupt held while DI, 189. 17 end at the BASIC prompt or a reboot on the Model III (Eliminator a, b, d, f, g, h; Rear Guard 1, 2, 3, 7; Sea Dragon 7, 9; Armored Patrol's `GO.CMD`; Asylum 1c, 1d; the two Infocom interpreters), the same on both machines. About 1.5 million
   compared instructions a second.
+- Changed by the merge of `main` (emu phase 6): one unit test's expectation,
+  `test/unit/model1-devices.test.js`'s check that a Model III's port `FF`
+  keeps its own reading, is now `$40` (bit 6 set, bits 5–1 from port `EC`, 0
+  at reset), where it was `$00`, after this phase's port `FF` fix.
+- Open (emu spec §11, phase 7): Eliminator `elimin8c` and Rear Guard
+  `reargrd5` never take the 1 at "1 or 2 Players?", on either machine, even
+  with the key held 3 s: both point the keyboard DCB's driver at `$03E3`, the
+  Model I ROM's keyboard driver, which on the Model III ROM is the printer
+  driver's tail and returns no key.
 - Emu phase 7 is met for the Model III (emu spec §11). The Model I waits for
   a Model I reference (MAME or xtrs, with the user's agreement), since trsjs
   is Model III only.
