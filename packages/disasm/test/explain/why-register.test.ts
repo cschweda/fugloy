@@ -1,5 +1,6 @@
 /** Explain's "why this register": facts about the Z80 that force a register, and a ROM call's input register. */
 import { describe, expect, it } from 'vitest';
+import { decodeAt } from '@fugloy/z80';
 import { explainLine, sentenceText } from '../../src/explain/index.js';
 import { inputRegisters } from '../../src/explain/why-register.js';
 import { openProgram } from '../../src/session.js';
@@ -29,8 +30,33 @@ describe('why this register: facts about the Z80', () => {
   });
 
   it('only A loads from or stores to an address written in the instruction', () => {
-    expect(why([0x3a, 0x00, 0x3c, RET])).toEqual(['Of the one-byte registers, only A, the accumulator, can be loaded straight from an address written in the instruction; any other would have to take its byte through A, or through an address in HL, IX or IY.']);
-    expect(why([0x32, 0x00, 0x3c, RET])).toEqual(['Of the one-byte registers, only A, the accumulator, can be stored straight to an address written in the instruction; any other would have to go through A, or through an address in HL, IX or IY.']);
+    expect(why([0x3a, 0x00, 0x3c, RET])).toEqual(['Of the one-byte registers, only A, the accumulator, can be loaded straight from an address written in the instruction; B, C, D, E, H and L can be loaded from one only as half of a pair, two bytes at a time (LD BC,(nn), LD DE,(nn), LD HL,(nn)).']);
+    expect(why([0x32, 0x00, 0x3c, RET])).toEqual(['Of the one-byte registers, only A, the accumulator, can be stored straight to an address written in the instruction; B, C, D, E, H and L can be stored to one only as half of a pair, two bytes at a time (LD (nn),BC, LD (nn),DE, LD (nn),HL).']);
+  });
+
+  it('the fixed-address sentences hold for every instruction in the table', () => {
+    // Every LD with an address written in the instruction, across the unprefixed, ED, DD and FD tables.
+    const loads8 = new Set<string>();
+    const stores8 = new Set<string>();
+    const loads16 = new Set<string>();
+    const stores16 = new Set<string>();
+    for (const prefix of [[], [0xed], [0xdd], [0xfd]]) {
+      for (let op = 0; op < 256; op++) {
+        const i = decodeAt([...prefix, op, 0x34, 0x12, 0x00], 0);
+        if (i.mnemonic !== 'LD') continue;
+        const [d, s] = i.operands;
+        if (s?.kind === 'mem' && d?.kind === 'reg') loads8.add(d.reg);
+        if (d?.kind === 'mem' && s?.kind === 'reg') stores8.add(s.reg);
+        if (s?.kind === 'mem' && d?.kind === 'reg16') loads16.add(d.reg);
+        if (d?.kind === 'mem' && s?.kind === 'reg16') stores16.add(s.reg);
+      }
+    }
+    expect([...loads8]).toEqual(['A']);
+    expect([...stores8]).toEqual(['A']);
+    for (const r of ['BC', 'DE', 'HL']) {
+      expect(loads16.has(r)).toBe(true);
+      expect(stores16.has(r)).toBe(true);
+    }
   });
 
   it('only A loads or stores through BC or DE', () => {
@@ -65,7 +91,7 @@ describe('why this register: facts about the Z80', () => {
   it('the rotate-A and adjust instructions work only on A', () => {
     expect(why([0x07, RET])).toEqual(['RLCA works only on A, the accumulator; to rotate another register the Z80 has a separate instruction, RLC.']);
     expect(why([0x1f, RET])).toEqual(['RRA works only on A, the accumulator; to rotate another register the Z80 has a separate instruction, RR.']);
-    expect(why([0x2f, RET])).toEqual(['CPL works only on A, the accumulator: the Z80 can flip every bit of no other register.']);
+    expect(why([0x2f, RET])).toEqual(['CPL works only on A, the accumulator: no other register has an instruction that flips all its bits.']);
     expect(why([0xed, 0x44, RET])).toEqual(['NEG works only on A, the accumulator: the Z80 can negate no other register.']);
     expect(why([0x27, RET])).toEqual(['DAA works only on A, the accumulator: it corrects A after an add or subtract of decimal digits.']);
   });
@@ -82,7 +108,7 @@ describe('why this register: facts about the Z80', () => {
   });
 
   it('EX DE,HL exists because HL is the register most memory instructions use', () => {
-    expect(why([0xeb, RET])).toEqual(['HL is the register most memory and 16-bit arithmetic instructions use; EX DE,HL swaps an address kept in DE into HL, in one step, so those instructions can use it.']);
+    expect(why([0xeb, RET])).toEqual(['HL is the register most memory and 16-bit arithmetic instructions use; EX DE,HL swaps a value kept in DE into HL, in one step, so those instructions can use it.']);
   });
 
   it('the stack pointer, I and R have their own forced registers', () => {

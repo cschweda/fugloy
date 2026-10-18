@@ -80,7 +80,7 @@ function formFacts(ins: Instruction): Sentence[] {
     case 'RRA':
       return [say(`${m} works only on ${ACC_END}; to rotate another register the Z80 has a separate instruction, ${ROTATE_A[m]}.`)];
     case 'CPL':
-      return [say(`CPL works only on ${ACC_END}: the Z80 can flip every bit of no other register.`)];
+      return [say(`CPL works only on ${ACC_END}: no other register has an instruction that flips all its bits.`)];
     case 'NEG':
       return [say(`NEG works only on ${ACC_END}: the Z80 can negate no other register.`)];
     case 'DAA':
@@ -90,7 +90,7 @@ function formFacts(ins: Instruction): Sentence[] {
       return [];
     case 'EX':
       if (o0?.kind === 'reg16' && o0.reg === 'DE' && o1?.kind === 'reg16' && o1.reg === 'HL') {
-        return [say('HL is the register most memory and 16-bit arithmetic instructions use; EX DE,HL swaps an address kept in DE into HL, in one step, so those instructions can use it.')];
+        return [say('HL is the register most memory and 16-bit arithmetic instructions use; EX DE,HL swaps a value kept in DE into HL, in one step, so those instructions can use it.')];
       }
       if (isInd(o0, 'SP')) return [say('Only HL, IX or IY can be swapped with the top of the stack.')];
       return [];
@@ -101,10 +101,10 @@ function formFacts(ins: Instruction): Sentence[] {
 
 function loadFacts(dst: Operand | undefined, src: Operand | undefined): Sentence[] {
   if (isReg(dst, 'A') && src?.kind === 'mem') {
-    return [say(`Of the one-byte registers, only ${ACC} can be loaded straight from an address written in the instruction; any other would have to take its byte through A, or through an address in HL, IX or IY.`)];
+    return [say(`Of the one-byte registers, only ${ACC} can be loaded straight from an address written in the instruction; B, C, D, E, H and L can be loaded from one only as half of a pair, two bytes at a time (LD BC,(nn), LD DE,(nn), LD HL,(nn)).`)];
   }
   if (dst?.kind === 'mem' && isReg(src, 'A')) {
-    return [say(`Of the one-byte registers, only ${ACC} can be stored straight to an address written in the instruction; any other would have to go through A, or through an address in HL, IX or IY.`)];
+    return [say(`Of the one-byte registers, only ${ACC} can be stored straight to an address written in the instruction; B, C, D, E, H and L can be stored to one only as half of a pair, two bytes at a time (LD (nn),BC, LD (nn),DE, LD (nn),HL).`)];
   }
   if (isReg(dst, 'A') && src?.kind === 'ind' && (src.reg === 'BC' || src.reg === 'DE')) {
     return [say(`Only ${ACC} can be loaded through the address in ${src.reg}; the other registers can be loaded through an address only when it is in HL, IX or IY.`)];
