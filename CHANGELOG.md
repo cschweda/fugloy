@@ -91,7 +91,7 @@ the `emu-phase7` branch:
   it lists with no unexplained divergence, video RAM equal every 100,000
   instructions, and exact class counts. With `FUGLOY_TRSJS_SWEEP=1`, every
   other `.CMD` in `examples/` and `fixtures/real/` runs 10 million
-  instructions under one generic script: 57 programs (20 builds in `examples/`, 37 in `fixtures/real/`, Planetfall and Enchanter without their story disks), none with an unexplained divergence; class counts in all, flag bits 3 and 5, 24,162,163; BIT's S and P/V, 2,964,829; CPI/CPD C, 24,098; DDCB/FDCB R, 23,696; interrupt-response R, 22,187; an interrupt held while DI, 189. 17 end at the BASIC prompt or a reboot on the Model III (Eliminator a, b, d, f, g, h; Rear Guard 1, 2, 3, 7; Sea Dragon 7, 9; Armored Patrol's `GO.CMD`; Asylum 1c, 1d; the two Infocom interpreters), the same on both machines. About 1.5 million
+  instructions under one generic script: 57 programs (20 builds in `examples/`, 37 in `fixtures/real/`, Planetfall and Enchanter without their story disks), none with an unexplained divergence; class counts in all (the sum the sweep logs with `--silent=false`, beside each program's own), flag bits 3 and 5, 24,162,163; BIT's S and P/V, 2,964,829; CPI/CPD C, 24,098; DDCB/FDCB R, 23,696; interrupt-response R, 22,187; an interrupt held while DI, 189. 17 end at the BASIC prompt or a reboot on the Model III (Eliminator a, b, d, f, g, h; Rear Guard 1, 2, 3, 7; Sea Dragon 7, 9; Armored Patrol's `GO.CMD`; Asylum 1c, 1d; the two Infocom interpreters), the same on both machines. About 1.5 million
   compared instructions a second.
 - Emu phase 7 is met for the Model III (emu spec §11). The Model I waits for
   a Model I reference (MAME or xtrs, with the user's agreement), since trsjs
@@ -492,7 +492,10 @@ Found by the emu phase 7 differential harness, `@fugloy/emu`, on `emu-phase7`:
 - No committed golden or fixture changed with either fix: the MCP story
   transcripts, the Sea Dragon label file
   (`examples/sea-dragon/seadrg01.labels.json`), and the save-state tests all
-  pass unchanged, none capturing R after a HALT or a port `FF` read.
+  pass unchanged. None captures R after a HALT; port `FF` is read, but every
+  Model III ROM site that reads it discards or masks bits 6–1 (`$31C5` loads
+  A over it, the 500-baud reader at `$3221` and `$3239` keeps only bit 7, the
+  1500-baud reader at `$336F` only bit 0).
 
 From the emu phase 5 final review, `@fugloy/emu`, on `emu-phase5`:
 

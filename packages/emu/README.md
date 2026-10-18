@@ -184,7 +184,7 @@ committed or bundled: `pnpm trsjs:install` fetches it into the gitignored
 ```sh
 pnpm trsjs:install
 FUGLOY_TRSJS=1 pnpm vitest run packages/emu/test/diff                     # about a minute: the harness tests and six game sessions
-FUGLOY_TRSJS=1 FUGLOY_TRSJS_SWEEP=1 pnpm vitest run packages/emu/test/diff # also every other .CMD in examples/ and fixtures/real/
+FUGLOY_TRSJS=1 FUGLOY_TRSJS_SWEEP=1 pnpm vitest run packages/emu/test/diff --silent=false # also every other .CMD in examples/ and fixtures/real/, logging each one's class counts and the sum
 pnpm diff examples/sea-dragon/seadrg01.cmd --instructions 10000000        # one program, with a report
 ```
 
@@ -203,9 +203,12 @@ reported (flag bits 3 and 5; BIT's S and P/V; R on an interrupt and on
 DDCB/FDCB; the HALT return address; carry after CPI/CPD/CPIR/CPDR; and three
 interrupt timings). Everything else is a divergence. On the six sessions
 (Sea Dragon, Eliminator c and e, Rear Guard 5 and 4, Armored Patrol, 10
-million instructions each) there is none. The harness found two bugs here,
-now fixed: a halted CPU did not count R, and port `FF` did not read port
-`EC`'s bits back. Details in spec §10 and §11 (phase 7). The Model I waits
+million instructions each) there is none. The harness found two bugs on our
+side, both now fixed: a halted CPU did not count R, and port `FF` did not
+read port `EC`'s bits back. After those fixes, every remaining difference is
+trsjs's. One is a judgment call rather than a trsjs error: port `FF` bit 6,
+which the Model III Technical Reference Manual calls undefined; we read it as
+1, as trsjs and trs80gp do. Details in spec §10 and §11 (phase 7). The Model I waits
 for a Model I reference; trsjs is Model III only.
 
 ## Testing the Z80 core

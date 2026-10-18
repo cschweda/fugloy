@@ -17,7 +17,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import { CPU_CLOCK_HZ } from '../../src/index.js';
 import { bootToReady, screen } from '../integration/boot-helpers.js';
 import { configuredFixtures } from '../rom.js';
@@ -139,9 +139,21 @@ const sweepFiles = [
 ];
 
 describe.skipIf(!SWEEP)(`every other .CMD against trsjs${SWEEP ? '' : ' (skipped: set FUGLOY_TRSJS=1 and FUGLOY_TRSJS_SWEEP=1 to run)'}`, { timeout: 120_000 }, () => {
-  it.each(sweepFiles.map((path) => ({ path, name: basename(path) })))('$name: 10 million instructions under the generic script, no unexplained divergence', ({ path }) => {
+  // Each program's class counts, logged as it finishes, and their sum over the sweep, logged at
+  // the end: the numbers emu spec §11 (phase 7) and the CHANGELOG report come from these lines.
+  // Vitest hides a passing test's console output, so run with --silent=false to see them.
+  /** @type {Record<string, number>} */
+  const totals = {};
+  let programs = 0;
+  afterAll(() => {
+    if (programs > 0) console.log(`sweep totals over ${programs} programs: ${JSON.stringify(totals)}`);
+  });
+  it.each(sweepFiles.map((path) => ({ path, name: basename(path) })))('$name: 10 million instructions under the generic script, no unexplained divergence', ({ path, name }) => {
     const { result } = session(new Uint8Array(readFileSync(path)), GENERIC, []);
+    console.log(`sweep ${name}: ${JSON.stringify(result.known)}`);
     expect(result.divergence).toBeNull();
     expect(result.instructions).toBe(INSTRUCTIONS);
+    programs++;
+    for (const [c, n] of Object.entries(result.known)) totals[c] = (totals[c] ?? 0) + n;
   });
 });
