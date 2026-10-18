@@ -25,6 +25,10 @@ function write(path, value) {
 }
 
 describe('loadConfig', () => {
+  it('names the file when FUGLOY_CONFIG is a folder', () => {
+    expect(() => loadConfig({ cwd, env: { FUGLOY_CONFIG: cwd }, home })).toThrow(`The config file ${cwd} cannot be read: it is a folder, not a file.`);
+  });
+
   it('loadConfig follows FUGLOY_CONFIG, then cwd, then ~/.config', () => {
     const inHome = write(join(home, '.config', 'fugloy', 'fugloy.mcp.json'), { roms: { model3: 'home.rom' } });
     expect(loadConfig({ cwd, env: {}, home })).toMatchObject({ source: inHome, roms: { model3: join(home, '.config', 'fugloy', 'home.rom') } });

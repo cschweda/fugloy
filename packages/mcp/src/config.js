@@ -35,7 +35,15 @@ export const DEFAULT_LIMITS = Object.freeze({
 export function loadConfig({ cwd, env, home }) {
   const path = findConfig({ cwd, env, home });
   if (path === null) return { roms: {}, defaultModel: 3, limits: { ...DEFAULT_LIMITS }, source: null };
-  return parseConfig(readFileSync(path, 'utf8'), path);
+  /** @type {string} */
+  let text;
+  try {
+    text = readFileSync(path, 'utf8');
+  } catch (err) {
+    const code = /** @type {NodeJS.ErrnoException} */ (err).code;
+    throw new Error(`The config file ${path} cannot be read: ${code === 'EISDIR' ? 'it is a folder, not a file' : `${code ?? 'unknown error'}`}.`);
+  }
+  return parseConfig(text, path);
 }
 
 /** The config file's path, or null when there is none. */

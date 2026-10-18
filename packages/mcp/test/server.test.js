@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import { Session } from '../src/session.js';
 import { connect, syntheticRom, testConfig } from './helpers.js';
 
@@ -71,9 +72,57 @@ describe('server', () => {
     const { text, isError } = await call('long');
     expect(isError).toBe(false);
     const lines = text.split('\n');
-    expect(lines.at(-1)).toMatch(/^… \(output cut at 64 bytes; \d+ more lines\)$/);
-    expect(Buffer.byteLength(lines.slice(0, -1).join('\n'))).toBeLessThanOrEqual(64);
+    expect(lines.at(-1)).toMatch(/^… \(\d+ more lines; use offset=\d+\)$/);
+    expect(Buffer.byteLength(text)).toBeLessThanOrEqual(64);
     expect(lines[0]).toBe('line 0');
+    await close();
+  });
+});
+
+describe('arguments', () => {
+  const tools = [
+    {
+      name: 'count',
+      description: 'echoes n',
+      inputSchema: { n: z.number().int().describe('How many'), word: z.string().optional() },
+      handler: (_session, args) => `n=${args.n} word=${args.word ?? '-'}`,
+    },
+    { name: 'long', description: 'long output', handler: () => Array.from({ length: 40 }, (_, k) => `line ${k}`).join('\n') },
+    { name: 'nothing', description: 'returns undefined', handler: () => ({ text: undefined }) },
+  ];
+
+  it('answers a wrong-typed argument with a plain sentence naming it', async () => {
+    const { call, close } = await connect({ tools });
+    expect(await call('count', { n: '400' })).toEqual({ text: 'The argument "n" is not valid: expected number, received string; you gave "400".', isError: true });
+    expect(await call('count', { n: 1.5 })).toMatchObject({ isError: true, text: expect.stringContaining('The argument "n" is not valid') });
+    expect(await call('count', {})).toEqual({ text: 'The argument "n" is required.', isError: true });
+    expect(await call('count', { n: 3, word: 7 })).toMatchObject({ isError: true, text: expect.stringContaining('The argument "word"') });
+    expect(await call('count', { n: 3 })).toEqual({ text: 'n=3 word=-', isError: false });
+    await close();
+  });
+
+  it('lists the real type and requiredness in the descriptions', async () => {
+    const { client, close } = await connect({ tools });
+    const { tools: listed } = await client.listTools();
+    const props = listed.find((t) => t.name === 'count').inputSchema.properties;
+    expect(props.n.description).toBe('How many integer, required');
+    expect(props.word.description).toBe('string');
+    expect(props.offset.description).toContain('offset');
+    await close();
+  });
+
+  it('pages any tool with offset and refuses a bad offset in a sentence', async () => {
+    const { call, close } = await connect({ config: testConfig({ limits: { ...testConfig().limits, outputBytes: 80 } }), tools });
+    const first = await call('long');
+    const next = Number(/use offset=(\d+)\)$/.exec(first.text)[1]);
+    expect((await call('long', { offset: next })).text.split('\n')[0]).toBe(`line ${next}`);
+    expect(await call('long', { offset: '5' })).toMatchObject({ isError: true, text: expect.stringContaining('offset is a decimal count') });
+    await close();
+  });
+
+  it('survives a handler that returns no text', async () => {
+    const { call, close } = await connect({ tools });
+    expect(await call('nothing')).toEqual({ text: '', isError: false });
     await close();
   });
 });
