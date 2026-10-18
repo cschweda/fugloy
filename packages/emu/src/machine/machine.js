@@ -8,6 +8,7 @@ import { ROM_HASHES } from './rom-hashes.js';
 import { sha256Hex } from './sha256.js';
 import { Video } from '../devices/video.js';
 import { Sound } from '../devices/sound.js';
+import { KeyQueue, romKeyReturn } from '../devices/key-queue.js';
 
 /**
  * @typedef {{ a: number, f: number, b: number, c: number, d: number, e: number, h: number, l: number,
@@ -33,6 +34,8 @@ export class Machine {
   video;
   /** @type {Sound} Every port $FF write, raw and stamped in T-states. */
   sound;
+  /** @type {KeyQueue} Key presses now, cycle-timed typing through the matrix, and the ROM keyboard-scan hook's feed. */
+  keyboard;
 
   /**
    * @param {{ model?: 3, ram?: 48, roms: { level2: Uint8Array }, log?: (level: string, text: string) => void }} opts
@@ -82,6 +85,7 @@ export class Machine {
     this.sound = new Sound();
     sys.io.onSoundWrite = (cycle, value) => this.sound.record(cycle, value);
     sys.io.onSoundReset = () => this.sound.clear();
+    this.keyboard = new KeyQueue(sys.keyboard, () => sys.cpu.cycles);
     this.io = {
       in: (port) => sys.io.readPort(port),
       out: (port, value) => sys.io.writePort(port, value),
@@ -97,14 +101,31 @@ export class Machine {
   reset() {
     this.system.reset();
     this.sound.clear();
+    this.keyboard.clear();
   }
 
   /**
    * The internal per-instruction hook, run at every instruction boundary (after interrupt
-   * delivery, before the instruction executes) by both `step` and `run`. Empty in this task;
-   * the keyboard queue and the ROM keyboard-scan hook attach here.
+   * delivery, before the instruction executes) by both `step` and `run`: deliver the matrix key
+   * events now due, then, with a fed character waiting and the PC at the ROM's keyboard scan
+   * ($002B) or wait-for-key ($0049), return from that routine with the character as the ROM
+   * would (spec §6, "Keyboard-scan hook"). That return stands in for the boundary's instruction,
+   * as one RET (10 T-states), so the next boundary is at the caller's return address.
+   * @returns {boolean} true when the hook stood in for the instruction
    */
-  #beforeInstruction() {}
+  #beforeInstruction() {
+    const cpu = this.system.cpu;
+    const kb = this.keyboard;
+    if (cpu.cycles >= kb.nextAt) kb.drain(cpu.cycles);
+    if (kb.hasFeed) {
+      const pc = cpu.registers.PC;
+      if (pc === 0x002b || pc === 0x0049) {
+        romKeyReturn(cpu, pc, kb.takeFeed());
+        return true;
+      }
+    }
+    return false;
+  }
 
   /** Bound once, so the hot loop passes the same function every instruction. */
   #hook = () => this.#beforeInstruction();

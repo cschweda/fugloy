@@ -92,7 +92,7 @@ export class TRS80System {
    * `runTStates` and the Machine facade both step through here, so the
    * RTC keeps one schedule however the machine is driven. Returns the
    * T-states consumed, an interrupt response included.
-   * @param {() => void} [beforeExecute] called after interrupt delivery, with PC at the instruction about to run
+   * @param {() => boolean | void} [beforeExecute] called after interrupt delivery, with PC at the instruction about to run; returning true means it stood in for that instruction, which then does not execute
    * @returns {number}
    */
   stepInstruction(beforeExecute) {
@@ -111,11 +111,12 @@ export class TRS80System {
     }
     this._nmiWasPending = nmiNow;
 
-    if (beforeExecute !== undefined) {
-      beforeExecute();
-    }
+    // beforeExecute returning true has executed the boundary's instruction itself (the
+    // Machine's ROM keyboard-scan hook stands in for a RET), so the CPU does not run one.
     const before = this.cpu.cycles;
-    this.cpu.executeInstruction();
+    if (beforeExecute === undefined || beforeExecute() !== true) {
+      this.cpu.executeInstruction();
+    }
     this.io.fdc.tick(this.cpu.cycles - before);
     return this.cpu.cycles - start;
   }

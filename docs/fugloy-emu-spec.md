@@ -88,8 +88,10 @@ m.io.in(port) / m.io.out(port, val)
 // devices
 m.video.text()            // 16 lines of 64 chars, string[]
 m.video.raw               // Uint8Array view of 0x3C00..0x3FFF
-m.keyboard.type(str, { cps })
-m.keyboard.press(key) / release(key)
+m.keyboard.type(str, { cps, mode })   // cycle-timed matrix typing ('matrix') or the §6 hook ('hook')
+m.keyboard.feed(str)      // characters for the ROM keyboard-scan hook (§6); '\n' = ENTER
+m.keyboard.press(key) / release(key)   // a character or ENTER CLEAR BREAK UP DOWN LEFT RIGHT SHIFT SPACE
+m.keyboard.pending        // queued events not yet delivered
 m.cassette.load(bytes) / m.cassette.motor
 m.fdc.mount(drive, image) / unmount(drive)
 
@@ -171,6 +173,8 @@ ROMs are not bundled. The caller supplies bytes; the core validates by length an
 | `.DSK` / JV1 / JV3 / DMK | Mount into FDC. JV1 = raw 10-sector tracks; JV3 = sector header table; DMK = raw track with IDAM pointers. Read all three; write DMK only. |
 
 Each loader returns a manifest the debugger records: where bytes landed and why. That manifest is the first entry in the coverage file.
+
+**Keyboard-scan hook** (verified in emu phase 2 against the Model III ROM: the commented disassembly `MDL3LEV2.Z80` in kiwisincebirth/TRS-80-ROMS, and the entries `$KBCHAR` and `$KBWAIT` in `packages/disasm/data/symbols/rom-model3.json`, cited to the Model III manual, pp. 12/11 and 12/12). `$002B` loads DE with `$4015` (the keyboard DCB) and goes through `$0013` and the driver dispatcher `CIO` (`$0674`), which saves and restores BC, HL, IX, and the DE it was given, to the keyboard driver (`$3024` → `$338E`). The driver returns A = the key's ASCII code, or 0 with Z set (`XOR A` at `$3083`/`$30A1`, or `RET Z` at `$3403` when the debounce re-read differs) when no new key is down. For a key its last flag-setting instruction is `CP 01H` at `$3100` (the BREAK test), so F holds that compare: N set, Z clear, H set when the code's low nibble is 0, bits 5 and 3 clear, carry clear; BREAK itself (`$01`) goes through `RST 28H` (a RET under Level II) and returns with Z set. `$0049` is `CALL 002BH / OR A / RET NZ / JR 0049H`, so it returns A = the key with F from `OR A` (S, Z, 5, 3, and parity from A; H, N, C clear). Both return DE = `$4015` and keep BC, HL, IX, IY, and the alternate set. BASIC's line editor (`$0040` → `KEYIN` at `$05D9`) waits at `$0049`, and `INKEY$` (`$0358`) calls `$002B`. The hook (`m.keyboard.feed`, or `type` with `mode: 'hook'`): at an instruction boundary with the PC at `$002B` or `$0049` and a fed character waiting, it sets A, F, and DE as above and pops the return address, standing in for one RET (10 T-states); every character is delivered once; with nothing fed the ROM runs. It does not make the routine's RAM side effects (the rollover buffer at `$4036`, the repeat counters) or spend its debounce time, and it reaches only code that calls the ROM: a program that scans `$3800` directly needs matrix typing (`m.keyboard.type`, the default mode), which presses and releases keys at T-state times computed from `cps` at the CPU clock. Tests: `packages/emu/test/unit/key-queue.test.js` checks the contract register by register; `test/integration/keyboard.test.js` checks that, on the real ROM, the hook leaves the same registers at `$05E3` and `$004C` as the ROM does for a held key.
 
 ## 7. Debugger interface
 
@@ -272,7 +276,7 @@ Phases 0–4 are the minimum for the MCP server to be useful. Phase 7 is what ma
 - [ ] Which external emulator is the differential reference — trs80gp (closed, very accurate, has a trace mode) or sdltrs (open, patchable)?
 - [ ] Video RAM access timing: the Model I shows "snow" on CPU access during display and the Model III/4 insert wait states. Model neither in v1 (timing error only matters for cycle-exact demos), but record the decision so the differential harness can exclude it.
 - [ ] Does the §8 `(map, page)` keying hold up once Model 4 is real, or should coverage be over physical RAM addresses with a map table?
-- [ ] Is the keyboard-hook injection (§6) safe for programs that replace the ROM keyboard routine with their own matrix scan? Likely needs a fallback to real matrix injection with a `mode` switch.
+- [x] Is the keyboard-hook injection (§6) safe for programs that replace the ROM keyboard routine with their own matrix scan? No: such programs never call `$002B`/`$0049`. Emu phase 2 ships both: cycle-timed matrix typing (the default) and the hook (`feed`, or `type` with `mode: 'hook'`).
 - [x] License for `packages/emu`: the code is the author's own MIT (upstream `LICENSE`); trsjs.48k.ca supplied only sample games, which stayed upstream. `packages/emu/NOTICE.md` carries the upstream notice.
 - [ ] Is WebAssembly worth it for the CPU core once correct, or is JIT'd JS fast enough for 20× real time?
 - [ ] Several cores in one process run about 4× slower each (measured in phase 1: ZEXALL's `bit n` group takes 8 s on a process's first `Z80CPU` and 33 s on its fourth). `makeRegisterFile` gives every instance its own accessor closures, so every register file gets its own hidden class and the hot paths go megamorphic: 114 MHz becomes about 28 MHz, under the target in §4. The MCP server's sessions and snapshots and the differential harness will run several cores per process. Fix with a benchmark in hand (§2.6): accessors shared on a prototype, or a `Uint8Array` register file. The exerciser harness reuses one core in the meantime.
