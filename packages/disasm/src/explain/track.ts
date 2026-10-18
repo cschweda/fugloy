@@ -33,7 +33,7 @@ interface Index {
   roots: Set<number>;
   /** Addresses an instruction references as data, or a hint declares a table at: reachable by an indirect transfer. */
   dataRefs: Set<number>;
-  /** Address → the instructions that refer to it as data (`dataReference`). */
+  /** Address → the instructions that hold it as a number (`dataReference` with no (nn) operand): a pointer that may be jumped or called through. */
   pointerUses: Map<number, number[]>;
   /** Addresses an instruction provably stores into: the (nn) of LD (nn),r, and nn and nn+1 of LD (nn),rr. */
   stores: Set<number>;
@@ -69,8 +69,9 @@ function index(a: Analysis): Index {
   const stores = new Set<number>();
   for (const [at, ins] of a.pass1.instructions) {
     const ref = dataReference(ins);
-    if (ref !== null) {
-      dataRefs.add(ref & 0xffff);
+    if (ref !== null) dataRefs.add(ref & 0xffff);
+    // Only an address the program holds as a number (LD rr,nn and the like) can be jumped or called through; a store or load at (nn) uses the byte there.
+    if (ref !== null && !ins.operands.some((o) => o.kind === 'mem')) {
       const list = pointerUses.get(ref & 0xffff);
       if (list === undefined) pointerUses.set(ref & 0xffff, [at]);
       else list.push(at);
@@ -175,7 +176,7 @@ export function written(ins: Instruction): Reg8Name[] {
   return [...out];
 }
 
-/** The instructions that refer to `addr` as data (an address loaded or used, perhaps as a pointer to jump through), ascending. */
+/** The instructions that hold `addr` as a number (LD HL,nn and the like, not a load or store at (nn)), so it may be jumped or called through; ascending. */
 export function pointerUses(a: Analysis, addr: number): number[] {
   return [...(index(a).pointerUses.get(addr & 0xffff) ?? [])];
 }

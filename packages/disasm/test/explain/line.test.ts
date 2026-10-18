@@ -192,6 +192,8 @@ describe('line sentences on synthetic code', () => {
 
   it('Sea Dragon $5174: the instruction the program swaps (written at $5C60 and five more) gets the first-byte caveat', () => {
     expect(lead(explainLine(sea, 0x5174)).join(' ')).toMatch(/stores into the first byte of this instruction as it runs \(L5174, written at \$5C60, \$5C91, \$5D5E and 3 more\)/);
+    // A store into an address is not a pointer to it: no "reached through a pointer".
+    expect(lead(explainLine(sea, 0x5174)).join(' ')).not.toMatch(/through a pointer/);
   });
 
   it('RET says where it carries on without claiming a CALL put it there', () => {
