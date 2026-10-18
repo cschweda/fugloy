@@ -118,6 +118,21 @@ describe('why this register: facts about the Z80', () => {
     expect(why([0xed, 0x47, RET])).toEqual(['I and R can be loaded only from A, the accumulator.']);
   });
 
+  it('names the one register the sentences speak of, for the workbench heading', () => {
+    const name = (bytes: number[], at = 0x7000): string | undefined => explainLine(raw(bytes), at).why?.registerName;
+    expect(name([0xfe, 0x0d, RET])).toBe('A'); // CP 0DH
+    expect(name([0x10, 0xfe, RET])).toBe('B'); // DJNZ
+    expect(name([0xed, 0x40, RET])).toBe('C'); // IN B,(C)
+    expect(name([0x19, RET])).toBe('HL'); // ADD HL,DE
+    expect(name([0xdd, 0x09, RET])).toBe('IX'); // ADD IX,BC
+    expect(name([0xdd, 0xe9])).toBe('IX'); // JP (IX)
+    expect(name([0xf9, RET])).toBe('HL'); // LD SP,HL
+    expect(name([0xeb, RET])).toBe('HL'); // EX DE,HL
+    expect(name([0xed, 0xb0, RET])).toBeUndefined(); // LDIR: HL, DE and BC
+    expect(name([0x3e, 0x58, 0xcd, 0x33, 0x00, RET])).toBe('A'); // LD A,'X' before $VDCHAR
+    expect(name([0x06, 0x05, RET])).toBeUndefined(); // LD B,5: no forced choice
+  });
+
   it('no forced choice, no sentence', () => {
     expect(why([0x41, RET])).toEqual([]); // LD B,C
     expect(why([0x14, RET])).toEqual([]); // INC D

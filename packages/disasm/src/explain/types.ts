@@ -65,6 +65,8 @@ export interface Explanation {
 
 export interface Why {
   register: Sentence[];
+  /** The one register the `register` sentences speak of (`A`, `B`, `HL`…); absent when they speak of several, or there are none. */
+  registerName?: string;
   purpose: Sentence[];
   idiom: Sentence[];
   routine: Sentence[];

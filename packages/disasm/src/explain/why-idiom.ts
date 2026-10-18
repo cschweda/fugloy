@@ -9,6 +9,7 @@
  */
 import { decodeAt, formatOperand } from '@fugloy/z80';
 import type { Instruction, Operand } from '@fugloy/z80';
+import { renderInstruction } from '../emit/operands.js';
 import { addrPiece, say } from './machine.js';
 import type { LineCtx } from './phrase.js';
 import { djnzLoop, opcodeRewritten, straightFrom, walkBack, written } from './track.js';
@@ -63,6 +64,12 @@ function nameOf(i: Instruction): string {
   const ops = i.operands.filter((o) => o.kind !== 'rel').map((o) => (o.kind === 'mem' ? '(nn)' : formatOperand(o)));
   return ops.length === 0 ? i.mnemonic : `${i.mnemonic} ${ops.join(',')}`;
 }
+/**
+ * A line of the program as the listing prints it, names and all, so the
+ * sentence quotes what the reader sees; `nameOf` is only for the alternatives,
+ * which are in no listing.
+ */
+const spelled = (c: LineCtx, ins: Instruction): string => renderInstruction(ins, c.a.symbols, c.a.externals);
 /** `LD A,(HL), INC A and LD (HL),A` */
 function names(k: Cost): string {
   const n = k.ins.map(nameOf);
@@ -146,7 +153,7 @@ function testA(c: LineCtx): Sentence[] {
       say(
         `The next line, at `,
         addrPiece(c, next.at),
-        `, is ${nameOf(next.ins)}: the Z80 has no 16-bit subtract that leaves the carry out, so clearing the carry first is the usual way to make SBC a plain subtract.`,
+        `, is ${spelled(c, next.ins)}: the Z80 has no 16-bit subtract that leaves the carry out, so clearing the carry first is the usual way to make SBC a plain subtract.`,
       ),
     );
   }
@@ -165,7 +172,7 @@ function compare(c: LineCtx): Sentence[] {
   else return [];
   const alt = costOf(b);
   if (alt.ins.length !== 1 || alt.ins[0]!.mnemonic !== 'SUB') return [];
-  return [say(`${nameOf(c.ins)} subtracts to set the flags, exactly as ${nameOf(alt.ins[0]!)} would, but throws the result away and leaves A unchanged, so A can be tested again; it costs ${against(own(c.ins), alt)}.`)];
+  return [say(`${spelled(c, c.ins)} subtracts to set the flags, exactly as ${nameOf(alt.ins[0]!)} would, but throws the result away and leaves A unchanged, so A can be tested again; it costs ${against(own(c.ins), alt)}.`)];
 }
 
 /** `LD B,n` that sets the count of a DJNZ loop starting in straight-line code after it. */
@@ -185,7 +192,7 @@ function countedLoop(c: LineCtx): Sentence[] {
       const alt = costOf([0x05, 0x20, 0xfe]);
       return [
         say(
-          `${nameOf(c.ins)} with the DJNZ at `,
+          `${spelled(c, c.ins)} with the DJNZ at `,
           addrPiece(c, x.from),
           ` is the Z80's counted loop: B holds the count, and DJNZ takes 1 from it and jumps back in ${bytesText(djnz.length)} and ${djnz.cycles} T-states (${djnz.cyclesNotTaken} when it falls out), against ${bytesText(alt.bytes)} and ${alt.cycles} (${alt.notTaken}) for ${names(alt)}.`,
         ),
@@ -266,7 +273,7 @@ function inPlace(c: LineCtx): Sentence[] {
   const alt = costOf([...loadA(s), inc ? 0x3c : 0x3d, ...storeA(s)]);
   return [
     say(
-      `${nameOf(c.ins)} ${inc ? 'adds 1 to' : 'takes 1 from'} the byte in memory where it is, the usual way to keep a counter in memory: ${against(own(c.ins), alt)} for ${names(alt)}, which would also change A.`,
+      `${spelled(c, c.ins)} ${inc ? 'adds 1 to' : 'takes 1 from'} the byte in memory where it is, the usual way to keep a counter in memory: ${against(own(c.ins), alt)} for ${names(alt)}, which would also change A.`,
     ),
   ];
 }
@@ -326,7 +333,7 @@ function rst(c: LineCtx): Sentence[] {
   const alt = costOf([0xcd, op.addr & 0xff, op.addr >> 8]);
   return [
     say(
-      `${nameOf(c.ins)} calls `,
+      `${spelled(c, c.ins)} calls `,
       addrPiece(c, op.addr),
       ` in ${against(own(c.ins), alt)} for ${nameOf(alt.ins[0]!)}. The Z80 has eight of these one-byte calls, to `,
       addrPiece(c, 0x00),
@@ -358,7 +365,7 @@ function walkTable(c: LineCtx): Sentence[] {
       : `HL is the cheapest pointer for it, ${against(mine, alt)} for ${names(alt)}`;
   return [
     say(
-      `${nameOf(c.ins)} with the ${nameOf(next.ins)} at `,
+      `${spelled(c, c.ins)} with the ${spelled(c, next.ins)} at `,
       addrPiece(c, next.at),
       ` is the usual way to walk through a table: read the byte HL points at, then move HL ${inc ? 'on' : 'back'} to the next. ${cheap}.`,
     ),

@@ -293,7 +293,8 @@ export function explainLine(s: Session, addr: number): Explanation {
     sentences.push(say(at === a.entry ? 'This is where the program starts (its entry point).' : 'This is an entry point the analysis starts from.'));
   }
   const pattern = patternAt(c, at);
-  const why = { register: registerWhy(lc), purpose: purposeWhy(lc), idiom: idiomWhy(lc), routine: routineWhy(lc) };
+  const reg = registerWhy(lc);
+  const why = { register: reg.sentences, ...(reg.about === undefined ? {} : { registerName: reg.about }), purpose: purposeWhy(lc), idiom: idiomWhy(lc), routine: routineWhy(lc) };
   return {
     kind: 'code',
     addr: at,
