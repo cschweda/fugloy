@@ -19,6 +19,15 @@ through `Machine`.
 
 ### Added
 
+Emu phase 4 (`@fugloy/mcp`, in progress):
+
+- The stdio server skeleton (`bin/fugloy-mcp.js`, MCP SDK 1.32.0): the
+  `fugloy.mcp.json` config (`$FUGLOY_CONFIG`, then the working directory,
+  then `~/.config/fugloy/`, with the §7 limits as defaults), the one-machine
+  session, the output cap, errors as `isError` sentences, a stdout guard that
+  sends console output and the emulator's log to stderr, and the `status`
+  tool.
+
 Emu phase 3:
 
 - `m.debug` (spec §3, §7): breakpoints with `once` and `when`, read and write

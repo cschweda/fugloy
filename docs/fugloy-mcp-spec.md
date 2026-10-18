@@ -219,7 +219,7 @@ Claude Code config (`.mcp.json` in the Fugløy repo so it's project-scoped):
 
 Inside the monorepo during development, point `command` at `node packages/mcp/bin/fugloy-mcp.js` instead so you're testing the working tree, not the published package.
 
-Dependency declaration in `packages/mcp/package.json` uses a normal semver range, `"@fugloy/emu": "^0.1.0"`; npm workspaces resolve it to the local package automatically. (`workspace:*` is pnpm syntax and npm will try to fetch it from the registry.)
+Dependency declaration in `packages/mcp/package.json` uses pnpm's `workspace:*` for `@fugloy/emu`, `@fugloy/disasm`, and `@fugloy/z80`, since the monorepo is a pnpm workspace; `pnpm pack` and `pnpm publish` rewrite each to the exact version of the local package, so the published package carries ordinary semver ranges. (Publish with pnpm, not npm: npm would leave `workspace:*` in place and fail to fetch it.)
 
 First session, verbatim:
 

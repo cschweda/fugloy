@@ -3,11 +3,18 @@
 A stdio MCP server that puts a running TRS-80 (`@fugloy/emu`) in front of
 Claude Code or any MCP client: load a program, run it, inspect memory and
 registers, inject input, read the screen, and record labels and coverage the
-Fugløy disassembler consumes. **Stub:** `src/index.js` is empty; phase A
-starts once `@fugloy/emu` boots to `READY` in Node.
+Fugløy disassembler consumes. **In progress (emu phase 4):** the server
+skeleton, config, session, and the `status` tool are in; the other phase A–C
+tools follow (plan: `docs/superpowers/plans/2026-10-18-emu-phase4-mcp.md`).
+
+Run it from the monorepo with `node packages/mcp/bin/fugloy-mcp.js`. It reads
+`fugloy.mcp.json` from `$FUGLOY_CONFIG`, else the working directory, else
+`~/.config/fugloy/` (spec §3; the repository's `fugloy.mcp.example.json`
+shows the format); paths in it are relative to the file. stdout carries
+JSON-RPC only: console output and the emulator's log go to stderr.
 
 - Spec: [`docs/fugloy-mcp-spec.md`](../../docs/fugloy-mcp-spec.md) (phases A–F in §11)
 - Companion core spec: [`docs/fugloy-emu-spec.md`](../../docs/fugloy-emu-spec.md)
 - Label and coverage file it reads and writes: [`docs/label-format.md`](../../docs/label-format.md)
-- Depends on `@fugloy/emu` by semver range (`^0.1.0`); inside the monorepo the
-  range resolves to the local package.
+- Depends on `@fugloy/emu`, `@fugloy/disasm`, and `@fugloy/z80` as
+  `workspace:*`; `pnpm pack` rewrites them to the local versions.
