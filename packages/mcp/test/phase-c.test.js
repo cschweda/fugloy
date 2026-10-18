@@ -13,6 +13,17 @@ import { RAIDERS, buildCmd, connect, syntheticRom, testConfig } from './helpers.
 
 const NO_MACHINE = 'No program loaded; call load first.';
 
+/** Whether the temporary folder's volume ignores case: decided at collection, for it.skipIf. */
+const CASE_INSENSITIVE = (() => {
+  const probe = mkdtempSync(join(tmpdir(), 'fugloy-mcp-case-'));
+  try {
+    writeFileSync(join(probe, 'probe'), '');
+    return existsSync(join(probe, 'PROBE'));
+  } finally {
+    rmSync(probe, { recursive: true, force: true });
+  }
+})();
+
 /**
  * CHORES: calls three routines five times each from one loop, then halts. KEY (7040h) reads
  * the keyboard, BEEP (7050h) writes port FFh, DELAY (7060h) counts BC down from 1,200.
@@ -260,32 +271,46 @@ describe('phase C tools', () => {
     expect(listing).toMatch(/CALL +PRINT/);
   });
 
-  it('coverage export compares files by identity: case variants, links, the program, the ROM', async () => {
-    const insensitive = existsSync(at('RAIDERS.CMD'));
+  it('coverage export compares files by identity: links, the program, the ROM', async () => {
     symlinkSync(at('raiders.cmd'), at('link.cmd'));
     symlinkSync(dir, at('dirlink'));
     try {
       const { call, close } = await raidersPlayed();
       const refused = async (path) => (await call('coverage', { mode: 'export', path })).text;
-      if (insensitive) expect(await refused(at('RAIDERS.CMD'))).toBe(`${at('RAIDERS.CMD')} is the program itself; give another path to export to.`);
       expect(await refused(join(at('dirlink'), 'raiders.cmd'))).toBe(`${join(at('dirlink'), 'raiders.cmd')} is the program itself; give another path to export to.`);
       expect(await refused(at('link.cmd'))).toBe(`${at('link.cmd')} is a symbolic link; the server does not write through links (replace it with a file, or remove it).`);
       expect(await refused(at('synthetic.rom'))).toBe(`${at('synthetic.rom')} is the ROM; give another path to export to.`);
       expect(readFileSync(at('raiders.cmd'))).toEqual(Buffer.from(RAIDERS));
       await close();
 
-      // An ignored sidecar is protected under any spelling.
+      // An ignored sidecar is protected through a linked folder too.
       writeFileSync(at('raiders.fugloy.json'), 'broken');
       const again = await server();
       await ok(again.call, 'load', { path: at('raiders.cmd') });
-      const variants = [join(at('dirlink'), 'raiders.fugloy.json'), ...(insensitive ? [at('RAIDERS.FUGLOY.JSON')] : [])];
-      for (const path of variants) expect((await again.call('coverage', { mode: 'export', path })).text).toMatch(/^The sidecar .* was ignored at load/);
+      const path = join(at('dirlink'), 'raiders.fugloy.json');
+      expect((await again.call('coverage', { mode: 'export', path })).text).toMatch(/^The sidecar .* was ignored at load/);
       expect(readFileSync(at('raiders.fugloy.json'), 'utf8')).toBe('broken');
       await again.close();
     } finally {
       rmSync(at('link.cmd'));
       rmSync(at('dirlink'));
     }
+  });
+
+  // Case variants name the same file only on a case-insensitive volume (macOS and Windows by
+  // default); on a case-sensitive one (most Linux, so CI) this test is reported as skipped.
+  it.skipIf(!CASE_INSENSITIVE)('coverage export compares files by identity: case variants of the program and the sidecar', async () => {
+    const { call, close } = await raidersPlayed();
+    expect((await call('coverage', { mode: 'export', path: at('RAIDERS.CMD') })).text).toBe(`${at('RAIDERS.CMD')} is the program itself; give another path to export to.`);
+    expect(readFileSync(at('raiders.cmd'))).toEqual(Buffer.from(RAIDERS));
+    await close();
+
+    writeFileSync(at('raiders.fugloy.json'), 'broken');
+    const again = await server();
+    await ok(again.call, 'load', { path: at('raiders.cmd') });
+    expect((await again.call('coverage', { mode: 'export', path: at('RAIDERS.FUGLOY.JSON') })).text).toMatch(/^The sidecar .* was ignored at load/);
+    expect(readFileSync(at('raiders.fugloy.json'), 'utf8')).toBe('broken');
+    await again.close();
   });
 
   it('after load with reset: false of another program, export refuses and suggest says why', async () => {

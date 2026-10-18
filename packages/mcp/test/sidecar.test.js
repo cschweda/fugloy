@@ -144,6 +144,25 @@ describe('the sidecar file', () => {
     await again.close();
   });
 
+  it('a sidecar removed on disk after the server wrote it is not written again', async () => {
+    const { call, close } = await server();
+    await ok(call, 'load', { path: at('raiders.cmd') });
+    await ok(call, 'label', { addr: '7030', name: 'PRINT' });
+    rmSync(SIDECAR());
+    const removed = `the sidecar ${SIDECAR()} was removed on disk since the server last read or wrote it, so it was not overwritten; load the program again to pick up the edits`;
+    expect(await call('label', { addr: '7040', name: 'BANNER', kind: 'data' })).toEqual({ text: `Labelled 7040h BANNER (data) in this session, but ${removed}`, isError: true });
+    expect(existsSync(SIDECAR())).toBe(false);
+    expect(await call('unlabel', { name: 'PRINT' })).toEqual({ text: `Removed PRINT at 7030h in this session, but ${removed}`, isError: true });
+    expect((await call('coverage', { mode: 'export' })).text).toBe(`The sidecar ${SIDECAR()} was removed on disk since the server last read or wrote it, so it was not overwritten; load the program again to pick up the edits.`);
+    expect(existsSync(SIDECAR())).toBe(false);
+    // An explicit path still exports, and a fresh load writes the sidecar again.
+    expect(await ok(call, 'coverage', { mode: 'export', path: at('elsewhere.json') })).toMatch(/^Wrote /);
+    rmSync(at('elsewhere.json'));
+    await ok(call, 'load', { path: at('raiders.cmd') });
+    expect(await ok(call, 'label', { addr: '7030', name: 'PRINT' })).toBe(`Labelled 7030h PRINT (code).\nWrote ${SIDECAR()}.`);
+    await close();
+  });
+
   it('a symbolic link at the sidecar path is reported and never written through', async () => {
     symlinkSync(at('nowhere.json'), SIDECAR());
     const { call, close } = await server();
