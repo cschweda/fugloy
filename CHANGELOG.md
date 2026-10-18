@@ -106,6 +106,42 @@ progress on the `emu-phase6` branch:
 - Changed: a save state of one model restored into a Model I says which
   ("This is a Model III save state; the machine is a Model I, …"); into a
   Model III the sentence is unchanged.
+- The Model I's disk: the Expansion Interface's WD1771
+  (`src/devices/fdc-wd1771.js`, the phase 5 controller with the 1771's
+  differences from the FD1771-01 data sheet) at `$37EC`–`$37EF`, the drive
+  select at `$37E1` (bits 0–3), INTRQ on the interrupt latch's bit 6 (cleared
+  by a status read or a command load, never an NMI). Single density only, no
+  side compare, the `b` flag's lengths, the data mark read into status bits
+  6–5 and written by a1 a0 (`FB`, `FA`, `F9`, `F8`), Read Address loading the
+  sector register with the ID's sector, the 1 MHz step rates and 20 ms
+  settling, a two-revolution search, a command loaded while Busy overriding
+  the one running (the dual-boot disks' loader needs it), and a Restore at
+  reset when a disk is mounted. `m.fdc` and `m.load.dsk` work on the Model I:
+  the Level II ROM boots track 0, sector 0 to `$4200`. With no disk mounted
+  `$37EC`–`$37EF` read `$FF` and the ROM starts Level II BASIC, as before. The
+  four local disk images boot on the Model I: the Duo-Loader menu of the
+  dual-boot Eliminator and Rear Guard disks and `ELIMATOR.dsk`, then each
+  game's title after ENTER, and Scarfman's title.
+- The Model I's printer at `$37E8`–`$37EB`: status `$30` (ready, as the ROM's
+  `PRTAVL` expects), bytes to the printout.
+- On a Model I a 10-sector JV1 may have 35 to 42 tracks as well as 77 or 80
+  (`JV1_MODEL1_SD_TRACKS`); any other length is still refused, with a
+  sentence listing the Model I's sizes. The Model III's sizes are unchanged.
+- A Model I built with `expansion: false` refuses `m.fdc.mount` and
+  `m.load.dsk` with a sentence.
+- Changed: a 10-sector JV1's synthesized directory marks are `FA` (the mark
+  the Model I DOSes write their directory with), not `F8`, so a DMK export
+  writes `FA` there; the WD1793 model still reads them as deleted. An
+  18-sector JV1 keeps `F8`.
+- Changed: a Model I save state records the lowercase modification, and a
+  restore refuses a Model I state saved with another Expansion Interface or
+  lowercase fitting, with a sentence (it used to restore and drop the latch).
+- Fixed: the debugger's own reads (a watched write's old value, the
+  instruction look-ahead, the trace, the label file) peek, so a watched write
+  to `$37E1` no longer clears the latch's clock bit, and one to `$37EC` does
+  not read the WD1771's status (which would drop INTRQ). The Model III's
+  reads are as before. `MemorySystem.getMemoryView` shows `$37E0`–`$37EF` as
+  `m.mem.read` does.
 
 Emu phase 5 (disk controller and images; emu spec §3, §5, §6), `@fugloy/emu`,
 unreleased, on the `emu-phase5` branch:

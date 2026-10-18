@@ -67,11 +67,11 @@ describe('the Expansion Interface clock and its latch at $37E0', () => {
     expect([...m.mem.read(0x5000, 2)]).toEqual([0x80, 0x00]);
   });
 
-  it('$37E1-$37E3 read the latch too (MAME maps the read over all four); $37E4-$37EF read $FF for now', () => {
+  it('$37E1-$37E3 read the latch too (MAME maps the read over all four); the printer reads ready at $37E8-$37EB; the rest, and the WD1771 with no disk, read $FF', () => {
     const m = model1([0xf3, 0x18, 0xfe]);
     m.run({ cycles: 50000 });
     for (const a of [0x37e1, 0x37e2, 0x37e3]) expect(m.mem.read(a, 1)[0]).toBe(0x80);
-    for (let a = 0x37e4; a <= 0x37ff; a++) expect(m.mem.read(a, 1)[0]).toBe(0xff);
+    for (let a = 0x37e4; a <= 0x37ff; a++) expect(m.mem.read(a, 1)[0]).toBe(a >= 0x37e8 && a <= 0x37eb ? 0x30 : 0xff);
     expect(m.mem.read(0x37df, 1)[0]).toBe(0xff);
   });
 

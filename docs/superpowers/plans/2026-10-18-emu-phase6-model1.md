@@ -58,6 +58,8 @@
 
 - [ ] Steps: failing tests (each 1771 difference in Ruling 5 on synthetic JV1 images; drive select; INTRQ to the latch; the Model I ROM boots a synthetic JV1 boot sector; a real Model I disk in `fixtures/real/` if one boots — the dual-boot DMKs are Model I and Model III — record what each reaches), run, implement, run, commit `e6: add the Expansion Interface's WD1771 disk controller`.
 
+Rulings made in Task 3: (a) a 10-sector JV1 of 35 to 42 tracks (as well as 77 and 80) mounts on a Model I only (`JV1_MODEL1_SD_TRACKS`); the Model III's sizes and refusal tests are unchanged, and any other length still refuses on both; (b) a 10-sector JV1's synthesized directory mark is `FA` (export and reads), an 18-sector one's stays `F8`; (c) with no disk mounted the WD1771 is absent (`$37EC`–`$37EF` read `$FF`), as the Model III's controller is, so Level II BASIC still starts; (d) a command loaded while Busy overrides the running one on the 1771 (its data sheet; the dual-boot loaders need it); (e) a Model I save state restores only into a Model I with the same `expansion` and `lowercase`, refused with a sentence otherwise; (f) `expansion: false` refuses `m.fdc.mount`; (g) the printer at `$37E8` is wired too (status `$30`).
+
 ### Task 4: Programs on the Model I, the MCP server, and docs
 
 **Files:** `packages/emu/test/integration/model1-programs.test.js` (gated), `packages/mcp/src/tools/load.js` and config (`roms.model1`), MCP tests; docs.

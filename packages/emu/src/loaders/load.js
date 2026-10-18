@@ -11,7 +11,7 @@ import { parseCmd, fastLoadCmd } from './cmd-format.js';
 import { parseCas, fastLoadBasic, fastLoadSystem } from './cas-format.js';
 import { casToPulses } from '../devices/cassette-tape.js';
 import { CPU_CLOCK_HZ } from '../machine/trs80-system.js';
-import { DiskImage } from '../devices/disk-image.js';
+import { DiskImage, JV1_MODEL1_SD_TRACKS } from '../devices/disk-image.js';
 
 /**
  * @typedef {{ addr: number, len: number, why: string, predicted?: true }} ManifestBlock
@@ -192,14 +192,18 @@ function checkDrive(op, drive) {
 }
 
 /**
- * The four floppy drives of the Model III's WD1793 controller (spec §3, §6), over
- * `TRS80System.mountDisk` and `ejectDisk`. With no disk in any drive the controller's ports float
- * (read $FF), which is what sends the ROM to cassette BASIC at reset, so a machine with nothing
- * mounted boots as it did before disks existed.
+ * The four floppy drives of the Model III's WD1793 controller, or of the Model I Expansion
+ * Interface's WD1771 (spec §3, §6), over `TRS80System.mountDisk` and `ejectDisk`. With no disk in
+ * any drive the controller's ports (on the Model I its addresses $37EC-$37EF) float (read $FF),
+ * which is what sends the ROM to cassette BASIC (Level II BASIC on the Model I) at reset, so a
+ * machine with nothing mounted boots as it did before disks existed. A Model I built without the
+ * Expansion Interface has no disk controller, and refuses a mount. On a Model I a 10-sector JV1
+ * may have 35 to 42, 77, or 80 tracks (disk-image.js, JV1_MODEL1_SD_TRACKS).
  * @param {import('../machine/machine.js').Machine} machine
  */
 export function diskDrives(machine) {
   const system = machine.system;
+  const model1 = system.model.id === 1;
   return {
     /**
      * Put a disk in a drive, replacing what was there. Bytes are copied into a new `DiskImage`
@@ -213,11 +217,14 @@ export function diskDrives(machine) {
     mount(drive, image, { writeProtect } = {}) {
       checkDrive('fdc.mount', drive);
       if (writeProtect !== undefined && typeof writeProtect !== 'boolean') throw new Error(`fdc.mount: writeProtect must be true or false, not ${String(writeProtect)}`);
+      if (model1 && system.io.latch === null) {
+        throw new Error('fdc.mount: this Model I has no Expansion Interface, so no disk controller; construct the Machine with expansion: true (the default) to mount a disk');
+      }
       let disk;
       if (image instanceof DiskImage) disk = image;
       else if (ArrayBuffer.isView(image) && image.BYTES_PER_ELEMENT === 1) {
         try {
-          disk = new DiskImage(/** @type {Uint8Array} */ (image), `drive ${drive}`);
+          disk = new DiskImage(/** @type {Uint8Array} */ (image), `drive ${drive}`, model1 ? { jv1SdTracks: JV1_MODEL1_SD_TRACKS } : {});
         } catch (e) {
           throw new Error(`fdc.mount: ${/** @type {Error} */ (e).message}`);
         }
@@ -264,7 +271,9 @@ export function diskDrives(machine) {
 
 /**
  * Load a disk image: mount it, and with `boot` reset the machine so the ROM boots from drive 0
- * (it reads track 0, sector 1 to $4300 and jumps there; ROM $34D9-$3516). Nothing is in memory
+ * (the Model III ROM reads track 0, sector 1 to $4300 and jumps there, ROM $34D9-$3516; the Model I
+ * Level II ROM reads track 0, sector 0 to $4200 and jumps there, MDL1LEV2.Z80 BOOT at $069F-$06C9,
+ * after its PAUSE at $06AF, 65,536 passes of 26 T-states, about a second). Nothing is in memory
  * when this returns, so the manifest's `blocks` is empty. Booting needs a disk in drive 0, this one
  * or one mounted before. A reset clears the keyboard queue; without `boot` it is left alone.
  * @param {import('../machine/machine.js').Machine} machine

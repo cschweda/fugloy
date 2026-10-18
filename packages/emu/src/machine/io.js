@@ -27,17 +27,22 @@
  * (src/machine/models.js), which MemorySystem hands to `readExpansion`,
  * `peekExpansion`, and `writeExpansion` here, so every other port floats to
  * 0xFF. With the Expansion Interface (`expansion`, the default) the Model I
- * has the interrupt latch at 0x37E0 (`latch`, devices/interrupt-latch.js);
+ * has the interrupt latch at 0x37E0 (`latch`, devices/interrupt-latch.js),
+ * the drive select at 0x37E1, the printer at 0x37E8, and the WD1771 at
+ * 0x37EC-0x37EF (devices/fdc-wd1771.js, its INTRQ on the latch's bit 6);
  * without it `latch` is null and nothing interrupts. The controller object
- * exists on both models, clocked at the model's CPU clock; the Model I does
- * not reach it through ports.
+ * exists on both models, clocked at the model's CPU clock (a WD1793 on the
+ * Model III, a WD1771 on the Model I); the Model I does not reach it through
+ * ports, and without the Expansion Interface not at all.
  */
 
 import { CassetteSystem } from "../devices/cassette.js";
 import { FDC1793 } from "../devices/fdc-wd1793.js";
+import { FDC1771 } from "../devices/fdc-wd1771.js";
 import { Printer } from "../devices/printer.js";
 import { InterruptLatch } from "../devices/interrupt-latch.js";
 import { MODEL_III } from "./models.js";
+import { decodeModel1Select, decodeModel3Select } from "./drive-select.js";
 
 export const RTC_IRQ_BIT = 0x04;
 // Cassette-edge interrupt sources (from the ROM's ISR at 0x35C2: E0
@@ -62,22 +67,7 @@ export const MODE_32COL_BIT = 0x04; // 32-character display mode
 export const M1_MOTOR_BIT = 0x04;
 export const M1_MODESEL_BIT = 0x08; // 32-character display mode
 
-/**
- * Decode a Model III port F4 write: bits 0-3 select drive 0-3 (the lowest set bit wins; none set
- * selects no drive, -1), bit 4 the side, bit 6 WAIT, bit 7 MFM (1) or FM (0); bit 5, write
- * precompensation, does nothing here. Bits from MAME's trs80m3 driver and the ROM's use, not yet
- * checked against the Model III Technical Reference Manual (spec §5).
- * @param {number} value
- * @returns {{ drive: number, side: number, mfm: boolean, wait: boolean }}
- */
-export function decodeModel3Select(value) {
-  let drive = -1;
-  if (value & 0x01) drive = 0;
-  else if (value & 0x02) drive = 1;
-  else if (value & 0x04) drive = 2;
-  else if (value & 0x08) drive = 3;
-  return { drive, side: value & 0x10 ? 1 : 0, mfm: (value & 0x80) !== 0, wait: (value & 0x40) !== 0 };
-}
+export { decodeModel1Select, decodeModel3Select } from "./drive-select.js";
 
 export class IOSystem {
   /**
@@ -94,7 +84,7 @@ export class IOSystem {
     this.cassette = new CassetteSystem();
     // A Model I recording decodes in Model III T-states (cassette.js)
     if (model.id !== 3) this.cassette.timeScale = MODEL_III.clockHz / model.clockHz;
-    this.fdc = new FDC1793({ cpuHz: model.clockHz });
+    this.fdc = model.id === 3 ? new FDC1793({ cpuHz: model.clockHz }) : new FDC1771({ cpuHz: model.clockHz, latch: this.latch });
     this.printer = new Printer();
     this.keyboardBuffer = []; // legacy internal buffer (not a Model III port)
     this.portHandlers = new Map();
@@ -350,33 +340,95 @@ export class IOSystem {
 
   /**
    * A CPU read of the Model I's Expansion Interface addresses 0x37E0-0x37EF
-   * (MemorySystem calls it only on a Model I with the Expansion Interface).
-   * 0x37E0-0x37E3 read the interrupt latch, clearing its clock bit
-   * (interrupt-latch.js); the rest read 0xFF until their devices are built
-   * (the printer at 0x37E8 and the WD1771 at 0x37EC-0x37EF, Task 3).
+   * (MemorySystem calls it only on a Model I with the Expansion Interface):
+   *   0x37E0-0x37E3  the interrupt latch, clearing its clock bit
+   *                  (interrupt-latch.js; the mirrors are MAME's, unverified)
+   *   0x37E4-0x37E7  0xFF (the cassette select at 0x37E4 is write-only, and a
+   *                  second deck is not modelled)
+   *   0x37E8-0x37EB  the printer's status: the Level II ROM's PRTAVL at $05D1
+   *                  reads 0x37E8 and takes (status AND F0H) = 30H as ready
+   *                  (MDL1LEV2.Z80); the mirrors are MAME's (unverified)
+   *   0x37EC-0x37EF  the WD1771: status, track, sector, data (CONSTANTS.Z80,
+   *                  "Memory Mapped Hardware, Model 1"); a status read clears
+   *                  INTRQ and with it the latch's disk bit
+   * With no disk mounted in any drive the controller is taken as absent, as on
+   * the Model III, and 0x37EC-0x37EF read 0xFF: the ROM's test at $0696-$069C
+   * (status + 1 < 2, that is $FF or $00: no disk controller) then sends it to
+   * Level II BASIC instead of a boot that would wait for a disk forever.
    * @param {number} address
    */
   readExpansion(address) {
     if (address <= 0x37e3) return this.latch.read();
+    if (address >= 0x37ec) {
+      if (!this.fdc.anyDiskMounted()) return 0xff;
+      switch (address) {
+        case 0x37ec:
+          return this.fdc.readStatus();
+        case 0x37ed:
+          return this.fdc.readTrackReg();
+        case 0x37ee:
+          return this.fdc.readSectorReg();
+        default:
+          return this.fdc.readData();
+      }
+    }
+    if (address >= 0x37e8) return this.printer.status();
     return 0xff;
   }
 
   /**
-   * What `readExpansion` would return, with no side effect.
+   * What `readExpansion` would return, with no side effect (the latch keeps
+   * its clock bit, the controller its INTRQ and DRQ).
    * @param {number} address
    */
   peekExpansion(address) {
     if (address <= 0x37e3) return this.latch.peek();
+    if (address >= 0x37ec) {
+      if (!this.fdc.anyDiskMounted()) return 0xff;
+      if (address === 0x37ec) return this.fdc.peekStatus();
+      if (address === 0x37ed) return this.fdc.trackReg;
+      if (address === 0x37ee) return this.fdc.sectorReg;
+      return this.fdc.dataReg;
+    }
+    if (address >= 0x37e8) return this.printer.status();
     return 0xff;
   }
 
   /**
-   * A CPU write to 0x37E0-0x37EF. Nothing takes one yet: the drive select
-   * at 0x37E1, the printer, and the controller come with the WD1771 (Task 3).
+   * A CPU write to 0x37E0-0x37EF:
+   *   0x37E0-0x37E3  the drive select (decodeModel1Select; written at 0x37E1,
+   *                  the mirrors are MAME's, unverified)
+   *   0x37E8-0x37EB  a byte to the printer (the ROM's `LD (37E8H),A` at $05BB)
+   *   0x37EC-0x37EF  the WD1771: command, track, sector, data
+   * The controller ignores writes, the select included, while no disk is
+   * mounted (absent, as above).
    * @param {number} address
    * @param {number} value
    */
-  writeExpansion(address, value) {}
+  writeExpansion(address, value) {
+    if (address <= 0x37e3) {
+      if (this.fdc.anyDiskMounted()) this.fdc.select(decodeModel1Select(value).drive, 0, false);
+      return;
+    }
+    if (address >= 0x37ec) {
+      if (!this.fdc.anyDiskMounted()) return;
+      switch (address) {
+        case 0x37ec:
+          this.fdc.writeCommand(value);
+          return;
+        case 0x37ed:
+          this.fdc.writeTrackReg(value);
+          return;
+        case 0x37ee:
+          this.fdc.writeSectorReg(value);
+          return;
+        default:
+          this.fdc.writeData(value);
+      }
+      return;
+    }
+    if (address >= 0x37e8) this.printer.write(value);
+  }
 
   readPort(port) {
     port &= 0xff;
