@@ -108,9 +108,9 @@ describe('why write it this way: the idioms', () => {
 
   it('LD A,(HL) and INC HL walk a table', () => {
     expect(why([0x7e, 0x23, RET])).toEqual([
-      'LD A,(HL) with the INC HL at $7001 is the usual way to walk through a table: read the byte HL points at, then move HL on to the next. HL is the cheapest pointer for it, 2 bytes and 13 T-states against 5 bytes and 29 for LD A,(IX+00H) and INC IX.',
+      'LD A,(HL) with the INC HL at $7001 is the usual way to walk through a table: read the byte HL points at, then move HL on to the next. HL is as cheap as any pointer for it (LD A,(DE) and INC DE cost the same), 2 bytes and 13 T-states against 5 bytes and 29 for LD A,(IX+00H) and INC IX.',
     ]);
-    expect(why([0x4e, 0x2b, RET])[0]).toMatch(/^LD C,\(HL\) with the DEC HL at \$7001 .* move HL back to the next/);
+    expect(why([0x4e, 0x2b, RET])[0]).toMatch(/^LD C,\(HL\) with the DEC HL at \$7001 .* move HL back to the next\. HL is the cheapest pointer for it, /);
   });
 
   it('LDIR copies a block', () => {
@@ -164,6 +164,24 @@ describe('why write it this way: look-alikes do not match', () => {
     expect(why([0x06, 0x08, 0x18, 0x00, 0x00, RET])).toEqual([]);
   });
 
+  it('a rewritten operand gives no comparison that would show its number', () => {
+    // 7000 LD (7004H),A; 7003 CP 0DH, whose 0DH the program stores over
+    expect(why([0x32, 0x04, 0x70, 0xfe, 0x0d, RET], 0x7003)).toEqual([]);
+    // 7000 LD (7005H),A; 7003 SLA (IX+02H), whose displacement the program stores over
+    expect(why([0x32, 0x05, 0x70, 0xdd, 0xcb, 0x02, 0x26, RET], 0x7003)).toEqual([]);
+    // 7000 LD (7005H),A; 7003 INC (IX+02H), whose displacement the program stores over
+    expect(why([0x32, 0x05, 0x70, 0xdd, 0x34, 0x02, RET], 0x7003)).toEqual([]);
+  });
+
+  it('PUSH AF around a call whose return address has a label is not the idiom', () => {
+    // 7000 LD HL,7007H; 7003 PUSH AF; 7004 CALL 700AH; 7007 POP AF (labelled: the LD HL at 7000 holds its address); 7008 RET; 7009 RET; 700A RET
+    const bytes = [0x21, 0x07, 0x70, 0xf5, 0xcd, 0x0a, 0x70, 0xf1, RET, RET, RET];
+    expect(raw(bytes).analysis.symbols.has(0x7007)).toBe(true);
+    expect(why(bytes, 0x7003)).toEqual([]);
+    // Without the label it is the idiom: the test is not passing for another reason.
+    expect(why([0x21, 0x00, 0x60, 0xf5, 0xcd, 0x0a, 0x70, 0xf1, RET, RET, RET], 0x7003)[0]).toMatch(/^PUSH AF here, with the POP AF at \$7007/);
+  });
+
   it('a forward DJNZ is not a loop', () => {
     expect(why([0x10, 0x00, RET])).toEqual([]);
   });
@@ -192,6 +210,36 @@ describe('why write it this way: the numbers come from the table', () => {
       const a = cost(alt);
       expect(why(prog)[0]).toContain(`${bytesText(m.b)} and ${m.t} T-states against ${bytesText(a.b)} and ${a.t}`);
     }
+    // Equal costs read "the same …"; the line and the alternative must really cost the same.
+    const same: { prog: number[]; mine: number[]; alt: number[] }[] = [
+      { prog: [0xfe, 0x0d, RET], mine: [0xfe, 0x0d], alt: [0xd6, 0x0d] },
+      { prog: [0xb8, RET], mine: [0xb8], alt: [0x90] },
+      { prog: [0xdd, 0xbe, 0x02, RET], mine: [0xdd, 0xbe, 0x02], alt: [0xdd, 0x96, 0x02] },
+      { prog: [0xcb, 0x3f, RET], mine: [0xcb, 0x3f], alt: [0xb7, 0x1f] },
+    ];
+    for (const { prog, mine, alt } of same) {
+      const m = cost(mine);
+      expect(cost(alt)).toEqual(m);
+      expect(why(prog)[0]).toContain(`the same ${bytesText(m.b)} and ${m.t} T-states`);
+    }
+    // SLA and SRL against the same work done through A, and the (IX+d) forms.
+    const through: { prog: number[]; mine: number[]; alt: number[] }[] = [
+      { prog: [0xcb, 0x20, RET], mine: [0xcb, 0x20], alt: [0x78, 0x87, 0x47] },
+      { prog: [0xcb, 0x39, RET], mine: [0xcb, 0x39], alt: [0x79, 0xb7, 0x1f, 0x4f] },
+      { prog: [0xdd, 0xcb, 0x02, 0x26, RET], mine: [0xdd, 0xcb, 0x02, 0x26], alt: [0xdd, 0x7e, 0x02, 0x87, 0xdd, 0x77, 0x02] },
+      { prog: [0xfd, 0xcb, 0x01, 0x3e, RET], mine: [0xfd, 0xcb, 0x01, 0x3e], alt: [0xfd, 0x7e, 0x01, 0xb7, 0x1f, 0xfd, 0x77, 0x01] },
+    ];
+    for (const { prog, mine, alt } of through) {
+      const m = cost(mine);
+      const a = cost(alt);
+      expect(why(prog)[0]).toContain(`would take ${bytesText(a.b)} and ${a.t} T-states against ${bytesText(m.b)} and ${m.t}`);
+    }
+    const slaA = cost([0xcb, 0x27]);
+    const addA = cost([0x87]);
+    expect(why([0xcb, 0x27, RET])[0]).toContain(`For A, ADD A,A does the same in ${bytesText(addA.b)} and ${addA.t} T-states against ${bytesText(slaA.b)} and ${slaA.t}`);
+    const incIx = cost([0xdd, 0x34, 0x02]);
+    const incIxAlt = cost([0xdd, 0x7e, 0x02, 0x3c, 0xdd, 0x77, 0x02]);
+    expect(why([0xdd, 0x34, 0x02, RET])[0]).toContain(`${bytesText(incIx.b)} and ${incIx.t} T-states against ${bytesText(incIxAlt.b)} and ${incIxAlt.t}`);
     const loop = cost([0x05, 0x20, 0xfe]);
     const dj = cost([0x10, 0xfe]);
     expect(why([0x00, 0x10, 0xfd, RET], 0x7001)[0]).toContain(`${bytesText(dj.b)} and ${dj.t} T-states when it jumps back (${dj.nt} when it falls out), against ${bytesText(loop.b)} and ${loop.t} (${loop.nt})`);

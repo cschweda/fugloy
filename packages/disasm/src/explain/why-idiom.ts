@@ -76,6 +76,7 @@ function flagsOnly(of: string, but: string): string {
     .split('')
     .filter((x) => !but.includes(x))
     .map((x) => FLAG_NAME[x]!);
+  if (f.length === 0) return '';
   return f.length === 1 ? f[0]! : `${f.slice(0, -1).join(', ')} and ${f.at(-1)}`;
 }
 
@@ -154,6 +155,8 @@ function testA(c: LineCtx): Sentence[] {
 
 /** CP is SUB that keeps A: the same instruction with SUB's opcode. */
 function compare(c: LineCtx): Sentence[] {
+  // A rewritten operand (CP n whose n the program stores over) would put a number in the sentence that is only where it starts.
+  if (c.patched.length > 0) return [];
   const b = [...c.ins.bytes];
   const i = b[0] === 0xdd || b[0] === 0xfd ? 1 : 0;
   const op = b[i]!;
@@ -227,7 +230,7 @@ function shift(c: LineCtx): Sentence[] {
   const m = c.ins.mnemonic;
   const op = c.ins.operands.at(-1);
   const s = slotOf(op);
-  if (s === undefined || !c.ins.documented) return [];
+  if (s === undefined || !c.ins.documented || c.patched.length > 0) return [];
   const mine = own(c.ins);
   if (m === 'SLA') {
     const lead = 'SLA shifts every bit left, which doubles an unsigned byte (the top bit goes into the carry): the Z80 has no multiply, so shifting is the usual way to multiply by two.';
@@ -258,7 +261,7 @@ function rotateA(c: LineCtx): Sentence[] {
 /** INC (HL), DEC (HL) and the (IX+d) forms: a counter kept in memory. */
 function inPlace(c: LineCtx): Sentence[] {
   const s = slotOf(c.ins.operands[0]);
-  if (s === undefined || s.code !== 6) return [];
+  if (s === undefined || s.code !== 6 || c.patched.length > 0) return [];
   const inc = c.ins.mnemonic === 'INC';
   const alt = costOf([...loadA(s), inc ? 0x3c : 0x3d, ...storeA(s)]);
   return [
@@ -347,11 +350,17 @@ function walkTable(c: LineCtx): Sentence[] {
   const inc = next.ins.mnemonic === 'INC';
   const alt = costOf([0xdd, 0x46 | (code << 3), 0x00, 0xdd, inc ? 0x23 : 0x2b]);
   const mine = costOf([...c.ins.bytes, ...next.ins.bytes]);
+  // For A, BC and DE serve as well: LD A,(DE) and INC DE cost what LD A,(HL) and INC HL do.
+  const viaDE = code === 7 ? costOf([0x1a, inc ? 0x13 : 0x1b]) : undefined;
+  const cheap =
+    viaDE !== undefined && viaDE.bytes === mine.bytes && viaDE.cycles === mine.cycles
+      ? `HL is as cheap as any pointer for it (${names(viaDE)} cost the same), ${against(mine, alt)} for ${names(alt)}`
+      : `HL is the cheapest pointer for it, ${against(mine, alt)} for ${names(alt)}`;
   return [
     say(
       `${nameOf(c.ins)} with the ${nameOf(next.ins)} at `,
       addrPiece(c, next.at),
-      ` is the usual way to walk through a table: read the byte HL points at, then move HL ${inc ? 'on' : 'back'} to the next. HL is the cheapest pointer for it, ${against(mine, alt)} for ${names(alt)}.`,
+      ` is the usual way to walk through a table: read the byte HL points at, then move HL ${inc ? 'on' : 'back'} to the next. ${cheap}.`,
     ),
   ];
 }
