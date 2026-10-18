@@ -7,8 +7,9 @@
  * gitignored `tools/trsjs/`, and this loader refuses any file whose SHA-256 is not the pinned one
  * before running a line of it. The script runs in a `node:vm` context with a few DOM stubs. Its
  * text is changed in memory only (the file on disk is never touched), in two places: one line
- * before the IIFE's final `return api;` exposes the internal functions the harness needs, and one
- * line at the top of `putbyte` (trsjs's only CPU write path) logs each write the CPU makes.
+ * before the IIFE's final `return api;` exposes the internal functions the harness needs, and two
+ * lines at the top of `putbyte` (trsjs's only CPU write path) log each write the CPU makes and
+ * drop one below $3C00 (ROM and keyboard), as the Model III does.
  *
  * The driver reproduces trsjs's own frame loop (`TRS80Field`) one instruction at a time: after
  * an instruction drives the per-frame down-counter `z.cycles` below 0, a frame (33,792 T-states)
@@ -108,7 +109,11 @@ export function loadTrsjs({ path = TRSJS_PATH } = {}) {
   const prefixedOps = new Set([...src.matchAll(/\bopx\[0x([0-9a-f]{2})\] = /g)].map((mm) => parseInt(mm[1], 16)));
   src = src.replace(RETURN_MARKER, RETURN_MARKER.replace('return api;',
     `api.__x = { ${EXPORTS.map((n) => `${n}: ${n}`).join(', ')}, cyclesPerFrame: function () { return cycles_per_frame; } };\n\treturn api;`));
-  src = src.replace(PUTBYTE_MARKER, `${PUTBYTE_MARKER}   if (z.wlog) z.wlog.push(addr, val);\n`);
+  // The log takes every write the CPU attempts; then a write below $3C00 is dropped. trsjs stores
+  // from $3000 up, but on the Model III $0000-$37FF is ROM and $3800-$3BFF the keyboard, which
+  // only reads (Model III Technical Reference Manual, the memory map and Address Decoding, p. 13):
+  // a write there changes nothing, as in our MemorySystem.
+  src = src.replace(PUTBYTE_MARKER, `${PUTBYTE_MARKER}   if (z.wlog) z.wlog.push(addr, val);\n   if (addr < 0x3c00) return;\n`);
 
   const document = {
     getElementById() { return null; }, createElement() { return stubElement(); },

@@ -113,6 +113,23 @@ describe.skipIf(trsjsSkip !== null)(`trsjs adapter against @fugloy/emu${trsjsSki
     expect(ref.peek(0x5ffe, 2)).toEqual(new Uint8Array([0x34, 0x12]));
   });
 
+  it('logs a write to ROM or the keyboard but stores nothing there, as the Model III does', () => {
+    const ref = loadTrsjs();
+    // LD ($3723),A; LD ($3801),A; LD ($3C00),A
+    ref.poke(0x5000, [0x32, 0x23, 0x37, 0x32, 0x01, 0x38, 0x32, 0x00, 0x3c]);
+    const before = ref.peek(0x3723, 1)[0];
+    const r = ref.z.reg;
+    r.PC = 0x5000; r.A = 0x5a;
+    ref.step();
+    expect(ref.writes()).toEqual([{ addr: 0x3723, value: 0x5a }]);
+    expect(ref.peek(0x3723, 1)[0]).toBe(before);
+    ref.step();
+    expect(ref.writes()).toEqual([{ addr: 0x3801, value: 0x5a }]);
+    expect(ref.peek(0x3801, 1)[0]).toBe(0x00); // no key down
+    ref.step();
+    expect(ref.peek(0x3c00, 1)[0]).toBe(0x5a); // video RAM takes it
+  });
+
   it('holds a frame-end request back when asked, and takes it when forced', () => {
     const ref = loadTrsjs();
     ref.poke(0x5000, [0x00, 0x00, 0x00]); // NOPs
