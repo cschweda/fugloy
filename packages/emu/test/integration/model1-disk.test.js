@@ -109,6 +109,28 @@ describe.skipIf(romData === null)('the Model I boots from disk through the WD177
     expect(text(m)).toContain('(C)(P) 1981 THE CORNSOFT GROUP');
   });
 
+  it.skipIf(DISKS.scarfman === null)('a debug run equals a plain one: Scarfman for 6 s with coverage, a trace, a watch over $37E0-$37EF, and both memory hooks', () => {
+    const session = (debug) => {
+      const m = model1();
+      let accesses = 0;
+      if (debug) {
+        m.debug.coverage.enable();
+        m.debug.trace.enable({ depth: 10000 });
+        m.debug.watch(0x37e0, 16, { read: true, write: true });
+        m.debug.hooks.onMemRead = () => accesses++;
+        m.debug.hooks.onMemWrite = () => accesses++;
+      }
+      m.load.dsk(new Uint8Array(readFileSync(/** @type {string} */ (DISKS.scarfman))));
+      m.run({ cycles: 6 * HZ });
+      if (debug) {
+        expect(accesses).toBeGreaterThan(0);
+        expect(m.debug.hits().length).toBeGreaterThan(0);
+      }
+      return JSON.stringify(m.debug.snapshot());
+    };
+    expect(session(true)).toBe(session(false));
+  });
+
   it.skipIf(DISKS.scarfman === null)('a Model I disk session repeats byte for byte: Scarfman for 12 s, twice', () => {
     const session = () => {
       const m = bootFrom(DISKS.scarfman);

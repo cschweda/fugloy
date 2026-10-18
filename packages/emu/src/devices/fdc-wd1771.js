@@ -134,6 +134,10 @@ export class FDC1771 extends FDC1793 {
     this.buffer = null;
     this.trackWrite = null;
     this.status &= ~(0x01 | (this.commandType === 1 ? 0 : 0x02));
+    // With Busy now clear the base loads the command, which resets INTRQ as any command load does
+    // (unless Force Interrupt I3 holds it) and may finish at once (not ready: INTRQ raised); then
+    // the override's own interrupt is raised over whatever that left. The order matters: raised
+    // first, the base's load would clear it.
     super.writeCommand(value);
     this.intrq = true;
   }

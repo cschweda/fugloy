@@ -109,6 +109,16 @@ describe('the WD1771 at $37EC-$37EF, the drive select at $37E1', () => {
     expect(io.readExpansion(0x37ec) & 0x80).toBe(0); // drive 0 ready
   });
 
+  it('keeps a drive select written with no disk mounted, for a disk mounted later', () => {
+    const io = new IOSystem({ model: MODEL_I });
+    io.writeExpansion(0x37e1, 0x02); // drive 1
+    expect(io.fdc.selected).toBe(1);
+    expect(io.readExpansion(0x37ec)).toBe(0xff); // still absent
+    io.fdc.attachDrive(1, new DiskImage(jv1()));
+    expect(io.fdc.selected).toBe(1);
+    expect(io.readExpansion(0x37ec) & 0x80).toBe(0); // drive 1 ready
+  });
+
   it('reads a sector of a JV1 at single density with the IBM length (b = 1)', () => {
     const io = rig(jv1());
     seek(io, 5);
@@ -400,6 +410,30 @@ describe('the Level II ROM\'s disk boot (a synthetic copy)', () => {
     expect(m.cpu.regs.pc).toBeGreaterThanOrEqual(MODEL1_BOOT_ORG);
   });
 
+  it('a debug run equals a plain one: coverage, a 10,000-deep trace, a watch over $37E0-$37EF, and both memory hooks change nothing', () => {
+    const disk = jv1({ fill: (t, side, s) => (t === 0 && s === 0 ? bootSector('M1 DISK BOOT OK', MODEL1_BOOT_ORG) : pattern(t, side, s)) });
+    const session = (debug) => {
+      const m = new Machine({ model: 1, roms: { level2: bootRom() } });
+      let accesses = 0;
+      if (debug) {
+        m.debug.coverage.enable();
+        m.debug.trace.enable({ depth: 10000 });
+        m.debug.watch(0x37e0, 16, { read: true, write: true });
+        m.debug.hooks.onMemRead = () => accesses++;
+        m.debug.hooks.onMemWrite = () => accesses++;
+      }
+      m.load.dsk(disk);
+      m.run({ cycles: 2 * HZ });
+      expect(m.video.text()[0]).toMatch(/^M1 DISK BOOT OK/);
+      if (debug) {
+        expect(accesses).toBeGreaterThan(0);
+        expect(m.debug.hits().length).toBeGreaterThan(0);
+      }
+      return JSON.stringify(m.debug.snapshot());
+    };
+    expect(session(true)).toBe(session(false));
+  });
+
   it('goes to BASIC with no disk mounted (the controller reads $FF), and without the Expansion Interface', () => {
     for (const expansion of [true, false]) {
       const m = new Machine({ model: 1, roms: { level2: bootRom() }, expansion });
@@ -470,8 +504,8 @@ describe('Model I disk images', () => {
     ddBytes[2] = 17;
     const dd = new DiskImage(new DiskImage(ddBytes).toDMK());
     expect(dd.trackIds(17, 0).every((id) => id.dam === 0xf8)).toBe(true);
-    // The WD1793 model reads FA as deleted, as it read the F8 the export used to write
-    expect(new DiskImage(sd).readSectorEx(17, 0, 0)).toMatchObject({ dam: 0xfa, deleted: true });
+    // The WD1793 model reads FA as normal data, as the Model III's 1793 does (Super Utility Tech Manual p. 2)
+    expect(new DiskImage(sd).readSectorEx(17, 0, 0)).toMatchObject({ dam: 0xfa, deleted: false });
   });
 
   it('a snapshot mid-command restores the WD1771, its INTRQ, and the latch', () => {

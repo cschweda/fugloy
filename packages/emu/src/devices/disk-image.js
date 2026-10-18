@@ -98,11 +98,14 @@ function jv3DamBits(dam, dd) {
 }
 
 // The WD1793 sets Record Type (status bit 5) for a deleted data mark,
-// F8 ("Status Register Summary"). The sheet names only FB and F8; the
-// FM marks FA and F9 (Model I TRSDOS writes its directory FA) are
-// reported as deleted too, so DOSes that verify the directory's mark
-// on every read find it (unverified for the 1793: spec §5).
-const isDeleted = (dam) => dam !== 0xfb;
+// F8 ("Status Register Summary"); the sheet names only FB and F8. Of the
+// FM marks the WD1771 also writes, the Model III's 1793 "recognizes 'Read
+// Protected' [FA] and 'Standard Data' both as 'Standard Data'" and
+// "'Deleted Data' and 'User Defined' [F8, F9] as 'Read Protected'"
+// (Super Utility Tech Manual, Breeze/QSD 1982, p. 2): FA reads as normal,
+// F9 as deleted (F9 unverified: spec §5). The WD1771 model reads `dam`
+// itself (fdc-wd1771.js), not this.
+const isDeleted = (dam) => dam === 0xf8 || dam === 0xf9;
 
 // TRSDOS-family boot sectors name the directory cylinder in byte 2.
 const DEFAULT_DIR_TRACK = 17;
@@ -499,7 +502,8 @@ export class DiskImage {
     // PROTECTED", the WD1771 write command A9H, a1 a0 = 01, FA (Super
     // Utility Tech Manual, Breeze/QSD 1982, p. 20 "@WRTYPE" and p. 61;
     // FD1771-01 data sheet, Table 4). The 1771 reports it as written
-    // (record type 01) and the WD1793 model as deleted. An 18-sector
+    // (record type 01); the WD1793 model reads it as normal (isDeleted,
+    // above), as the Model III's 1793 does. An 18-sector
     // disk's is F8, the only MFM deleted mark (Model III TRSDOS: A1H).
     this.dirDam = chosen.spt === 10 ? 0xfa : 0xf8;
     const bootDir = this.bytes[2];

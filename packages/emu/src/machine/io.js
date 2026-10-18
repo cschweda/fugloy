@@ -397,17 +397,20 @@ export class IOSystem {
   /**
    * A CPU write to 0x37E0-0x37EF:
    *   0x37E0-0x37E3  the drive select (decodeModel1Select; written at 0x37E1,
-   *                  the mirrors are MAME's, unverified)
+   *                  the mirrors are MAME's, unverified). The latch is the
+   *                  Expansion Interface's, not the controller's, so it takes
+   *                  a write with no disk mounted too, and a disk mounted
+   *                  later finds the drive the program last selected
    *   0x37E8-0x37EB  a byte to the printer (the ROM's `LD (37E8H),A` at $05BB)
    *   0x37EC-0x37EF  the WD1771: command, track, sector, data
-   * The controller ignores writes, the select included, while no disk is
-   * mounted (absent, as above).
+   * The controller's registers ignore writes while no disk is mounted
+   * (absent, as above).
    * @param {number} address
    * @param {number} value
    */
   writeExpansion(address, value) {
     if (address <= 0x37e3) {
-      if (this.fdc.anyDiskMounted()) this.fdc.select(decodeModel1Select(value).drive, 0, false);
+      this.fdc.select(decodeModel1Select(value).drive, 0, false);
       return;
     }
     if (address >= 0x37ec) {

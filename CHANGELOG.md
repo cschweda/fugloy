@@ -129,10 +129,15 @@ progress on the `emu-phase6` branch:
   sentence listing the Model I's sizes. The Model III's sizes are unchanged.
 - A Model I built with `expansion: false` refuses `m.fdc.mount` and
   `m.load.dsk` with a sentence.
-- Changed: a 10-sector JV1's synthesized directory marks are `FA` (the mark
-  the Model I DOSes write their directory with), not `F8`, so a DMK export
-  writes `FA` there; the WD1793 model still reads them as deleted. An
-  18-sector JV1 keeps `F8`.
+- Changed (visible on the Model III): a 10-sector JV1's synthesized
+  directory marks are `FA` (the mark the Model I DOSes write their directory
+  with), not `F8`, so a DMK export writes `FA` there, and the Model III's
+  WD1793 now reads an `FA` mark (any container) as normal data, not deleted
+  (Record Type clear), as the Super Utility Tech Manual (p. 2) says the 1793
+  does; so a 10-sector JV1's directory reads as normal on the Model III. `F9`
+  and `F8` still read as deleted. An 18-sector JV1 keeps `F8`.
+- The Model I's drive select at `$37E1` keeps a value written with no disk
+  mounted, and a disk mounted later finds that drive selected.
 - Changed: a Model I save state records the lowercase modification, and a
   restore refuses a Model I state saved with another Expansion Interface or
   lowercase fitting, with a sentence (it used to restore and drop the latch).

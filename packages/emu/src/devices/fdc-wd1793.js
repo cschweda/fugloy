@@ -912,6 +912,8 @@ export class FDC1793 {
         // flags the error, which is what the status reports.
         this.buffer = Uint8Array.from([id.track, id.side, id.sector, id.sizeCode, crc >> 8, crc & 0xff]);
         p.crcOk = id.idCrcOk;
+        // No longer read (the sector register takes buffer[readAddressField]); kept so a Read
+        // Address in flight serializes as it did before emu phase 6
         p.idTrack = id.track;
         p.phase = "data";
         p.delay = at + 2 * B;
