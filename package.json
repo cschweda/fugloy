@@ -22,7 +22,8 @@
     "web:generate": "pnpm --filter @fugloy/web generate",
     "fugloy": "node packages/cli/bin/fugloy.js",
     "zmac:install": "bash scripts/install-zmac.sh",
-    "zex:install": "bash scripts/install-zex.sh"
+    "zex:install": "bash scripts/install-zex.sh",
+    "trsjs:install": "bash scripts/install-trsjs.sh"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
