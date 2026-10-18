@@ -74,9 +74,18 @@ const KDCB = 0x4015;
  * `code` in A, verified against the ROM listing (spec §6, "Keyboard-scan hook"): DE = $4015 (the
  * KDCB), BC, HL, IX, IY and the alternate set unchanged, F as the routine's last flag-setting
  * instruction leaves it (`CP 01H` at $3100 for $002B, `OR A` at $004C for $0049), and the return
- * address popped. It also does what the CPU does at the end of any instruction: clears `afterPrefix`
- * and counts a pending EI down. It costs what a RET costs, 10 T-states and one refresh-counter step; the
- * routine's RAM side effects (its key-rollover buffer at $4036, the repeat counters) are not made.
+ * address popped.
+ *
+ * The Model I Level II ROM keeps the same contract (MDL1LEV2.Z80, kiwisincebirth/TRS-80-ROMS at
+ * 736bcba): `_KBD` at $002B loads DE with the KDCB ($4015) and goes through `_GET` ($0013) and
+ * `CIO` ($03C2), which saves BC, HL, IX, and that DE and restores them at `CIORTN` ($03DD), to the
+ * keyboard driver `KBDDRV` ($03E3, the KDCB's driver address at $4016), whose path for a key ends
+ * with `CP $01` at $0453 (the BREAK test) and `RET NZ`, or for BREAK `RST 28H` (a RET under
+ * Level II, $400C) and `RET`; `_KEY` at $0049 is `CALL _KBD / OR A / RET NZ / JR _KEY`. So the
+ * stand-in is the same on both models (phase 6 plan, Ruling 6). It also does what the CPU does at
+ * the end of any instruction: clears `afterPrefix` and counts a pending EI down. It costs what a
+ * RET costs, 10 T-states and one refresh-counter step; the routine's RAM side effects (its
+ * key-rollover buffer at $4036, the repeat counters) are not made.
  * @param {import('../cpu/z80cpu.js').Z80CPU} cpu
  * @param {number} pc
  * @param {number} code
@@ -113,6 +122,8 @@ export class KeyQueue {
   #matrix;
   /** @type {() => number} */
   #now;
+  /** @type {number} */
+  #clockHz;
   /** @type {KeyEvent[]} Matrix events in time order. */
   #events = [];
   /** @type {number} Index of the next undelivered matrix event. */
@@ -130,9 +141,15 @@ export class KeyQueue {
    * @param {import('./keyboard.js').KeyboardMatrix} matrix
    * @param {() => number} now the current T-state
    */
-  constructor(matrix, now) {
+  /**
+   * @param {import('./keyboard.js').KeyboardMatrix} matrix
+   * @param {() => number} now the CPU's T-state count
+   * @param {number} [clockHz] the CPU clock `type`'s cps counts in (the Model III's by default)
+   */
+  constructor(matrix, now, clockHz = CPU_CLOCK_HZ) {
     this.#matrix = matrix;
     this.#now = now;
+    this.#clockHz = clockHz;
   }
 
   /**
@@ -173,7 +190,7 @@ export class KeyQueue {
     if (mode === 'hook') return this.feed(str);
     if (mode !== 'matrix') throw new Error(`type: mode must be 'matrix' or 'hook', not ${String(mode)}`);
     if (!(cps > 0) || !Number.isFinite(cps)) throw new Error(`type: cps must be a positive number, not ${String(cps)}`);
-    const period = Math.round(CPU_CLOCK_HZ / cps);
+    const period = Math.round(this.#clockHz / cps);
     const hold = Math.round(period / 2);
     const keys = Array.from(str, (ch) => this.#mapped(ch, 'type'));
     this.#compact();

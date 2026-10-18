@@ -1,13 +1,15 @@
 # @fugloy/emu
 
-Headless, deterministic TRS-80 emulator core (Model III; Model I and 4 to come) in plain
+Headless, deterministic TRS-80 emulator core (the Model III and, since emu phase 6, the Model I) in plain
 JavaScript, for Node and the browser alike. Emu phase 0 brought in the core of
 [cschweda/trs80-emulator](https://github.com/cschweda/trs80-emulator) (v1.6.0):
 the Z80 CPU (`src/cpu/`), the Model III memory map, I/O ports, and system
 (`src/machine/`), the keyboard matrix, cassette, WD1793 disk controller, disk
 images, and printer (`src/devices/`), the `.CAS` and `.CMD` formats
-(`src/loaders/`), and save states (`src/debug/`). Model III only for now.
-Phases 0–4 of the spec's eight are done: the Z80 core passes ZEXDOC and
+(`src/loaders/`), and save states (`src/debug/`). Emu phase 6 added the
+Model I with its Expansion Interface (unreleased; the Model 4 is split off into
+a plan of its own, for when a Model 4 ROM and boot disk are supplied).
+Phases 0–6 of the spec's eight are done (6 for the Model I): the Z80 core passes ZEXDOC and
 ZEXALL, the `Machine` below runs real programs, `m.debug` writes the label
 and coverage file, and phase 4, the MCP server
 [`@fugloy/mcp`](https://github.com/cschweda/fugloy/blob/main/packages/mcp/README.md),
@@ -78,6 +80,39 @@ about a second. Check the screen between slices of `run` rather than in an
 keyboard hook), sound events, the loaders, and the disk drives are described
 in spec §3.
 
+### The Model I
+
+`model: 1` builds a Model I (unreleased, emu phase 6): the 12K Level II ROM
+(1.2 and 1.3 are recognised; a Model III ROM given for it is refused naming its
+model), 4, 16, 32, or 48K of RAM (`ram`, default 48), and the Expansion
+Interface (`expansion`, default `true`) with its 40 Hz clock in the latch at
+`$37E0`, its WD1771 disk controller at `$37EC`–`$37EF`, and its printer.
+`expansion: false` is a bare keyboard unit: no clock, no disk, `$37E0`–`$37EF`
+read `$FF`. The stock video RAM has no bit 6, so lowercase reads back and shows
+as punctuation and a program's mixed-case title in capitals; `lowercase: true`
+fits the lowercase modification. Its clock is 1,774,080 Hz, `clockHz(1)`
+(`CPU_CLOCK_HZ` stays the Model III's):
+
+```js
+import { Machine } from '@fugloy/emu'
+
+const m1 = new Machine({ model: 1, roms: { level2: readFileSync('level2-model1.rom') } })
+const sec = m1.clockHz                                     // clockHz(1): 1,774,080 T-states an emulated second
+m1.run({ until: shows('SIZE?'), cycles: sec })             // MEMORY SIZE? (MEM SIZE? in Level II 1.3); no Cass?
+m1.keyboard.type('\n')
+m1.run({ until: shows('READY'), cycles: 5 * sec })
+m1.load.cmd(readFileSync('elimin8a.cmd'))                  // Eliminator's Model I-only build
+m1.run({ cycles: 2 * sec })                                // "BY: WAYNE WESTMORELAND & TERRY GILMAN"
+m1.load.dsk(readFileSync('rrgarddb.dmk'))                  // or a disk: the ROM reads track 0, sector 0 to $4200
+```
+
+Type at 10 characters a second on the Model I (`m1.keyboard.type(text, {
+cps: 10 })`): the Level II keyboard routine drops every other key at the
+default 20. T-states, `m.sound` stamps included, are the model's own
+(`m.clockHz`). A label file records its model, and `mergeLabelFiles` refuses
+a Model I file with a Model III one. Cassettes play at 500 baud only. Real programs that run on it, and
+what is still unverified against the Model I manual, are in spec §5.
+
 ## Debugging
 
 `m.debug` stops on breakpoints and watches, logs memory hits, records which
@@ -122,7 +157,13 @@ process, on the laptop that built phase 3):
 | Debugging off | about 42× real time (41.5–43.3× over three runs; phase 2 measured about 43×) |
 | Coverage and a 10,000-deep trace | about 30× real time (29.5–30.7×) |
 
-`test/integration/benchmark.test.js` asserts at least 20× for both.
+`test/integration/benchmark.test.js` asserts at least 20× for both, but only
+when asked: `FUGLOY_BENCH=1 pnpm exec vitest run
+packages/emu/test/integration/benchmark.test.js`, by itself on a quiet machine
+(`./publish.sh check` runs it that way after the suite). In the full parallel
+suite, beside the other ROM tests, it measured 12–15× against about 40× alone,
+so it is skipped there. On the laptop that built phase 6 it measured 40× (off)
+and 29× (debug); Sea Dragon on the Model I runs at about 48×.
 
 - Spec: [`docs/fugloy-emu-spec.md`](https://github.com/cschweda/fugloy/blob/main/docs/fugloy-emu-spec.md) (phases 0–7 in §11)
 - Label and coverage file shared with `mcp` and `disasm`: [`docs/label-format.md`](https://github.com/cschweda/fugloy/blob/main/docs/label-format.md)

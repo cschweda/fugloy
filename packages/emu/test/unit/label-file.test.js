@@ -419,6 +419,13 @@ describe('mergeLabelFiles', () => {
     // The same program merges; a file without a hash takes the other's.
     expect(mergeLabelFiles(base(), a).program.sha256).toBe('a'.repeat(64));
   });
+
+  it('merge refuses two models', () => {
+    const a = { ...base(), program: { name: 'P', sha256: 'a'.repeat(64), model: 3 } };
+    const b = { ...base(), program: { name: 'P', sha256: 'a'.repeat(64), model: 1 } };
+    expect(() => mergeLabelFiles(a, b)).toThrow('mergeLabelFiles: the files are for different models (3 and 1), whose ROMs and hardware differ');
+    expect(mergeLabelFiles(b, { ...b }).program.model).toBe(1);
+  });
 });
 
 describe('the committed fixture', () => {

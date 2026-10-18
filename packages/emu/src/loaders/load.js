@@ -10,7 +10,8 @@
 import { parseCmd, fastLoadCmd } from './cmd-format.js';
 import { parseCas, fastLoadBasic, fastLoadSystem } from './cas-format.js';
 import { casToPulses } from '../devices/cassette-tape.js';
-import { DiskImage } from '../devices/disk-image.js';
+import { CPU_CLOCK_HZ } from '../machine/trs80-system.js';
+import { DiskImage, JV1_MODEL1_SD_TRACKS } from '../devices/disk-image.js';
 
 /**
  * @typedef {{ addr: number, len: number, why: string, predicted?: true }} ManifestBlock
@@ -27,8 +28,32 @@ import { DiskImage } from '../devices/disk-image.js';
 
 const TXTTAB_PTR = 0x40a4;
 
-function checkBaud(baud) {
+/**
+ * @param {unknown} baud
+ * @param {import('../machine/machine.js').Machine} machine
+ */
+function checkBaud(baud, machine) {
+  if (machine.model === 1) {
+    // The Level II ROM reads only 500 baud (MDL1LEV2.Z80, CTBIT at $0241: one clock pulse and an
+    // optional data pulse a bit cell); 1500 baud is the Model III's.
+    if (baud !== 500) throw new Error(`The Model I reads cassettes at 500 baud only (1500 is the Model III's rate), not ${String(baud)}.`);
+    return;
+  }
   if (baud !== 500 && baud !== 1500) throw new Error(`cassette baud must be 500 or 1500 (the Model III's L and H rates), not ${String(baud)}`);
+}
+
+/**
+ * The pulse tape for `bytes` at `baud`, in T-states of this machine's clock. casToPulses times the
+ * tape in Model III T-states; a tape plays in real time, so on the Model I (a slower clock) every
+ * time is scaled by the clocks' ratio, which keeps the 500-baud bit cell at its 2 ms.
+ * @param {import('../machine/machine.js').Machine} machine
+ * @param {Uint8Array} bytes
+ * @param {500 | 1500} baud
+ */
+function pulsesFor(machine, bytes, baud) {
+  const times = casToPulses(tapeForBaud(bytes, baud), baud);
+  const scale = machine.system.clockHz / CPU_CLOCK_HZ;
+  return scale === 1 ? times : times.map((t) => Math.round(t * scale));
 }
 
 /**
@@ -62,8 +87,8 @@ export function cassetteDeck(machine) {
      * @param {{ baud?: 500 | 1500 }} [opts]
      */
     insert(bytes, { baud = 500 } = {}) {
-      checkBaud(baud);
-      deck.insertPulseTape(casToPulses(tapeForBaud(bytes, baud), baud));
+      checkBaud(baud, machine);
+      deck.insertPulseTape(pulsesFor(machine, bytes, baud));
     },
     /** Back to the start of the tape. */
     rewind() {
@@ -109,7 +134,7 @@ export function loadCmd(machine, bytes) {
  */
 export function loadCas(machine, bytes, { baud = 500, via = 'rom' } = {}) {
   if (via !== 'rom' && via !== 'fast') throw new Error(`load.cas: via must be 'rom' or 'fast', not ${String(via)}`);
-  if (via === 'rom') checkBaud(baud);
+  if (via === 'rom') checkBaud(baud, machine);
   const parsed = parseCas(bytes);
   const system = machine.system;
 
@@ -127,7 +152,7 @@ export function loadCas(machine, bytes, { baud = 500, via = 'rom' } = {}) {
   if (via === 'rom') blocks = blocks.map((b) => ({ ...b, predicted: /** @type {true} */ (true) }));
 
   if (via === 'rom') {
-    system.io.cassette.insertPulseTape(casToPulses(tapeForBaud(bytes, baud), baud));
+    system.io.cassette.insertPulseTape(pulsesFor(machine, bytes, baud));
   } else if (parsed.kind === 'system') {
     fastLoadSystem(system, parsed);
   } else {
@@ -167,14 +192,18 @@ function checkDrive(op, drive) {
 }
 
 /**
- * The four floppy drives of the Model III's WD1793 controller (spec §3, §6), over
- * `TRS80System.mountDisk` and `ejectDisk`. With no disk in any drive the controller's ports float
- * (read $FF), which is what sends the ROM to cassette BASIC at reset, so a machine with nothing
- * mounted boots as it did before disks existed.
+ * The four floppy drives of the Model III's WD1793 controller, or of the Model I Expansion
+ * Interface's WD1771 (spec §3, §6), over `TRS80System.mountDisk` and `ejectDisk`. With no disk in
+ * any drive the controller's ports (on the Model I its addresses $37EC-$37EF) float (read $FF),
+ * which is what sends the ROM to cassette BASIC (Level II BASIC on the Model I) at reset, so a
+ * machine with nothing mounted boots as it did before disks existed. A Model I built without the
+ * Expansion Interface has no disk controller, and refuses a mount. On a Model I a 10-sector JV1
+ * may have 35 to 42, 77, or 80 tracks (disk-image.js, JV1_MODEL1_SD_TRACKS).
  * @param {import('../machine/machine.js').Machine} machine
  */
 export function diskDrives(machine) {
   const system = machine.system;
+  const model1 = system.model.id === 1;
   return {
     /**
      * Put a disk in a drive, replacing what was there. Bytes are copied into a new `DiskImage`
@@ -188,11 +217,14 @@ export function diskDrives(machine) {
     mount(drive, image, { writeProtect } = {}) {
       checkDrive('fdc.mount', drive);
       if (writeProtect !== undefined && typeof writeProtect !== 'boolean') throw new Error(`fdc.mount: writeProtect must be true or false, not ${String(writeProtect)}`);
+      if (model1 && system.io.latch === null) {
+        throw new Error('fdc.mount: this Model I has no Expansion Interface, so no disk controller; construct the Machine with expansion: true (the default) to mount a disk');
+      }
       let disk;
       if (image instanceof DiskImage) disk = image;
       else if (ArrayBuffer.isView(image) && image.BYTES_PER_ELEMENT === 1) {
         try {
-          disk = new DiskImage(/** @type {Uint8Array} */ (image), `drive ${drive}`);
+          disk = new DiskImage(/** @type {Uint8Array} */ (image), `drive ${drive}`, model1 ? { jv1SdTracks: JV1_MODEL1_SD_TRACKS } : {});
         } catch (e) {
           throw new Error(`fdc.mount: ${/** @type {Error} */ (e).message}`);
         }
@@ -239,7 +271,9 @@ export function diskDrives(machine) {
 
 /**
  * Load a disk image: mount it, and with `boot` reset the machine so the ROM boots from drive 0
- * (it reads track 0, sector 1 to $4300 and jumps there; ROM $34D9-$3516). Nothing is in memory
+ * (the Model III ROM reads track 0, sector 1 to $4300 and jumps there, ROM $34D9-$3516; the Model I
+ * Level II ROM reads track 0, sector 0 to $4200 and jumps there, MDL1LEV2.Z80 BOOT at $069F-$06C9,
+ * after its PAUSE at $06AF, 65,536 passes of 26 T-states, about a second). Nothing is in memory
  * when this returns, so the manifest's `blocks` is empty. Booting needs a disk in drive 0, this one
  * or one mounted before. A reset clears the keyboard queue; without `boot` it is left alone.
  * @param {import('../machine/machine.js').Machine} machine

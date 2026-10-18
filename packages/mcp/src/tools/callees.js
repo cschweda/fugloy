@@ -67,7 +67,7 @@ export default {
     }
     const callerMap = m.debug.callerMap();
     const named = (/** @type {number} */ a) => {
-      const name = routineName(session.labels, a);
+      const name = routineName(session.labels, a, m.model);
       return name === undefined ? '' : `  ; ${name}`;
     };
     const rootEnd = routineEnd(m, root);

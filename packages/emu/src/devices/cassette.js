@@ -43,6 +43,10 @@ export class CassetteSystem {
     this.recordLog = [];
     this.RECORD_LIMIT = 400000;
     this.restoredRecording = null; // decoded bytes carried in by a save state
+    // The pulse codec (cassette-tape.js) counts Model III T-states; a machine
+    // with another clock (the Model I) sets this to the Model III's clock over
+    // its own, so a recording decodes at the times it took in real time.
+    this.timeScale = 1;
 
     this.BUFFER_ADDRESS = 0x4300;
     this.BUFFER_SIZE = 256;
@@ -130,7 +134,7 @@ export class CassetteSystem {
    */
   recordedCas() {
     if (this.recordLog.length) {
-      return pulsesToBytes(this.recordLog.map((r) => r.t));
+      return pulsesToBytes(this.recordLog.map((r) => r.t * this.timeScale));
     }
     if (this.restoredRecording) {
       return { bytes: this.restoredRecording, baud: null };

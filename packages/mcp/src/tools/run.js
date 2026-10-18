@@ -2,10 +2,9 @@
  * `run`: run the machine until a stop condition or a cap (docs/fugloy-mcp-spec.md §5, §7).
  * Reasons: break, watch, halt, screen, pc, cycles (the budget or the emulated cap), wallclock.
  */
-import { CPU_CLOCK_HZ } from '@fugloy/emu';
 import { z } from 'zod';
 import { parseAddr, parseCount } from '../args.js';
-import { capCycles, runMachine, seconds, stoppedLine, withTrace } from '../execute.js';
+import { capCycles, clockOf, runMachine, seconds, stoppedLine, withTrace } from '../execute.js';
 import { regsBlock } from '../format/regs.js';
 import { screenDiff } from '../format/screen.js';
 
@@ -39,7 +38,7 @@ export default {
   handler(session, args) {
     const m = session.requireMachine();
     const { limits } = session.config;
-    const cap = capCycles(session.config);
+    const cap = capCycles(session.config, m);
     if (args.cycles !== undefined && args.seconds !== undefined) throw new Error('Give cycles or seconds, not both.');
     let budget = cap;
     let asked;
@@ -50,7 +49,7 @@ export default {
       if (!(args.seconds > 0) || args.seconds > limits.runSecondsEmulated) {
         throw new Error(`seconds must be more than 0 and at most ${limits.runSecondsEmulated} (limits.runSecondsEmulated), not ${args.seconds}.`);
       }
-      budget = Math.max(1, Math.round(args.seconds * CPU_CLOCK_HZ));
+      budget = Math.max(1, Math.round(args.seconds * clockOf(m)));
       asked = `${args.seconds} s`;
     }
     const until = args.until === undefined ? undefined : parseUntil(args.until, session);
@@ -64,7 +63,7 @@ export default {
     );
     const lines = [
       stoppedLine(stop, session, { capped: asked === undefined || budget === cap, ...(asked ? { asked } : {}), ...(until?.kind === 'pc' ? { pc: until.pc } : {}) }),
-      `Ran ${stop.cycles.toLocaleString('en-US')} cycles (${seconds(stop.cycles)} emulated)`,
+      `Ran ${stop.cycles.toLocaleString('en-US')} cycles (${seconds(stop.cycles, m)} emulated)`,
     ];
     if (until?.kind === 'break' && m.debug.breaks.length === 0) lines.push('(no breakpoints are set, so only a stop watch or a cap could stop it)');
     if (args.trace) lines.push(`Trace: recorded while running (the last ${limits.traceDepth.toLocaleString('en-US')} instructions are kept)`);

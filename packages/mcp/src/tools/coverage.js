@@ -159,7 +159,7 @@ function exportTo(session, path, mask, overwrite) {
   // By identity, not spelling: a case variant on a case-insensitive volume, or a path through a
   // linked folder, names the same file (the sidecar's even before it exists).
   if (sameFile(given, program.path)) throw new Error(`${given} is the program itself; give another path to export to.`);
-  if (sameFile(given, session.config.roms.model3)) throw new Error(`${given} is the ROM; give another path to export to.`);
+  if (Object.values(session.config.roms).some((rom) => sameFile(given, rom))) throw new Error(`${given} is the ROM; give another path to export to.`);
   const toSidecar = samePath(given, sidecar.path);
   const target = toSidecar ? sidecar.path : given;
   const refusal = sidecarRefusal(sidecar);

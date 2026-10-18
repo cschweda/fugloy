@@ -84,7 +84,7 @@ export class Debugger {
   #machine;
   /** @type {any} The Z80CPU whose accessors are swapped. */
   #cpu;
-  /** @type {{ readMemory: (a: number) => number, writeMemory: (a: number, v: number) => void, readPort: (p: number) => number, writePort: (p: number, v: number) => void }} The CPU's own accessors, restored when nothing listens. */
+  /** @type {{ readMemory: (a: number) => number, writeMemory: (a: number, v: number) => void, readPort: (p: number) => number, writePort: (p: number, v: number) => void, peek: (a: number) => number }} The CPU's own accessors, restored when nothing listens, and `peek`, a read with no device side effect (memory.peekByte) for the debugger's own looks at memory. */
   #plain;
   /** @type {Map<number, BreakEntry[]>} */
   #breaks = new Map();
@@ -159,7 +159,18 @@ export class Debugger {
     this.#machine = machine;
     const cpu = machine.system.cpu;
     this.#cpu = cpu;
-    this.#plain = { readMemory: cpu.readMemory, writeMemory: cpu.writeMemory, readPort: cpu.readPort, writePort: cpu.writePort };
+    const memory = machine.system.memory;
+    // The debugger's own reads (an old value, the look-ahead, the trace, the label file) peek: a
+    // CPU read of the Model I's $37E0 clears the latch's clock bit, and one of $37EC drops the
+    // WD1771's INTRQ. With no Expansion Interface (every Model III) a read has no side effect, and
+    // the CPU's own accessor serves.
+    this.#plain = {
+      readMemory: cpu.readMemory,
+      writeMemory: cpu.writeMemory,
+      readPort: cpu.readPort,
+      writePort: cpu.writePort,
+      peek: memory.expansion === null ? cpu.readMemory : (/** @type {number} */ a) => memory.peekByte(a),
+    };
     const dbg = this;
     /** @param {string} name @param {unknown} f */
     const check = (name, f) => {
@@ -308,7 +319,7 @@ export class Debugger {
     this.#loaded = { manifest: JSON.parse(JSON.stringify(manifest)), sha256: sha256Hex(bytes) };
     // A copy of what landed, so the label file can tell which loaded bytes changed since (a
     // block still `predicted` has not landed). Read after the loader, so a later block wins.
-    const read = this.#plain.readMemory;
+    const read = this.#plain.peek;
     this.#placed = manifest.blocks
       .filter((/** @type {any} */ b) => !b.predicted)
       .map((/** @type {any} */ b) => {
@@ -331,7 +342,7 @@ export class Debugger {
    */
   labelFile({ name, started, input } = {}) {
     const bits = this.#bits.slice();
-    const read = this.#plain.readMemory;
+    const read = this.#plain.peek;
     for (const { addr, bytes } of this.#placed) {
       for (let i = 0; i < bytes.length; i++) {
         const a = (addr + i) & 0xffff;
@@ -347,6 +358,7 @@ export class Debugger {
       bits,
       callerMap: this.callerMap(),
       cycles: this.#cpu.cycles,
+      model: this.#machine.model,
     });
   }
 
@@ -525,9 +537,8 @@ export class Debugger {
       this.#len = 0;
       return;
     }
-    // The look-ahead assumes reads have no side effects: true on the Model III; the Model I's $37E0
-    // interrupt latch (phase 6) clears on read and will need a side-effect-free peek.
-    const info = instructionInfo(this.#plain.readMemory, pc);
+    // The look-ahead peeks, so it clears no device latch (the Model I's $37E0 and $37EC).
+    const info = instructionInfo(this.#plain.peek, pc);
     const len = info.len;
     this.#len = len;
     if (this.#covOn) {
@@ -577,7 +588,7 @@ export class Debugger {
   /** Open the next trace entry for the instruction at `pc`: its bytes and registers before it runs; `afterInstruction` adds its T-states. */
   #traceStart(/** @type {number} */ pc) {
     const i = this.#tHead;
-    const read = this.#plain.readMemory;
+    const read = this.#plain.peek;
     const len = instructionInfo(read, pc).len;
     this.#tPcs[i] = pc;
     this.#tLens[i] = len;
@@ -630,7 +641,7 @@ export class Debugger {
     addr &= 0xffff;
     value &= 0xff;
     const watched = (this.#watchMask[addr] & 2) !== 0;
-    const prev = watched || this.#onMemWrite !== null ? this.#plain.readMemory(addr) : 0;
+    const prev = watched || this.#onMemWrite !== null ? this.#plain.peek(addr) : 0;
     this.#plain.writeMemory(addr, value);
     if (this.#marking) this.#bits[addr] |= WRITE;
     if (watched) this.#hit('write', addr, value, prev);

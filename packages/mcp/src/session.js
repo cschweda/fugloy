@@ -5,6 +5,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { Machine } from '@fugloy/emu';
+import { MODELS } from './args.js';
 import { recordFacts } from './attribution.js';
 import { TraceLog } from './trace-log.js';
 
@@ -20,25 +21,54 @@ export function stderrLog(level, text) {
   process.stderr.write(`[emu ${level}] ${text}\n`);
 }
 
+/** The models the server builds: the Model I and the Model III (emu phase 6 split the Model 4 off). */
+export const BUILT_MODELS = /** @type {const} */ ([1, 3]);
+
+/** `Model I` or `Model III`. */
+export const modelName = (/** @type {number} */ model) => `Model ${MODELS[model] ?? model}`;
+
 /**
- * Read the Model III ROM a config names. Throws a sentence when none is configured or the file is missing.
+ * Read the ROM a config names for `model` (`roms.model1` or `roms.model3`). Throws a sentence
+ * when none is configured or the file is missing.
  * @param {import('./config.js').Config} config
+ * @param {1 | 3} [model]
  * @returns {Uint8Array}
  */
-export function readRom(config) {
-  const path = config.roms.model3;
-  if (path === undefined) throw new Error('No Model III ROM is configured; set roms.model3 in fugloy.mcp.json (see the MCP spec §3).');
-  if (!existsSync(path)) throw new Error(`The configured Model III ROM ${path} does not exist; fix roms.model3 in ${config.source ?? 'fugloy.mcp.json'}.`);
+export function readRom(config, model = 3) {
+  const key = `model${model}`;
+  const path = config.roms[key];
+  if (path === undefined) {
+    const what = model === 1 ? 'Model I Level II ROM' : 'Model III ROM';
+    throw new Error(`No ${what} is configured; set roms.${key} in fugloy.mcp.json (see the MCP spec §3).`);
+  }
+  if (!existsSync(path)) throw new Error(`The configured ${modelName(model)} ROM ${path} does not exist; fix roms.${key} in ${config.source ?? 'fugloy.mcp.json'}.`);
   return new Uint8Array(readFileSync(path));
 }
 
 /**
- * A Model III Machine on `rom` (by default the config's), logging to stderr.
+ * A Machine of `model` (by default the config's defaultModel) on `rom` (by default the config's
+ * ROM for that model), with 48K, logging to stderr. A configured ROM the emulator recognises as
+ * another model's is refused with a sentence naming the config entry to fix.
  * @param {import('./config.js').Config} config
  * @param {Uint8Array} [rom]
+ * @param {1 | 3} [model]
  */
-export function makeMachine(config, rom = readRom(config)) {
-  return new Machine({ model: 3, ram: 48, roms: { level2: rom }, log: stderrLog });
+export function makeMachine(config, rom, model = config.defaultModel ?? 3) {
+  const given = rom !== undefined;
+  const image = rom ?? readRom(config, model);
+  try {
+    return new Machine({ model, ram: 48, roms: { level2: image }, log: stderrLog });
+  } catch (err) {
+    // The emulator names the model a recognised ROM belongs to ("…: construct the Machine with
+    // model: 3"); that one is put in the server's terms. Anything else (a wrong size) is the emulator's sentence.
+    const message = err instanceof Error ? err.message : String(err);
+    const other = /^(.*): construct the Machine with model: (\d)\.?$/.exec(message);
+    if (other === null) throw err;
+    const [, why, owner] = /** @type {[string, string, string]} */ (other);
+    if (given) throw new Error(`${why}; load with model ${owner}.`);
+    const key = `model${model}`;
+    throw new Error(`The configured roms.${key} ${config.roms[key]} cannot run the ${modelName(model)}: ${why.charAt(0).toLowerCase()}${why.slice(1)}; load with model ${owner}, or fix roms.${key} in ${config.source ?? 'fugloy.mcp.json'}.`);
+  }
 }
 
 /**
@@ -94,9 +124,14 @@ export class Session {
     this.trace = new TraceLog(traceDepth(config));
   }
 
-  /** A new Machine for this session's config (on `rom` when given); the caller installs it. */
-  createMachine(/** @type {Uint8Array | undefined} */ rom) {
-    return makeMachine(this.config, rom);
+  /**
+   * A new Machine for this session's config (on `rom` when given), of `model`: by default the
+   * running machine's, else the config's defaultModel. The caller installs it.
+   * @param {Uint8Array} [rom]
+   * @param {1 | 3} [model]
+   */
+  createMachine(rom, model = this.machine?.model ?? this.config.defaultModel ?? 3) {
+    return makeMachine(this.config, rom, model);
   }
 
   /**

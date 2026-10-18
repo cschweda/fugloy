@@ -5,7 +5,8 @@
  *
  * - `load` reads it: its labels become the session's, and the file as read is kept as the base
  *   that `coverage export` merges into. A file that is not JSON, breaks a rule of §8, was
- *   written for another program (its `sha256` differs), or is a symbolic link is ignored,
+ *   written for another program (its `sha256` differs) or another model (its `program.model`
+ *   differs from the machine's, so its coverage is of another ROM), or is a symbolic link is ignored,
  *   reported, and never overwritten.
  * - `label` and `unlabel` rewrite it at once: the file as it now stands (or a skeleton naming
  *   the program and its blocks) with the session's labels in place of its own. Coverage, callers,
@@ -22,6 +23,7 @@
 import { lstatSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, join } from 'node:path';
 import { mergeLabelFiles, parseLabelFile } from '@fugloy/emu';
+import { modelName } from './session.js';
 
 /**
  * @typedef {any} LabelFile the §8 object, as `parseLabelFile` checks it
@@ -124,9 +126,10 @@ export function refuseLink(/** @type {string} */ path) {
  * Check a sidecar's text against §8 and the program.
  * @param {string} text
  * @param {string} programSha256
+ * @param {number} [model] the machine's model; a file for another model is ignored
  * @returns {{ file: LabelFile } | { ignored: string }}
  */
-function checkText(text, programSha256) {
+function checkText(text, programSha256, model) {
   let json;
   try {
     json = JSON.parse(text);
@@ -142,6 +145,9 @@ function checkText(text, programSha256) {
   if (sha !== undefined && sha !== programSha256) {
     return { ignored: `it was written for another program (its sha256 is ${sha.slice(0, 12)}…, this program's is ${programSha256.slice(0, 12)}…)` };
   }
+  if (model !== undefined && file.program.model !== model) {
+    return { ignored: `it was written on the ${modelName(file.program.model)}, and this machine is the ${modelName(model)}, whose ROM and hardware differ (its coverage would merge with another ROM's)` };
+  }
   return { file };
 }
 
@@ -149,11 +155,12 @@ function checkText(text, programSha256) {
  * Read the sidecar of the program at `programPath`, whose SHA-256 is `programSha256`.
  * @param {string} programPath
  * @param {string} programSha256
- * @param {{ fixtures?: string }} [where] a fixtures folder to look in when there is none beside the program
+ * @param {{ fixtures?: string, model?: number }} [where] a fixtures folder to look in when there is none
+ *   beside the program; the machine's model, when a file for another model is to be ignored
  * @returns {null | { path: string, file: LabelFile, labels: Label[], text: string } | { path: string, ignored: string }}
  *   null when there is no sidecar; `path` is the file read; `labels` are its labels for map 0, page 0
  */
-export function readSidecar(programPath, programSha256, { fixtures } = {}) {
+export function readSidecar(programPath, programSha256, { fixtures, model } = {}) {
   const beside = sidecarPath(programPath);
   const candidates = [beside, ...(fixtures === undefined ? [] : [join(fixtures, basename(beside))])];
   const path = candidates.find((p) => lstatOf(p) !== null);
@@ -165,7 +172,7 @@ export function readSidecar(programPath, programSha256, { fixtures } = {}) {
   } catch (err) {
     return { path, ignored: `it could not be read (${err instanceof Error ? err.message : String(err)})` };
   }
-  const checked = checkText(text, programSha256);
+  const checked = checkText(text, programSha256, model);
   if ('ignored' in checked) return { path, ignored: checked.ignored };
   return { path, file: checked.file, labels: checked.file.labels.filter(home).map((/** @type {Label} */ l) => ({ ...l })), text };
 }
@@ -261,7 +268,7 @@ export function writeSidecarFile(session, file) {
     }
   }
   if (now !== s.text) {
-    const checked = now === null ? null : checkText(now, /** @type {any} */ (session.program).sha256);
+    const checked = now === null ? null : checkText(now, /** @type {any} */ (session.program).sha256, session.requireMachine().model);
     const state = now === null ? 'was removed' : checked !== null && 'ignored' in checked ? `changed, and ${checked.ignored}` : 'changed';
     throw new Error(`the sidecar ${s.path} ${s.text === null && now !== null ? 'appeared' : state} on disk since the server last read or wrote it, so it was not overwritten; load the program again to pick up the edits`);
   }
