@@ -13,7 +13,8 @@
  * instructions in most programs); `--strict-all` stops on those too.
  *
  * Prints the report (the counts per class, the divergence with ten instructions disassembled on
- * each side). Exit status: 0 no divergence, 1 a divergence, 2 a usage or setup error.
+ * each side). Exit status: 0 no divergence, 1 a divergence, 2 a usage or setup error; an
+ * unexpected error (the ROM not reaching READY, trsjs throwing) also exits 2, never 1.
  * Needs trsjs (`pnpm trsjs:install`); it is never bundled.
  */
 import { readFileSync } from 'node:fs';
@@ -35,6 +36,9 @@ function fail(msg) {
   console.error(msg);
   process.exit(2);
 }
+
+// An unexpected error is a setup error (2), never a divergence (1).
+process.on('uncaughtException', (e) => fail(`diff: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`));
 
 /** @param {string[]} argv */
 function parseArgs(argv) {

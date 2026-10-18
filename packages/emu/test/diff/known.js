@@ -104,8 +104,8 @@ export const STEP_CLASSES = [
     name: 'flags 3 and 5 (X/Y)',
     // trsjs keeps the undocumented flag bits 3 and 5 by its own rules; our core passes every
     // ZEXALL group, and ZEXALL (unlike ZEXDOC) checks those two bits for every instruction [ZEXALL].
-    // Young §2.3 and §4 describe the rules our core follows. The plan masks them (Ruling 5); here
-    // they are counted, so a run shows how often they differ.
+    // Young §2.3 and §4 describe the rules our core follows. Ruling 5 compares them bit by bit and
+    // this class counts them, so a run shows how often they differ.
     evidence: 'ZEXALL checks flag bits 3 and 5 for every instruction group and our core passes all 67 groups; the rules are Young §2.3 and §4.',
     explains(ctx, diff) {
       const t = ['f.5', 'f.3', 'f2.5', 'f2.3'].filter((k) => diff.has(k));
@@ -209,8 +209,9 @@ export const INTERRUPT_CLASSES = [
     reason: 'EI',
     // Zilog UM0080 p. 19 (Interrupt Enable/Disable) and EI (p. 183): "any pending interrupt request is not accepted until
     // after the instruction following EI is executed"; Young §5.5 tests it. trsjs sets IFF1 in EI
-    // and takes a frame-end request right after it. Recorded only when our CPU still had EI's delay
-    // (pendingEI) at that boundary.
+    // and takes a frame-end request right after it. Recorded only at the boundary right after an
+    // executed EI (compare.js derives it from the instruction stream, not from our CPU's state), and
+    // our CPU must then take the request at the next boundary, else a divergence (field irq).
     evidence: 'Zilog UM0080 p. 19 and EI (p. 183): during EI and the following instruction maskable interrupts are disabled; Young §5.5.',
   },
   {
@@ -220,7 +221,10 @@ export const INTERRUPT_CLASSES = [
     // Young §5.5 and §3.7: interrupts are accepted only between instructions, and a prefixed
     // instruction is one instruction; a DD or FD before another prefix is not one on its own, so
     // our CPU takes no interrupt after it (spec §10, "Lone prefixes"). trsjs never stops between a
-    // prefix and the next byte. Recorded only when our CPU was after such a prefix (afterPrefix).
+    // prefix and the next byte. Recorded only at the boundary right after an executed DD or FD
+    // whose next byte is DD, FD, or ED (derived from the instruction stream, not from our CPU's
+    // afterPrefix), and our CPU must then take the request at the next boundary, else a divergence
+    // (field irq).
     evidence: 'Young §5.5: interrupts are never accepted during an instruction, prefixed ones included; a DD/FD before another prefix sets a flag rather than being an instruction (Young §3.7).',
   },
 ];

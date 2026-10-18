@@ -47,8 +47,10 @@ const SESSIONS = [
     known: { 'BIT: S and P/V': 364_967, 'DDCB/FDCB: R counted three times': 6_245, 'flags 3 and 5 (X/Y)': 1_390_426 },
   },
   {
-    // The phase 2 build: title at once, ENTER to the high scores. It never takes the 1: it waits in
-    // the ROM's $0049 with interrupts off (on trsjs too).
+    // The phase 2 build: title at once, ENTER to the high scores. It never takes the 1, on trsjs
+    // either, however long the key is held: it points the keyboard DCB's driver ($4016) at $03E3,
+    // the Model I ROM's keyboard driver, which on the Model III ROM is the tail of the printer
+    // driver and returns no key, so its wait in $0049 never ends (spec §11, phase 7).
     file: 'eliminator/elimin8c.cmd',
     keys: [press(2, 'ENTER'), press(5, '1')],
     screens: ['Press <ENTER> to Start', '1 or 2 Players?'],
@@ -64,7 +66,7 @@ const SESSIONS = [
   {
     // The phase 2 build, to "1 or 2 Players?" (the plan's Review Focus 4: the ENTER reaches both
     // machines at the same T-state and leaves both on that screen). Like Eliminator c, it then
-    // waits in $0049 with interrupts off.
+    // waits in $0049 on the Model I keyboard driver's address and never takes the 1.
     file: 'rear-guard/reargrd5.cmd',
     keys: [press(4, 'ENTER'), press(7, '1')],
     screens: ['Hit <ENTER> to begin', 'HIGH SCORES', '1 or 2 Players?'],

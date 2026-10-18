@@ -275,6 +275,53 @@ describe.skipIf(trsjsSkip !== null)(`compareRun against trsjs${trsjsSkip === nul
     expect(d.fields).toEqual(expect.arrayContaining(['pc', 'sp', 'cycles', 'writes']));
   });
 
+  // The held-EI and held-prefix classes come from the instruction stream, not our CPU's state, so
+  // a planted fault in that state is a divergence (field irq), not an excused difference.
+  it('an EI delay of ours that runs long is a divergence at the boundary it should have ended', () => {
+    const m = setup([0x00, 0xfb, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], 8); // NOP / EI / NOP ...
+    const cpu = m.system.cpu;
+    const exec = cpu.decodeAndExecute.bind(cpu);
+    cpu.decodeAndExecute = (op) => {
+      const t = exec(op);
+      if (op === 0xfb) cpu.pendingEI = 4; // two instructions late
+      return t;
+    };
+    const r = run(m, 12);
+    expect(r.divergence).toMatchObject({ index: 3, pc: 0x4003, fields: ['irq'], known: null });
+  });
+
+  it('an EI delay of ours that runs short is a divergence where it took the interrupt', () => {
+    const m = setup([0x00, 0xfb, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], 8);
+    const cpu = m.system.cpu;
+    const exec = cpu.decodeAndExecute.bind(cpu);
+    cpu.decodeAndExecute = (op) => {
+      const t = exec(op);
+      if (op === 0xfb) {
+        cpu.pendingEI = 0;
+        cpu.IFF1 = cpu.IFF2 = true; // no delay at all
+      }
+      return t;
+    };
+    const d = run(m, 12).divergence;
+    expect(d).toMatchObject({ index: 2, known: null });
+    expect(d.fields).toContain('irq');
+  });
+
+  it('a lone-prefix hold of ours that sticks is a divergence at the boundary it should have ended', () => {
+    // EI / NOP / DD (lone) / LD IX,$1234 / NOP ...; the request lands after the lone DD.
+    const m = setup([0xfb, 0x00, 0xdd, 0xdd, 0x21, 0x34, 0x12, 0x00, 0x00, 0x00], 12);
+    const cpu = m.system.cpu;
+    const exec = cpu.executeInstruction;
+    cpu.executeInstruction = () => {
+      const pc = cpu.registers.PC;
+      const t = exec.call(cpu);
+      if (pc === 0x4003) cpu.afterPrefix = true; // still held after LD IX
+      return t;
+    };
+    const r = run(m, 12);
+    expect(r.divergence).toMatchObject({ index: 4, pc: 0x4007, fields: ['irq'], known: null });
+  });
+
   it('the held-interrupt class excuses nothing on the step it is taken', () => {
     // The DI case, with our handler's PUSH AF (test-only) pushing F xor 1.
     const m = setup([0xf3, 0x00, 0x00, 0x00, 0x00, 0xfb, 0x00, 0x00, 0x00], 8);

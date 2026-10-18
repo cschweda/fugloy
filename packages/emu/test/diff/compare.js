@@ -12,6 +12,12 @@
  * IFF1/2 read as set (trsjs sets them in EI itself), and a halted CPU of ours sits at HALT+1 where
  * trsjs's sits on the HALT, so our PC is compared less one while halted.
  *
+ * Where an interrupt may be taken is derived from the instruction stream, never from our CPU's
+ * own state: none at the boundary right after an executed EI, none after a lone DD or FD (one whose
+ * next byte is DD, FD, or ED). A request held for one of those, or while IFF1 was 0, must be taken
+ * by our CPU at the first boundary that allows it, and none may be taken where the stream forbids
+ * it; either fault is a divergence in the field `irq`.
+ *
  * Keys (Ruling 3) go to both machines' keyboard matrices directly, at the first instruction
  * boundary at or after their T-state, never through our ROM keyboard hook.
  *
@@ -47,7 +53,7 @@ import { diffStep, droppedPrefix, explainStep, interruptClass, REFERENCE_FIXES, 
  *   context: ContextLine[],
  * }} Divergence
  *   index: the instruction's 0-based number in the run; pc: where our CPU executed it; fields: what
- *   differs (register names, flag bits as `f.S`, `cycles`, `writes`, or `video`); known: the class a
+ *   differs (register names, flag bits as `f.S`, `cycles`, `writes`, `irq` (an interrupt taken where none may be, or not taken where it must), or `video`); known: the class a
  *   `strict` run stopped on, else null; context: up to 10 instructions before, the divergent one,
  *   and up to 10 after (both machines run on, unsynced).
  * @typedef {{ instructions: number, divergence: Divergence | null, known: Record<string, number> }} CompareResult
@@ -214,12 +220,20 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
     }
   };
 
+  /**
+   * Why no maskable interrupt may be taken at the next boundary, derived from the instruction
+   * stream, not from our CPU's state: EI allows none at the one boundary right after it (Zilog
+   * UM0080, EI), and a DD or FD whose next byte is DD, FD or ED (a lone prefix, which our step runs
+   * on its own) allows none before that byte runs (Young §3.7). The first boundary has no
+   * instruction before it in the run, so its reason comes from our CPU's state at the start.
+   * @type {'EI' | 'prefix' | null}
+   */
+  let blocked = cpu.pendingEI > 0 ? 'EI' : cpu.afterPrefix ? 'prefix' : null;
+
   try {
     ref.syncFrom(m);
     for (let index = 0; index < instructions; index++) {
       deliverKeys();
-      // Why our CPU will not take an interrupt at this boundary, if it will not.
-      const blocked = cpu.pendingEI > 0 ? 'EI' : cpu.afterPrefix ? 'prefix' : null;
       const wasHalted = cpu.halted;
       const op = cpu.halted ? 0 : sys.memory.readByte(cpu.registers.PC);
       // Before a DD or FD, the reference's registers and the byte after the prefix, in case trsjs
@@ -228,11 +242,18 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
       const afterPrefix = theirsBefore === null ? 0 : sys.memory.readByte((cpu.registers.PC + 1) & 0xffff);
       const refIff1 = ref.z.reg.IFF1 !== 0;
       const fBefore = cpu.registers.F;
+      // A held request our latch still holds must be taken at the first boundary where IFF1 is
+      // set and nothing blocks it (Zilog UM0080 p. 7, INT pin): if our CPU does not, that is a
+      // divergence (field irq), whatever our CPU's own state says.
+      const mustTake = held !== null && refIff1 && blocked === null && (io.intLatch & io.intMask & RTC_IRQ_BIT) !== 0;
 
       const oursCycles = ours.step();
       const oursIrq = ours.log.irq;
+      // Our CPU took an interrupt where the stream says none may be taken, or did not take the one
+      // it had to.
+      const irqWrong = (oursIrq && blocked !== null) || (mustTake && !oursIrq);
       /** @type {import('./trsjs-adapter.js').IrqMode} */
-      const mode = oursIrq ? (held !== null ? 'force' : 'auto') : blocked !== null ? 'hold' : 'auto';
+      const mode = blocked !== null ? 'hold' : oursIrq && held !== null ? 'force' : 'auto';
       const t = ref.step({ irq: mode });
       /** @type {string | null} */
       let fix = null;
@@ -248,9 +269,10 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
         held = null;
       } else if (t.raised && !t.irq) {
         // The reference raised the request and did not take it: dropped because its IFF1 was 0
-        // (DI), or held back (hold mode) because our CPU could not take it here (EI's delay, a lone
-        // prefix). Either way our latch keeps it. Anything else records nothing, so a later take
-        // by our CPU is a divergence.
+        // (DI), or held back (hold mode) because the stream allows no interrupt here (EI's delay,
+        // a lone prefix). Either way our latch keeps it, and our CPU must take it at the first
+        // boundary that allows one (mustTake). Anything else records nothing, so a later take by
+        // our CPU is a divergence.
         /** @type {'DI' | 'EI' | 'prefix' | null} */
         const reason = !refIff1 ? 'DI' : mode === 'hold' ? blocked : null;
         if (reason !== null) held ??= { reason };
@@ -274,6 +296,13 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
 
       const diff = diffStep(ctx);
       const { classes, unexplained } = diff.size === 0 ? { classes: [], unexplained: [] } : explainStep(ctx, diff);
+      if (irqWrong) {
+        diff.add('irq');
+        unexplained.push('irq');
+      }
+      // The next boundary's reason, from the instruction that just ran (a halted step runs a NOP).
+      blocked = ours.log.idle ? null : bytes[0] === 0xfb ? 'EI'
+        : (bytes[0] === 0xdd || bytes[0] === 0xfd) && (bytes[1] === 0xdd || bytes[1] === 0xfd || bytes[1] === 0xed) ? 'prefix' : null;
       if (fix !== null) classes.unshift(fix);
       if (interrupt !== null) classes.unshift(interrupt);
 
