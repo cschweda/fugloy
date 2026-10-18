@@ -166,6 +166,7 @@ export class Machine {
    */
   run({ cycles, until } = {}) {
     if (cycles === undefined && until === undefined) throw new Error('run needs cycles, until, or both; with neither it would never stop');
+    if (cycles !== undefined && !(Number.isFinite(cycles) && cycles >= 0)) throw new Error(`run: cycles must be a finite number of T-states, 0 or more, not ${String(cycles)}`);
     if (until !== undefined && until !== 'halt' && typeof until !== 'function') throw new Error(`run: until must be 'halt' or a function, not ${String(until)}`);
     const sys = this.system;
     const cpu = sys.cpu;

@@ -57,6 +57,18 @@ describe('Machine', () => {
     expect(m.cycles).toBe(r.cycles);
   });
 
+  it.each([['a string', '1000'], ['NaN', NaN], ['negative', -1], ['Infinity', Infinity]])('run rejects a %s cycles budget, naming it', (_, bad) => {
+    const m = machine([0x00, 0x00, 0xc3, 0x00, 0x00]);
+    expect(() => m.run({ cycles: bad })).toThrow(/cycles/);
+    expect(() => m.run({ cycles: bad })).toThrow(String(bad));
+    expect(m.cycles).toBe(0);
+  });
+
+  it('run({ cycles: 0 }) still runs one instruction', () => {
+    const m = machine([0x00, 0x00]);
+    expect(m.run({ cycles: 0 })).toEqual({ reason: 'cycles', cycles: 4 });
+  });
+
   it("run({ until: 'halt' }) stops at a HALT", () => {
     const m = machine(COUNT_TO_5);
     const r = m.run({ until: 'halt' });
