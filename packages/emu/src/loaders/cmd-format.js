@@ -28,6 +28,8 @@
  * machine-language games run with no DOS resident.
  */
 
+import { startProgram } from "./handoff.js";
+
 /**
  * Parse a /CMD byte stream.
  * @returns {{name:string, blocks:{addr:number,data:Uint8Array}[], entry:number}}
@@ -84,23 +86,3 @@ export function fastLoadCmd(system, parsed) {
   return startProgram(system, parsed.entry);
 }
 
-/**
- * The loader's hand-off, shared with fastLoadSystem: jump to `entry` with nothing of the
- * interrupted code carried over. The CPU leaves HALT; an EI or DD/FD prefix still pending from
- * the old code is dropped; and any interrupt request latched before the load is cleared, so no
- * request from before the load interrupts the program and a later EI does not take a stale
- * request at once; the next request is the next one the hardware raises. IFF1, IFF2, and the
- * interrupt mode are left as they were.
- * @param {any} system a TRS80System (a bare { cpu } works too)
- * @param {number} entry
- * @returns {number} the entry
- */
-export function startProgram(system, entry) {
-  const cpu = system.cpu;
-  cpu.halted = false;
-  cpu.pendingEI = 0;
-  cpu.afterPrefix = false;
-  if (system.io) system.io.intLatch = 0;
-  cpu.registers.PC = entry;
-  return entry;
-}

@@ -34,7 +34,7 @@ describe.skipIf(rom === null)("m.load.cas via 'rom' on the Model III ROM", { tim
   it('a SYSTEM tape at 500 baud loads through SYSTEM, *?, the name, and /, then runs', () => {
     const m = bootToReady('L');
     const manifest = m.load.cas(buildSystemCas([{ addr: 0x7000, data: PROGRAM }], 0x7000, { name: 'HELLO' }), { baud: 500 });
-    expect(manifest).toEqual({ format: 'cas', kind: 'system', name: 'HELLO', entry: 0x7000, blocks: [{ addr: 0x7000, len: PROGRAM.length, why: 'block 3C' }], baud: 500, via: 'rom' });
+    expect(manifest).toEqual({ format: 'cas', kind: 'system', name: 'HELLO', entry: 0x7000, blocks: [{ addr: 0x7000, len: PROGRAM.length, why: 'block 3C', predicted: true }], baud: 500, via: 'rom' });
     const sys = m.system;
     sys.typeText('SYSTEM\n');
     sys.runSeconds(0.5);
@@ -56,7 +56,7 @@ describe.skipIf(rom === null)("m.load.cas via 'rom' on the Model III ROM", { tim
     const tokens = [T_PRINT, 0x20, 0x22, ...[...'FROM TAPE'].map((c) => c.charCodeAt(0)), 0x22];
     const manifest = m.load.cas(buildBasicCas([{ lineNo: 10, tokens }], { name: 'A' }), { baud: 1500 });
     const txttab = m.system.memory.readWord(0x40a4);
-    expect(manifest).toEqual({ format: 'cas', kind: 'basic', name: 'A', blocks: [{ addr: txttab, len: 5 + tokens.length + 2, why: 'BASIC program' }], baud: 1500, via: 'rom' });
+    expect(manifest).toEqual({ format: 'cas', kind: 'basic', name: 'A', blocks: [{ addr: txttab, len: 5 + tokens.length + 2, why: 'BASIC program (predicted from TXTTAB; CLOAD not yet run)', predicted: true }], baud: 1500, via: 'rom' });
     const sys = m.system;
     sys.typeText('CLOAD\n');
     sys.runSeconds(10);

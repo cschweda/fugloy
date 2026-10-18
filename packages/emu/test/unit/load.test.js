@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { casToPulses, fastLoadCmd, fastLoadSystem, Machine, parseCas, parseCmd } from '../../src/index.js';
+import { startProgram } from '../../src/loaders/handoff.js';
 import { buildBasicCas, buildSystemCas, T_PRINT } from './cas-builders.js';
 
 /** A 14K ROM with `bytes` at $0000 (and `at` maps more addresses to bytes). */
@@ -108,7 +109,7 @@ describe('m.load.cas', () => {
   it("a SYSTEM tape via 'rom' goes into the deck at 500 baud by default and writes nothing", () => {
     const m = new Machine({ roms: { level2: HALT_ROM } });
     const manifest = m.load.cas(system());
-    expect(manifest).toEqual({ format: 'cas', kind: 'system', name: 'HELLO', entry: 0x7000, blocks: SYSTEM_BLOCKS, baud: 500, via: 'rom' });
+    expect(manifest).toEqual({ format: 'cas', kind: 'system', name: 'HELLO', entry: 0x7000, blocks: SYSTEM_BLOCKS.map((b) => ({ ...b, predicted: true })), baud: 500, via: 'rom' });
     const deck = m.system.io.cassette;
     expect(deck.pulseTape.length).toBeGreaterThan(0);
     expect(deck.pulsePos).toBe(0);
@@ -135,7 +136,7 @@ describe('m.load.cas', () => {
 
     const rom = new Machine({ roms: { level2: HALT_ROM } });
     rom.mem.write(0x40a4, [0xe9, 0x42]);
-    expect(rom.load.cas(basic(), { baud: 1500 })).toEqual({ format: 'cas', kind: 'basic', name: 'B', blocks: [{ addr: 0x42e9, len, why: 'BASIC program' }], baud: 1500, via: 'rom' });
+    expect(rom.load.cas(basic(), { baud: 1500 })).toEqual({ format: 'cas', kind: 'basic', name: 'B', blocks: [{ addr: 0x42e9, len, why: 'BASIC program (predicted from TXTTAB; CLOAD not yet run)', predicted: true }], baud: 1500, via: 'rom' });
     expect(rom.mem.read(0x42e9 + 4, 1)[0]).toBe(0);
   });
 
@@ -186,6 +187,13 @@ describe('load-over-running', () => {
   // EI / NOP / NOP / JR $: once the EI takes effect, a stale request would fire at once.
   const PROG = buildCmd([{ addr: 0x7000, data: [0xfb, 0x00, 0x00, 0x18, 0xfe] }], 0x7000);
 
+  it('startProgram lives in loaders/handoff.js, and with no EI in flight it leaves IFF1 and IFF2 alone', () => {
+    const m = new Machine({ roms: { level2: HALT_ROM } });
+    expect(startProgram(m.system, 0x7000)).toBe(0x7000);
+    expect(m.cpu.regs.iff1).toBe(false);
+    expect(m.cpu.regs.iff2).toBe(false);
+  });
+
   it('loading while halted: the CPU leaves HALT and the next instruction is the entry', () => {
     const m = new Machine({ roms: { level2: SPIN_ISR } });
     expect(m.run({ until: 'halt', cycles: 1000 }).reason).toBe('halt');
@@ -202,12 +210,13 @@ describe('load-over-running', () => {
     expect(m.system.io.pendingInterrupt()).toBe(true);
     m.load.cmd(PROG);
     expect(m.system.io.pendingInterrupt()).toBe(false);
+    expect(m.cpu.regs.iff1).toBe(false); // no EI in flight inside the ISR: interrupts stay off
     m.step(4); // EI, NOP, NOP, JR: no interrupt until the next RTC tick
     expect(m.cpu.regs.pc).toBe(0x7003);
     expect(m.cpu.regs.iff1).toBe(true);
   });
 
-  it('a pending EI or prefix from the old code is dropped, by fastLoadCmd and fastLoadSystem alike', () => {
+  it('an EI in flight takes effect at the load (IFF1 and IFF2 set) and a pending prefix is dropped, by fastLoadCmd and fastLoadSystem alike', () => {
     for (const load of [(sys) => fastLoadCmd(sys, parseCmd(PROG)), (sys) => fastLoadSystem(sys, parseCas(buildSystemCas([{ addr: 0x7000, data: [0x00] }], 0x7000)))]) {
       const m = new Machine({ roms: { level2: romWith([0xf3, 0xfb, 0x76]) } }); // DI / EI / HALT
       m.step(2);
@@ -218,7 +227,8 @@ describe('load-over-running', () => {
       expect(m.system.cpu.pendingEI).toBe(0);
       expect(m.system.cpu.afterPrefix).toBe(false);
       expect(m.system.io.intLatch).toBe(0);
-      expect(m.cpu.regs.iff1).toBe(false);
+      expect(m.cpu.regs.iff1).toBe(true);
+      expect(m.cpu.regs.iff2).toBe(true);
       expect(m.cpu.regs.pc).toBe(0x7000);
     }
   });

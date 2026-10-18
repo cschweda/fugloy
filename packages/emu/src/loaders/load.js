@@ -4,7 +4,7 @@
  *
  * A .CAS goes in one of two ways. Via 'rom' (the default) the tape is put in the cassette deck as
  * pulses at the chosen baud, and the ROM's own loader reads it when the caller types CLOAD or
- * SYSTEM; nothing is written until then, so the manifest says where the blocks will land. Via
+ * SYSTEM; nothing is written until then, so every manifest block carries `predicted: true`. Via
  * 'fast' the blocks are written at once (fastLoadBasic, fastLoadSystem).
  */
 import { parseCmd, fastLoadCmd } from './cmd-format.js';
@@ -12,7 +12,8 @@ import { parseCas, fastLoadBasic, fastLoadSystem } from './cas-format.js';
 import { casToPulses } from '../devices/cassette-tape.js';
 
 /**
- * @typedef {{ addr: number, len: number, why: string }} ManifestBlock
+ * @typedef {{ addr: number, len: number, why: string, predicted?: true }} ManifestBlock
+ *   `predicted` marks a block that has not landed yet (via 'rom', before the ROM reads the tape)
  * @typedef {{ format: 'cmd', name: string, entry: number, blocks: ManifestBlock[] }} CmdManifest
  * @typedef {{ format: 'cas', kind: 'basic' | 'system', name: string, entry?: number, blocks: ManifestBlock[],
  *   baud: 500 | 1500 | null, via: 'rom' | 'fast' }} CasManifest
@@ -108,8 +109,10 @@ export function loadCas(machine, bytes, { baud = 500, via = 'rom' } = {}) {
     // CLOAD and the fast path both put the program at TXTTAB: per line a pointer, a line number, the body, and 00, then 00 00.
     const start = system.memory.readWord(TXTTAB_PTR);
     const len = parsed.lines.reduce((n, l) => n + 5 + l.tokens.length, 2);
-    blocks = [{ addr: start, len, why: 'BASIC program' }];
+    blocks = [{ addr: start, len, why: via === 'rom' ? 'BASIC program (predicted from TXTTAB; CLOAD not yet run)' : 'BASIC program' }];
   }
+  // Via 'rom' nothing has landed until the ROM reads the tape: every block is where it will go.
+  if (via === 'rom') blocks = blocks.map((b) => ({ ...b, predicted: /** @type {true} */ (true) }));
 
   if (via === 'rom') {
     system.io.cassette.insertPulseTape(casToPulses(tapeForBaud(bytes, baud), baud));

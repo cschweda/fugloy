@@ -20,7 +20,7 @@
  * does).
  */
 
-import { startProgram } from "./cmd-format.js";
+import { startProgram } from "./handoff.js";
 
 // Model III cassette BASIC work area
 const TXTTAB_PTR = 0x40a4; // -> start of BASIC program (0x42E9 stock)
