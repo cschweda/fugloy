@@ -5,6 +5,8 @@ import { buildIr } from '../src/ir.js';
 import { analyze } from '../src/pipeline.js';
 import { loadRaw } from '../src/raw.js';
 import { formatRow, listingRows, rowIndex } from '../src/rows.js';
+import type { Hint } from '../src/hints/format.js';
+import { openProgram, skeletonHints, withHintFile, withSelection } from '../src/session.js';
 
 // $7000 LD A,1 / $7002 NOP (labelled) / $7003 RET / $7004.. six data bytes.
 const mod = loadRaw(Uint8Array.from([0x3e, 0x01, 0x00, 0xc9, 1, 2, 3, 4, 5, 6]), 0x7000);
@@ -50,5 +52,24 @@ describe('notes in zmac and the IR', () => {
     expect(buildIr(mod, a.pass1, 'n', a).notes).toEqual([{ addr: 0x7002, lines: ['Waits here.', '', 'Twice.'] }, { addr: 0x7006, lines: ['Data note'] }]);
     const b = analyze(mod, { entries: [0x7000] });
     expect('notes' in buildIr(mod, b.pass1, 'n', b)).toBe(false);
+  });
+});
+
+describe('a note inside an instruction', () => {
+  it('is warned about in the applied hints and the listing header, since no row shows it', () => {
+    // $7000 LD A,1 / $7002 RET; a note at $7001 (LD's operand) and one at $7002 (a row).
+    const bytes = Uint8Array.from([0x3e, 0x01, 0xc9]);
+    const s0 = openProgram(bytes, { base: 0x7000 });
+    const hints: Hint[] = [
+      { directive: 'note', text: 'Lost', block: 0, offset: 1, line: 1 },
+      { directive: 'note', text: 'Shown', block: 0, offset: 2, line: 2 },
+    ];
+    const s = withHintFile(s0, { ...skeletonHints(s0.module, bytes), hints });
+    const warning = 'note at $7001 is inside the instruction at $7000 and is not shown; move it with the block comment box';
+    expect(s.applied.warnings).toEqual([warning]);
+    expect(s.analysis.hints?.warnings).toEqual([warning]);
+    expect(listingRows(s.analysis).map(formatRow)).toContain(`; warning: ${warning}`);
+    // Rebuilding the session (another symbol selection) does not repeat it.
+    expect(withSelection(s, { machine: 3, dos: 'trsdos' }).applied.warnings).toEqual([warning]);
   });
 });
