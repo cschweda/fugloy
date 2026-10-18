@@ -9,7 +9,7 @@ Releases are tagged `vX.Y.Z` on `main`.
 ## [Unreleased]
 
 Emu phase 3 (`@fugloy/emu`, unreleased): the debugger and the label and
-coverage file, which the disassembler reads. Phase 3's done-criterion is met:
+coverage file, which the disassembler reads from 1.1.0. Phase 3's done-criterion is met:
 a scripted session produces a label file Fugløy's disassembler consumes.
 
 Emu phase 2 (`@fugloy/emu`, unreleased): the Model III as a `Machine`, with
@@ -31,14 +31,6 @@ Emu phase 3:
 - `m.debug.labelFile()`, `parseLabelFile`, `mergeLabelFiles`, and the
   `rle-hex` coverage encoding: the label and coverage file of spec §8 and
   `docs/label-format.md`, with a committed synthetic fixture.
-- `@fugloy/disasm` reads the file (`parseLabelFile`, `withLabelFile`), and the
-  CLI applies it with `--labels <path>`: executed bytes become roots, runs read
-  and never run or written stop descent (never at another source's entry
-  point), observed subroutines get their evidence as a comment, and a file
-  written for another program is refused. Hint files win. The file's `write`
-  field also marks loaded bytes changed since the load, and code that changed
-  at runtime (a program that moved or rewrote itself) is not applied to the
-  file's bytes outside a relocate hint's region; one warning counts it.
 - `examples/sea-dragon/seadrg01.labels.json`: the file of a scripted Sea Dragon
   session (coverage from `$497F`, after the loader's copy, through the title
   screen and ENTER), written by `packages/emu/scripts/sea-dragon-labels.mjs`.
@@ -72,16 +64,36 @@ Emu phase 2:
 
 ### Changed
 
+- The load hand-off: `fastLoadCmd` and `fastLoadSystem` now clear a latched
+  interrupt request, a pending `DD`/`FD` prefix, and HALT, and complete an `EI`
+  still in flight, before jumping to the entry. A caller that relied on a
+  latched tick surviving a load will see it dropped.
+
+## [1.1.0] - 2026-10-18
+
+`@fugloy/z80`, `@fugloy/disasm`, and `@fugloy/cli` 1.1.0, the first release
+published to npm. The disassembler reads the emulator's label and coverage
+file.
+
+### Added
+
+- `@fugloy/disasm` reads the file (`parseLabelFile`, `withLabelFile`), and the
+  CLI applies it with `--labels <path>`: executed bytes become roots, runs read
+  and never run or written stop descent (never at another source's entry
+  point), observed subroutines get their evidence as a comment, and a file
+  written for another program is refused. Hint files win. The file's `write`
+  field also marks loaded bytes changed since the load, and code that changed
+  at runtime (a program that moved or rewrote itself) is not applied to the
+  file's bytes outside a relocate hint's region; one warning counts it.
+
+### Changed
+
 - Releases: `./publish.sh` publishes the `@fugloy` packages to npm in two
   steps, `check <set>` (every check, the packed tarballs installed and run,
   staged in `.release/`) and `publish` (those tarballs, with npm's two-factor
   code). The packages gained a `LICENSE`, a `README.md` where they had none,
   repository links, and a `publishConfig` that drops the `source` export
   condition, which points at TypeScript files the tarballs do not carry.
-- The load hand-off: `fastLoadCmd` and `fastLoadSystem` now clear a latched
-  interrupt request, a pending `DD`/`FD` prefix, and HALT, and complete an `EI`
-  still in flight, before jumping to the entry. A caller that relied on a
-  latched tick surviving a load will see it dropped.
 
 ## [1.0.0] - 2026-10-17
 
@@ -625,6 +637,8 @@ of any `.BAS`.
   when at least two load records precede the damage; there is no `--format`
   override yet.
 
-[Unreleased]: https://github.com/cschweda/fugloy/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/cschweda/fugloy/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/cschweda/fugloy/releases/tag/v1.1.0
+[1.0.0]: https://github.com/cschweda/fugloy/releases/tag/v1.0.0
 [0.2.0]: https://github.com/cschweda/fugloy/releases/tag/v0.2.0
 [0.1.0]: https://github.com/cschweda/fugloy/releases/tag/v0.1.0

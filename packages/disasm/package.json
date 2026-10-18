@@ -1,6 +1,6 @@
 {
   "name": "@fugloy/disasm",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "TRS-80 disassembler core: loaders, memory image, listing (no DOM, no Node)",
   "license": "MIT",
   "type": "module",
