@@ -184,11 +184,13 @@ export function disassemble(code, pc, idle = false) {
  * Our machine's own key queue must be empty: keys come through `keys`.
  *
  * `strict: true` stops on any known class but flag bits 3 and 5 (which differ in most programs
- * within a few instructions); `strict: 'all'` stops on that one as well.
- * @param {{ machine: Machine, reference: Reference, instructions: number, keys?: KeyEvent[], strict?: boolean | 'all' }} opts
+ * within a few instructions); `strict: 'all'` stops on that one as well. `progress`, if given, is
+ * called after every `progress.every` instructions with the count so far (a session test checks
+ * the screen there).
+ * @param {{ machine: Machine, reference: Reference, instructions: number, keys?: KeyEvent[], strict?: boolean | 'all', progress?: { every: number, fn: (done: number) => void } }} opts
  * @returns {CompareResult}
  */
-export function compareRun({ machine: m, reference: ref, instructions, keys = [], strict = false }) {
+export function compareRun({ machine: m, reference: ref, instructions, keys = [], strict = false, progress }) {
   if (m.keyboard.pending > 0) throw new Error('compareRun: the machine\'s key queue has keys waiting; pass keys to compareRun so both machines get them');
   const sys = m.system;
   const cpu = sys.cpu;
@@ -302,6 +304,7 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
         for (const w of ctx.ours.writes) ref.poke(w.addr, [m.mem.read(w.addr, 1)[0]]);
       }
       ring[index % CONTEXT] = line;
+      if (progress !== undefined && (index + 1) % progress.every === 0) progress.fn(index + 1);
     }
 
     const video = compareVideo(m, ref);
