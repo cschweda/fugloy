@@ -138,18 +138,23 @@ export class TRS80System {
     // beforeExecute returning true has executed the boundary's instruction itself (the
     // Machine's ROM keyboard-scan hook stands in for a RET), so the CPU does not run one.
     // Returning 'stop' runs nothing; the return value is then the response's T-states.
+    // try/finally: a callback or an instruction that throws must not leave `_executing` set, or
+    // a later debugger port poke would wait as if an instruction were running.
     this._executing = true;
-    if (beforeExecute !== undefined) {
-      const r = beforeExecute();
-      if (r === 'stop') {
-        this._executing = false;
-        return before - start;
+    try {
+      if (beforeExecute !== undefined) {
+        const r = beforeExecute();
+        if (r === 'stop') return before - start;
+        if (r !== true) this.cpu.executeInstruction();
+      } else {
+        this.cpu.executeInstruction();
       }
-      if (r !== true) this.cpu.executeInstruction();
-    } else {
-      this.cpu.executeInstruction();
+    } catch (e) {
+      this._fdcAhead = 0;
+      throw e;
+    } finally {
+      this._executing = false;
     }
-    this._executing = false;
     this.io.fdc.tick(this.cpu.cycles - before - this._fdcAhead);
     this._fdcAhead = 0;
     return this.cpu.cycles - start;

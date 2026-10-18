@@ -9,13 +9,18 @@
  * The authority is the Western Digital FD179X data sheet; the copy read for this model is the
  * FD179X-01 sheet of October 1979 (bitsavers, components/westernDigital), whose command, flag,
  * and status descriptions the -02 part shares. Comments name its sections in quotes. All time is
- * in CPU T-states at the Model III's 2.02752 MHz, so the controller is as deterministic as the
- * CPU: a command is a chain of timed events (`pending`), advanced by tick().
+ * in CPU T-states, so the controller is as deterministic as the CPU: a command is a chain of
+ * timed events (`pending`), advanced by tick(). The CPU clock is a constructor option (`cpuHz`,
+ * the Model III's 2.02752 MHz by default); every time below is derived from it, and the exported
+ * constants are the Model III's values.
  *
- * The disk turns at 300 rpm, one index pulse per 405,504 T-states (`indexClock` is the angle).
- * IDs pass at the positions DiskImage.trackIds gives, and data bytes arrive one byte time apart:
- * 32 microseconds in MFM and 64 in FM at the 5.25" data rates (250 and 125 kbit/s), 65 and 130
- * T-states. A byte the CPU has not taken when the next arrives is lost (status bit 2), as on the
+ * The drive-select latch is the machine's: the FDC takes a decoded `select(drive, side, mfm)`,
+ * and each model's I/O decodes its own port (the Model III's port F4 in machine/io.js).
+ *
+ * The disk turns at 300 rpm, one index pulse per 405,504 T-states at 2.02752 MHz (`indexClock`
+ * is the angle). IDs pass at the positions DiskImage.trackIds gives, and data bytes arrive one
+ * byte time apart: 32 microseconds in MFM and 64 in FM at the 5.25" data rates (250 and 125
+ * kbit/s), 65 and 130 T-states at 2.02752 MHz. A byte the CPU has not taken when the next arrives is lost (status bit 2), as on the
  * chip; the Model III's WAIT (port F4 bit 6) lets the ROM and DOSes keep up with INI loops.
  *
  * Model III wiring assumed and not verified against the Technical Reference Manual (spec §5):
@@ -23,6 +28,10 @@
  * mini-floppies in both densities), so the 1 MHz column of the step rates and 30 ms settling
  * apply; READY is true when the selected drive holds a disk; HLT is always true.
  */
+
+// io.js imports this module too; the cycle is safe because each side uses the other's exports
+// only when called, never while the modules evaluate.
+import { decodeModel3Select } from "../machine/io.js";
 
 // Status bits (data sheet, "Status Register Summary", Table 6)
 const ST_BUSY = 0x01;
@@ -38,20 +47,39 @@ const ST_RECORD_TYPE = 0x20; // Read Sector: deleted data mark
 const ST_WRITE_PROTECT = 0x40;
 const ST_NOT_READY = 0x80;
 
-const CPU_HZ = 2027520; // the Model III CPU clock (trs80-system.js CPU_CLOCK_HZ)
-const ms = (n) => Math.round((n * CPU_HZ) / 1000);
+/** The Model III CPU clock (trs80-system.js CPU_CLOCK_HZ), the default `cpuHz`. */
+export const MODEL3_CPU_HZ = 2027520;
 
-/** One revolution at 300 rpm, and the index pulse's width (5.25" drives: about 4 ms). */
-export const INDEX_PERIOD = 405504;
-const INDEX_WIDTH = 8000;
+/**
+ * The controller's times in T-states of a CPU clocked at `cpuHz`: one revolution at 300 rpm
+ * (0.2 s), the index pulse's width (5.25" drives: about 4 ms; 8,000 T-states at 2.02752 MHz),
+ * "Stepping Rates" (Table 1) in the CLK = 1 MHz column for r1 r0 = 00, 01, 10, 11, "Head
+ * Positioning"'s 15 ms of settling doubled to 30 ms with a 1 MHz clock, and one byte at 250
+ * kbit/s (MFM) and 125 kbit/s (FM): 32 and 64 microseconds.
+ * @param {number} cpuHz
+ */
+export function fdcTimes(cpuHz) {
+  const ms = (/** @type {number} */ n) => Math.round((n * cpuHz) / 1000);
+  return {
+    indexPeriod: Math.round(cpuHz / 5),
+    indexWidth: Math.round((8000 * cpuHz) / MODEL3_CPU_HZ),
+    step: [6, 12, 20, 30].map(ms),
+    settle: ms(30),
+    byteMfm: Math.round((32 * cpuHz) / 1e6),
+    byteFm: Math.round((64 * cpuHz) / 1e6),
+  };
+}
 
-/** "Stepping Rates" (Table 1), the CLK = 1 MHz column: r1 r0 = 00, 01, 10, 11. */
-export const STEP_TSTATES = [6, 12, 20, 30].map(ms);
-/** "Head Positioning": 15 ms of head settling, doubled to 30 ms with a 1 MHz clock. */
-export const SETTLE_TSTATES = ms(30);
-/** One byte at 250 kbit/s (MFM) and 125 kbit/s (FM): 32 and 64 microseconds. */
-export const BYTE_TSTATES_MFM = 65;
-export const BYTE_TSTATES_FM = 130;
+const MODEL3 = fdcTimes(MODEL3_CPU_HZ);
+/** One revolution at 300 rpm on the Model III. */
+export const INDEX_PERIOD = MODEL3.indexPeriod;
+/** "Stepping Rates" (Table 1), the CLK = 1 MHz column, on the Model III. */
+export const STEP_TSTATES = MODEL3.step;
+/** "Head Positioning": 30 ms of settling with a 1 MHz clock, on the Model III. */
+export const SETTLE_TSTATES = MODEL3.settle;
+/** One byte at 250 kbit/s (MFM) and 125 kbit/s (FM), on the Model III. */
+export const BYTE_TSTATES_MFM = MODEL3.byteMfm;
+export const BYTE_TSTATES_FM = MODEL3.byteFm;
 
 /**
  * How long an ID search runs before Record Not Found or Seek Error: the data sheet says "within
@@ -223,7 +251,17 @@ function layTrack(ids, dataOf, mfm, ibm) {
 }
 
 export class FDC1793 {
-  constructor() {
+  /** @param {{ cpuHz?: number }} [opts] the CPU clock the controller's times count in */
+  constructor({ cpuHz = MODEL3_CPU_HZ } = {}) {
+    this.cpuHz = cpuHz;
+    const t = fdcTimes(cpuHz);
+    this.indexPeriod = t.indexPeriod;
+    this.indexWidth = t.indexWidth;
+    this.stepTStates = t.step;
+    this.settleTStates = t.settle;
+    this.byteTStatesMfm = t.byteMfm;
+    this.byteTStatesFm = t.byteFm;
+
     this.drives = [null, null, null, null]; // DiskImage or null
     this.selected = 0; // -1 when a port F4 write selected no drive
     this.side = 0;
@@ -300,21 +338,30 @@ export class FDC1793 {
   }
 
   /**
-   * Port 0xF4 write: bits 0-3 select drive 0-3 (none set selects no drive), bit 4 the side, bit 7
-   * MFM (1) or FM (0). Bit 6 (WAIT) is the IOSystem's business (waitForDrq); bit 5, write
-   * precompensation, does nothing here. Bits from MAME's trs80m3 driver, not yet checked against
-   * the Model III Technical Reference Manual (spec §5).
+   * The drive-select latch, decoded: `drive` 0-3, or -1 for none; `side` 0 or 1; `mfm` the density
+   * (true double, false single). Each model's I/O decodes its own select port into this (the
+   * Model III's port F4: machine/io.js, decodeModel3Select).
+   * @param {number} drive
+   * @param {number} side
+   * @param {boolean} mfm
+   */
+  select(drive, side, mfm) {
+    const was = this._ready();
+    this.selected = drive >= 0 && drive <= 3 ? drive : -1;
+    this.side = side ? 1 : 0;
+    this.mfm = !!mfm;
+    this._readyChanged(was);
+  }
+
+  /**
+   * A Model III port F4 byte (bits 0-3 drive, bit 4 side, bit 7 MFM), for a bare controller driven
+   * without the machine's I/O (tests, probes). The machine decodes port F4 in machine/io.js and
+   * calls select(); the decoding is that module's, and this applies it.
+   * @param {number} value
    */
   selectDrive(value) {
-    const was = this._ready();
-    if (value & 0x01) this.selected = 0;
-    else if (value & 0x02) this.selected = 1;
-    else if (value & 0x04) this.selected = 2;
-    else if (value & 0x08) this.selected = 3;
-    else this.selected = -1;
-    this.side = value & 0x10 ? 1 : 0;
-    this.mfm = (value & 0x80) !== 0;
-    this._readyChanged(was);
+    const d = decodeModel3Select(value);
+    this.select(d.drive, d.side, d.mfm);
   }
 
   /**
@@ -331,7 +378,7 @@ export class FDC1793 {
    */
   waitForDrq() {
     let total = 0;
-    const cap = (SEARCH_INDEX_PULSES + 2) * INDEX_PERIOD;
+    const cap = (SEARCH_INDEX_PULSES + 2) * this.indexPeriod;
     while (this.pending !== null && !(this.status & ST_DRQ && this.commandType !== 1) && !this.intrq && total < cap) {
       const d = Math.max(0, this.pending.delay);
       this.tick(d);
@@ -351,7 +398,7 @@ export class FDC1793 {
       p.delay -= cycles;
     }
     this.indexClock += cycles;
-    if (this.indexClock >= INDEX_PERIOD) this._advance(0);
+    if (this.indexClock >= this.indexPeriod) this._advance(0);
   }
 
   _runEvents(cycles) {
@@ -368,8 +415,8 @@ export class FDC1793 {
 
   _advance(d) {
     this.indexClock += d;
-    while (this.indexClock >= INDEX_PERIOD) {
-      this.indexClock -= INDEX_PERIOD;
+    while (this.indexClock >= this.indexPeriod) {
+      this.indexClock -= this.indexPeriod;
       this._indexPulse();
     }
   }
@@ -383,18 +430,18 @@ export class FDC1793 {
   }
 
   _byteTime() {
-    return this.mfm ? BYTE_TSTATES_MFM : BYTE_TSTATES_FM;
+    return this.mfm ? this.byteTStatesMfm : this.byteTStatesFm;
   }
 
   /** T-states until the disk turns to `pos` (a fraction of a revolution after the index pulse). */
   _until(pos) {
-    const d = Math.round(pos * INDEX_PERIOD) - this.indexClock;
-    return d < 0 ? d + INDEX_PERIOD : d;
+    const d = Math.round(pos * this.indexPeriod) - this.indexClock;
+    return d < 0 ? d + this.indexPeriod : d;
   }
 
   /** T-states until the fifth index pulse from now: where an ID search gives up. */
   _searchWindow() {
-    return INDEX_PERIOD - this.indexClock + (SEARCH_INDEX_PULSES - 1) * INDEX_PERIOD;
+    return this.indexPeriod - this.indexClock + (SEARCH_INDEX_PULSES - 1) * this.indexPeriod;
   }
 
   /** The IDs the head can read now, in the order they pass: this track side, this density. */
@@ -424,7 +471,7 @@ export class FDC1793 {
     if (disk && disk.writeProtected) s |= ST_WRITE_PROTECT;
     if (this.headLoaded) s |= ST_HEAD_LOADED; // HLD and HLT, HLT taken as true
     if (this.selected >= 0 && this._track === 0) s |= ST_TRACK0;
-    if (disk && this.indexClock < INDEX_WIDTH) s |= ST_INDEX;
+    if (disk && this.indexClock < this.indexWidth) s |= ST_INDEX;
     return s;
   }
 
@@ -512,7 +559,7 @@ export class FDC1793 {
       left: op === "restore" ? 255 : op === "step" ? 1 : 0,
       update: op === "step" ? (value & 0x10) !== 0 : true,
       verify: (value & 0x04) !== 0,
-      rate: STEP_TSTATES[value & 3],
+      rate: this.stepTStates[value & 3],
     };
   }
 
@@ -601,7 +648,7 @@ export class FDC1793 {
     // 1 MHz] occurs"; with h = 1 the same delay follows the last step.
     this.headLoaded = true;
     p.phase = "settle";
-    p.delay = SETTLE_TSTATES;
+    p.delay = this.settleTStates;
   }
 
   /**
@@ -654,7 +701,7 @@ export class FDC1793 {
     this.pending = {
       kind: write ? "write" : "read",
       phase: "search",
-      delay: value & 0x04 ? SETTLE_TSTATES : 0,
+      delay: value & 0x04 ? this.settleTStates : 0,
       multiple: (value & 0x10) !== 0,
       compareSide: (value & 0x02) !== 0,
       sideFlag: (value >> 3) & 1,
@@ -677,6 +724,9 @@ export class FDC1793 {
         crc = ST_CRC_ERROR;
         continue;
       }
+      // "Read Sector": no data mark within 30 (FM) or 43 (MFM) bytes of the ID's CRC, and "the ID
+      // field is searched for and verified again". Write Sector writes its own mark and needs none.
+      if (id.noData && p.kind === "read") continue;
       this.status |= crc;
       return { id, at };
     }
@@ -823,7 +873,7 @@ export class FDC1793 {
     }
     this.status = ST_BUSY;
     this.headLoaded = true;
-    this.pending = { kind, phase: "start", delay: value & 0x04 ? SETTLE_TSTATES : 0, k: 0 };
+    this.pending = { kind, phase: "start", delay: value & 0x04 ? this.settleTStates : 0, k: 0 };
     // "Write Track": "The Data Request is activated immediately upon receiving the command".
     if (kind === "format") this.status |= ST_DRQ;
   }
@@ -870,15 +920,25 @@ export class FDC1793 {
       return;
     }
 
-    const perRevolution = Math.floor(INDEX_PERIOD / B);
+    const perRevolution = Math.floor(this.indexPeriod / B);
     if (p.phase === "start") {
       // Both start "with the leading edge of the first encountered index pulse".
       p.phase = "index";
-      p.delay = INDEX_PERIOD - this.indexClock;
+      p.delay = this.indexPeriod - this.indexClock;
       return;
     }
     if (p.kind === "track") {
       if (p.phase === "index") {
+        // The drive went empty or was deselected while the command waited for the index pulse
+        // (an OUT to the select port, or m.fdc.unmount). With no disk turning there is no index
+        // pulse and nothing to read; the chip would wait for one that never comes, and the model
+        // ends the command instead, as Type II and III end when Ready is false at the start: Busy
+        // reset, an interrupt, and Not Ready in the status, which reports it live (spec §5,
+        // unverified).
+        if (!this._ready()) {
+          this._finish();
+          return;
+        }
         this.buffer = this._rawTrack(perRevolution);
         p.k = 0;
         p.phase = "data";
@@ -895,6 +955,12 @@ export class FDC1793 {
     }
     // "Write Track"
     if (p.phase === "index") {
+      // No disk turning: no index pulse to start at; ended as Read Track's is (above).
+      if (!this._ready()) {
+        this.status &= ~ST_DRQ;
+        this._finish();
+        return;
+      }
       // "If the DR has not been loaded by the time the index pulse is encountered the operation
       // is terminated making the device Not Busy, the Lost Data Status Bit is set".
       if (this.status & ST_DRQ) {
@@ -931,6 +997,7 @@ export class FDC1793 {
   /** The bytes READ TRACK delivers in one revolution at the latched density. */
   _rawTrack(length) {
     const disk = this.currentDisk();
+    if (!disk) return new Uint8Array(length).fill(this.mfm ? 0x4e : 0xff); // callers check Ready first
     const raw = disk.rawTrack(this._track, this.side);
     if (raw) {
       const step = !this.mfm && raw.doubled ? 2 : 1;

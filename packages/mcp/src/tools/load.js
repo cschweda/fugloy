@@ -55,6 +55,8 @@ export function diskContainer(bytes) {
  * A DMK or JV3 has a header the emu checks field by field, so it is tried before the program
  * formats; a JV1 is only a size (a whole number of 10- or 18-sector tracks), so it comes last,
  * after everything that has a signature of its own.
+ * So a JV1 that also parses as a `.CMD` (or as BASIC) loads as a program, not a disk: the
+ * program's signature wins over a size.
  * @returns {'cmd' | 'bas' | 'cas' | 'dsk' | null}
  */
 export function formatOf(/** @type {Uint8Array} */ bytes) {

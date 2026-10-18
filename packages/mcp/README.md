@@ -310,6 +310,11 @@ and `tools/list` over a pipe. It needs those `@fugloy` versions on npm, so
 `@fugloy/emu` is published first; with emu only staged, the check is a
 rehearsal that stages nothing.
 
+Disk images (emu phase 5) make `load` call emu APIs that `@fugloy/emu` 0.2.0
+does not have (`m.fdc`, `m.load.dsk`, `DiskImage`, `CPU_CLOCK_HZ`), so emu is
+bumped to 0.3.0 and released before the next mcp release, whose range then
+reads `^0.3.0`.
+
 ## Not yet
 
 Only the Model III (the Model I and 4 wait for emu phase 6), disk images in

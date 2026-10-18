@@ -386,7 +386,10 @@ describe("DMK exactly", () => {
     const base = 16 + 0x1900; // track 1
     const id = base + ((bytes[base] | (bytes[base + 1] << 8)) & 0x3fff);
     bytes[id + 7 + 22 + 12 + 2] = 0x00; // the A1 before sector 0's data mark
-    expect(new DiskImage(bytes).trackIds(1, 0).map((x) => x.sector)).toEqual([1, 2, 3]);
+    // Sector 0's ID stays (Read Address sees it) with no data field (Read Sector does not).
+    const disk = new DiskImage(bytes);
+    expect(disk.trackIds(1, 0).map((x) => [x.sector, x.noData])).toEqual([[0, true], [1, false], [2, false], [3, false]]);
+    expect(disk.readSector(1, 0, 0)).toBeNull();
   });
 });
 

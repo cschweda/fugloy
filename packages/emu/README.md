@@ -59,7 +59,10 @@ writeFileSync('saved.dmk', m.fdc.export(0)) // the disk as DMK bytes, with what 
 ```
 
 Writes stay in memory; `m.fdc.export(drive)` returns the disk as a DMK file,
-whatever container it was mounted from (read JV1, JV3, and DMK; write DMK).
+whatever container it was mounted from (read JV1, JV3, and DMK; write DMK). A snapshot carries each disk's bytes and container, so a
+disk the session formatted restores as it was. With a disk loaded through
+`m.load.dsk` the label file lists no load blocks and `m.debug.labelFile()`
+needs a `name`.
 
 The WD1793 behind the drives follows the Western Digital FD179X data sheet in
 T-states (spec §5): heads step at the programmed rate, sectors come round at

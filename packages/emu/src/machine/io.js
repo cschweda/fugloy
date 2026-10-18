@@ -41,6 +41,23 @@ export const NMI_INTRQ_BIT = 0x80;
 // Mode register (port 0xEC write) bits
 export const MODE_32COL_BIT = 0x04; // 32-character display mode
 
+/**
+ * Decode a Model III port F4 write: bits 0-3 select drive 0-3 (the lowest set bit wins; none set
+ * selects no drive, -1), bit 4 the side, bit 6 WAIT, bit 7 MFM (1) or FM (0); bit 5, write
+ * precompensation, does nothing here. Bits from MAME's trs80m3 driver and the ROM's use, not yet
+ * checked against the Model III Technical Reference Manual (spec §5).
+ * @param {number} value
+ * @returns {{ drive: number, side: number, mfm: boolean, wait: boolean }}
+ */
+export function decodeModel3Select(value) {
+  let drive = -1;
+  if (value & 0x01) drive = 0;
+  else if (value & 0x02) drive = 1;
+  else if (value & 0x04) drive = 2;
+  else if (value & 0x08) drive = 3;
+  return { drive, side: value & 0x10 ? 1 : 0, mfm: (value & 0x80) !== 0, wait: (value & 0x40) !== 0 };
+}
+
 export class IOSystem {
   constructor() {
     this.cassette = new CassetteSystem();
@@ -177,8 +194,9 @@ export class IOSystem {
       read: () => 0xff,
       write: (v) => {
         if (!fdcPresent()) return;
-        this.fdc.selectDrive(v);
-        if (v & 0x40 && this.onWait) this.onWait(() => this.fdc.waitForDrq());
+        const sel = decodeModel3Select(v);
+        this.fdc.select(sel.drive, sel.side, sel.mfm);
+        if (sel.wait && this.onWait) this.onWait(() => this.fdc.waitForDrq());
       },
     });
 

@@ -140,6 +140,11 @@ export function serializeState(system) {
       drive,
       name: disk.name,
       bytes: toBase64(disk.bytes),
+      // The container and a JV1's directory track, so a restore parses the bytes as what they
+      // are rather than detecting again (a JV3 the session formatted may hold too few sectors for
+      // detection, and a JV1's track 0 may have been rewritten since the mount read its byte 2).
+      format: disk.format,
+      dirTrack: disk.format === "jv1" ? disk.dirTrack : undefined,
       sectorBase: disk.sectorBase,
       writeProtected: disk.writeProtected,
     });
@@ -209,7 +214,11 @@ export function restoreState(system, state) {
 
   fdc.drives = [null, null, null, null];
   for (const entry of state.disks) {
-    const disk = new DiskImage(fromBase64(entry.bytes), entry.name);
+    // Saves from before emu phase 5's final fixes carry no format: detected, as they were made.
+    const disk = new DiskImage(fromBase64(entry.bytes), entry.name, {
+      format: entry.format ?? undefined,
+      dirTrack: entry.dirTrack ?? undefined,
+    });
     // Carry over flags the constructor can't know: write protection set at mount, and a JV1's
     // sector base (fixed by its geometry since emu phase 5; older saves may hold null, meaning the
     // geometry's, or a base learned by the fallback the reader then had).

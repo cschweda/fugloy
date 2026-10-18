@@ -212,15 +212,27 @@ export class DiskImage {
   /**
    * @param {Uint8Array} bytes - raw .dsk contents
    * @param {string} name - display name (file name)
+   * @param {{ format?: "dmk" | "jv3" | "jv1", dirTrack?: number }} [opts] - for a save state's
+   *   disk, whose container is known: `format` parses the bytes as that container only, without
+   *   the detection's plausibility floor (a JV3 of fewer than ten sectors, which a format of a
+   *   blank disk can leave, is a valid disk the session made); `dirTrack` restores a JV1's
+   *   directory track as it was mounted (a guest rewrite of track 0, sector 0 changes byte 2, which
+   *   is read only at mount).
    */
-  constructor(bytes, name = "disk") {
+  constructor(bytes, name = "disk", { format, dirTrack } = {}) {
     this.name = name;
     this.bytes = new Uint8Array(bytes); // private working copy
     this.writeProtected = false;
     this.format = null; // "dmk" | "jv3" | "jv1"
     this.sectorBase = null; // JV1: the first sector number, 0 or 1, from the geometry
 
-    if (this._tryParseDMK()) {
+    if (format !== undefined) {
+      const parsed =
+        format === "dmk" ? this._tryParseDMK() : format === "jv3" ? this._tryParseJV3(false) : format === "jv1" ? this._tryParseJV1() : false;
+      if (!parsed) throw new Error(`Disk image (${bytes.length} bytes) does not parse as ${String(format)}`);
+      this.format = format;
+      if (format === "jv1" && dirTrack !== undefined) this.dirTrack = dirTrack;
+    } else if (this._tryParseDMK()) {
       this.format = "dmk";
     } else if (this._tryParseJV3()) {
       this.format = "jv3";
@@ -315,13 +327,25 @@ export class DiskImage {
             break;
           }
         }
-        if (dataOff < 0 || dataOff >= trackLen) continue;
-        // The ID and data fields' CRCs as the WD1793 checks them (FD179X data sheet, "Read
-        // Sector" and "Read Address"): CRC-CCITT preset FFFF over the address mark and the field,
-        // and in MFM over the three A1 sync bytes before the mark too.
+        // An ID with no data mark in the window is still an ID: Read Address and a Type I verify
+        // read it, and Write Sector writes its data field after it (`_dmkWriteSector`), but "Read
+        // Sector" finds no data there: "the ID field is searched for and verified again", and
+        // after the search window, Record Not Found (FD179X data sheet, "Read Sector").
         const sync = mfm ? [0xa1, 0xa1, 0xa1] : [];
         const id = [0xfe, at(1), at(2), sector, at(4)];
         const idCrcOk = crc16([...sync, ...id]) === ((at(5) << 8) | at(6));
+        if (dataOff < 0) {
+          out.push({
+            sector, size, dam: null, deleted: false, mfm: ignoreDensity ? null : mfm, recordedMfm: mfm, step, dataOff: -1,
+            off, idTrack: at(1), idSide: at(2), sizeCode: at(4) & 3,
+            idCrcOk, dataCrcOk: false, noData: true,
+          });
+          continue;
+        }
+        if (dataOff >= trackLen) continue;
+        // The ID and data fields' CRCs as the WD1793 checks them (FD179X data sheet, "Read
+        // Sector" and "Read Address"): CRC-CCITT preset FFFF over the address mark and the field,
+        // and in MFM over the three A1 sync bytes before the mark too.
         // A field cut off by the end of the track reads as bad.
         const dataAt = (k) => (dataOff + k * step < trackLen ? b[base + dataOff + k * step] : -1);
         const field = [dam];
@@ -331,7 +355,7 @@ export class DiskImage {
         out.push({
           sector, size, dam, deleted: isDeleted(dam), mfm: ignoreDensity ? null : mfm, recordedMfm: mfm, step, dataOff,
           off, idTrack: at(1), idSide: at(2), sizeCode: at(4) & 3,
-          idCrcOk, dataCrcOk,
+          idCrcOk, dataCrcOk, noData: false,
         });
       }
     }
@@ -356,8 +380,9 @@ export class DiskImage {
    * Read the JV3 header blocks. Each used entry gets its data's offset; free entries advance the
    * offset by their own size (see the file comment). Garbage is refused: an entry with a track
    * over 96 or a sector over 63, or data running past the end of the file, means it is no JV3.
+   * `detect` adds the floor detection needs (ten sectors, or a blank disk); a known JV3 skips it.
    */
-  _tryParseJV3() {
+  _tryParseJV3(detect = true) {
     const b = this.bytes;
     if (b.length < JV3_HEADER_SIZE) return false;
 
@@ -392,7 +417,7 @@ export class DiskImage {
     // A real disk has many sectors; an exactly-header-sized all-free
     // image is a valid BLANK disk (DiskImage.blank, and its export /
     // save-state round trip) waiting for a DOS FORMAT.
-    if (map.length < 10 && !(map.length === 0 && b.length === JV3_HEADER_SIZE)) {
+    if (detect && map.length < 10 && !(map.length === 0 && b.length === JV3_HEADER_SIZE)) {
       return false;
     }
 
@@ -478,10 +503,11 @@ export class DiskImage {
    * sectors, so their IDs carry the physical track and side, are spaced evenly round the track in
    * image order, and use the IBM gaps of the data sheet's "IBM Track Format" (an ID field of 7
    * bytes, then Gap II, the sync zeros, the A1s in MFM, and the data mark: 45 bytes in MFM, 25 in
-   * FM). JV3's flag bit 3 marks a data CRC error.
+   * FM). JV3's flag bit 3 marks a data CRC error. A DMK ID with no data mark within the data
+   * sheet's window has `noData` true, `dataGap` and `dam` null, and a bad data CRC.
    * @returns {{track:number, side:number, sector:number, sizeCode:number, size:number,
-   *   mfm:boolean|null, pos:number, dataGap:number, idCrcOk:boolean, dataCrcOk:boolean,
-   *   dam:number, deleted:boolean, index:number}[]}
+   *   mfm:boolean|null, pos:number, dataGap:number|null, idCrcOk:boolean, dataCrcOk:boolean,
+   *   dam:number|null, deleted:boolean, index:number, noData?:boolean}[]}
    */
   trackIds(track, side) {
     const gap = (mfm) => (mfm === false ? 25 : 45);
@@ -495,12 +521,13 @@ export class DiskImage {
         size: s.size,
         mfm: s.mfm,
         pos: (s.off - DMK_IDAM_TABLE) / raw,
-        dataGap: (s.dataOff - s.off) / s.step,
+        dataGap: s.noData ? null : (s.dataOff - s.off) / s.step,
         idCrcOk: s.idCrcOk,
         dataCrcOk: s.dataCrcOk,
         dam: s.dam,
         deleted: s.deleted,
         index,
+        noData: s.noData,
       }));
     }
     if (this.format === "jv1") {
@@ -585,11 +612,14 @@ export class DiskImage {
     return { offset: (track * this.sectorsPerTrack + i) * 256, size: 256, entry: null };
   }
 
-  /** A DMK track's parsed sector: by list place when `index` is given, else by sector number. */
+  /**
+   * A DMK track's parsed sector: by list place when `index` is given, else by sector number, an ID
+   * with a data field first.
+   */
   _dmkHit(track, side, sector, index) {
     const list = this._dmkSectors(track, side);
     if (index !== undefined) return list[index]?.sector === sector ? list[index] : undefined;
-    return list.find((s) => s.sector === sector);
+    return list.find((s) => s.sector === sector && !s.noData) ?? list.find((s) => s.sector === sector);
   }
 
   /**
@@ -601,7 +631,7 @@ export class DiskImage {
   readSectorEx(track, side, sector, index) {
     if (this.format === "dmk") {
       const hit = this._dmkHit(track, side, sector, index);
-      if (!hit) return null;
+      if (!hit || hit.noData) return null;
       const base = this._dmkTrackBase(track, side);
       const { trackLen } = this.dmk;
       const data = new Uint8Array(hit.size);
@@ -700,15 +730,26 @@ export class DiskImage {
     };
 
     const mark = deleted ? 0xf8 : 0xfb;
-    put(hit.dataOff - hit.step, mark);
+    let dataOff = hit.dataOff;
+    if (hit.noData) {
+      // No data field yet: lay it where Write Sector puts it ("Write Sector"): after the ID's
+      // seven bytes, 22 bytes (MFM) or 11 (FM) of Gap II, then 12 or 6 zeros, the A1s in MFM, and
+      // the mark.
+      const mfm = hit.recordedMfm;
+      let k = 7 + (mfm ? 22 : 11);
+      for (let z = 0; z < (mfm ? 12 : 6); z++) put(hit.off + k++ * hit.step, 0x00);
+      if (mfm) for (let z = 0; z < 3; z++) put(hit.off + k++ * hit.step, 0xa1);
+      dataOff = hit.off + (k + 1) * hit.step;
+    }
+    put(dataOff - hit.step, mark);
     const payload = new Uint8Array(hit.size);
     for (let k = 0; k < hit.size; k++) {
       payload[k] = data[k] ?? 0x00;
-      put(hit.dataOff + k * hit.step, payload[k]);
+      put(dataOff + k * hit.step, payload[k]);
     }
     const crc = crc16(hit.recordedMfm ? [0xa1, 0xa1, 0xa1, mark, ...payload] : [mark, ...payload]);
-    put(hit.dataOff + hit.size * hit.step, crc >> 8);
-    put(hit.dataOff + (hit.size + 1) * hit.step, crc & 0xff);
+    put(dataOff + hit.size * hit.step, crc >> 8);
+    put(dataOff + (hit.size + 1) * hit.step, crc & 0xff);
     this._dmkCache.delete(`${track}:${side}`);
     return true;
   }
