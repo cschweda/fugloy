@@ -4,6 +4,7 @@ import { hex4, parseAddr, parseCount, parseRange } from '../src/args.js';
 const labels = new Map([
   [0x5200, { addr: 0x5200, name: 'CLS' }],
   [0x0033, { addr: 0x0033, name: 'Put_Char' }],
+  [0x7000, { addr: 0x7000, name: 'ACC' }],
 ]);
 
 describe('addresses', () => {
@@ -20,6 +21,12 @@ describe('addresses', () => {
     expect(parseAddr('PUT_CHAR', labels)).toBe(0x33);
     expect(parseAddr(0)).toBe(0);
     expect(parseAddr('FFFF')).toBe(0xffff);
+  });
+
+  it('refuses a string that is both a hex address and a label, naming both readings', () => {
+    expect(() => parseAddr('ACC', labels)).toThrow('"ACC" is ambiguous: read as hex it is 0ACCh, and it is also the label at 7000h; write 0xACC for the hex address or 28672 (decimal) for the label.');
+    expect(parseAddr('0xACC', labels)).toBe(0x0acc);
+    expect(parseAddr('ACC')).toBe(0x0acc);
   });
 
   it('parseAddr refuses what is not an address, in sentences', () => {

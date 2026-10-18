@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { createServer } from '../src/server.js';
 import { Session } from '../src/session.js';
 import { connect, syntheticRom, testConfig } from './helpers.js';
 
@@ -98,16 +99,40 @@ describe('arguments', () => {
     expect(await call('count', {})).toEqual({ text: 'The argument "n" is required.', isError: true });
     expect(await call('count', { n: 3, word: 7 })).toMatchObject({ isError: true, text: expect.stringContaining('The argument "word"') });
     expect(await call('count', { n: 3 })).toEqual({ text: 'n=3 word=-', isError: false });
+    for (const bad of [{ n: '400' }, {}]) expect((await call('count', bad)).text).not.toContain('MCP error');
     await close();
   });
 
-  it('lists the real type and requiredness in the descriptions', async () => {
+  // Pins the SDK internal FugloyMcpServer overrides (validateToolInput): an SDK upgrade that
+  // moves it makes these fail.
+  it('lists real schemas, and the override still answers in plain sentences', async () => {
     const { client, close } = await connect({ tools });
     const { tools: listed } = await client.listTools();
-    const props = listed.find((t) => t.name === 'count').inputSchema.properties;
-    expect(props.n.description).toBe('How many integer, required');
-    expect(props.word.description).toBe('string');
-    expect(props.offset.description).toContain('offset');
+    const schema = listed.find((t) => t.name === 'count').inputSchema;
+    expect(schema.properties.n).toMatchObject({ type: 'integer', description: 'How many' });
+    expect(schema.properties.word.type).toBe('string');
+    expect(schema.properties.offset).toMatchObject({ type: 'integer', minimum: 0 });
+    expect(schema.required).toContain('n');
+    expect(schema.required).not.toContain('offset');
+    const res = await client.callTool({ name: 'count', arguments: { n: 'x' } });
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text.startsWith('The argument "n"')).toBe(true);
+    await close();
+  });
+
+  it('pages from the cache and never re-runs the handler', async () => {
+    let runs = 0;
+    const counter = { name: 'bump', description: 'side effect', inputSchema: { tag: z.string().optional() }, handler: () => `run ${++runs}\n${Array.from({ length: 40 }, (_, k) => `line ${k}`).join('\n')}` };
+    const { call, close } = await connect({ config: testConfig({ limits: { ...testConfig().limits, outputBytes: 80 } }), tools: [counter] });
+    const first = await call('bump', { tag: 'a' });
+    expect(runs).toBe(1);
+    const next = Number(/use offset=(\d+)\)$/.exec(first.text)[1]);
+    const page = await call('bump', { tag: 'a', offset: next });
+    expect(runs).toBe(1);
+    expect(page.text.split('\n')[0]).toBe(`line ${next - 1}`);
+    expect(page.text).not.toContain('run 2');
+    expect(await call('bump', { tag: 'b', offset: next })).toEqual({ text: 'offset continues the last output of bump; call bump again without offset first.', isError: true });
+    expect(runs).toBe(1);
     await close();
   });
 
@@ -118,6 +143,12 @@ describe('arguments', () => {
     expect((await call('long', { offset: next })).text.split('\n')[0]).toBe(`line ${next}`);
     expect(await call('long', { offset: '5' })).toMatchObject({ isError: true, text: expect.stringContaining('offset is a decimal count') });
     await close();
+  });
+
+  it('refuses a tool that declares its own offset', () => {
+    expect(() => createServer({ config: testConfig(), tools: [{ name: 'bad', description: 'x', inputSchema: { offset: z.number() }, handler: () => '' }] })).toThrow(
+      'Tool bad declares an offset argument; offset is reserved for the server\'s paging.',
+    );
   });
 
   it('survives a handler that returns no text', async () => {

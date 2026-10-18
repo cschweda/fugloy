@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -25,6 +25,13 @@ function write(path, value) {
 }
 
 describe('loadConfig', () => {
+  it('says permission denied for an unreadable file', () => {
+    const path = write(join(cwd, 'locked.json'), {});
+    chmodSync(path, 0);
+    if (process.getuid?.() === 0) return; // root reads anything
+    expect(() => loadConfig({ cwd, env: { FUGLOY_CONFIG: path }, home })).toThrow(`The config file ${path} cannot be read: permission denied.`);
+  });
+
   it('names the file when FUGLOY_CONFIG is a folder', () => {
     expect(() => loadConfig({ cwd, env: { FUGLOY_CONFIG: cwd }, home })).toThrow(`The config file ${cwd} cannot be read: it is a folder, not a file.`);
   });

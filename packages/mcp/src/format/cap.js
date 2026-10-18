@@ -11,7 +11,7 @@ export function cap(text, { limit, offset = 0 }) {
   if (offset > 0 && offset >= lines.length) return `… (no lines at offset=${offset}; the output has ${lines.length} lines)`;
   const rest = lines.slice(offset);
   if (Buffer.byteLength(rest.join('\n')) <= limit) return rest.join('\n');
-  const notice = (/** @type {number} */ kept) => `… (${rest.length - kept} more lines; use offset=${offset + kept})`;
+  const notice = (/** @type {number} */ kept) => `… (${rest.length - kept} more ${rest.length - kept === 1 ? 'line' : 'lines'}; use offset=${offset + kept})`;
   const reserve = Buffer.byteLength(`\n${notice(0)}`);
   let used = 0;
   let kept = 0;

@@ -53,6 +53,8 @@ export class Session {
   labels = new Map();
   /** @type {Uint8Array | null} Video RAM as the last `screen` call saw it. */
   screenBaseline = null;
+  /** @type {{ key: string, text: string } | null} The last full tool result, for `offset` paging. */
+  lastOutput = null;
 
   /** @param {import('./config.js').Config} config */
   constructor(config) {

@@ -27,6 +27,9 @@ export const DEFAULT_LIMITS = Object.freeze({
  * }} Config
  */
 
+/** What a failed read of the config says, by error code. */
+const READ_FAILURES = { EISDIR: 'it is a folder, not a file', EACCES: 'permission denied', EPERM: 'permission denied', ENOENT: 'there is no such file' };
+
 /**
  * Find and read the config.
  * @param {{ cwd: string, env: Record<string, string | undefined>, home: string }} where
@@ -41,7 +44,7 @@ export function loadConfig({ cwd, env, home }) {
     text = readFileSync(path, 'utf8');
   } catch (err) {
     const code = /** @type {NodeJS.ErrnoException} */ (err).code;
-    throw new Error(`The config file ${path} cannot be read: ${code === 'EISDIR' ? 'it is a folder, not a file' : `${code ?? 'unknown error'}`}.`);
+    throw new Error(`The config file ${path} cannot be read: ${READ_FAILURES[code ?? ''] ?? (code ?? 'unknown error')}.`);
   }
   return parseConfig(text, path);
 }

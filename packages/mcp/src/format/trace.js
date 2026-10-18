@@ -14,7 +14,7 @@ function line(e, labels) {
     mnemonic = `DB ${bytes.map(h2).join(',')}`;
   }
   const label = labels.get(e.pc & 0xffff);
-  let text = `${h4(e.pc)}  ${bytes.map(h2).join(' ').padEnd(11)}  ${mnemonic.padEnd(16)}  ${label ? `; ${label.name} ` : ''}[${e.cycles}]`;
+  let text = `${h4(e.pc)}  ${bytes.map(h2).join(' ').padEnd(11)}  ${mnemonic.padEnd(16)}  ${label ? `; ${label.name}  ` : ''}[${e.cycles}]`;
   if (e.regs) {
     const r = e.regs;
     text += `  A=${h2(r.a)} F=${h2(r.f)} BC=${h4((r.b << 8) | r.c)} DE=${h4((r.d << 8) | r.e)} HL=${h4((r.h << 8) | r.l)} SP=${h4(r.sp)}`;

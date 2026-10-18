@@ -31,6 +31,10 @@ export function parseAddr(value, labels) {
   const digits = /^(?:0x|\$)([0-9a-f]+)$/i.exec(text)?.[1] ?? /^([0-9a-f]+)h$/i.exec(text)?.[1] ?? (/^[0-9a-f]+$/i.test(text) ? text : undefined);
   if (digits !== undefined) {
     const n = Number.parseInt(digits, 16);
+    const named = digits === text && labels !== undefined ? [...labels].find(([, l]) => l.name.toLowerCase() === text.toLowerCase()) : undefined;
+    if (named) {
+      throw new Error(`"${text}" is ambiguous: read as hex it is ${hex4(n & 0xffff)}, and it is also the label at ${hex4(named[0])}; write 0x${text} for the hex address or ${named[0]} (decimal) for the label.`);
+    }
     if (n > 0xffff) throw new Error(`Address ${text} is outside 0000h-FFFFh.`);
     return n;
   }

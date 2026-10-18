@@ -61,7 +61,7 @@ Config file `fugloy.mcp.json` in cwd or `~/.config/fugloy/`:
 **Bytes out.** Hex dump, 16 per line, with ASCII gutter, labels interleaved on their own line when a labeled address falls in range:
 
 ```
-5200  21 00 3C 11 01 3C 01 FF  03 36 20 ED B0 C9 00 00  !.<..<...6 ....
+5200  21 00 3C 11 01 3C 01 FF  03 36 20 ED B0 C9 00 00  !.<..<...6 .....
       ; CLS
 5210  3E 0D CD 33 00 C9 ...
 ```
@@ -79,13 +79,13 @@ Flags: S0 Z1 H0 PV1 N0 C0     Cycles: 48,201,339
 **Screen.** 16 lines of 64 characters inside a fence, with a ruler, non-printables as `·`:
 
 ```
-          1111111111222222222233333333334444444444555555555566666
-01234567890123456789012345678901234567890123456789012345678901234
+          111111111122222222223333333333444444444455555555556666
+0123456789012345678901234567890123456789012345678901234567890123
 READY
 >_
 ```
 
-**Trace lines.** `PC  bytes      mnemonic          ; label/comment  [cycles]`, loops collapsed as `  ×212 (5214–521A)`.
+**Trace lines.** `PC  bytes      mnemonic          ; label/comment  [cycles]`, loops collapsed as `  ×212 (5214h–521Ah)`.
 
 **Errors.** Plain sentences, never stack traces. `"No program loaded; call load first."` The agent should be able to act on every error without reading source.
 

@@ -3,19 +3,19 @@
  * module registered. A tool module is `{ name, description, inputSchema?, handler(session, args) }`;
  * the handler returns text or `{ text, isError }`.
  *
- * Declaring arguments (the pattern for every tool): `inputSchema` is a zod raw shape, with a
- * `.describe()` on each field. The server does NOT hand it to the SDK, because the SDK validates
- * before the handler runs and answers a bad argument with its own JSON-ish text. Instead it
- * registers a permissive shape (every field `z.any()`, its description carrying the type and
- * "(required)") and validates with the tool's real shape itself, so a wrong-typed or missing
- * argument comes back as a plain `isError` sentence naming the argument. The handler gets the
- * parsed object. Put the finer rules (addresses, decimal counts) in `args.js`, which throws
- * sentences too. Anything a handler throws becomes an `isError` sentence, never a stack.
+ * Declaring arguments (the pattern for every tool): `inputSchema` is a zod raw shape with a
+ * `.describe()` on each field. It is registered as is (plus `offset`), so `tools/list` shows
+ * real types and required fields. The SDK would answer a bad argument with its own
+ * `MCP error -32602` text, so `FugloyMcpServer` overrides the SDK's `validateToolInput` (an
+ * internal; test/server.test.js pins it so an SDK upgrade that moves it fails loudly) to
+ * validate with the same shape and throw a plain sentence naming the argument; the SDK turns a
+ * thrown Error into an `isError` result. Put finer rules (addresses, decimal counts) in `args.js`,
+ * which throws sentences too. Anything a handler throws becomes an `isError` sentence, never a stack.
  *
- * Paging: every tool also accepts `offset` (a line number). The server runs the handler, then
- * `cap`s the text to `limits.outputBytes` starting at that line, ending with
- * `… (N more lines; use offset=K)`. The handler runs again on each page, so only tools that are
- * safe to repeat (peek, trace, disasm, ...) should be paged; `offset` is not passed to handlers.
+ * Paging: `offset` is reserved (a tool may not declare it). The server keeps the last full
+ * result in `session.lastOutput`, keyed by tool name and arguments without `offset`; a call with
+ * `offset` > 0 pages from that cache and never runs the handler, so side effects happen once.
+ * Output is `cap`ped to `limits.outputBytes`, ending `… (N more lines; use offset=K)`.
  */
 import { readFileSync } from 'node:fs';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -39,30 +39,6 @@ const { version } = JSON.parse(readFileSync(new URL('../package.json', import.me
  * }} Tool
  */
 
-/** A short type for a field's description, from its JSON schema (`integer`, `string | number`, `"a" | "b"`). */
-function typeHint(/** @type {import('zod').ZodType} */ field) {
-  try {
-    const js = /** @type {any} */ (z.toJSONSchema(field, { unrepresentable: 'any' }));
-    const one = (/** @type {any} */ s) => (s.enum ? s.enum.map((/** @type {unknown} */ v) => JSON.stringify(v)).join(' | ') : s.const !== undefined ? JSON.stringify(s.const) : s.type === 'array' ? 'array' : (s.type ?? 'any'));
-    return (js.anyOf ?? js.oneOf ?? [js]).map(one).join(' | ');
-  } catch {
-    return 'any';
-  }
-}
-
-/** The shape the SDK sees: permissive, with the real type and requiredness in each description. */
-function permissiveShape(/** @type {import('zod').ZodRawShape} */ shape) {
-  /** @type {Record<string, import('zod').ZodType>} */
-  const out = {};
-  for (const [key, field] of Object.entries(shape)) {
-    const required = !field.safeParse(undefined).success;
-    const text = [field.description, `${typeHint(field)}${required ? ', required' : ''}`].filter(Boolean).join(' ');
-    out[key] = z.any().optional().describe(text);
-  }
-  out.offset = z.any().optional().describe('Line to resume at when the last output ended with "use offset=K"; integer');
-  return out;
-}
-
 /** One plain sentence for the first problem in `error`. */
 function argumentSentence(/** @type {import('zod').ZodError} */ error, /** @type {Record<string, unknown>} */ args) {
   const issue = error.issues[0];
@@ -73,41 +49,69 @@ function argumentSentence(/** @type {import('zod').ZodError} */ error, /** @type
   return `The argument "${name}" is not valid${where}: ${issue.message.replace(/^Invalid input: /, '')}; you gave ${JSON.stringify(given)}.`;
 }
 
+/** Arguments as a stable string, for the paging cache key. */
+function stable(/** @type {any} */ v) {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v) ?? 'null';
+  if (Array.isArray(v)) return `[${v.map(stable).join(',')}]`;
+  return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${stable(v[k])}`).join(',')}}`;
+}
+
+/** The SDK server with plain-sentence argument errors (see the comment at the top of this file). */
+class FugloyMcpServer extends McpServer {
+  /** @type {Map<string, z.ZodType>} */
+  schemas = new Map();
+
+  // @ts-ignore validateToolInput is private in the SDK's .d.ts
+  async validateToolInput(/** @type {any} */ _tool, /** @type {any} */ args, /** @type {string} */ toolName) {
+    const raw = args ?? {};
+    if (raw.offset !== undefined) parseCount(raw.offset, { name: 'offset', min: 0 });
+    const schema = this.schemas.get(toolName);
+    if (!schema) throw new Error(`There is no tool named ${toolName}.`);
+    const parsed = schema.safeParse(raw);
+    if (!parsed.success) throw new Error(argumentSentence(parsed.error, raw));
+    return parsed.data;
+  }
+}
+
 /**
  * @param {{ config: import('./config.js').Config, session?: Session, tools?: Tool[] }} opts
  * @returns {McpServer}
  */
 export function createServer({ config, session = new Session(config), tools = TOOLS }) {
-  const server = new McpServer({ name: 'fugloy-mcp', version });
+  const server = new FugloyMcpServer({ name: 'fugloy-mcp', version });
   for (const tool of tools) {
-    const real = z.object(tool.inputSchema ?? {});
-    server.registerTool(
-      tool.name,
-      { description: tool.description, inputSchema: permissiveShape(tool.inputSchema ?? {}) },
-      async (/** @type {any} */ raw) => {
-        let text;
-        let isError = false;
-        let offset = 0;
+    if (tool.inputSchema && Object.hasOwn(tool.inputSchema, 'offset')) {
+      throw new Error(`Tool ${tool.name} declares an offset argument; offset is reserved for the server's paging.`);
+    }
+    const shape = { ...tool.inputSchema, offset: z.number().int().min(0).optional().describe('Line to continue at, from the last output\'s "use offset=K"') };
+    server.schemas.set(tool.name, z.object(shape));
+    server.registerTool(tool.name, { description: tool.description, inputSchema: shape }, async (/** @type {any} */ parsed) => {
+      const { offset = 0, ...rest } = parsed ?? {};
+      const key = `${tool.name} ${stable(rest)}`;
+      let text;
+      let isError = false;
+      let start = offset;
+      if (offset > 0) {
+        if (session.lastOutput?.key !== key) {
+          text = `offset continues the last output of ${tool.name}; call ${tool.name} again without offset first.`;
+          isError = true;
+          start = 0;
+        } else text = session.lastOutput.text;
+      } else {
         try {
-          const { offset: rawOffset, ...rest } = raw ?? {};
-          if (rawOffset !== undefined) offset = parseCount(rawOffset, { name: 'offset', min: 0 });
-          const parsed = real.safeParse(rest);
-          if (!parsed.success) {
-            text = argumentSentence(parsed.error, rest);
-            isError = true;
-          } else {
-            const out = await tool.handler(session, parsed.data);
-            if (typeof out === 'string') text = out;
-            else ({ text, isError = false } = out);
-          }
+          const out = await tool.handler(session, rest);
+          if (typeof out === 'string') text = out;
+          else ({ text, isError = false } = out);
         } catch (err) {
           text = err instanceof Error ? err.message : String(err);
           isError = true;
         }
-        const shown = cap(text ?? '', { limit: config.limits.outputBytes, offset });
-        return { content: [{ type: /** @type {const} */ ('text'), text: shown }], ...(isError ? { isError: true } : {}) };
-      },
-    );
+        text ??= '';
+        session.lastOutput = { key, text };
+      }
+      const shown = cap(text, { limit: config.limits.outputBytes, offset: start });
+      return { content: [{ type: /** @type {const} */ ('text'), text: shown }], ...(isError ? { isError: true } : {}) };
+    });
   }
   return server;
 }
