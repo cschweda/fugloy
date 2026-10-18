@@ -6,7 +6,7 @@
  * A relative path in the file is relative to the file's own folder. No config, or no entry for
  * the model: null, and the test skips. An entry naming a missing file is an error, never a skip.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,4 +33,22 @@ export function configuredRom(model = 'model3', config = configPath()) {
   const path = isAbsolute(entry) ? entry : resolve(dirname(config), entry);
   if (!existsSync(path)) throw new Error(`${config} names ${path} as roms.${model}, and there is no such file`);
   return new Uint8Array(readFileSync(path));
+}
+
+/**
+ * Files under the `fixtures` folder of the config (relative to the config's own folder) whose
+ * path matches `pattern`, sorted; none without a config, a `fixtures` entry, or the folder.
+ * @param {RegExp} pattern
+ * @returns {string[]}
+ */
+export function configuredFixtures(pattern, config = configPath()) {
+  if (config === null || !existsSync(config)) return [];
+  const entry = JSON.parse(readFileSync(config, 'utf8')).fixtures;
+  if (typeof entry !== 'string') return [];
+  const root = isAbsolute(entry) ? entry : resolve(dirname(config), entry);
+  if (!existsSync(root)) return [];
+  return readdirSync(root, { recursive: true, encoding: 'utf8' })
+    .filter((f) => pattern.test(f))
+    .map((f) => join(root, f))
+    .sort();
 }

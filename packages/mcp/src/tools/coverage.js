@@ -106,16 +106,20 @@ export default {
     if (mode === 'export') return exportTo(session, path, mask, overwrite);
 
     const bits = m.debug.coverage.bits;
+    // Why there are no blocks: a disk image's sectors land as the machine runs; ASCII BASIC is typed in.
+    const why = /** @type {any} */ (program.manifest).format === 'dsk'
+      ? 'a disk image is read into memory by the ROM and the disk\'s own loader as the machine runs, not loaded as blocks, so what it ran counts as outside them'
+      : 'an ASCII BASIC program is typed in through the ROM, not loaded as blocks';
     const c = classify(mask, (a) => (bits[a] & CODE) !== 0, (a) => (bits[a] & DATA) !== 0);
     if (format === 'json') return JSON.stringify({ loaded: c.loaded, blocks, executed: c.executed, data: c.data, unseen: c.unseen, codeRanges: c.codeRanges, dataRanges: c.dataRanges, outside: c.outside, ranges: c.ranges }, null, 2);
     if (mode === 'ranges') {
-      if (c.ranges.length === 0) return 'Nothing is loaded yet (an ASCII BASIC program is typed in through the ROM, not loaded as blocks).';
+      if (c.ranges.length === 0) return `Nothing is loaded yet (${why}).`;
       const lines = [`Ranges in the loaded blocks (${c.ranges.length}):`, 'start  end    bytes  kind'];
       for (const r of c.ranges) lines.push(`${hex4(r.addr)}  ${hex4(r.addr + r.len - 1)}  ${r.len.toLocaleString('en-US').padStart(5)}  ${KIND_TEXT[r.kind]}`);
       return lines.join('\n');
     }
     const lines = ['Coverage since load (this session):'];
-    if (c.loaded === 0) lines.push('Loaded: no blocks (an ASCII BASIC program is typed in through the ROM, not loaded as blocks)');
+    if (c.loaded === 0) lines.push(`Loaded: no blocks (${why})`);
     else {
       lines.push(
         `Loaded: ${bytes(c.loaded)} in ${plural(blocks.length, 'block', 'blocks')} (${spans(mask)})`,

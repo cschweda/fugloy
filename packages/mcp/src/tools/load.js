@@ -1,13 +1,17 @@
 /**
  * `load`: put a program into the machine (docs/fugloy-mcp-spec.md §5, Lifecycle). The format
- * comes from the content, never the extension: a .CAS by its leader and sync bytes, then
- * `detectFormat` from @fugloy/disasm for .BAS (tokenized) and .CMD, then ASCII BASIC source by
- * its first line's number. With `reset` (the default) a fresh Machine boots its ROM to READY
- * first, as the emu integration tests do; coverage is on from the start (Ruling 3).
+ * comes from the content, never the extension: a .CAS by its leader and sync bytes, then a disk
+ * image with a header (DMK, JV3), then `detectFormat` from @fugloy/disasm for .BAS (tokenized)
+ * and .CMD, then ASCII BASIC source by its first line's number, and last a JV1 disk image, which
+ * has no header and is known only by its size (the emu `DiskImage` decides all three containers,
+ * as `m.fdc.mount` does; emu phase 5 plan, Ruling 4). With `reset` (the default) a fresh Machine
+ * boots its ROM to READY first, as the emu integration tests do; a disk image instead goes into
+ * drive 0 of a fresh Machine, which the ROM boots from. Coverage is on from the start (Ruling 3).
  */
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, extname, isAbsolute, relative, resolve } from 'node:path';
 import { detectFormat } from '@fugloy/disasm';
+import { CPU_CLOCK_HZ, DiskImage } from '@fugloy/emu';
 import { z } from 'zod';
 import { hex4, MODELS } from '../args.js';
 import { bootToReady, BOOT_SECONDS, seconds } from '../execute.js';
@@ -33,12 +37,47 @@ function isAsciiBas(/** @type {Uint8Array} */ b) {
   return first !== undefined && /^\s*\d+/.test(first);
 }
 
-/** @returns {'cmd' | 'bas' | 'cas' | null} */
+/**
+ * The disk image container the emu reads `bytes` as, or null: the same rules `m.fdc.mount`
+ * applies (DMK header, then JV3 sector table, then a JV1 size; docs/fugloy-emu-spec.md §5).
+ * @param {Uint8Array} bytes
+ * @returns {'dmk' | 'jv3' | 'jv1' | null}
+ */
+export function diskContainer(bytes) {
+  try {
+    return /** @type {'dmk' | 'jv3' | 'jv1'} */ (new DiskImage(bytes).format);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A DMK or JV3 has a header the emu checks field by field, so it is tried before the program
+ * formats; a JV1 is only a size (a whole number of 10- or 18-sector tracks), so it comes last,
+ * after everything that has a signature of its own.
+ * @returns {'cmd' | 'bas' | 'cas' | 'dsk' | null}
+ */
 export function formatOf(/** @type {Uint8Array} */ bytes) {
   if (isCas(bytes)) return 'cas';
+  const disk = diskContainer(bytes);
+  if (disk === 'dmk' || disk === 'jv3') return 'dsk';
   const found = detectFormat(bytes);
   if (found === 'cmd' || found === 'bas') return found;
-  return isAsciiBas(bytes) ? 'bas' : null;
+  if (isAsciiBas(bytes)) return 'bas';
+  return disk === 'jv1' ? 'dsk' : null;
+}
+
+/** Where the Model III ROM puts track 0, sector 1 of drive 0 and jumps (ROM $34D9-$3516). */
+export const BOOT_SECTOR = 0x4300;
+
+/** How long `load` lets the ROM take to read a disk's boot sector and jump to it. */
+export const DISK_BOOT_SECONDS = 5;
+
+/** `40 tracks, 1 side, 18 sectors a track` for a disk's mount info. */
+function geometry(/** @type {{ tracks: number, sides: number, sectorsPerTrack?: number }} */ info) {
+  const parts = [`${info.tracks} ${info.tracks === 1 ? 'track' : 'tracks'}`, `${info.sides} ${info.sides === 1 ? 'side' : 'sides'}`];
+  parts.push(info.sectorsPerTrack === undefined ? 'sectors a track varying' : `${info.sectorsPerTrack} ${info.sectorsPerTrack === 1 ? 'sector' : 'sectors'} a track`);
+  return parts.join(', ');
 }
 
 /** `addr–end (len)` for a manifest block. */
@@ -56,7 +95,7 @@ function locate(/** @type {string} */ given, /** @type {import('../config.js').C
 export default {
   name: 'load',
   description:
-    'Load a .CMD, .BAS (tokenized or ASCII), or .CAS program, detected from its content. By default a fresh Model III boots its ROM to READY first; reset: false loads into the machine as it is. Returns the manifest: format, blocks, entry point, the ROM, the sidecar label file (<program>.fugloy.json beside the program, or failing that in the fixtures folder, whose labels are loaded; writes always go beside the program; one that cannot be used is reported and left alone), and the resolved path. Coverage is recorded from the start.',
+    'Load a .CMD, .BAS (tokenized or ASCII), or .CAS program, or a JV1, JV3, or DMK disk image, detected from its content. By default a fresh Model III boots its ROM to READY first; reset: false loads into the machine as it is. A disk image goes into drive 0 of a fresh machine, and the ROM boots it: load runs until the ROM jumps to the boot sector at 4300h (or 5 s emulated), and the disk\'s own loader then reads the rest as the machine runs, which takes seconds of emulated time (the drive turns at 300 rpm), so follow it with run until "settled", repeated until the program\'s screen appears; with reset: false the disk is only put in drive 0 of the running machine, and reset boots from it. Returns the manifest: format, blocks, entry point, the ROM, the sidecar label file (<program>.fugloy.json beside the program, or failing that in the fixtures folder, whose labels are loaded; writes always go beside the program; one that cannot be used is reported and left alone), and the resolved path. Coverage is recorded from the start.',
   inputSchema: {
     path: z.string().describe('The program file; relative paths resolve against the working folder, then the config\'s fixtures folder'),
     model: z.number().int().optional().describe('The machine model; only 3 (the Model III) exists until emu phase 6'),
@@ -79,7 +118,7 @@ export default {
     const bytes = new Uint8Array(readFileSync(file));
     const format = formatOf(bytes);
     if (format === null) {
-      throw new Error(`${file} is not a .CMD, .BAS, or .CAS program as far as its content shows (the extension is not consulted); raw memory images cannot be loaded.`);
+      throw new Error(`${file} is not a .CMD, .BAS, or .CAS program or a JV1, JV3, or DMK disk image as far as its content shows (the extension is not consulted); raw memory images cannot be loaded.`);
     }
 
     const lines = [];
@@ -88,27 +127,47 @@ export default {
     const fresh = reset || session.machine === null;
     const m = fresh ? session.createMachine() : session.requireMachine();
     let boot;
+    let dropped = 0;
     if (fresh) {
       const old = session.machine;
-      const dropped = old === null ? 0 : old.debug.breaks.length + old.debug.watches.length;
-      const booted = bootToReady(m);
-      boot = booted.ready
-        ? `Boot: READY after ${seconds(booted.cycles)} emulated`
-        : `Boot: the ROM showed no READY within ${BOOT_SECONDS} s emulated, so the program was loaded where the ROM had got to`;
-      if (dropped > 0) boot += `\nThe previous machine's ${dropped} breakpoints and watches went with it.`;
+      dropped = old === null ? 0 : old.debug.breaks.length + old.debug.watches.length;
+      if (format === 'dsk') boot = ''; // the disk is booted below, once it is mounted
+      else {
+        const booted = bootToReady(m);
+        boot = booted.ready
+          ? `Boot: READY after ${seconds(booted.cycles)} emulated`
+          : `Boot: the ROM showed no READY within ${BOOT_SECONDS} s emulated, so the program was loaded where the ROM had got to`;
+      }
     } else boot = 'Boot: none (reset: false loads into the running machine)';
     // `screen diff` after the load shows what the program drew, including blocks loaded into video RAM.
-    const baseline = Uint8Array.from(m.video.raw);
+    let baseline = Uint8Array.from(m.video.raw);
 
     /** @type {any} */
     let manifest;
     try {
       if (format === 'cmd') manifest = m.load.cmd(bytes);
       else if (format === 'bas') manifest = m.load.bas(bytes);
-      else manifest = m.load.cas(bytes, { via: 'fast' });
+      else if (format === 'cas') manifest = m.load.cas(bytes, { via: 'fast' });
+      // A fresh machine boots from the disk (load.dsk resets it); a running one only gets it in drive 0.
+      else manifest = m.load.dsk(bytes, { drive: 0, boot: fresh });
     } catch (err) {
-      throw new Error(`${file} could not be loaded as ${format === 'cmd' ? 'a .CMD' : format === 'bas' ? 'a .BAS' : 'a .CAS'}: ${err instanceof Error ? err.message.replace(/\.$/, '') : String(err)}.`);
+      const as = { cmd: 'a .CMD', bas: 'a .BAS', cas: 'a .CAS', dsk: 'a disk image' }[format];
+      throw new Error(`${file} could not be loaded as ${as}: ${err instanceof Error ? err.message.replace(/\.$/, '') : String(err)}.`);
     }
+    if (format === 'dsk') {
+      if (fresh) {
+        // The ROM reads track 0, sector 1 into 4300h and jumps there; reading it takes real
+        // emulated time (a revolution is 0.2 s), so the budget is generous.
+        const cpu = m.system.cpu;
+        const r = m.run({ until: () => cpu.registers.PC === BOOT_SECTOR, cycles: DISK_BOOT_SECONDS * CPU_CLOCK_HZ });
+        boot = r.reason === 'predicate'
+          ? `Boot: the ROM read the boot sector and jumped to ${hex4(BOOT_SECTOR)} after ${seconds(m.cycles)} emulated; the disk's loader reads the rest as the machine runs, so call run with until "settled" (again if the screen is still loading: a disk can take 10 s emulated or more)`
+          : `Boot: the ROM did not reach the boot sector at ${hex4(BOOT_SECTOR)} within ${DISK_BOOT_SECONDS} s emulated (the PC is ${hex4(cpu.registers.PC)}); the disk may not be one the Model III ROM can boot, or it needs longer; call run to go on, and screen to see where it is`;
+        // The screen diff starts from what the ROM left, now that the disk's own code runs.
+        baseline = Uint8Array.from(m.video.raw);
+      } else boot = 'Boot: none (reset: false puts the disk in drive 0 of the running machine; call reset to boot from it)';
+    }
+    if (dropped > 0) boot += `\nThe previous machine's ${dropped} breakpoints and watches went with it.`;
     if (fresh) session.install(m);
     session.screenBaseline = baseline;
     const name = manifest.name || basename(file, extname(file)).toUpperCase();
@@ -123,11 +182,18 @@ export default {
     session.sidecar = sidecarState(file, found);
     session.labels = new Map(found !== null && 'labels' in found ? found.labels.map((l) => [l.addr, l]) : []);
 
-    const kind = format === 'cmd' ? '.CMD (load module)' : format === 'bas' ? `.BAS (${manifest.kind})` : `.CAS (${manifest.kind}, loaded at once)`;
+    /** @type {string} */
+    let kind;
+    if (format === 'dsk') {
+      const info = m.fdc.drives[0];
+      kind = `disk image (${manifest.container.toUpperCase()}, ${geometry(info)}${info.writeProtected ? ', write-protected' : ''}), in drive 0`;
+    } else kind = format === 'cmd' ? '.CMD (load module)' : format === 'bas' ? `.BAS (${manifest.kind})` : `.CAS (${manifest.kind}, loaded at once)`;
     lines.push(`Loaded ${name} from ${file}`, `Format: ${kind}`);
-    if (manifest.blocks.length === 0) lines.push('Blocks: none yet (ASCII BASIC is typed in through the ROM as the machine runs; call run, then key RUN)');
+    if (format === 'dsk') lines.push('Blocks: none yet (the ROM and the disk\'s own loader read sectors into memory as the machine runs)');
+    else if (manifest.blocks.length === 0) lines.push('Blocks: none yet (ASCII BASIC is typed in through the ROM as the machine runs; call run, then key RUN)');
     else lines.push(`Blocks (${manifest.blocks.length}):`, ...manifest.blocks.map(block));
-    if (manifest.entry !== undefined && manifest.entry !== null) lines.push(`Entry: ${hex4(manifest.entry)} (the PC is there now)`);
+    if (format === 'dsk') lines.push(`Entry: none (the ROM boots from drive 0: track 0, sector 1 runs at ${hex4(BOOT_SECTOR)})`);
+    else if (manifest.entry !== undefined && manifest.entry !== null) lines.push(`Entry: ${hex4(manifest.entry)} (the PC is there now)`);
     else lines.push('Entry: none (a BASIC program; key RUN to start it)');
     lines.push(`ROM: ${m.rom.recognized ?? `unrecognised (SHA-256 ${m.rom.sha256.slice(0, 16)}…)`}`);
     lines.push(boot);

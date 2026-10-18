@@ -91,3 +91,58 @@ export const RAIDERS = (() => {
   text(0x7060, 'GOOD LUCK');
   return buildCmd([{ name: 'RAIDERS' }, { addr: 0x7000, data: code }], 0x7000);
 })();
+
+/**
+ * A 14K ROM that boots from disk the way the Model III ROM does (ROM $3492-$3516), as the emu's
+ * fdc-api test has it: with no controller (status FFh) it halts; otherwise it selects drive 0,
+ * lets INTRQ raise the NMI, reads track 0 sector 1 into 4300h with INI as DRQ rises, and the NMI
+ * that ends the read jumps to 4300h when the status shows no error.
+ */
+export function diskBootRom() {
+  const rom = new Uint8Array(0x3800);
+  rom.set([
+    0xf3, //                          0000  DI
+    0x31, 0x00, 0x50, //              0001  LD SP,5000H
+    0xdb, 0xf0, //                    0004  IN A,(F0H)
+    0x3c, //                          0006  INC A
+    0x28, 0x20, //                    0007  JR Z,0029H: no controller
+    0x3e, 0x81, 0xd3, 0xf4, //        0009  LD A,81H / OUT (F4H),A: drive 0
+    0x3e, 0x80, 0xd3, 0xe4, //        000D  LD A,80H / OUT (E4H),A: INTRQ raises NMI
+    0x01, 0xf3, 0x00, //              0011  LD BC,00F3H
+    0x21, 0x00, 0x43, //              0014  LD HL,4300H
+    0x3e, 0x01, 0xd3, 0xf2, //        0017  sector 1
+    0x3e, 0x80, 0xd3, 0xf0, //        001B  READ SECTOR
+    0xdb, 0xf0, //                    001F  IN A,(F0H)
+    0xe6, 0x02, //                    0021  AND 02H: DRQ
+    0x28, 0xfa, //                    0023  JR Z,001FH
+    0xed, 0xa2, //                    0025  INI
+    0x18, 0xf6, //                    0027  JR 001FH
+    0x76, //                          0029  HALT
+  ]);
+  rom.set([
+    0xaf, 0xd3, 0xe4, //              0066  XOR A / OUT (E4H),A
+    0xe1, //                          0069  POP HL
+    0xdb, 0xf0, 0xe6, 0x1c, //        006A  IN A,(F0H) / AND 1CH
+    0xca, 0x00, 0x43, //              006E  JP Z,4300H
+    0x76, //                          0071  HALT
+  ], 0x66);
+  return rom;
+}
+
+/**
+ * A 40-track, 18-sector JV1 (a headerless dump, sectors numbered from 1) whose track 0 sector 1
+ * copies `message` to the top line of the screen at 4300h and spins.
+ * @param {string} message
+ */
+export function bootJv1(message) {
+  const bytes = new Uint8Array(40 * 18 * 256);
+  bytes.set([
+    0x21, 0x20, 0x43, //              4300  LD HL,4320H
+    0x11, 0x00, 0x3c, //              4303  LD DE,3C00H
+    0x01, message.length, 0x00, //    4306  LD BC,length
+    0xed, 0xb0, //                    4309  LDIR
+    0x18, 0xfe, //                    430B  JR 430BH
+  ]);
+  bytes.set([...message].map((c) => c.charCodeAt(0)), 0x20);
+  return bytes;
+}
