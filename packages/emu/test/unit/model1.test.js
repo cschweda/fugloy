@@ -30,7 +30,7 @@ describe('model descriptions', () => {
     expect(clockHz(3)).toBe(2027520);
     expect(clockHz(1)).toBe(1774080);
     expect(CPU_CLOCK_HZ).toBe(clockHz(3));
-    expect(() => clockHz(4)).toThrow(/^There is no Model 4 yet/);
+    expect(clockHz(4)).toBe(2027520); // Model III mode; the Model 4 has its own tests in model4.test.js
   });
 
   it('m.model names the model built, and the system runs at that model\'s clock', () => {
@@ -45,9 +45,8 @@ describe('model descriptions', () => {
     expect(m3.clockHz).toBe(2027520);
   });
 
-  it('the Model 4 is refused, naming its own plan', () => {
-    expect(() => new Machine({ model: 4, roms: { level2: new Uint8Array(0x3800) } })).toThrow(/^There is no Model 4 yet: /);
-    expect(() => new Machine({ model: 2, roms: { level2: new Uint8Array(0x3800) } })).toThrow(/^model must be 1 \(the Model I\) or 3 \(the Model III\), not 2/);
+  it('models not built are refused in a sentence', () => {
+    expect(() => new Machine({ model: 2, roms: { level2: new Uint8Array(0x3800) } })).toThrow(/^model must be 1 \(the Model I\), 3 \(the Model III\), or 4 \(the Model 4\), not 2/);
   });
 });
 
@@ -204,7 +203,7 @@ describe('ROM recognition and the model check', () => {
     expect(ROM_HASHES['3cd3824d2ac2743750d2179951ed812794302b885ccb4f98aa2579b352c4b00e']).toBe('model1-level2-1.2');
     expect(ROM_HASHES['5515d95d7c19058400a2e91c6930bb557035db5ce093bd96fd017f795c346776']).toBe('model1-level2-1.3');
     expect(ROM_HASHES.beeb3741175a8b8706cc384d5b2534ebf32e383662864054e5a0ce4d861a43bb).toBe('model3-rev-c-2ef8');
-    for (const name of Object.values(ROM_HASHES)) expect(MODELS[1].roms.includes(name) || MODELS[3].roms.includes(name)).toBe(true);
+    for (const name of Object.values(ROM_HASHES)) expect(Object.values(MODELS).some((d) => d.roms.includes(name))).toBe(true);
   });
 
   it('romModelProblem refuses a recognised ROM given for the other model, with a sentence naming its model', () => {

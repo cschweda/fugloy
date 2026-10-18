@@ -154,9 +154,9 @@ describe('Machine', () => {
     expect(m.step().halted).toBe(false);
   });
 
-  it('rejects models and RAM sizes that are not built (the Model I has its own tests in model1.test.js)', () => {
+  it('rejects models and RAM sizes that are not built (the Model I and Model 4 have their own tests in model1.test.js and model4.test.js)', () => {
     const roms = { level2: romWith([0x76]) };
-    expect(() => new Machine({ model: 4, roms })).toThrow(/^There is no Model 4 yet: /);
+    expect(() => new Machine({ model: 5, roms })).toThrow(/^model must be 1 /);
     expect(() => new Machine({ ram: 16, roms })).toThrow(/^The Model III takes ram: 48 \(K\), not 16; /);
     expect(() => new Machine({ model: 3, ram: 48, roms })).not.toThrow();
   });
@@ -175,7 +175,7 @@ describe('Machine', () => {
     expect(Object.keys(ROM_HASHES).length).toBeGreaterThan(0);
     for (const [hash, name] of Object.entries(ROM_HASHES)) {
       expect(hash).toMatch(/^[0-9a-f]{64}$/);
-      expect(name).toMatch(/^model[13]-/);
+      expect(name).toMatch(/^model[134]-/);
     }
   });
 });

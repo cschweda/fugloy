@@ -1,7 +1,7 @@
 /**
  * The spec §3 `Machine`: the public face of the emulator, over a TRS80System. It builds the
- * Model III with 48K, or (emu phase 6) the Model I with 4, 16, 32, or 48K, as the model
- * descriptions in models.js lay them out; execution, state access, ROM identification, the
+ * Model III with 48K, (emu phase 6) the Model I with 4, 16, 32, or 48K, or (emu phase 6b) the
+ * Model 4 with 64 or 128K, as the model descriptions in models.js lay them out; execution, state access, ROM identification, the
  * devices, the loaders, and the debugger live here.
  */
 import { TRS80System } from './trs80-system.js';
@@ -67,9 +67,10 @@ export class Machine {
   #stopped = false;
 
   /**
-   * @param {{ model?: 1 | 3, ram?: 4 | 16 | 32 | 48, roms: { level2: Uint8Array }, expansion?: boolean, lowercase?: boolean,
+   * @param {{ model?: 1 | 3 | 4, ram?: 4 | 16 | 32 | 48 | 64 | 128, roms: { level2: Uint8Array }, expansion?: boolean, lowercase?: boolean,
    *   log?: (level: string, text: string) => void }} opts
-   *   `ram` defaults to 48 (the Model III takes only 48 for now); `expansion` (the Expansion Interface, default
+   *   `ram` defaults to 48 (the Model III takes only 48 for now; the Model 4 takes 64 or 128, 128 by
+   *   default); `expansion` (the Expansion Interface, default
    *   true) and `lowercase` (the lowercase modification, default false) are Model I options
    */
   constructor({ model = 3, ram, roms, expansion, lowercase, log } = /** @type {any} */ ({})) {
@@ -121,6 +122,8 @@ export class Machine {
       write(addr, bytes) {
         for (let k = 0; k < bytes.length; k++) sys.memory.writeByte((addr + k) & 0xffff, bytes[k]);
       },
+      // All RAM: from $4000 on the Model III and Model I; on the Model 4 every 32K bank in order,
+      // map 0's CPU address A at ram[A] (memory.js, Model4Memory).
       get ram() {
         return sys.memory.ram;
       },
@@ -150,7 +153,7 @@ export class Machine {
     };
   }
 
-  /** @returns {1 | 3} The model built: 1 (the Model I) or 3 (the Model III). */
+  /** @returns {1 | 3 | 4} The model built: 1 (the Model I), 3 (the Model III), or 4 (the Model 4). */
   get model() {
     return this.system.model.id;
   }

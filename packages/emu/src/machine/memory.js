@@ -29,6 +29,9 @@
  *   kept as it reads back and displays: bit 6 = NOT (bit 5 OR bit 7). The
  *   lowercase modification (`lowercase: true`) fits the missing RAM, so all
  *   eight bits are kept.
+ *
+ *   Model 4 (Model4Memory, below): four memory maps chosen by port 0x84,
+ *   64K or 128K of RAM in 32K banks, and 2K of video RAM.
  */
 
 import { MODEL_III } from "./models.js";
@@ -284,6 +287,169 @@ export class MemorySystem {
     // The Model I's Expansion Interface, peeked, as m.mem.read shows it
     if (this.expansion !== null) {
       for (let a = EXPANSION_BASE; a < EXPANSION_LIMIT; a++) view[a] = this.expansion.peekExpansion(a);
+    }
+    return view;
+  }
+}
+
+
+const BANK = 0x8000;
+
+/**
+ * The Model 4's memory: four maps, chosen by bits 0-1 of port 0x84, over 64K
+ * or 128K of RAM and 2K of video RAM. No Model 4 Technical Reference Manual is
+ * local; the layout is MAME's (src/mame/trs/trs80m3.cpp, `m4_banked_mem`, and
+ * trs80m3_m.cpp, `port_84_w` and the bank setup in `machine_start`), which Tim
+ * Mann's xtrs agrees with (trs_memory.c, `mem_read`/`mem_write`, cases
+ * 0x40-0x43, and `mem_bank`; trs_io.c, port 0x84). Spec §5 lists what is
+ * unverified.
+ *
+ *   map 0 (Model III mode, the map at reset):
+ *     0x0000-0x37FF  14K ROM (writes lost)
+ *     0x3800-0x3BFF  keyboard matrix
+ *     0x3C00-0x3FFF  video RAM: one 1K page of the 2K, port 0x84 bit 7
+ *     0x4000-0xFFFF  RAM
+ *   map 1: as map 0, with RAM in place of the ROM at 0x0000-0x37FF
+ *   map 2:
+ *     0x0000-0xF3FF  RAM
+ *     0xF400-0xF7FF  keyboard matrix (MAME: "Keyboard=F400-F7FF"; xtrs reads
+ *                    trs_kb_mem_read there)
+ *     0xF800-0xFFFF  all 2K of video RAM
+ *   map 3: 0x0000-0xFFFF RAM
+ *
+ * RAM, `ram` (m.mem.ram), is laid out as 32K banks in physical order: bank n
+ * is ram[n * 0x8000 .. n * 0x8000 + 0x7FFF]; 64K has banks 0-1, 128K banks
+ * 0-3. With no page selected the CPU's 0x0000-0x7FFF is bank 0 and
+ * 0x8000-0xFFFF bank 1, so in map 0 the CPU's address A (0x4000 and up) is
+ * ram[A]; ram[0x0000-0x3FFF] is reached through maps 1-3. (The Model III's and
+ * Model I's `ram` starts at 0x4000 instead.)
+ *
+ * The 128K page select, port 0x84 bits 4-6 (MAME's names: d4 Srcpage, d5
+ * "Enable page mapping (1=enabled)", d6 Despage): with bit 5 set, bank
+ * 2 + bit 4 takes the place of bank 1 (CPU 0x8000-0xFFFF) when bit 6 is clear,
+ * or of bank 0 (CPU 0x0000-0x7FFF) when bit 6 is set; with bit 5 clear,
+ * banks 0 and 1 (MAME's entries for 128K in `machine_start`; xtrs's
+ * `mem_bank` has the same five settings, 0, 2, 3, 6, 7, and stops on 1, 4, and
+ * 5, which MAME, followed here, takes as no paging). With 64K the page bits do
+ * nothing (MAME configures every entry to banks 0 and 1).
+ *
+ * Bits 2 (80/64 columns) and 3 (inverse video) are kept in `mapRegister` for
+ * the video (emu phase 6b, Task 2).
+ */
+export class Model4Memory extends MemorySystem {
+  /** @param {{ model: import('./models.js').Model, ram?: number }} opts */
+  constructor(opts) {
+    super(opts);
+    // 2K of video RAM (MAME: m_p_videoram, banked by 1K at 0x3C00, all 2K at 0xF800)
+    this.videoRam = new Uint8Array(0x800);
+    /** The last byte written to port 0x84 (0 at reset). */
+    this.mapRegister = 0;
+    /** The memory map, 0-3: port 0x84 bits 0-1. */
+    this.map = 0;
+    /** Where in `ram` the CPU's 0x0000-0x7FFF and 0x8000-0xFFFF start. */
+    this.lowBase = 0;
+    this.highBase = BANK;
+    /** Where in `videoRam` the 1K page shown at 0x3C00 in maps 0-1 starts: port 0x84 bit 7. */
+    this.videoBase = 0;
+    this.setMapRegister(0);
+  }
+
+  /**
+   * Take a write to port 0x84 (the IOSystem's handler, and reset with 0).
+   * @param {number} value
+   */
+  setMapRegister(value) {
+    value &= 0xff;
+    this.mapRegister = value;
+    this.map = value & 0x03;
+    this.videoBase = value & 0x80 ? 0x400 : 0;
+    this.lowBase = 0;
+    this.highBase = BANK;
+    if (this.ram.length > 2 * BANK && (value & 0x20) !== 0) {
+      const bank = (2 + ((value >> 4) & 1)) * BANK;
+      if (value & 0x40) this.lowBase = bank;
+      else this.highBase = bank;
+    }
+  }
+
+  /**
+   * The 128K page select as a number, port 0x84 bits 4-6 (0 with 64K, whose
+   * page bits do nothing), for save states and coverage.
+   */
+  get page() {
+    return this.ram.length > 2 * BANK ? (this.mapRegister >> 4) & 0x07 : 0;
+  }
+
+  /** @param {number} address */
+  readByte(address) {
+    address &= 0xffff;
+    switch (this.map) {
+      case 0:
+        if (address < KEYBOARD_BASE) return this.rom[address];
+      // falls through: 0x3800-0x3FFF as in map 1
+      case 1:
+        if (address >= KEYBOARD_BASE && address < RAM_BASE) {
+          if (address >= KEYBOARD_LIMIT) return this.videoRam[this.videoBase + address - KEYBOARD_LIMIT];
+          return this.keyboard ? this.keyboard.read(address & 0xff) : 0x00;
+        }
+        break;
+      case 2:
+        if (address >= 0xf400) {
+          if (address >= 0xf800) return this.videoRam[address - 0xf800];
+          return this.keyboard ? this.keyboard.read(address & 0xff) : 0x00;
+        }
+        break;
+    }
+    return this.ram[(address < BANK ? this.lowBase : this.highBase) + (address & 0x7fff)];
+  }
+
+  /** @param {number} address */
+  peekByte(address) {
+    return this.readByte(address);
+  }
+
+  /**
+   * @param {number} address
+   * @param {number} value
+   */
+  writeByte(address, value) {
+    address &= 0xffff;
+    value &= 0xff;
+    switch (this.map) {
+      case 0:
+        if (address < KEYBOARD_BASE) return; // ROM
+      // falls through
+      case 1:
+        if (address >= KEYBOARD_BASE && address < RAM_BASE) {
+          if (address >= KEYBOARD_LIMIT) {
+            this.videoRam[this.videoBase + address - KEYBOARD_LIMIT] = value;
+            this.videoDirty = true;
+          }
+          return;
+        }
+        break;
+      case 2:
+        if (address >= 0xf400) {
+          if (address >= 0xf800) {
+            this.videoRam[address - 0xf800] = value;
+            this.videoDirty = true;
+          }
+          return;
+        }
+        break;
+    }
+    this.ram[(address < BANK ? this.lowBase : this.highBase) + (address & 0x7fff)] = value;
+  }
+
+  /** The 64K the CPU sees in the current map; the keyboard reads idle (0x00), as in the base view. */
+  getMemoryView() {
+    const view = new Uint8Array(0x10000);
+    const saved = this.keyboard;
+    this.keyboard = null;
+    try {
+      for (let a = 0; a < 0x10000; a++) view[a] = this.readByte(a);
+    } finally {
+      this.keyboard = saved;
     }
     return view;
   }

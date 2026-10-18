@@ -3,7 +3,8 @@
  * restore it into a system booted from the same ROM.
  *
  * The state carries everything the machine needs to resume mid-program:
- * CPU registers and interrupt state, RAM and video RAM, the I/O latches,
+ * CPU registers and interrupt state, RAM and video RAM (all of the Model 4's
+ * banks and its 2K, and its port $84 register), the I/O latches,
  * the FDC (including an in-flight command), the cassette tape, and the
  * full contents of every mounted disk (writes are in-memory, so the disk
  * bytes ARE the disk state). The ROM itself is NOT included — a state is
@@ -139,6 +140,8 @@ export function serializeState(system) {
   // they were, and from a Model I's without the interface) and its lowercase modification
   if (io.latch) state.latch = io.latch.bits;
   if (system.model?.id === 1) state.lowercase = !!system.lowercase;
+  // The Model 4's port $84 register (memory map, video page, 128K page), absent from other states
+  if (system.model?.id === 4) state.memory.map = system.memory.mapRegister;
   for (const key of CPU_SCALARS) state.cpu[key] = cpu[key];
   for (const key of IO_SCALARS) state.io[key] = io[key];
   for (const key of FDC_SCALARS) state.fdc[key] = fdc[key];
@@ -213,6 +216,7 @@ export function restoreState(system, state) {
 
   system.memory.ram.set(ram);
   system.memory.videoRam.set(fromBase64(state.memory.videoRam));
+  if (system.model?.id === 4) system.memory.setMapRegister(state.memory.map ?? 0);
   system.memory.videoDirty = true;
 
   for (const key of FDC_SCALARS) fdc[key] = state.fdc[key];

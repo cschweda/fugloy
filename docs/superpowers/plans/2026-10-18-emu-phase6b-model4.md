@@ -42,6 +42,8 @@
 
 **Interfaces:** `Machine({ model: 4, ram?: 64 | 128 = 128, roms: { level2 } })`; port `$84` map register (bits 0–1 map, bit 2 video page / 80-column select per the cited source, bits 4–5 page select on 128K); `m.mem.read/write` see the current map; `m.mem.ram` exposes all RAM (document the layout); save states carry the map register and all RAM.
 
+*As built:* the cited sources (MAME `trs80m3`, xtrs) put the 80/64-column select at bit 2, inverse video at bit 3, the 128K page select at bits 4–6, and the video page at bit 7; map 2 keeps the keyboard at `$F400–$F7FF` (map 3 has none). Spec §5 records it.
+
 - [ ] Steps: failing tests (each map's layout; keyboard present/absent; video address per map; Review Focus 2, 3, 5; ROM recognised and refused on model 3), run, implement, run, commit `e6: map the Model 4's memory and bank its RAM`.
 
 ### Task 2: Model 4 video, clock, timer, and Model III mode

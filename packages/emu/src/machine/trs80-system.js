@@ -1,5 +1,5 @@
 /**
- * TRS-80 System, Model III or Model I
+ * TRS-80 System, Model III, Model I, or Model 4
  *
  * Owns and wires the machine: Z80 CPU, memory map, I/O ports, and the
  * keyboard matrix, laid out by the model description (models.js). Runs the
@@ -16,7 +16,7 @@
  */
 
 import { Z80CPU } from "../cpu/z80cpu.js";
-import { MemorySystem } from "./memory.js";
+import { MemorySystem, Model4Memory } from "./memory.js";
 import { IOSystem, MODE_32COL_BIT, M1_MODESEL_BIT } from "./io.js";
 import { TIMER_BIT } from "../devices/interrupt-latch.js";
 import { KeyboardMatrix } from "../devices/keyboard.js";
@@ -30,7 +30,7 @@ export const RTC_INTERVAL_TSTATES = CPU_CLOCK_HZ / RTC_HZ; // 67,584
 export class TRS80System {
   /**
    * @param {{ romData: Uint8Array, log?: (level: string, text: string) => void,
-   *   model?: 1 | 3 | import('./models.js').Model, ram?: number, expansion?: boolean, lowercase?: boolean }} opts
+   *   model?: 1 | 3 | 4 | import('./models.js').Model, ram?: number, expansion?: boolean, lowercase?: boolean }} opts
    *   the model (a number or a description; the Model III by default), its RAM in K (the model's
    *   default), and the Model I's Expansion Interface (fitted by default) and lowercase modification
    *   (not fitted by default); the Machine checks them
@@ -42,8 +42,15 @@ export class TRS80System {
     this.rtcInterval = desc.clockHz / desc.timerHz;
     this.expansion = expansion;
     this.lowercase = lowercase;
-    this.memory = new MemorySystem({ model: desc, ram: ram ?? desc.defaultRam, lowercase });
+    this.memory = desc.id === 4
+      ? new Model4Memory({ model: desc, ram: ram ?? desc.defaultRam })
+      : new MemorySystem({ model: desc, ram: ram ?? desc.defaultRam, lowercase });
     this.io = new IOSystem({ model: desc, expansion });
+    // The Model 4's port $84 goes to its memory maps
+    if (this.memory instanceof Model4Memory) {
+      const memory = this.memory;
+      this.io.onMapWrite = (value) => memory.setMapRegister(value);
+    }
     // The Model I's Expansion Interface addresses go to the I/O decode
     if (this.io.latch !== null) this.memory.expansion = this.io;
     // The 32-column bit: port $EC bit 2 on the Model III, port $FF bit 3 (MODESEL) on the Model I
@@ -135,7 +142,7 @@ export class TRS80System {
   stepInstruction(beforeExecute) {
     const start = this.cpu.cycles;
     if (this.cpu.cycles >= this.nextRtcAt) {
-      if (this.model.id === 3) this.io.raiseRTC();
+      if (this.model.id !== 1) this.io.raiseRTC();
       else if (this.io.latch !== null) this.io.latch.raise(TIMER_BIT);
       this.nextRtcAt += this.rtcInterval;
     }

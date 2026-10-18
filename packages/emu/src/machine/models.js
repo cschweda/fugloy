@@ -24,10 +24,21 @@
  *   xtrs runs it; unverified against the manual). The ROM's PAUSE loop at $0060 is commented
  *   "BC times 14.65" µs at $06AF, and one pass of it is 26 T-states, which puts the clock at
  *   1.775 MHz.
+ *
+ * Model 4 facts (no Model 4 Technical Reference Manual is local; each is from secondary sources,
+ * named where memory.js and io.js decide them, and spec §5 lists what is unverified):
+ * - ROM: the user's `trs32-MODEL4.ROM` (fixtures/real/model4.rom), 14,336 bytes, mapped at
+ *   $0000-$37FF in memory map 0 only (MAME trs80m3.cpp, `m4_banked_mem`; xtrs trs_memory.c,
+ *   `mem_read`, case 0x40).
+ * - RAM 64 or 128 KB (spec §5; MAME trs80m3_m.cpp, `machine_start`, configures the banks for
+ *   each); 128K by default (the phase 6b plan's interface; the choice is ours, unverified).
+ * - Clock 2,027,520 Hz at power-on: the Model III's, which the Model 4 runs in Model III mode
+ *   (spec §5: "4.055 MHz (2.027 in III mode)"); the 4 MHz switch (port $EC bit 6) is emu phase 6b
+ *   Task 2's. Timer 30 Hz at power-on, as the Model III's (spec §5; the 60 Hz option is Task 2's).
  */
 
 /**
- * @typedef {{ id: 1 | 3, name: string, clockHz: number, timerHz: number, romTop: number,
+ * @typedef {{ id: 1 | 3 | 4, name: string, clockHz: number, timerHz: number, romTop: number,
  *   romSizes: readonly number[], romSizeText: string, ram: readonly number[], defaultRam: number,
  *   ramNote: string, roms: readonly string[], romTitle: string, stateMachine: string }} Model
  */
@@ -70,8 +81,26 @@ export const MODEL_III = Object.freeze({
   stateMachine: 'trs80-model3',
 });
 
+/** @type {Model} */
+export const MODEL_4 = Object.freeze({
+  id: 4,
+  name: 'Model 4',
+  clockHz: 2027520,
+  timerHz: 30,
+  // Map 0's ROM; maps 1-3 put RAM there (memory.js, Model4Memory).
+  romTop: 0x3800,
+  romSizes: Object.freeze([0x3800, 0x4000]),
+  romSizeText: 'Expected 14KB (0x3800) or a 16KB (0x4000) padded image',
+  ram: Object.freeze([64, 128]),
+  defaultRam: 128,
+  ramNote: '',
+  roms: Object.freeze(['model4-trs32']),
+  romTitle: 'the Model 4 ROM',
+  stateMachine: 'trs80-model4',
+});
+
 /** The models built, by number. */
-export const MODELS = Object.freeze({ 1: MODEL_I, 3: MODEL_III });
+export const MODELS = Object.freeze({ 1: MODEL_I, 3: MODEL_III, 4: MODEL_4 });
 
 /**
  * The description of model `n`, or a sentence-long error for a model not built.
@@ -81,8 +110,8 @@ export const MODELS = Object.freeze({ 1: MODEL_I, 3: MODEL_III });
 export function modelOf(n) {
   if (n === 1) return MODEL_I;
   if (n === 3) return MODEL_III;
-  if (n === 4) throw new Error('There is no Model 4 yet: it needs a Model 4 ROM and boot disk to prove it boots, and comes in its own plan when one is supplied; use model 1 or 3.');
-  throw new Error(`model must be 1 (the Model I) or 3 (the Model III), not ${String(n)}.`);
+  if (n === 4) return MODEL_4;
+  throw new Error(`model must be 1 (the Model I), 3 (the Model III), or 4 (the Model 4), not ${String(n)}.`);
 }
 
 /**
@@ -93,14 +122,14 @@ export function modelOf(n) {
  */
 export function ramProblem(desc, ram) {
   if (desc.ram.includes(/** @type {number} */ (ram))) return null;
-  const sizes = desc.ram.length === 1 ? String(desc.ram[0]) : `${desc.ram.slice(0, -1).join(', ')}, or ${desc.ram.at(-1)}`;
+  const sizes = desc.ram.length === 1 ? String(desc.ram[0]) : desc.ram.length === 2 ? `${desc.ram[0]} or ${desc.ram[1]}` : `${desc.ram.slice(0, -1).join(', ')}, or ${desc.ram.at(-1)}`;
   const got = typeof ram === 'string' ? JSON.stringify(ram) : String(ram);
   return `The ${desc.name} takes ram: ${sizes} (K), not ${got}${desc.ramNote}.`;
 }
 
 /**
  * The CPU clock of model `n`, in Hz.
- * @param {1 | 3} n
+ * @param {1 | 3 | 4} n
  */
 export function clockHz(n) {
   return modelOf(n).clockHz;
@@ -110,14 +139,14 @@ export function clockHz(n) {
  * Why a recognised ROM cannot run on model `n`, as a sentence, or null when it can (or is not
  * recognised: an unknown image is checked by its size alone).
  * @param {string | null} recognized the ROM_HASHES name
- * @param {1 | 3} n
+ * @param {1 | 3 | 4} n
  * @returns {string | null}
  */
 export function romModelProblem(recognized, n) {
   if (recognized === null) return null;
   const wanted = modelOf(n);
   if (wanted.roms.includes(recognized)) return null;
-  const owner = [MODEL_I, MODEL_III].find((d) => d.roms.includes(recognized));
+  const owner = Object.values(MODELS).find((d) => d.roms.includes(recognized));
   if (owner === undefined) return null;
   return `This ROM is ${owner.romTitle} (${recognized}); it runs on the ${owner.name}, not the ${wanted.name}: construct the Machine with model: ${owner.id}.`;
 }

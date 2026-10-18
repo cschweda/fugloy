@@ -18,6 +18,13 @@
  *              read: bit 7 = 500-baud pulse latch, bit 0 = 1500-baud
  *              level, bits 5-1 = port 0xEC's latch, bit 6 high)
  *
+ * The Model 4 has the Model III's ports and, at 0x84-0x87, its memory-map
+ * register (write only; reads float to 0xFF): MAME trs80m3.cpp maps
+ * `port_84_w` over 0x84-0x87, and xtrs trs_io.c decodes 0x84-0x87 alike.
+ * The byte goes to `onMapWrite` (Model4Memory.setMapRegister, which decodes
+ * it), and a reset writes 0 there (MAME `machine_reset`: "port_84_w(0)";
+ * xtrs `trs_reset`: z80_out(0x84, 0)).
+ *
  * The RTC heartbeat interrupt fires at 30 Hz; its latch bit is RTC_IRQ_BIT.
  * The keyboard is memory-mapped at 0x3800-0x3BFF (see MemorySystem), not
  * an I/O port.
@@ -85,7 +92,7 @@ export class IOSystem {
     this.cassette = new CassetteSystem();
     // A Model I recording decodes in Model III T-states (cassette.js)
     if (model.id !== 3) this.cassette.timeScale = MODEL_III.clockHz / model.clockHz;
-    this.fdc = model.id === 3 ? new FDC1793({ cpuHz: model.clockHz }) : new FDC1771({ cpuHz: model.clockHz, latch: this.latch });
+    this.fdc = model.id !== 1 ? new FDC1793({ cpuHz: model.clockHz }) : new FDC1771({ cpuHz: model.clockHz, latch: this.latch });
     this.printer = new Printer();
     this.keyboardBuffer = []; // legacy internal buffer (not a Model III port)
     this.portHandlers = new Map();
@@ -125,9 +132,14 @@ export class IOSystem {
     // by TRS80System. Unwired, port F4 does not wait.
     this.onWait = null;
 
-    if (model.id === 3) {
+    // The Model 4's port 0x84 sink, wired by TRS80System to the memory (Model4Memory).
+    /** @type {((value: number) => void) | null} */
+    this.onMapWrite = null;
+
+    if (model.id !== 1) {
       this.initializeModelIIIPorts();
       this.initializeCassettePort();
+      if (model.id === 4) this.initializeModel4Ports();
     } else {
       this.initializeModel1CassettePort();
       // The Model I interrupts through the Expansion Interface's latch alone, which has no mask
@@ -241,6 +253,17 @@ export class IOSystem {
       this.portHandlers.set(port, {
         read: () => this.printer.status(),
         write: (v) => this.printer.write(v),
+      });
+    }
+  }
+
+  /** The Model 4's memory-map register at 0x84-0x87 (above). */
+  initializeModel4Ports() {
+    for (let port = 0x84; port <= 0x87; port++) {
+      this.portHandlers.set(port, {
+        write: (value) => {
+          if (this.onMapWrite) this.onMapWrite(value & 0xff);
+        },
       });
     }
   }
@@ -495,6 +518,7 @@ export class IOSystem {
     this.cassetteOut = 0;
     this.soundLog = [];
     this.fdc.reset();
+    if (this.model.id === 4 && this.onMapWrite) this.onMapWrite(0);
   }
 
   readKeyboard() {
