@@ -55,6 +55,14 @@ describe('the label file in the disassembler', () => {
     expect(errorsOf(edited((o) => { o['coverage']['0:0'].read = '7040,,1,EBD,2,8100'; }))).toEqual(['coverage["0:0"].read: run 2 is empty']);
     expect(errorsOf(edited((o) => { o['coverage']['0:0'].write = '7041,1,EBC,2,80FF'; }))).toEqual(['coverage["0:0"].write: the runs sum to $FFFF, not $10000']);
     expect(errorsOf(edited((o) => { o['coverage']['0:0'].jump = '7006,1,2D,1,8FCBG'; }))).toEqual(['coverage["0:0"].jump: run 5 "8FCBG" is not one to five hex digits']);
+    // A control character in a name or evidence would start a new line in the listing or the zmac source.
+    expect(errorsOf(edited((o) => { o['labels'][1].evidence = 'called 3×\n        JP 0'; }))).toEqual(['labels[1].evidence contains a control character']);
+    expect(errorsOf(edited((o) => { o['labels'][3].name = 'BU\rMP'; }))).toEqual(['labels[3].name contains a control character']);
+    expect(errorsOf(edited((o) => { o['labels'][3].name = 'BUMP\u007f'; o['labels'][2].evidence = '\u0000'; }))).toEqual([
+      'labels[2].evidence contains a control character',
+      'labels[3].name contains a control character',
+    ]);
+    expect(errorsOf(edited((o) => { o['labels'][1].evidence = ''; }))).toEqual(['labels[1] is observed and has no evidence']);
     // Either case, and zero-length runs anywhere, are fine.
     expect(parseLabelFile(edited((o) => { o['coverage']['0:0'].read = '0,0,7040,1,ebd,0,0,2,8100'; })).errors).toEqual([]);
   });
@@ -67,7 +75,7 @@ describe('the label file in the disassembler', () => {
     expect(annotations.executed).toEqual(EXEC.filter((a) => ![0x7000, 0x7020, 0x7030, 0x7034].includes(a)));
     expect(annotations.overrides).toEqual([
       { addr: 0x7040, kind: 'bytes', length: 2 },
-      { addr: 0x7040, kind: 'nocode', length: 1 },
+      { addr: 0x7040, kind: 'nocode', length: 1, fromLabels: true },
     ]);
     expect(summary).toEqual({ names: 3, roots: 16, dataRuns: 1, warnings: [] });
     // Another coverage key is reported and ignored.
@@ -124,6 +132,29 @@ describe('the label file in the disassembler', () => {
     // A label name the hints already use elsewhere is dropped too: zmac would see it twice.
     expect([...m.names]).toEqual([[0x7000, 'START']]);
     expect(m.overrides).toEqual([{ addr: 0x7030, kind: 'code', length: 0 }, { addr: 0x7040, kind: 'nocode', length: 1 }]);
+  });
+
+  it('an executed address that is an entry for another reason keeps its entry mark', () => {
+    const s = withLabelFile(openProgram(bytes, { name: 'sample.cmd', entries: [0x7004] }), parsed());
+    const listing = renderSession(s, 'listing');
+    expect(listing).toMatch(/^7004 .*LD B,03H +; entry$/m);
+    expect(listing).toMatch(/^7000 .*DI +; entry$/m);
+    expect(listing).toMatch(/^7006 .*CALL SUB_7020$/m);
+    expect(s.analysis.annotations.executed).not.toContain(0x7004);
+    expect(s.analysis.annotations.executed).not.toContain(0x7000);
+  });
+
+  it('a path that lands inside a read-only run ends there', () => {
+    // Coverage that saw $7033-$7035 read and nothing executed: static descent still reaches JP 7034H, which lands inside the run.
+    const file = parseLabelFile(edited((o) => {
+      o['labels'] = [];
+      o['coverage']['0:0'] = { encoding: 'rle-hex', exec: '10000', operand: '10000', read: '7033,3,8FCA', write: '10000', jump: '10000', call: '10000' };
+    })).file!;
+    const s = withLabelFile(open(), file);
+    expect(s.analysis.annotations.overrides).toEqual([{ addr: 0x7033, kind: 'nocode', length: 3, fromLabels: true }]);
+    expect(s.analysis.pass1.diagnostics.map((d) => d.message)).toContain('path ends at $7034 (read, never executed, per the label file)');
+    expect(s.analysis.pass1.instructions.has(0x7034)).toBe(false);
+    expect(s.analysis.pass1.instructions.has(0x7030)).toBe(true);
   });
 
   it('refuses a file written for another program', () => {

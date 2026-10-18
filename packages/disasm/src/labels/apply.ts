@@ -82,7 +82,7 @@ export function labelAnnotations(file: LabelFile, image: MemoryImage, programHas
     let runStart = -1;
     const endRun = (end: number): void => {
       if (runStart < 0) return;
-      annotations.overrides.push({ addr: runStart, kind: 'nocode', length: end - runStart });
+      annotations.overrides.push({ addr: runStart, kind: 'nocode', length: end - runStart, fromLabels: true });
       dataRuns++;
       runStart = -1;
     };

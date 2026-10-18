@@ -17,6 +17,8 @@ export interface Override {
   kind: OverrideKind;
   /** Bytes covered; 0 for a `code` hint without a length (a root only). */
   length: number;
+  /** A `nocode` from a label file's coverage: bytes read and never executed. Every byte of it ends a path, not only the first. */
+  fromLabels?: true;
 }
 
 export interface TableHint {

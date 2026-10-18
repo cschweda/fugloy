@@ -54,6 +54,8 @@ export const COVERAGE_FIELDS = ['exec', 'operand', 'read', 'write', 'jump', 'cal
 const SOURCES: readonly string[] = ['loader', 'observed', 'user', 'disasm'];
 const EDGE_KINDS: readonly string[] = ['call', 'jp', 'jr', 'rst', 'ret-to'];
 const RUN = /^[0-9A-Fa-f]{1,5}$/;
+/** C0 controls and DEL: a CR or LF in a name or evidence would start a new line in the listing or the zmac source. */
+const CONTROL = /[\u0000-\u001f\u007f]/;
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isInt = (v: unknown, min: number, max: number): v is number => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
@@ -138,11 +140,13 @@ export function parseLabelFile(text: string): { file: LabelFile | null; errors: 
         else if (seen.has(l['addr'])) errors.push(`${at}: $${hex4(l['addr'])} already has a label`);
         else seen.add(l['addr']);
         if (typeof l['name'] !== 'string' || l['name'] === '') errors.push(`${at}.name must be a non-empty string`);
+        else if (CONTROL.test(l['name'])) errors.push(`${at}.name contains a control character`);
         if (l['kind'] !== 'code' && l['kind'] !== 'data') errors.push(`${at}.kind must be "code" or "data"`);
         if (l['size'] !== undefined && !isInt(l['size'], 1, 0x10000)) errors.push(`${at}.size must be 1 to 65536`);
         if (typeof l['source'] !== 'string' || !SOURCES.includes(l['source'])) errors.push(`${at}.source must be one of ${SOURCES.join(', ')}`);
         if (l['evidence'] !== undefined && typeof l['evidence'] !== 'string') errors.push(`${at}.evidence must be a string`);
-        if (l['source'] === 'observed' && typeof l['evidence'] !== 'string') errors.push(`${at} is observed and has no evidence`);
+        else if (typeof l['evidence'] === 'string' && CONTROL.test(l['evidence'])) errors.push(`${at}.evidence contains a control character`);
+        if (l['source'] === 'observed' && (typeof l['evidence'] !== 'string' || l['evidence'] === '')) errors.push(`${at} is observed and has no evidence`);
       });
     }
   }

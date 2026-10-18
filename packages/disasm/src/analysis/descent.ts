@@ -95,7 +95,8 @@ export function recursiveDescent(image: MemoryImage, rootsIn: number[], annotati
   const externals = new Set<number>();
   const indirectJumps: number[] = [];
   const diagnostics: Diagnostic[] = [];
-  const nocode = new Set<number>();
+  /** Addresses where a path ends, with why: a `nocode` hint, or a byte a label file saw read and never executed. */
+  const nocode = new Map<number, string>();
   const work: WorkItem[] = [];
   const diagnose = (kind: DiagnosticKind, addr: number, message: string, from?: number): void => {
     diagnostics.push(from === undefined ? { kind, addr, message } : { kind, addr, from, message });
@@ -108,7 +109,9 @@ export function recursiveDescent(image: MemoryImage, rootsIn: number[], annotati
 
   // 1. Overrides first: they win over anything descent would decide.
   for (const o of annotations.overrides) {
-    if (o.kind === 'nocode') nocode.add(o.addr);
+    if (o.kind === 'nocode' && o.fromLabels === true) {
+      for (let i = 0; i < o.length; i++) if (!nocode.has((o.addr + i) & 0xffff)) nocode.set((o.addr + i) & 0xffff, 'read, never executed, per the label file');
+    } else if (o.kind === 'nocode') nocode.set(o.addr, 'nocode hint');
     else if (o.kind === 'bytes') map.mark(o.addr, o.length, Kind.Byte);
     else if (o.kind === 'words') map.mark(o.addr, o.length, Kind.Word);
     else if (o.kind === 'string') map.mark(o.addr, o.length, Kind.String);
@@ -136,8 +139,9 @@ export function recursiveDescent(image: MemoryImage, rootsIn: number[], annotati
   /** Decodes one instruction at `addr` and records it; null when the path cannot continue there. */
   const decodeOne = (addr: number, from?: number): { ins: Instruction; next: number } | null => {
     if (!image.isLoaded(addr) || map.isStart(addr)) return null;
-    if (nocode.has(addr)) {
-      diagnose('nocode', addr, `path ends at ${$(addr)} (nocode hint)`, from);
+    const why = nocode.get(addr);
+    if (why !== undefined) {
+      diagnose('nocode', addr, `path ends at ${$(addr)} (${why})`, from);
       return null;
     }
     const kind = map.kind(addr);

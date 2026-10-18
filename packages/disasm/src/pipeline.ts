@@ -108,7 +108,7 @@ function withStructure(prog: BasProgram, hints: Annotations): { annotations: Ann
 export function analyze(mod: Module, opts: AnalyzeOptions = {}): Analysis {
   const hints = opts.annotations ?? emptyAnnotations();
   const basic = mod.format === 'bas' ? withStructure(mod, hints) : null;
-  const annotations = basic?.annotations ?? hints;
+  let annotations = basic?.annotations ?? hints;
   const entries = mod.format === 'bas' ? mineEntries(mod) : [];
   const entry = mod.format === 'bas' ? null : mod.entry;
   const roots: number[] = entry === null ? [] : [entry];
@@ -117,6 +117,15 @@ export function analyze(mod: Module, opts: AnalyzeOptions = {}): Analysis {
   for (const o of hints.overrides) if (o.kind === 'code') roots.push(o.addr);
   for (const m of entries) if (m.addr !== null) roots.push(m.addr);
   roots.push(...(basic?.candidates ?? []));
+  // A root only a label file's coverage gave is an instruction that ran; one that is a root for any other reason stays an entry.
+  if (hints.executed !== undefined) {
+    const executed = new Set(hints.executed);
+    const other = new Set<number>(roots.filter((r) => !executed.has(r)));
+    for (const r of [entry, ...(opts.entries ?? []).map((e) => e & 0xffff), ...hints.overrides.filter((o) => o.kind === 'code').map((o) => o.addr)]) if (r !== null) other.add(r);
+    for (const m of entries) if (m.addr !== null) other.add(m.addr);
+    for (const c of basic?.candidates ?? []) other.add(c);
+    annotations = { ...annotations, executed: hints.executed.filter((a) => !other.has(a)) };
+  }
   // applyHints refuses bad relocations and reports them; annotations built directly are checked here.
   const { space, errors: relocationErrors } = analysisSpace(mod.image, annotations.relocations);
   const pass1 = recursiveDescent(space.image, roots, annotations);
