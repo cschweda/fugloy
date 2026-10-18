@@ -148,7 +148,7 @@ Not modeled, and invisible to ZEXALL:
 | Clock | 1.774 MHz | 2.027 MHz | 4.055 MHz (2.027 in III mode) |
 | ROM | 12 KB Level II at `0000–2FFF` | 14 KB at `0000–37FF` | 14 KB, bankable out |
 | Keyboard | `3800–3BFF` matrix | `3800–3BFF` | `3800–3BFF` in memory maps 0–1; absent from maps 2–3 |
-| Video | `3C00–3FFF`, 64×16, lowercase mod optional | `3C00–3FFF`, lowercase | `3C00–3FFF` (maps 0–1) or `F800–FFFF` (maps 2–3); 64×16 or 80×24 via port `EC` bit 2 and port `84` bit 2 |
+| Video | `3C00–3FFF`, 64×16, lowercase mod optional | `3C00–3FFF`, lowercase. Character set: codes `C0–FF` show the special set (or Kana, via ENALTSET, port `EC` bit 3) per the Model III manuals, but the glyphs are pictures only, so `m.video.text()` keeps `.` for `80–FF`: unverified as text | `3C00–3FFF` (maps 0–1) or `F800–FFFF` (maps 2–3); 64×16 or 80×24 via port `EC` bit 2 and port `84` bit 2 |
 | RAM | 4/16/32/48 KB from `4000` | 16/32/48 KB | 64/128 KB; memory map select port `84` bits 0–1; 128 KB page select bits 4–5 |
 | Cassette / sound | Port `FF` bits 0–1 out, bit 7 in; 500 baud | Port `FF`; 500/1500 baud | Port `FF` (Model III mode only) |
 | FDC | WD1771: command/status `37EC`, track `37ED`, sector `37EE`, data `37EF`; drive select `37E1`; interrupt latch `37E0` (expansion interface) | WD1793 at ports `F0–F3`; drive select/density port `F4`; NMI status `E4` | Same as Model III |

@@ -13,6 +13,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { configuredRom, ROM_TEST_TIMEOUT } from "../rom.js";
 import { TRS80System, CPU_CLOCK_HZ } from "../../src/machine/trs80-system.js";
 import { MODE_32COL_BIT } from "../../src/machine/io.js";
+import { Video } from "../../src/devices/video.js";
 
 // The ROM from fugloy.mcp.json; null without one, and the suite skips.
 const romData = configuredRom("model3");
@@ -101,5 +102,16 @@ describe.skipIf(romData === null)("32-column mode (real ROM)", { timeout: ROM_TE
     system.typeText("CLS\n");
     system.runSeconds(0.3);
     expect(system.columns32).toBe(false);
+  });
+
+  it("m.video reports 32 columns and reads READY from the even bytes", () => {
+    const m = { video: new Video(system) };
+    expect(m.video.columns).toBe(64);
+    system.typeText("PRINT CHR$(23)\n");
+    system.runSeconds(0.3);
+    expect(m.video.columns).toBe(32);
+    const lines = m.video.text();
+    expect(lines.every((l) => l.length === 32)).toBe(true);
+    expect(lines.some((l) => l.startsWith("READY"))).toBe(true);
   });
 });
