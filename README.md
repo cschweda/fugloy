@@ -13,29 +13,124 @@
 [![Node](https://img.shields.io/badge/node-%E2%89%A522-339933.svg)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6.svg)](https://www.typescriptlang.org)
 
-**A TRS-80 disassembler that reads programs the way the machine stored them,
-finds the code, and proves that its output rebuilds the original byte for
-byte.**
+**A toolkit for taking apart TRS-80 Model I and Model III programs: a
+disassembler that proves its output rebuilds the original byte for byte, a
+workbench in the browser that explains every line, and a headless emulator
+with a debugger whose runs feed back into the listing.**
 
 ## What is it?
 
-Fugløy takes a program for the TRS-80 Model I or Model III, a `.CMD` load
-module or a tokenized BASIC program saved to disk, and turns it into:
+Fugløy started as a disassembler and has grown into a reverse-engineering
+toolkit for the TRS-80, built to read old programs faithfully and keep what
+you learn about them. It reads a program the way the machine stored it, a
+`.CMD` load module or a tokenized BASIC program, works out which bytes are
+code, names what it can, and gives back source that reassembles to the same
+bytes. Around that core sit a web workbench for reading and annotating
+listings, an emulator that runs the program and records what really executed,
+and, being built now, an MCP server that lets an AI assistant drive the
+emulator.
+
+| Part | What it does | Status | Where |
+| --- | --- | --- | --- |
+| **Disassembler** | Loads `.CMD`, `.BAS`, and raw files by content; recursive descent; labels; cited ROM, hardware, and DOS names; hint files; hidden code in BASIC; rebasing and relocation; zmac source that reassembles byte for byte; JSON IR; reads the emulator's label files | Released, 1.1.0 on npm | `@fugloy/disasm`, the `fugloy` command in `@fugloy/cli`, opcode tables in `@fugloy/z80` |
+| **Web workbench** | The disassembler in the browser: facing pages, the four public-domain games one click away, editing by keyboard, the **Explain** tab, block comments, exports | Live | [fugloy.netlify.app](https://fugloy.netlify.app/), source in `apps/web` |
+| **Emulator** | A headless, deterministic Model III that passes ZEXDOC and ZEXALL, runs `.CMD`, `.BAS`, and `.CAS` programs, and has a debugger that writes label and coverage files | 0.1.0, phases 0–3 of 8 done; not yet on npm | `packages/emu` (`@fugloy/emu`) |
+| **MCP server** | Will let an AI assistant such as Claude Code load a program, run it, set breakpoints and watches, and name what it finds in the same label file | Being built (emu phase 4) | `packages/mcp` (`@fugloy/mcp`) |
+| **Ahead** | An assembler and IDE in the workbench, a course in assembly for non-programmers, and, later, recompiling games to TypeScript | Planned | [Roadmap](#whats-ahead) |
+
+Its core libraries have no runtime dependencies and use no Node or browser
+APIs, so the same code runs in the command line, the browser, and the tests.
+
+Named after the island in *Voyage of the Valkyrie*; spelled `fugloy` in code.
+
+### The disassembler
+
+Give it a program for the Model I or Model III and it turns it into:
 
 - a **listing** that separates code from data, names every jump, call, and
-  data reference, names the ROM, hardware, and DOS addresses a program uses,
-  and shows machine code hidden in BASIC at the address it really occupies;
+  data reference, names the ROM, hardware, and DOS addresses a program uses
+  from eight cited tables of 634 entries, and shows machine code hidden in
+  BASIC at the address it really occupies;
 - **zmac assembler source** that assembles back into exactly the same bytes;
 - a **JSON description** of the program (regions, basic blocks,
   cross-references, symbols) for other tools to build on.
 
-It is a command-line tool for Node 22 today. Its core library has no runtime
-dependencies and uses no Node or browser APIs, so the same code will run in
-the planned web workbench.
+Your names, comments, and code and data decisions live in a plain-text
+[hint file](#hint-files), and a [label file](#label-files) from the emulator
+turns the code a run reached into code in the listing. It is a command-line
+tool for Node 22, published on npm as `@fugloy/cli`; see [Install](#install)
+and [Use](#use).
 
-Named after the island in *Voyage of the Valkyrie*; spelled `fugloy` in code.
+### The web workbench
+
+[fugloy.netlify.app](https://fugloy.netlify.app/) runs the same disassembler
+in the browser, with nothing to install and no server. Open a program of your
+own or one of the four public-domain Westmoreland and Gilman games, and the
+listing appears on the left of two facing pages, beside tabs for symbols, an
+index, a spec sheet of the program, and manuals. You name, comment, and mark
+code or data from the keyboard, and each edit lands as a line in the hint
+file. Work saves in your browser, backs up and restores between browsers, and
+exports as zmac
+source, hints, IR, a `.CMD` load module, or a `.CAS` tape. Bring your own
+copies of the cited manuals and a citation opens at its page.
+
+The **Explain** tab is a tutor for every machine-code line: what it does in
+plain English, from register values proven on every path to it and never
+from a guess; the patterns it belongs to, such as block copies, delay loops,
+and a loader moving the program to where it runs; a summary of the routine
+around it; and, for data, the code that reads it and a picture of its bytes
+in the TRS-80 character set, block graphics included. Block comments (the
+hint file's `note`, the **:** key) sit above any line. The workbench opens
+Sea Dragon already annotated, from
+[`seadrg01.hints`](examples/sea-dragon/seadrg01.hints).
+
+### The emulator
+
+`@fugloy/emu` is a headless TRS-80 Model III in plain JavaScript, built on the
+core of [trs80-emulator](https://github.com/cschweda/trs80-emulator). It has
+no DOM and no Node APIs, and the same inputs give the same run every time, so
+a scripted session repeats byte for byte. Its Z80 core passes ZEXDOC and
+ZEXALL. It loads `.CMD`, `.BAS`, and `.CAS` programs, takes keys on a
+cycle-timed queue, reports sound as events and the screen as text, and Sea
+Dragon, Eliminator, and Rear Guard reach their title screens on it. Its
+debugger, `m.debug`, has breakpoints, watches, hooks, coverage, callers, a
+trace, and snapshots, and writes the [label and coverage
+file](docs/label-format.md) that the disassembler reads with `--labels`. You
+bring the ROM. Usage is in its [README](packages/emu/README.md).
+
+### The MCP server
+
+`@fugloy/mcp` is being built now, as the emulator's phase 4. It is a stdio
+MCP server over the emulator, so that an assistant such as Claude Code can
+load a game, find the routine that prints text, label it, and leave that
+label in the file the disassembler reads. Its design is in
+[docs/fugloy-mcp-spec.md](docs/fugloy-mcp-spec.md); it is not available yet.
+
+### What's ahead
+
+From the roadmap in [CLAUDE.md](CLAUDE.md) and the
+[project plan](docs/Fugloy-Project-Plan.md):
+
+- **The emulator's later phases:** disk images, the Model I and the Model 4,
+  and a differential harness.
+- **An assembler and IDE** (plan phase 5): write Z80 assembly in the
+  workbench, assemble it to a `.CMD`, and run it on an emulated Model I or
+  Model III beside its listing, an IDE in the way Inform 7 has one for its
+  language.
+- **Learn assembly with Fugløy** (phase 6): an introduction to assembly for
+  people who have never programmed, on the small and regular Z80, with
+  Explain's tutor voice on each line written and a tutorial that builds a
+  Space Invaders-style game from a blank page.
+- **Recompilation** (the plan's Part 2): turning a game into readable
+  TypeScript that plays the same in a browser, checked frame by frame against
+  the emulator, and bundling the public-domain games for one arcade page.
+  Part 2 is outlined, not designed; it gets its own design document, and the
+  plan's kill criteria are reviewed before it starts.
 
 ## Why Fugløy
+
+The disassembler is the part the rest builds on, and it is where Fugløy
+differs most from the tools that came before it.
 
 ### How the usual tools work
 
@@ -102,10 +197,15 @@ the bytes it came from.
 - **It keeps your notes.** Names, comments, and code and data decisions live
   in a plain-text hint file keyed by content, so one file fits a relocated
   build of the same program, and a BASIC program after `--rebase`.
+- **It learns from a run.** The emulator in `packages/emu` writes a label and
+  coverage file of what a session executed, read, and wrote; `--labels` feeds
+  it back, so code that only a run reaches becomes code in the listing. A file
+  written for a different program is refused, and the hint file wins where
+  both speak.
 
-The roadmap adds a web workbench next, then a headless emulator and an MCP
-server, so that what a program does at run time can confirm and extend what
-the static analysis finds.
+Next is the [MCP server](#the-mcp-server) over the emulator, so that an AI
+assistant can run a program, watch it, and record what it learns in the same
+label file.
 
 ## User stories
 
@@ -113,7 +213,7 @@ What people come to Fugløy for, and how each one is done today.
 
 - **As a fan who grew up with a TRS-80 game,** I want to read its machine
   code as labeled assembly, so that I can see how it really worked.
-  *Today:* `pnpm fugloy game.cmd` lists it, with the jumps, calls, and data
+  *Today:* `fugloy game.cmd` lists it, with the jumps, calls, and data
   references inside the program named.
 - **As a reader of a listing,** I want ROM and DOS calls named, so that
   `CALL 0033H` reads as showing a character. *Today:* it lists as
@@ -121,7 +221,7 @@ What people come to Fugløy for, and how each one is done today.
   you pick with `--machine` and `--dos`.
 - **As someone studying a BASIC game,** I want the machine code hidden in its
   lines shown at the addresses it occupies, so that I can follow what the
-  BASIC hands off to. *Today:* `pnpm fugloy game.bas` parses every line,
+  BASIC hands off to. *Today:* `fugloy game.bas` parses every line,
   disassembles the ones that cannot be BASIC, and finds the entry point the
   BASIC plants when it uses one of the common idioms.
 - **As a preservationist,** I want a disassembly I can trust byte for byte,
@@ -149,20 +249,32 @@ What people come to Fugløy for, and how each one is done today.
   machine code into 48K, so that students can see the tricks for themselves.
   *Today:* the listings show tokenized BASIC, hidden code, and self-moving
   loaders next to the bytes they came from.
+- **As someone checking what really runs,** I want to run the program and see
+  which bytes execute, so that the listing can be confirmed against the real
+  thing. *Today:* the headless emulator in `packages/emu` runs it and writes a
+  label and coverage file, and `--labels` applies that file to the listing.
+- **As someone without a terminal,** I want to explore and annotate a listing
+  in the browser. *Today:* the web workbench at
+  [fugloy.netlify.app](https://fugloy.netlify.app/).
 
 Planned, per the roadmap:
 
-- **As someone checking what really runs,** I want to run the program and see
-  which bytes execute, so that the listing can be confirmed against the real
-  thing. *Planned:* the headless emulator in `packages/emu`.
-- **As someone without a terminal,** I want to explore and annotate a listing
-  in the browser. *Planned:* phase 4's web workbench.
+- **As someone working with an AI assistant,** I want it to run the program,
+  set breakpoints, and read the screen for me, so that it can find and name
+  routines as I would. *Planned:* the MCP server in `packages/mcp`, emu
+  phase 4.
+- **As someone learning assembly,** I want to write Z80 code and run it at
+  once. *Planned:* phase 5's assembler and IDE in the workbench.
 
 ## Status
 
-**Current release: [v1.0.0](https://github.com/cschweda/fugloy/releases/tag/v1.0.0)**, v1: phases 1–4 of the plan.
-Phase 3 names ROM, hardware, and DOS addresses from cited symbol tables, with
-`--machine` and `--dos` choosing them. Phase 4 is the web workbench, live at
+**Current release: [1.1.0](https://github.com/cschweda/fugloy/releases/tag/v1.1.0)**
+(2026-10-18), the first published to npm as `@fugloy/z80`, `@fugloy/disasm`,
+and `@fugloy/cli`, which share one version. It adds `--labels`, which reads
+the emulator's label and coverage file. It follows
+[v1.0.0](https://github.com/cschweda/fugloy/releases/tag/v1.0.0), v1: phases
+1–4 of the plan. Phase 3 names ROM, hardware, and DOS addresses from cited
+symbol tables, with `--machine` and `--dos` choosing them. Phase 4 is the web workbench, live at
 [fugloy.netlify.app](https://fugloy.netlify.app/): open a program or one of the
 four public-domain games, read and annotate the listing, click any line for a
 plain-English explanation in the Explain tab, write block comments, save in
@@ -170,12 +282,18 @@ your browser, and export zmac source, hints, IR, `.CMD`, or `.CAS`. Earlier
 releases: phase 2, Pass 1 and Pass 2, as
 [v0.2.0](https://github.com/cschweda/fugloy/releases/tag/v0.2.0); phase 1, the
 core decoder and loaders, as
-[v0.1.0](https://github.com/cschweda/fugloy/releases/tag/v0.1.0). The
-emulator's phases 0 and 1 are done (the core of
-[trs80-emulator](https://github.com/cschweda/trs80-emulator) in
-`packages/emu`, booting the Model III ROM to `READY` in Node and passing ZEXDOC
-and ZEXALL). Next is the emulator's phase 2, the Model III devices and program
-loaders, then the MCP server (see the roadmap in [CLAUDE.md](CLAUDE.md)). Later,
+[v0.1.0](https://github.com/cschweda/fugloy/releases/tag/v0.1.0).
+
+The emulator, `@fugloy/emu` 0.1.0 (not yet on npm), has phases 0–3 of eight
+done: the core of [trs80-emulator](https://github.com/cschweda/trs80-emulator)
+booting the Model III ROM to `READY` in Node (0); a Z80 core that passes
+ZEXDOC and ZEXALL (1); the Model III as a `Machine`, with video, sound,
+keyboard, and `.CMD`, `.BAS`, and `.CAS` loaders, on which Sea Dragon,
+Eliminator, and Rear Guard reach their title screens (2); and the debugger,
+`m.debug`, with breakpoints, watches, coverage, a trace, snapshots, and the
+label and coverage file (3). Next is the emulator's phase 4, the MCP server
+`@fugloy/mcp` v0.1 (its phases A–C), then disk images, Model I and Model 4,
+and a differential harness (see the roadmap in [CLAUDE.md](CLAUDE.md)). Later,
 phase 5 adds an assembler with an IDE in the workbench: write Z80 code,
 assemble it, and run it on an emulated Model I or Model III. Every change is
 recorded in [CHANGELOG.md](CHANGELOG.md); releases are tagged `vX.Y.Z` on
@@ -185,17 +303,37 @@ recorded in [CHANGELOG.md](CHANGELOG.md); releases are tagged `vX.Y.Z` on
 | --- | --- |
 | `packages/z80` | Z80 opcode tables generated from the x/y/z/p/q decomposition (unprefixed, `CB`, `ED`, `DD`/`FD`, `DDCB`/`FDCB`) with length, operands, cycle counts, and control-flow effect; a decoder; an exhaustion test against an independently typed reference. No I/O. |
 | `packages/disasm` | 64K memory image with a load bitmap and block log, `.CMD` and `.BAS` loaders, content-based format detection, raw loader, a Level II BASIC parser and entry-point miner, pass 1 recursive descent, labels, the hint file, string and proposal heuristics, rebasing, relocation, the cited symbol tables (`data/symbols`, compiled by `pnpm symbols`), zmac emitter, JSON IR, linear sweep, plain-text listings. No Node or DOM APIs, so it runs in a browser. |
-| `packages/cli` | `fugloy <file> [--base <hex> \| --rebase <hex>] [--entry <hex>]... [--hints <path> \| --write-hints <path>] [--machine 1\|3\|4] [--dos trsdos\|ldos\|none] [--format listing\|zmac\|ir] [--sweep] [--color] [-o <path>]`, the only package that touches the file system. |
-| `packages/emu` | The headless, deterministic TRS-80 Model III emulator core from trs80-emulator: Z80 CPU, memory map, I/O, keyboard, cassette, disk controller, save states. No DOM; boots the ROM to `READY` in Node. Design in [docs/fugloy-emu-spec.md](docs/fugloy-emu-spec.md). |
-| `packages/mcp` | The stdio MCP server that lets an AI assistant drive the emulator (`bin/fugloy-mcp.js`), in progress in emu phase 4: the phase A and B tools so far (load, run, step, key, inspect memory and the screen; breakpoints, watches and their hits, the trace, callers, and a disassembly with coverage marks); design in [docs/fugloy-mcp-spec.md](docs/fugloy-mcp-spec.md). |
+| `packages/cli` | `fugloy <file> [--base <hex> \| --rebase <hex>] [--entry <hex>]... [--hints <path> \| --write-hints <path>] [--labels <path>] [--machine 1\|3\|4] [--dos trsdos\|ldos\|none] [--format listing\|zmac\|ir] [--sweep] [--color] [-o <path>]`, the only package that touches the file system. |
+| `packages/emu` | The headless, deterministic TRS-80 Model III emulator, built on the core of trs80-emulator: a Z80 CPU that passes ZEXALL, the `Machine` facade (`step`, `run`, registers, memory, video text, sound events, keyboard), `.CMD`, `.BAS`, and `.CAS` loaders with manifests, and the debugger `m.debug`, which writes the label and coverage file. No DOM, no Node APIs. Design in [docs/fugloy-emu-spec.md](docs/fugloy-emu-spec.md); usage in its [README](packages/emu/README.md). |
+| `packages/mcp` | A stub for the MCP server that will let an AI assistant drive the emulator, built in emu phase 4; design in [docs/fugloy-mcp-spec.md](docs/fugloy-mcp-spec.md). |
+| `apps/web` | The web workbench (`@fugloy/web`, Nuxt 4 and Nuxt UI, static, deployed to Netlify), running the disassembler in the browser. |
 | `fixtures/synthetic` | Generated fixtures, one `.CMD` or `.BAS` per loader rule and analysis case plus their hint files, written by the test suite's own `.CMD` writer and BASIC tokenizer. |
 | `fixtures/hints` | Hint files for real programs; `asylum16.hints` carries Asylum's generated relocate lines, and `volcano.hints` relocates Volcano Hunter's game to its runtime address. |
 
-Phase 4 adds a static web workbench (`apps/web`, Nuxt 4, deployed to Netlify).
+The workbench is live at [fugloy.netlify.app](https://fugloy.netlify.app/);
+the domains `app.fugloy.dev` and `fugloy.dev` will follow.
+
+## Install
+
+The command-line tool needs Node 22 or later. Run it without installing, or
+install it once to get the `fugloy` command:
+
+```sh
+npx @fugloy/cli GAME.CMD     # run once
+npm i -g @fugloy/cli         # or install it
+fugloy GAME.CMD --format zmac -o game.z
+```
+
+The libraries are `@fugloy/disasm` (loaders, analysis, emitters; runs in a
+browser) and `@fugloy/z80` (the opcode table and decoder). The examples below
+use `pnpm fugloy` from a clone, which runs the same CLI; with the package
+installed, write `fugloy` instead. The emulator, `@fugloy/emu`, is not on npm
+yet; use it from a clone (`pnpm install`), as its
+[README](packages/emu/README.md) shows. The workbench needs no install.
 
 ## Requirements
 
-Node 22 (`.nvmrc`) and pnpm 10. The round-trip tests also need zmac, which
+To build from source: Node 22 (`.nvmrc`) and pnpm 10. The round-trip tests also need zmac, which
 `pnpm zmac:install` builds from a pinned commit into the gitignored `tools/`
 folder; that takes git, make, a C compiler, and bison. Without zmac those
 tests skip; with `FUGLOY_REQUIRE_ZMAC=1`, as in CI, they fail instead.
@@ -206,10 +344,12 @@ tests skip; with `FUGLOY_REQUIRE_ZMAC=1`, as in CI, they fail instead.
 pnpm install
 pnpm test          # vitest, all packages
 pnpm typecheck     # tsc project references plus the test sources
-pnpm build         # emits packages/*/dist
+pnpm build         # emits dist for z80, disasm, and cli (run it before pnpm fugloy)
 pnpm fixtures      # regenerates fixtures/synthetic from the writers
 pnpm symbols       # validates data/symbols/*.json, regenerates the tables module and COMPARISON.md
 pnpm zmac:install  # builds the pinned zmac into tools/ for the round-trip tests
+pnpm zex:install   # downloads ZEXDOC and ZEXALL into tools/zex/ for the emulator's exerciser tests
+pnpm web:dev       # the workbench on a local dev server; pnpm test:web runs its tests
 
 pnpm fugloy path/to/program.cmd          # load module: pass 1 listing (descent from the entry)
 pnpm fugloy path/to/program.bas          # tokenized BASIC: its lines, any hidden code disassembled
@@ -224,11 +364,13 @@ pnpm fugloy game.cmd --sweep                     # the phase-1 linear sweep inst
 pnpm fugloy game.cmd --color                     # the listing in color on a terminal (plain when piped or with NO_COLOR)
 pnpm fugloy game.cmd --write-hints game.hints    # a hint-file skeleton to edit by hand
 pnpm fugloy game.cmd --hints game.hints          # apply names, comments, entries, code and data, tables, relocations
+pnpm fugloy game.cmd --labels game.labels.json   # apply the emulator's label and coverage file for this program
 ```
 
 The exit code is 0 on success, 1 when a file cannot be read or written, and 2
 for a usage error, a file that is neither a load module nor tokenized BASIC,
-a hint-file error, or a relocation that cannot apply.
+a hint-file error, a label file written for another program, or a relocation
+that cannot apply.
 
 ### What the output looks like
 
@@ -312,8 +454,8 @@ listing.
 A hint file is line-oriented text keyed by block and offset, so it diffs in
 git. Write a skeleton with `--write-hints`, then add one directive per line:
 `entry`, `code`, `bytes <n>`, `words <n>`, `string`, `nocode`,
-`table <count> 2`, `name <label>`, `comment <text>`, or
-`relocate <addr> <length>`.
+`table <count> 2`, `name <label>`, `comment <text>`, `note <text>` (a block
+comment on its own lines above the address), or `relocate <addr> <length>`.
 
 ```
 fugloy-hints 1
@@ -334,6 +476,33 @@ block 0:$00E1 relocate $42F3 $0080
 block 0:$0165 relocate $4373 $0080
 block 0:$01A0 entry
 ```
+
+### Label files
+
+A label file is the JSON record of a run on the emulator: which bytes
+executed, were read, were written, were jumped to and called, and any labels
+named during the session. It is described in
+[docs/label-format.md](docs/label-format.md). Today the emulator's debugger
+writes it (`m.debug.labelFile()`, see the
+[emulator's README](packages/emu/README.md)); the MCP server, coming in emu
+phase 4, will write it too. Sea Dragon's, from a scripted session through the
+title screen, is committed as
+[`seadrg01.labels.json`](examples/sea-dragon/seadrg01.labels.json):
+
+```sh
+pnpm fugloy examples/sea-dragon/seadrg01.cmd --hints examples/sea-dragon/seadrg01.hints \
+  --labels examples/sea-dragon/seadrg01.labels.json
+```
+
+```
+; labels: seadrg01.labels.json: 1 name, 459 roots, 24 data runs applied
+```
+
+Executed instructions become entry points, and bytes only read stop descent
+as data. A file that carries the program's SHA-256, as the emulator's do
+after a load, is refused for any other program (exit 2). Code that changed at run time, such as Sea Dragon's game
+after its loader copies it down, is applied only inside a `relocate` hint's
+region; without the hint file the listing says so in a note.
 
 ### How the analysis reads a program
 
@@ -502,9 +671,12 @@ Opcode tables are generated, never hand-edited. The image is a flat
 ## Repository
 
 Source and issues: [github.com/cschweda/fugloy](https://github.com/cschweda/fugloy).
-CI builds the pinned zmac and requires it, then runs typecheck, the tests,
-the build, and a check that the committed synthetic fixtures and the generated
-symbol tables still match their sources, on every push and pull request.
+CI builds the pinned zmac and fetches the Z80 exercisers and requires both,
+then runs typecheck, the tests, the build, and a check that the committed
+synthetic fixtures and the generated symbol tables still match their sources;
+a second job typechecks the workbench and runs its unit, SEO, and browser
+tests, on every push and pull request. A separate workflow runs ZEXDOC and
+ZEXALL group by group.
 
 Releases to npm go through `./publish.sh`, in two steps, from `main` after
 CI has passed. `./publish.sh check core` (or `emu`) runs every check, packs

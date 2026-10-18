@@ -1,17 +1,20 @@
 # @fugloy/emu
 
-Headless, deterministic TRS-80 Model I/III/4 emulator core in plain
+Headless, deterministic TRS-80 emulator core (Model III; Model I and 4 to come) in plain
 JavaScript, for Node and the browser alike. Emu phase 0 brought in the core of
 [cschweda/trs80-emulator](https://github.com/cschweda/trs80-emulator) (v1.6.0):
 the Z80 CPU (`src/cpu/`), the Model III memory map, I/O ports, and system
 (`src/machine/`), the keyboard matrix, cassette, WD1793 disk controller, disk
 images, and printer (`src/devices/`), the `.CAS` and `.CMD` formats
 (`src/loaders/`), and save states (`src/debug/`). Model III only for now.
+Phases 0–3 of the spec's eight are done: the Z80 core passes ZEXDOC and
+ZEXALL, the `Machine` below runs real programs, and `m.debug` writes the label
+and coverage file. Phase 4 is the MCP server, `@fugloy/mcp`.
 
 The renderer, the WebAudio driver, the turbo throttle, the web UI, and every
 ROM, disk, and program file stayed upstream: rendering and sound belong to the
 workbench, and the caller supplies ROM bytes. Provenance and license:
-[`NOTICE.md`](NOTICE.md).
+[`NOTICE.md`](https://github.com/cschweda/fugloy/blob/main/packages/emu/NOTICE.md).
 
 The core never writes to the console. Pass a logger to see what it reports,
 such as an unimplemented opcode or a tape load:
@@ -73,7 +76,7 @@ differs from what the load placed, so the disassembler neither mistakes moved
 code for data nor applies the moved code's coverage to the file's bytes (a
 relocate hint says where it runs).
 Everything on `m.debug` is described in spec §3 and §7, the file in §8 and
-[`docs/label-format.md`](../../docs/label-format.md).
+[`docs/label-format.md`](https://github.com/cschweda/fugloy/blob/main/docs/label-format.md).
 `examples/sea-dragon/seadrg01.labels.json` is the file of the scripted session
 in `test/integration/sea-dragon-session.js`; `node
 packages/emu/scripts/sea-dragon-labels.mjs` rewrites it (it needs the ROM).
@@ -90,8 +93,8 @@ process, on the laptop that built phase 3):
 
 `test/integration/benchmark.test.js` asserts at least 20× for both.
 
-- Spec: [`docs/fugloy-emu-spec.md`](../../docs/fugloy-emu-spec.md) (phases 0–7 in §11)
-- Label and coverage file shared with `mcp` and `disasm`: [`docs/label-format.md`](../../docs/label-format.md)
+- Spec: [`docs/fugloy-emu-spec.md`](https://github.com/cschweda/fugloy/blob/main/docs/fugloy-emu-spec.md) (phases 0–7 in §11)
+- Label and coverage file shared with `mcp` and `disasm`: [`docs/label-format.md`](https://github.com/cschweda/fugloy/blob/main/docs/label-format.md)
 - ROM images are never bundled or committed; `roms/` here is gitignored and
   paths are supplied by the caller.
 

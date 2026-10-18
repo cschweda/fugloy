@@ -1,21 +1,57 @@
 # Changelog
 
 All notable changes to Fugløy are recorded here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Phases 1 and 2
-landed as minor versions; 1.0.0 is v1, phases 1–4 of the plan.
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
+[Semantic Versioning](https://semver.org/).
 
-Releases are tagged `vX.Y.Z` on `main`.
+The repository holds parts that are versioned and released separately:
+
+- **Core**: `@fugloy/z80`, `@fugloy/disasm`, and `@fugloy/cli`, released
+  together at one version. Phases 1 and 2 of the plan landed as minor
+  versions (0.1.0, 0.2.0); 1.0.0 is v1, phases 1–4 of the plan, and a
+  release that adds features raises the minor version. Core releases have the plain `## [X.Y.Z]` headings below and are tagged `vX.Y.Z` on
+  `main`. 1.1.0 is the first on npm; 0.1.0, 0.2.0, and 1.0.0 were tagged and
+  published as GitHub releases only.
+- **The emulator**, `@fugloy/emu`, is versioned 0.x on its own. It is at
+  0.1.0 and not yet on npm, so its phases are listed under [Unreleased]. Its
+  first release moves them to an `## [emu X.Y.Z]` heading, tagged
+  `emu-vX.Y.Z`.
+- **The MCP server**, `@fugloy/mcp`, is an unpublished 0.1.0 stub. It is
+  built in emu phase 4, which is not on `main` yet.
+- **The web workbench**, `apps/web`, is not on npm and has no version of its
+  own: Netlify builds it from `main` and serves it at fugloy.netlify.app
+  (app.fugloy.dev to follow). Its changes are listed under the core release
+  they shipped with.
+
+A release is cut from `main`. An ordinary commit bumps the set's
+`package.json` versions and moves its entries out of [Unreleased] into the new
+heading; then `./publish.sh check core` (or `check emu`) runs every check,
+installs and runs the packed tarballs, and stages them in `.release/`, and
+`./publish.sh publish` publishes those tarballs with npm's two-factor code and
+creates and pushes the tag.
 
 ## [Unreleased]
 
-Emu phase 3 (`@fugloy/emu`, unreleased): the debugger and the label and
-coverage file, which the disassembler reads. Phase 3's done-criterion is met:
-a scripted session produces a label file Fugløy's disassembler consumes.
+Nothing in the core packages since 1.1.0. The emulator, `@fugloy/emu` 0.1.0
+(not on npm), has phases 0–3 of eight done, listed here until its first
+release. Phases 0 and 1 were merged while core 1.0.0 was being built, and
+phases 2 and 3 between 1.0.0 and 1.1.0. Emu phase 4, `@fugloy/mcp` v0.1 (MCP
+phases A–C), is being built on a branch and is not on `main`.
 
-Emu phase 2 (`@fugloy/emu`, unreleased): the Model III as a `Machine`, with
-the devices and loaders that run real programs. Phase 2's done-criterion is
-met: Sea Dragon, Eliminator, and Rear Guard load and reach their title screens
-through `Machine`.
+Emu phase 3: the debugger and the label and coverage file, which the
+disassembler reads from 1.1.0. Phase 3's done-criterion is met: a scripted
+session produces a label file Fugløy's disassembler consumes.
+
+Emu phase 2: the Model III as a `Machine`, with the devices and loaders that
+run real programs. Phase 2's done-criterion is met: Sea Dragon, Eliminator,
+and Rear Guard load and reach their title screens through `Machine` (Armored
+Patrol was tried and left out).
+
+Emu phase 1: the Z80 core passes the ZEXDOC and ZEXALL instruction
+exercisers, and its timing matches `@fugloy/z80`.
+
+Emu phase 0: the core of `cschweda/trs80-emulator`, without its DOM, boots
+the Model III ROM to `READY` in Node.
 
 ### Added
 
@@ -37,17 +73,18 @@ Emu phase 3:
   snapshots and `m.video.diff`, and user labels. Debugging off costs nothing
   measurable: Sea Dragon runs at about 42× real time with it off and about 30×
   with coverage and a 10,000-deep trace on, both over the §4 target of 20×.
+- How the debugger behaves at the edges: a breakpoint stops a run before its
+  instruction, and the next run starts past it, so hit counts do not depend on
+  how a session is split into runs; a halted CPU is never stopped by a
+  breakpoint; a watch hit by an interrupt response at a boundary a breakpoint
+  then holds is returned by the next run; logged hits are frozen objects;
+  where a return lands is not marked as a jump target (the callers map
+  records it as `ret-to`), and the keyboard hook's stand-in `RET` marks no
+  coverage; `step` and `run` throw when called from a `when` or `until`
+  callback.
 - `m.debug.labelFile()`, `parseLabelFile`, `mergeLabelFiles`, and the
   `rle-hex` coverage encoding: the label and coverage file of spec §8 and
   `docs/label-format.md`, with a committed synthetic fixture.
-- `@fugloy/disasm` reads the file (`parseLabelFile`, `withLabelFile`), and the
-  CLI applies it with `--labels <path>`: executed bytes become roots, runs read
-  and never run or written stop descent (never at another source's entry
-  point), observed subroutines get their evidence as a comment, and a file
-  written for another program is refused. Hint files win. The file's `write`
-  field also marks loaded bytes changed since the load, and code that changed
-  at runtime (a program that moved or rewrote itself) is not applied to the
-  file's bytes outside a relocate hint's region; one warning counts it.
 - `examples/sea-dragon/seadrg01.labels.json`: the file of a scripted Sea Dragon
   session (coverage from `$497F`, after the loader's copy, through the title
   screen and ENTER), written by `packages/emu/scripts/sea-dragon-labels.mjs`.
@@ -63,13 +100,22 @@ Emu phase 2:
 
 - `Machine` (spec §3): `step(n)` and `run({ cycles, until })` with reasons,
   registers, flags, memory, ports, ROM identification (`m.rom`, `ROM_HASHES`),
-  and `m.system` as an escape hatch.
+  and `m.system` as an escape hatch. `run` refuses a `cycles` budget that is
+  negative or not a finite number.
 - `m.video.text()`: the screen as 16 lines, 64 or 32 columns.
 - `m.sound`: every port `FF` write in a 65,536-event ring, stamped in T-states,
-  with `events(sinceCycle)` and `overflowed`.
+  with `events(sinceCycle)` and `overflowed`. `events()` with no argument
+  includes a write at cycle 0, and a reset or a state restore clears the ring.
 - `m.keyboard`: `press`, `release`, cycle-timed `type` through the matrix, and
   `feed` through a hook on the ROM's keyboard-scan entries (`$002B`, `$0049`),
-  verified against the Model III ROM listing.
+  verified against the Model III ROM listing. `type` holds each key 50 ms of
+  emulated time at its default 10 characters a second (Rear Guard needs ENTER
+  held about half a second, `{ cps: 1 }`); `feed` checks every character
+  first and queues nothing when one is bad; the hook's stand-in `RET` costs
+  10 T-states and does the CPU's end-of-instruction bookkeeping (a pending
+  `EI` takes effect). `m.keyboard.clear()` drops queued input, and
+  `m.load.cmd` and the fast path of `m.load.cas` call it, so a new program
+  does not read the last one's keys.
 - `m.load.bas`: tokenized (`FF`) and ASCII `.BAS` files; ASCII goes through the
   keyboard hook. A file without the `FF` header is rejected with a message
   that says to add one.
@@ -77,7 +123,93 @@ Emu phase 2:
   including the ROM-loader path (`via: 'rom'`, blocks marked `predicted`) and
   the `m.cassette` deck.
 - Determinism proof: a scripted session run twice ends byte-identical
-  (synthetic ROM in CI, Sea Dragon locally).
+  (synthetic ROM in CI, Sea Dragon locally), and splitting a run into slices
+  does not change where it ends.
+
+Emu phase 1:
+
+- The Z80 core passes ZEXDOC and ZEXALL, all 67 groups each, run one Vitest
+  test per group through a CP/M harness (`pnpm zex:install`, then
+  `FUGLOY_ZEX=1`; CI runs them in `exerciser.yml`), and its T-states match
+  `@fugloy/z80` for every opcode, both ways for each conditional. On the way:
+  - `CPL` sets flags 3 and 5.
+  - MEMPTR follows the documented rules, interrupt entry included, and save
+    states keep it.
+  - `IN F,(C)`, `OUT (C),0`, and the `NEG`, `RETN`, and `IM` duplicates exist,
+    and the other undefined `ED` opcodes are 8-T-state NOPs.
+  - A `DD` or `FD` before another prefix or `ED` is a 4-T-state step with no
+    maskable interrupt after it, and one before `EX DE,HL` or `EXX` is
+    ignored.
+  - The block I/O instructions set every flag.
+  - `ADC`, `SBC`, `AND`, `XOR`, `OR`, and `CP` on `(HL)` take 7 T-states, not 4.
+
+Emu phase 0:
+
+- `packages/emu`: the core of `cschweda/trs80-emulator` (v1.6.0) — Z80 CPU,
+  Model III memory map and I/O, keyboard matrix, cassette, WD1793 disk
+  controller, disk images, printer, `.CAS`/`.CMD` formats, save states — as
+  plain ESM with no DOM (`NOTICE.md` records the source). An injected logger
+  replaces `console` and a built-in base64 replaces `Buffer`/`atob`/`btoa`. A
+  check links and runs the package in an empty `node:vm` context, as the spec
+  requires. The Model III ROM named in `fugloy.mcp.json` (see
+  `fugloy.mcp.example.json`) boots to `READY` in Node, the same way twice; a
+  `FUGLOY_CONFIG` that names no file is an error, not a silent skip. 348
+  upstream tests came along, 23 of them needing the ROM; the renderer, sound,
+  UI, and every ROM, disk, and program file stayed upstream.
+
+### Changed
+
+- The load hand-off: `fastLoadCmd` and `fastLoadSystem` now clear a latched
+  interrupt request, a pending `DD`/`FD` prefix, and HALT, and complete an `EI`
+  still in flight, before jumping to the entry. A caller that relied on a
+  latched tick surviving a load will see it dropped.
+
+### Fixed
+
+- `fromBase64` accepts whitespace and the URL-safe alphabet again, as
+  upstream's decoder did; phase 0's replacement for `atob` had dropped both.
+
+### Security
+
+- The emulator's `parseLabelFile` refuses a label name or evidence that holds a control character (C0 or DEL), so a file cannot
+  start a new line in a listing or zmac source made from it. The
+  disassembler's reader refuses the same from 1.1.0.
+
+## [1.1.0] - 2026-10-18
+
+`@fugloy/z80`, `@fugloy/disasm`, and `@fugloy/cli` 1.1.0, the first release
+published to npm (`@fugloy/cli` installs the `fugloy` command). The
+disassembler reads the label and coverage file the emulator writes, so code
+that only a run reaches becomes code in the listing. Emu phases 2 and 3 were
+merged in this release's range; `@fugloy/emu` itself stays 0.1.0 and
+unpublished. `@fugloy/z80` changes only its version and package files, and
+the web workbench is unchanged. The `v1.1.0` tag is made by `./publish.sh
+publish`.
+
+### Added
+
+- `@fugloy/disasm` reads the file (`parseLabelFile`, `withLabelFile`), and the
+  CLI applies it with `--labels <path>`: executed bytes become roots, runs read
+  and never run or written stop descent (never at another source's entry
+  point), observed subroutines get their evidence as a comment, and a file
+  written for another program is refused. Hint files win. The file's `write`
+  field also marks loaded bytes changed since the load, and code that changed
+  at runtime (a program that moved or rewrote itself) is not applied to the
+  file's bytes outside a relocate hint's region; one warning counts it.
+- What a label file shows: the listing header gains `; labels: <file>: N
+  names, M roots, K data runs applied` and a `; warning:` line for each
+  warning (with `--format zmac` or `ir` the warnings go to stderr); a root
+  that only the file's coverage gave is an instruction that ran and is not
+  marked as an entry point; a path ending in a read-only run says `read,
+  never executed, per the label file`; the IR gains a `labels` summary
+  (`fugloyIr` stays 1).
+- The reader takes format version 1 (`"fugloy": 1`) and refuses any other.
+  Parse errors print one per line and exit 2, as does a file for another
+  program; an unreadable file exits 1. `--labels` with `--sweep` or
+  `--write-hints` is a usage error (exit 2).
+- `@fugloy/disasm` also exports `COVERAGE_FIELDS`, `decodeRle`,
+  `labelAnnotations`, and `mergeAnnotations`, and the `LabelFile`, `Label`,
+  `LabelSource`, `Coverage`, `CallerEdge`, and `LabelsSummary` types.
 
 ### Changed
 
@@ -87,10 +219,15 @@ Emu phase 2:
   code). The packages gained a `LICENSE`, a `README.md` where they had none,
   repository links, and a `publishConfig` that drops the `source` export
   condition, which points at TypeScript files the tarballs do not carry.
-- The load hand-off: `fastLoadCmd` and `fastLoadSystem` now clear a latched
-  interrupt request, a pending `DD`/`FD` prefix, and HALT, and complete an `EI`
-  still in flight, before jumping to the entry. A caller that relied on a
-  latched tick surviving a load will see it dropped.
+- The README describes the npm packages, `--labels`, and the emulator's
+  phases 0–3, and its user stories say what works today and what is planned;
+  the `cli`, `disasm`, and `emu` package READMEs follow.
+
+### Security
+
+- A label file's names and evidence may not hold a control character (C0 or
+  DEL); such a file is refused, so it cannot forge lines in the listing or
+  the zmac source.
 
 ## [1.0.0] - 2026-10-17
 
@@ -108,7 +245,10 @@ shows its ROM calls named, and keeps a rename and a comment across a reload;
 CI runs the same flow on Sea Dragon. The site is live at
 fugloy.netlify.app (app.fugloy.dev to follow). `@fugloy/z80`,
 `@fugloy/disasm`, and `@fugloy/cli` are 1.0.0; the `@fugloy/emu` and
-`@fugloy/mcp` packages keep their own 0.1.0.
+`@fugloy/mcp` packages keep their own 0.1.0. Emu phases 0 and 1 were merged
+in this release's range and are listed under [Unreleased], since the
+emulator is not released. Tagged `v1.0.0` on 2026-10-17; its GitHub release
+was published at 03:11 UTC on 2026-10-18.
 
 ### Added
 
@@ -135,7 +275,15 @@ fugloy.netlify.app (app.fugloy.dev to follow). `@fugloy/z80`,
   `@fugloy/disasm` exports the engine (`explainLine`, `explainRow`,
   `summarizeRoutine`, `summaryNotes`, `dataRegion`, `sentenceText`,
   `screenCell`, `blockCells`, `trsGlyph`), which has no DOM and returns
-  structured sentences, not HTML.
+  structured sentences, not HTML. It claims only what is proven: the value
+  tracker forgets what it knows at every label and after an undocumented
+  `DB` fallback; an instruction the program rewrites (a store through a
+  proven register, or into a prefixed instruction's real opcode byte) is
+  flagged and its values are unknown; a `DJNZ` loop is counted only when
+  nothing else enters it or changes `B`, and its count is bounded by early
+  exits; a delay loop only when it tests the pair it decrements; and calls
+  and jumps the program rewrites are left out of a label's ways in. The
+  guarantees are collected in one test file.
 - Block comments: the `note <text>` hint directive (`block <i>:<offset> note
   …`), printed as `; text` lines above an address in the listing and the zmac
   source, and carried in the JSON IR as `notes`. An empty `note` is a blank `;`
@@ -145,7 +293,9 @@ fugloy.netlify.app (app.fugloy.dev to follow). `@fugloy/z80`,
   routine" or "above this line" inside a routine; saving replaces the notes
   as one undoable edit, and emptying the box removes them. **Use as comment**
   under Explain's routine summary opens the box with the summary, after any
-  notes already there, for the user to rewrite before saving.
+  notes already there, for the user to rewrite before saving. A note at an
+  address inside an instruction, where no row could show it, draws a
+  warning.
 - An annotated Sea Dragon: `examples/sea-dragon/seadrg01.hints` now names 19
   routines and labels and 22 variables and tables, and carries block comments
   on 46 addresses: the loader, the title screen, the main loop (`MAIN_LOOP`)
@@ -165,31 +315,6 @@ fugloy.netlify.app (app.fugloy.dev to follow). `@fugloy/z80`,
   since the mnemonic and operands already identify the family.
 - The workbench numbers every listing line in a gutter of its own (not part
   of the text), and the status line gives the total.
-- `@fugloy/emu`, emu phase 0: the core of `cschweda/trs80-emulator` (v1.6.0)
-  — Z80 CPU, Model III memory map and I/O, keyboard matrix, cassette, WD1793
-  disk controller, disk images, printer, `.CAS`/`.CMD` formats, save states —
-  as plain ESM with no DOM. An injected logger replaces `console` and a
-  built-in base64 replaces `Buffer`/`atob`/`btoa`. A check links and runs the
-  package in an empty `node:vm` context, as the spec requires. The Model III
-  ROM named in `fugloy.mcp.json` (see `fugloy.mcp.example.json`) boots to
-  `READY` in Node, the same way twice. 348 upstream tests came along, 23 of
-  them needing the ROM; the renderer, sound, UI, and every ROM, disk, and
-  program file stayed upstream.
-- `@fugloy/emu`, emu phase 1: the Z80 core passes ZEXDOC and ZEXALL, all 67
-  groups each, run one Vitest test per group through a CP/M harness
-  (`pnpm zex:install`, then `FUGLOY_ZEX=1`; CI runs them in `exerciser.yml`),
-  and its T-states match `@fugloy/z80` for every opcode, both ways for each
-  conditional. On the way:
-  - `CPL` sets flags 3 and 5.
-  - MEMPTR follows the documented rules, interrupt entry included, and save
-    states keep it.
-  - `IN F,(C)`, `OUT (C),0`, and the `NEG`, `RETN`, and `IM` duplicates exist,
-    and the other undefined `ED` opcodes are 8-T-state NOPs.
-  - A `DD` or `FD` before another prefix or `ED` is a 4-T-state step with no
-    maskable interrupt after it, and one before `EX DE,HL` or `EXX` is
-    ignored.
-  - The block I/O instructions set every flag.
-  - `ADC`, `SBC`, `AND`, `XOR`, `OR`, and `CP` on `(HL)` take 7 T-states, not 4.
 - `examples/rear-guard/`, `examples/eliminator/`, and `examples/armored-patrol/`:
   three more of the Westmoreland and Gilman games released into the public
   domain in 1995, beside Sea Dragon, each with a README saying what every
@@ -221,7 +346,9 @@ fugloy.netlify.app (app.fugloy.dev to follow). `@fugloy/z80`,
     service calls (Soltoff's *Programmer's Guide to LDOS/TRSDOS Version 6* and
     the Model 4 *Technical Reference Manual*).
   - `pnpm symbols` validates the files (schema, hex ranges, citations, names
-    zmac accepts and unique ignoring case, no overlapping regions) and writes
+    zmac accepts and unique ignoring case, no repeated port or service call
+    numbers, no line breaks in a purpose, note, or cited page, no overlapping
+    regions) and writes
     the generated `src/symbols/tables.generated.ts` and `COMPARISON.md`; CI runs
     it and fails on a difference.
 - `--machine 1|3|4` (default 3) and `--dos trsdos|ldos|none` (default `trsdos`
@@ -386,18 +513,26 @@ fugloy.netlify.app (app.fugloy.dev to follow). `@fugloy/z80`,
     (Latin, 400 and 700) and credited on the About page; before, the CSS
     named it but nothing loaded it.
   - Canonical, `og:url`, and `sitemap.xml` URLs end in a slash past the home
-    page (`https://app.fugloy.dev/about/`), where Netlify serves each page.
-  - The browser checks' `window.__fugloyTest` hook is compiled in only when
-    `NUXT_PUBLIC_E2E=1` (Playwright's web server); the site's build leaves it
-    out, and `test:seo` checks that.
+    page (`https://app.fugloy.dev/about/`), where Netlify serves each page,
+    and so do the site's internal links, which Netlify then serves without a
+    redirect.
+
+### Removed
+
+- The free-text `locator` field of a symbol source, replaced by `url`,
+  `catalog`, `archiveId`, and `permissionUrl` (see Added).
 
 ### Fixed
 
-- `@fugloy/emu`'s `fromBase64` accepts whitespace and the URL-safe alphabet
-  again, as upstream's decoder did.
 - `fugloy` no longer crashes when the reader of its output goes away and the
   write fails with `ENOTCONN` or `ECONNRESET` instead of `EPIPE`, as Node's
   piped stdio can on macOS; 0.2.0's fix caught only `EPIPE`.
+
+### Security
+
+- The workbench's `window.__fugloyTest` hook, which the browser checks drive
+  it through, is compiled in only when `NUXT_PUBLIC_E2E=1` (Playwright's web
+  server); the site's build leaves it out, and `test:seo` checks that.
 
 ## [0.2.0] - 2026-10-16
 
@@ -408,7 +543,8 @@ server stubs, and the first program the repository ships, the public-domain
 *Sea Dragon*. Deliverable, met: every synthetic fixture round-trips, and
 Valkyrie's hidden code disassembles at its true addresses. `@fugloy/z80`,
 `@fugloy/disasm`, and `@fugloy/cli` are 0.2.0; the `@fugloy/emu` and
-`@fugloy/mcp` stubs keep their own 0.1.0.
+`@fugloy/mcp` stubs keep their own 0.1.0 (no emulator phase had started).
+Tagged `v0.2.0` and published as a GitHub release on 2026-10-16.
 
 ### Added
 
@@ -420,7 +556,6 @@ Valkyrie's hidden code disassembles at its true addresses. `@fugloy/z80`,
   mnemonics, registers, numbers, labels, strings, comments, warnings). It
   stays plain when piped, written with `-o`, or with `NO_COLOR` set; zmac
   source and the IR are never colored, since other tools read them.
-
 - Level II BASIC lexer and parser: a line counts as BASIC only when every
   statement parses, each keyword checked against its argument shape over one
   expression grammar, Disk BASIC statements and `&H`/`&O` constants included.
@@ -459,12 +594,15 @@ Valkyrie's hidden code disassembles at its true addresses. `@fugloy/z80`,
   lifts decoded code from under 1% to between 19% and 68%.
 - A smoke test on the Model I Level II ROM: half of it decodes as code from
   its documented entry points, and it reassembles byte for byte.
-
 - Hint file (`--hints`): line-oriented text keyed by block and offset, with
   content-based block identity (length plus a SHA-256 prefix of the first 64
   bytes, computed in pure TypeScript) so the same hints apply to relocated
   builds; directives `entry`, `code`, `bytes`, `words`, `string`, `nocode`,
-  `table`, `name`, `comment`; every parse error reports its line.
+  `table`, `name`, `comment`; every parse error reports its line. A line may
+  end in a `# comment` (except `comment`, whose text runs to the end), extra
+  arguments and a bad `program sha256` are errors, a user name already used
+  elsewhere (ignoring case, as zmac folds it) is refused, and a table that
+  runs past the end of its run is clipped with a warning.
 - `--write-hints <path>` writes a hint-file skeleton (identities and `--entry`
   addresses) and refuses to overwrite.
 - Annotations drive Pass 1: overrides win and are applied before descent,
@@ -480,7 +618,6 @@ Valkyrie's hidden code disassembles at its true addresses. `@fugloy/z80`,
 - `fixtures/hints/asylum16.hints`, documenting that build's self-relocating
   loader: it copies the payload from `$80DD` down to `$42F3` and jumps to
   `$43AE`, so its game code is never at a loaded address.
-
 - Pass 1 recursive descent (`@fugloy/disasm`): a byte-kind map parallel to
   the image, decoded instructions, cross-references, external (ROM) targets,
   indirect jumps, and diagnostics; paths end at returns, indirect and
@@ -494,7 +631,8 @@ Valkyrie's hidden code disassembles at its true addresses. `@fugloy/z80`,
   with successors, xrefs, externals, indirect jumps, diagnostics.
 - Pass 1 listing with a reached-bytes summary and notes.
 - CLI: `--entry <hex>` (repeatable), `--format listing|zmac|ir`, `--sweep`,
-  `-o <path>`.
+  `-o <path>`. `--sweep` with another format, or with `--entry`, is a usage
+  error (exit 2), since the sweep ignores both.
 - Round-trip harness: `pnpm zmac:install` builds `gp48k/zmac` at a pinned
   commit into gitignored `tools/`; tests assemble emitted source and compare
   memory images and bitmaps, never files; every synthetic fixture and every
@@ -505,6 +643,9 @@ Valkyrie's hidden code disassembles at its true addresses. `@fugloy/z80`,
 - `docs/label-format.md`, the label and coverage file format shared by emu,
   mcp, and disasm, extracted from §8 of `docs/fugloy-emu-spec.md`.
 - `packages/disasm/README.md`.
+- `docs/technical-details/inside-fugloy.html`, the source of the Inside
+  Fugløy explainer (how Fugløy works, what makes it new, and where Part 2
+  leads), for phase 4's technical details page.
 - A Roadmap in `CLAUDE.md`: disasm phase 2 (in progress), then emu phases
   0–7, then mcp phases A–F.
 
@@ -535,7 +676,10 @@ Valkyrie's hidden code disassembles at its true addresses. `@fugloy/z80`,
 - Project plan: the undocumented-opcode spelling question is closed (zmac's
   names, which the listing already used).
 - README: CI badge, release badge (latest semver tag, live now that the
-  repository is public), repository link; changelog release links.
+  repository is public), repository link; changelog release links. It was
+  rewritten to say what Fugløy is and how it differs, with verified examples
+  on public-domain Sea Dragon, user stories, and where to get ROMs and
+  programs.
 - `linkWorkspacePackages` in `pnpm-workspace.yaml`, so a semver range on a
   workspace package resolves locally the way npm workspaces would.
 - Project plan: phase 5, an assembler with an IDE in the workbench, after
@@ -547,7 +691,8 @@ Valkyrie's hidden code disassembles at its true addresses. `@fugloy/z80`,
 - A `.CMD` `03` record that whole records follow is skipped as a comment, as
   TRSDOS 2.3 and NEWDOS/80 do; only a `03` that ends the file, or one followed
   by debris, ends the load. Rear Guard's cracked copies open with one
-  (`THE MARK OF "ZORRO"`) and were rejected before.
+  (`THE MARK OF "ZORRO"`) and were rejected before. Two `03` tags before the
+  first load are both skipped.
 - New real samples in the round-trip tests: Rear Guard, Eliminator,
   Planetfall, Penetrator, Super Nova, Crazy Painter, and the BASIC programs
   of Super Star Trek, Crush, Crumble & Chomp, and Eliminator's patchers.
@@ -572,13 +717,16 @@ Valkyrie's hidden code disassembles at its true addresses. `@fugloy/z80`,
   parses, as the ROM's IF handler at `$2039` allows; such lines were reported
   as machine code (all 59 "code lines" in Super Star Trek were these).
 - `fugloy` no longer crashes with an unhandled `EPIPE` when the reader of its
-  output stops early (`fugloy game.cmd | head`); it ends quietly.
+  output stops early (`fugloy game.cmd | head`); it ends quietly. When the
+  same reader holds stderr (`2>&1 | head`), it stops writing there and keeps
+  its exit code.
 
 ## [0.1.0] - 2026-10-14
 
-Phase 1 of the plan: core decoder and loaders. Deliverable: a CLI that prints
-a linear-sweep listing of any `.CMD` or raw binary and a detokenized listing
-of any `.BAS`.
+Phase 1 of the plan: core decoder and loaders. Deliverable, met: a CLI that
+prints a linear-sweep listing of any `.CMD` or raw binary and a detokenized
+listing of any `.BAS`. `@fugloy/z80`, `@fugloy/disasm`, and `@fugloy/cli` are
+0.1.0. Tagged `v0.1.0` and published as a GitHub release on 2026-10-14.
 
 ### Added
 
@@ -599,7 +747,10 @@ of any `.BAS`.
   chain validation and base-address derivation, and a detokenizer that reports
   lines failing the phase-1 lexical check as unparsed with address and length;
   content-based format detection; raw loader; linear sweep; listing renderers.
-  No Node or DOM APIs.
+  No Node or DOM APIs. Detection believes a `.CMD` whose record walk ends in
+  damage only after two load blocks, since raw code can start with `01`
+  (`LD BC,nn`); a `.BAS` may hold a single line, as long as its pointer chain
+  covers at least half the file.
 - `@fugloy/cli`: `fugloy <file> [--base <hex>]`.
 - `fixtures/synthetic`: 18 `.CMD` and 7 `.BAS` fixtures generated by the test
   suite's own record writer and BASIC tokenizer; a test fails if a committed
@@ -618,10 +769,13 @@ of any `.BAS`.
 
 ### Fixed
 
-- `.CMD` module name and copyright text are escaped before they reach a
-  listing, so file content cannot forge listing lines or terminal escapes.
 - A transfer (`02`) record with a `00` length byte, as ARMOUR.III carries, is
   read as the transfer address rather than a truncated record.
+
+### Security
+
+- `.CMD` module name and copyright text are escaped before they reach a
+  listing, so file content cannot forge listing lines or terminal escapes.
 
 ### Known limitations
 
@@ -634,6 +788,8 @@ of any `.BAS`.
   when at least two load records precede the damage; there is no `--format`
   override yet.
 
-[Unreleased]: https://github.com/cschweda/fugloy/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/cschweda/fugloy/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/cschweda/fugloy/releases/tag/v1.1.0
+[1.0.0]: https://github.com/cschweda/fugloy/releases/tag/v1.0.0
 [0.2.0]: https://github.com/cschweda/fugloy/releases/tag/v0.2.0
 [0.1.0]: https://github.com/cschweda/fugloy/releases/tag/v0.1.0

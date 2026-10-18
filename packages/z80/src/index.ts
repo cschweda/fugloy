@@ -1,4 +1,4 @@
-export const VERSION = '1.0.0';
+export const VERSION = '1.1.0';
 
 export type {
   Cond, Flow, FlowKind, IndexReg, IndReg, Instruction, Operand, Reader, Reg8, Reg16, Template, TemplateOperand,
