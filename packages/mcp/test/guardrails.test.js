@@ -227,22 +227,29 @@ describe('round trip with a real restart (MCP spec §10)', () => {
     writeFileSync(join(work, 'synthetic.rom'), syntheticRom());
     writeFileSync(join(work, 'raiders.cmd'), RAIDERS);
     writeFileSync(join(work, 'fugloy.mcp.json'), JSON.stringify({ roms: { model3: './synthetic.rom' } }));
-    /** Start the bin as a child process in `work` and connect a client to it over stdio. */
-    const start = async () => {
+    /** @type {{ name: string, stderr: string[], close: () => Promise<void> }[]} */
+    const children = [];
+    /** Start the bin as a child process in `work` and connect a client to it over stdio, keeping its stderr. */
+    const start = async (/** @type {string} */ name) => {
       const transport = new StdioClientTransport({ command: process.execPath, args: [bin], cwd: work, env: { PATH: process.env.PATH ?? '', FUGLOY_CONFIG: join(work, 'fugloy.mcp.json') }, stderr: 'pipe' });
       const client = new Client({ name: 'fugloy-mcp-restart', version: '0.0.0' });
+      /** @type {string[]} */
+      const stderr = [];
+      transport.stderr?.on('data', (chunk) => stderr.push(String(chunk)));
+      const child = { name, stderr, close: () => client.close() };
+      children.push(child);
       await client.connect(transport);
-      const call = async (/** @type {string} */ name, /** @type {object} */ args = {}) => {
-        const r = await client.callTool({ name, arguments: /** @type {any} */ (args) });
+      const call = async (/** @type {string} */ tool, /** @type {object} */ args = {}) => {
+        const r = await client.callTool({ name: tool, arguments: /** @type {any} */ (args) });
         const text = /** @type {{ text: string }[]} */ (r.content).map((c) => c.text).join('');
-        if (r.isError) throw new Error(`${name} failed: ${text}`);
+        if (r.isError) throw new Error(`${tool} failed: ${text}`);
         return text;
       };
-      return { call, pid: transport.pid, close: () => client.close() };
+      return { call, pid: transport.pid, close: child.close };
     };
     try {
       const note = 'copies a zero-ended string from DE to video RAM at HL';
-      const first = await start();
+      const first = await start('first');
       expect(first.pid).toEqual(expect.any(Number));
       await first.call('load', { path: 'raiders.cmd' });
       await first.call('run', { until: 'screen' });
@@ -250,14 +257,19 @@ describe('round trip with a real restart (MCP spec §10)', () => {
       await first.call('coverage', { mode: 'export' });
       await first.close();
 
-      const second = await start();
+      const second = await start('second');
       expect(second.pid).not.toBe(first.pid);
       const loadText = await second.call('load', { path: 'raiders.cmd' });
       expect(loadText).toMatch(new RegExp(`^Sidecar: ${join(work, 'raiders.fugloy.json').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}: \\d+ labels?, 1 recorded session`, 'm'));
       expect(await second.call('labels', { source: 'user' })).toBe(['Labels (1 of 2, source user):', 'addr   kind  size   source    name', `7030h  code         user      PRINT  ; ${note}`].join('\n'));
       expect((await second.call('disasm', { addr: '7009', n: 1 })).split('\n')[0]).toMatch(/CALL 7030H +; PRINT$/);
-      await second.close();
+    } catch (err) {
+      // Show what the children said on stderr, which is where a crashing server explains itself.
+      for (const c of children) console.error(`${c.name} server's stderr:\n${c.stderr.join('') || '(nothing)'}`);
+      throw err;
     } finally {
+      // Closing an already closed client is harmless, so every child is closed whatever failed.
+      for (const c of children) await c.close().catch(() => {});
       rmSync(work, { recursive: true, force: true });
     }
   }, 30_000);
