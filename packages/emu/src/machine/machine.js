@@ -10,6 +10,7 @@ import { Video } from '../devices/video.js';
 import { Sound } from '../devices/sound.js';
 import { loadBas } from '../loaders/bas.js';
 import { cassetteDeck, loadCas, loadCmd } from '../loaders/load.js';
+import { Debugger } from '../debug/debugger.js';
 import { KeyQueue, romKeyReturn } from '../devices/key-queue.js';
 
 /**
@@ -46,6 +47,15 @@ export class Machine {
   load;
   /** @type {ReturnType<typeof cassetteDeck>} The cassette deck: insert a .CAS at a baud, rewind, read the motor relay. */
   cassette;
+  /** @type {Debugger} Breakpoints now; watchpoints, coverage, and trace follow (spec §7). */
+  debug;
+
+  /** True inside `run`, false inside `step`, which ignores breakpoints. */
+  #checkBreaks = false;
+  /** True until a run's first boundary has passed; that boundary is never checked, so a run resumes past a break. */
+  #firstBoundary = false;
+  /** Set by the hook when a breakpoint held the boundary, read by `run`. */
+  #stopped = false;
 
   /**
    * @param {{ model?: 3, ram?: 48, roms: { level2: Uint8Array }, log?: (level: string, text: string) => void }} opts
@@ -102,6 +112,7 @@ export class Machine {
       cas: (bytes, opts) => loadCas(this, bytes, opts),
     };
     this.cassette = cassetteDeck(this);
+    this.debug = new Debugger(this);
     this.io = {
       in: (port) => sys.io.readPort(port),
       out: (port, value) => sys.io.writePort(port, value),
@@ -127,12 +138,20 @@ export class Machine {
    * ($002B) or wait-for-key ($0049), return from that routine with the character as the ROM
    * would (spec §6, "Keyboard-scan hook"). That return stands in for the boundary's instruction,
    * as one RET (10 T-states); a halted CPU idles instead, as it does for any instruction, so the next boundary is at the caller's return address.
-   * @returns {boolean} true when the hook stood in for the instruction
+   * Between draining and the keyboard hook, a breakpoint hit (only while `debug.active`, and
+   * never in `step`) stops the boundary: nothing executes.
+   * @returns {boolean | 'stop'} true when the hook stood in for the instruction, 'stop' when a breakpoint holds the boundary
    */
   #beforeInstruction() {
     const cpu = this.system.cpu;
     const kb = this.keyboard;
     if (cpu.cycles >= kb.nextAt) kb.drain(cpu.cycles);
+    const first = this.#firstBoundary;
+    this.#firstBoundary = false;
+    if (this.debug.active && this.#checkBreaks && this.debug.beforeInstruction(cpu.registers.PC, first)) {
+      this.#stopped = true;
+      return 'stop';
+    }
     if (kb.hasFeed && !cpu.halted) {
       const pc = cpu.registers.PC;
       if (pc === 0x002b || pc === 0x0049) {
@@ -154,15 +173,22 @@ export class Machine {
   step(n = 1) {
     const sys = this.system;
     const start = sys.cpu.cycles;
-    for (let k = 0; k < n; k++) sys.stepInstruction(this.#hook);
+    const debug = this.debug;
+    this.#checkBreaks = false;
+    for (let k = 0; k < n; k++) {
+      sys.stepInstruction(this.#hook);
+      if (debug.active) debug.afterInstruction();
+    }
     return { cycles: sys.cpu.cycles - start, halted: sys.cpu.halted };
   }
 
   /**
    * Run until a T-state budget is spent or a condition holds, both checked after each
-   * instruction; at least one instruction always runs. The condition wins a tie.
+   * instruction; at least one instruction always runs. The condition wins a tie with the budget,
+   * and a breakpoint at the boundary where the budget ends wins over the budget. A breakpoint
+   * stops the run before its instruction executes; the next run resumes past it.
    * @param {{ cycles?: number, until?: Until }} opts
-   * @returns {{ reason: 'cycles' | 'halt' | 'predicate', cycles: number }}
+   * @returns {{ reason: 'cycles' | 'halt' | 'predicate', cycles: number } | { reason: 'break' | 'watch', id: number, cycles: number }}
    */
   run({ cycles, until } = {}) {
     if (cycles === undefined && until === undefined) throw new Error('run needs cycles, until, or both; with neither it would never stop');
@@ -172,14 +198,35 @@ export class Machine {
     const cpu = sys.cpu;
     const start = cpu.cycles;
     const target = cycles === undefined ? Infinity : start + cycles;
+    const debug = this.debug;
+    this.#checkBreaks = true;
+    this.#firstBoundary = true;
+    this.#stopped = false;
     for (;;) {
       sys.stepInstruction(this.#hook);
+      if (this.#stopped) {
+        this.#stopped = false;
+        const id = /** @type {number} */ (debug.stopId);
+        debug.stopId = null;
+        return { reason: 'break', id, cycles: cpu.cycles - start };
+      }
+      if (debug.active) {
+        const w = debug.afterInstruction();
+        if (w !== null) return { reason: 'watch', id: w, cycles: cpu.cycles - start };
+      }
       if (until === 'halt') {
         if (cpu.halted) return { reason: 'halt', cycles: cpu.cycles - start };
       } else if (until !== undefined && until(this)) {
         return { reason: 'predicate', cycles: cpu.cycles - start };
       }
-      if (cpu.cycles >= target) return { reason: 'cycles', cycles: cpu.cycles - start };
+      if (cpu.cycles >= target) {
+        if (debug.active && debug.beforeInstruction(cpu.registers.PC, false)) {
+          const id = /** @type {number} */ (debug.stopId);
+          debug.stopId = null;
+          return { reason: 'break', id, cycles: cpu.cycles - start };
+        }
+        return { reason: 'cycles', cycles: cpu.cycles - start };
+      }
     }
   }
 }
