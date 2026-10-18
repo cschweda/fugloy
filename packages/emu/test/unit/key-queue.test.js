@@ -57,6 +57,22 @@ describe('m.keyboard matrix queue', () => {
     expect(bUp).toBeGreaterThan(bDown);
   });
 
+  it("type(['ENTER']) presses ENTER, not E-N-T-E-R, and an array mixes characters and key names", () => {
+    const named = machine(JR_SELF);
+    named.keyboard.type(['ENTER']);
+    const enter = machine(JR_SELF);
+    enter.keyboard.type('\n');
+    const cycles = CPU_CLOCK_HZ / 2;
+    const changes = matrixChanges(named, cycles);
+    expect(changes.map((c) => c.rows)).toEqual(matrixChanges(enter, cycles).map((c) => c.rows));
+    expect(changes).toHaveLength(2);
+    const mixed = machine(JR_SELF);
+    mixed.keyboard.type(['A', 'ENTER', 'B']);
+    const spelled = machine(JR_SELF);
+    spelled.keyboard.type('A\nB');
+    expect(matrixChanges(mixed, cycles).map((c) => c.rows)).toEqual(matrixChanges(spelled, cycles).map((c) => c.rows));
+  });
+
   it('presses a repeated letter twice, with a key-up gap between', () => {
     const m = machine(JR_SELF);
     m.keyboard.type('AA', { cps: 20 });

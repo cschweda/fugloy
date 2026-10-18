@@ -5,7 +5,7 @@
  */
 import { CPU_CLOCK_HZ } from '@fugloy/emu';
 import { z } from 'zod';
-import { capCycles, runMachine, seconds, stoppedLine } from '../execute.js';
+import { capCycles, runMachine, seconds, stoppedLine, wallDeadline } from '../execute.js';
 import { screenDiff } from '../format/screen.js';
 
 const NAMES = ['ENTER', 'BREAK', 'CLEAR', 'UP', 'DOWN', 'LEFT', 'RIGHT', 'SHIFT', 'SPACE'];
@@ -47,7 +47,7 @@ export default {
       tokens = [...Array.from(text), ...named.map((k) => HOOK_CHARS[/** @type {'ENTER' | 'SPACE'} */ (k)])];
     } else tokens = [...Array.from(text), ...named];
     try {
-      // type maps each element of what it is given, so an array mixes characters and key names.
+      // type takes an array of keys, each a character or a key name (emu spec §3).
       if (mode === 'hook') m.keyboard.feed(tokens.join(''));
       else m.keyboard.type(/** @type {any} */ (tokens), { cps });
     } catch (err) {
@@ -58,10 +58,12 @@ export default {
 
     const before = Uint8Array.from(m.video.raw);
     const cap = capCycles(session.config);
-    let stop = runMachine(session, { budget: cap, until: 'drained' });
+    // One wall-clock deadline for both runs, so the call as a whole keeps to limits.runSecondsWall.
+    const deadline = wallDeadline(session);
+    let stop = runMachine(session, { budget: cap, until: 'drained', deadline });
     let ran = stop.cycles;
     if (stop.reason === 'drained' && ran < cap) {
-      const tail = runMachine(session, { budget: Math.min(AFTER, cap - ran) });
+      const tail = runMachine(session, { budget: Math.min(AFTER, cap - ran), deadline });
       ran += tail.cycles;
       stop = tail.reason === 'cycles' ? { reason: 'drained', cycles: ran } : { ...tail, cycles: ran };
     }

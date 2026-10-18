@@ -5,7 +5,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { formatOf, isCas } from '../src/tools/load.js';
 import { buildCas, buildCmd, connect, syntheticRom, testConfig } from './helpers.js';
 
@@ -68,6 +68,24 @@ const FED = buildCmd(
   0x7000,
 );
 
+/** PIECES: draws A, B, and C at the top left a tenth of a second apart, then loops without drawing. */
+const PIECES = (() => {
+  const code = new Array(0x29).fill(0);
+  const place = (addr, bytes) => code.splice(addr - 0x7000, bytes.length, ...bytes);
+  place(0x7000, [0x31, 0x00, 0x7f]); //  7000  LD SP,7F00H
+  place(0x7003, [0x21, 0x00, 0x3c]); //  7003  LD HL,3C00H
+  place(0x7006, [0x36, 0x41, 0x23]); //  7006  LD (HL),'A' / INC HL
+  place(0x7009, [0xcd, 0x20, 0x70]); //  7009  CALL 7020H
+  place(0x700c, [0x36, 0x42, 0x23]); //  700C  LD (HL),'B' / INC HL
+  place(0x700f, [0xcd, 0x20, 0x70]); //  700F  CALL 7020H
+  place(0x7012, [0x36, 0x43]); //        7012  LD (HL),'C'
+  place(0x7014, [0x18, 0xfe]); //        7014  JR 7014H
+  place(0x7020, [0x01, 0x78, 0x1e]); //  7020  LD BC,1E78H   about 0.1 s of
+  place(0x7023, [0x0b, 0x78, 0xb1]); //  7023  DEC BC / LD A,B / OR C
+  place(0x7026, [0x20, 0xfb, 0xc9]); //  7026  JR NZ,7023H / RET
+  return buildCmd([{ addr: 0x7000, data: code }], 0x7000);
+})();
+
 /** The synthetic ROM with a wait loop at 0049h for the keyboard hook to return from. */
 function hookRom() {
   const rom = syntheticRom();
@@ -85,6 +103,8 @@ beforeAll(() => {
   writeFileSync(at('hello.cmd'), HELLO);
   writeFileSync(at('keys.cmd'), KEYS);
   writeFileSync(at('fed.cmd'), FED);
+  writeFileSync(at('pieces.cmd'), PIECES);
+  writeFileSync(at('bad.cas'), new Uint8Array([0x00, 0xa5, 0x55, 0x42, 0x41, 0x44, 0x20, 0x20, 0x20, 0x99]));
   writeFileSync(at('hello.cas'), buildCas('HELLO', [{ addr: 0x7000, data: [0x76] }], 0x7000));
   writeFileSync(at('notes.txt'), 'just some words\n');
   writeFileSync(at('prog.bas'), '10 PRINT "HI"\r\n20 GOTO 10\r\n');
@@ -181,6 +201,18 @@ describe('phase A tools', () => {
     await close();
   });
 
+  it('a load that fails leaves the session as it was', async () => {
+    const { call, close } = await server();
+    await ok(call, 'load', { path: at('hello.cmd') });
+    await ok(call, 'step', { n: 2 });
+    const before = [await ok(call, 'status', {}), await ok(call, 'regs', {}), await ok(call, 'peek', { addr: '7000', len: 16 })];
+    const failed = await call('load', { path: at('bad.cas') });
+    expect(failed).toEqual({ text: `${at('bad.cas')} could not be loaded as a .CAS: Unexpected SYSTEM block marker 0x99 at 9.`, isError: true });
+    expect([await ok(call, 'status', {}), await ok(call, 'regs', {}), await ok(call, 'peek', { addr: '7000', len: 16 })]).toEqual(before);
+    expect(before[0]).toContain('Program: HELLO');
+    await close();
+  });
+
   it('load refuses what it cannot load, in sentences', async () => {
     const { call, close } = await server();
     expect(await call('load', { path: at('missing.cmd') })).toEqual({ text: `There is no file at ${at('missing.cmd')}.`, isError: true });
@@ -229,10 +261,28 @@ describe('phase A tools', () => {
     await close();
   });
 
+  it('run until settled waits for the drawing to stop, where until screen stops at its start', async () => {
+    const { call, close } = await server();
+    await ok(call, 'load', { path: at('pieces.cmd') });
+    const first = (await ok(call, 'run', { until: 'screen' })).split('\n');
+    expect(first[0]).toBe('stopped: screen (video RAM changed)');
+    expect(first.slice(-2)).toEqual(['1 cell changed', "(0,0) ' '→'A'"]);
+    await ok(call, 'load', { path: at('pieces.cmd') });
+    const settled = (await ok(call, 'run', { until: 'settled' })).split('\n');
+    expect(settled[0]).toBe('stopped: settled (video RAM changed, then stayed the same for 0.5 s emulated)');
+    // C lands about 0.2 s in; 0.5 s without a change follows.
+    expect(settled[1]).toMatch(/^Ran 1,4\d\d,\d{3} cycles \(0\.7\d\d s emulated\)$/);
+    expect(settled.slice(-4)).toEqual(['3 cells changed', "(0,0) ' '→'A'", "(0,1) ' '→'B'", "(0,2) ' '→'C'"]);
+    // A screen that never changes runs to the cap.
+    await ok(call, 'load', { path: at('keys.cmd') });
+    expect((await ok(call, 'run', { until: 'settled', seconds: 1 })).split('\n')[0]).toBe('stopped: cycles (the 1 s asked for)');
+    await close();
+  });
+
   it('run refuses bad arguments in sentences', async () => {
     const { call, close } = await server();
     await ok(call, 'load', { path: at('hello.cmd') });
-    expect((await call('run', { until: 'forever' })).text).toBe('until must be "break", "halt", "screen", or "pc:<addr>" (such as "pc:5200"), not "forever".');
+    expect((await call('run', { until: 'forever' })).text).toBe('until must be "break", "halt", "screen", "settled", or "pc:<addr>" (such as "pc:5200"), not "forever".');
     expect((await call('run', { cycles: 10, seconds: 1 })).text).toBe('Give cycles or seconds, not both.');
     expect((await call('run', { seconds: 11 })).text).toBe('seconds must be more than 0 and at most 10 (limits.runSecondsEmulated), not 11.');
     expect((await call('run', { cycles: 30_000_000 })).text).toBe('cycles must be between 1 and 20275200, not 30000000.');
@@ -293,6 +343,25 @@ describe('phase A tools', () => {
     expect(await call('key', { keys: ['ESCAPE'] })).toEqual({ text: '"ESCAPE" is not a key name; use ENTER, BREAK, CLEAR, UP, DOWN, LEFT, RIGHT, SHIFT, SPACE, or put characters in text.', isError: true });
     expect(await call('key', {})).toEqual({ text: 'Give text or keys to type.', isError: true });
     expect(await ok(call, 'key', { text: 'B', run: false })).toBe('Queued 1 key (matrix, 20 cps); nothing ran yet (call run to deliver them).');
+    await close();
+  });
+
+  it('key keeps both of its runs within one wall-clock cap', async () => {
+    // A clock that moves 1 ms each time it is read: typing one key at 20 cps takes about 27
+    // slices to deliver and 203 more for the 0.2 s after, so a 0.22 s cap holds each run alone
+    // but not the two together.
+    const { call, close } = await server({ limits: { runSecondsWall: 0.22 } });
+    await ok(call, 'load', { path: at('keys.cmd') });
+    let t = 0;
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => ++t);
+    try {
+      const text = await ok(call, 'key', { text: 'A' });
+      expect(text.split('\n')[2]).toBe(
+        'stopped: wallclock (the 0.22 s wall-clock cap, limits.runSecondsWall: emulation ran slow, often because of trace; the result depends on the host\'s speed)',
+      );
+    } finally {
+      clock.mockRestore();
+    }
     await close();
   });
 
@@ -386,6 +455,9 @@ describe('phase A tools', () => {
     const script = [
       ['load', { path: at('hello.cmd') }],
       ['run', { until: 'screen' }],
+      ['load', { path: at('pieces.cmd') }],
+      ['run', { until: 'settled' }],
+      ['load', { path: at('hello.cmd') }],
       ['step', { n: 5 }],
       ['screen', {}],
       ['run', { until: 'halt', trace: true }],

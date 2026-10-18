@@ -11,6 +11,9 @@ import { hex4 } from './args.js';
 /** T-states between the run loop's checks of the clock and the screen (Ruling 5). */
 export const SLICE = 2000;
 
+/** T-states video RAM must stay unchanged for `until: "settled"`: 0.5 s emulated. */
+export const SETTLE = Math.round(0.5 * CPU_CLOCK_HZ);
+
 /** How long `load` lets a ROM take to reach READY before it loads the program anyway. */
 export const BOOT_SECONDS = 5;
 
@@ -54,23 +57,26 @@ export function bootToReady(m, limit = BOOT_SECONDS) {
 /**
  * @typedef {'halt' | 'drained' | { pc: number }} Until
  * @typedef {{ reason: 'break' | 'watch', id: number, cycles: number }
- *   | { reason: 'halt' | 'screen' | 'pc' | 'drained' | 'cycles' | 'wallclock', cycles: number }} Stop
+ *   | { reason: 'halt' | 'screen' | 'settled' | 'pc' | 'drained' | 'cycles' | 'wallclock', cycles: number }} Stop
  */
 
 /**
  * Run the session's machine for at most `budget` T-states, or until `until` holds, video RAM
  * differs from `screenFrom` (checked at slice ends), a breakpoint or stop watch fires, or the
- * wall-clock cap (`limits.runSecondsWall`) passes. When the budget and a condition are met at
- * the same point the condition wins; the wall clock is checked last.
+ * wall-clock cap passes. With `settle`, `screenFrom` is where a wait starts instead: after video
+ * RAM first differs from it, the run stops once video RAM has stayed the same for `SETTLE`
+ * T-states, as seen at slice ends. When the budget and a condition are met at the same point
+ * the condition wins; the wall clock is checked last.
  * @param {import('./session.js').Session} session
- * @param {{ budget: number, until?: Until, screenFrom?: Uint8Array }} opts
+ * @param {{ budget: number, until?: Until, screenFrom?: Uint8Array, settle?: boolean, deadline?: number }} opts
+ *   `deadline` is a `performance.now()` time, by default `limits.runSecondsWall` from now; a tool
+ *   that runs more than once passes one deadline to all its runs
  * @returns {Stop}
  */
-export function runMachine(session, { budget, until, screenFrom }) {
+export function runMachine(session, { budget, until, screenFrom, settle = false, deadline = wallDeadline(session) }) {
   const m = session.requireMachine();
   const start = m.cycles;
   const target = start + budget;
-  const deadline = performance.now() + session.config.limits.runSecondsWall * 1000;
   const cpu = m.system.cpu;
   /** @type {'halt' | ((m: any) => boolean) | undefined} */
   let emuUntil;
@@ -81,6 +87,9 @@ export function runMachine(session, { budget, until, screenFrom }) {
     emuUntil = () => cpu.registers.PC === pc;
   }
   const video = m.video.raw;
+  /** @type {Uint8Array | null} Video RAM as last seen while settling, once it first changed. */
+  let seen = null;
+  let quietSince = 0;
   for (;;) {
     const done = m.cycles - start;
     const next = Math.min(target, start + SLICE * (Math.floor(done / SLICE) + 1));
@@ -89,11 +98,24 @@ export function runMachine(session, { budget, until, screenFrom }) {
     if (r.reason === 'break' || r.reason === 'watch') return { reason: r.reason, id: /** @type {any} */ (r).id, cycles: ran };
     if (r.reason === 'halt') return { reason: 'halt', cycles: ran };
     if (r.reason === 'predicate') return { reason: until === 'drained' ? 'drained' : 'pc', cycles: ran };
-    if (screenFrom && differs(video, screenFrom)) return { reason: 'screen', cycles: ran };
+    if (screenFrom && settle) {
+      if (seen === null) {
+        if (differs(video, screenFrom)) {
+          seen = Uint8Array.from(video);
+          quietSince = m.cycles;
+        }
+      } else if (differs(video, seen)) {
+        seen.set(video);
+        quietSince = m.cycles;
+      } else if (m.cycles - quietSince >= SETTLE) return { reason: 'settled', cycles: ran };
+    } else if (screenFrom && differs(video, screenFrom)) return { reason: 'screen', cycles: ran };
     if (m.cycles >= target) return { reason: 'cycles', cycles: ran };
     if (performance.now() > deadline) return { reason: 'wallclock', cycles: ran };
   }
 }
+
+/** The default wall-clock deadline: `limits.runSecondsWall` from now. */
+export const wallDeadline = (/** @type {import('./session.js').Session} */ session) => performance.now() + session.config.limits.runSecondsWall * 1000;
 
 /** True when two copies of video RAM differ anywhere. */
 function differs(/** @type {Uint8Array} */ a, /** @type {Uint8Array} */ b) {
@@ -123,6 +145,8 @@ export function stoppedLine(stop, session, why) {
       return 'stopped: halt (the CPU ran HALT and waits for an interrupt)';
     case 'screen':
       return 'stopped: screen (video RAM changed)';
+    case 'settled':
+      return 'stopped: settled (video RAM changed, then stayed the same for 0.5 s emulated)';
     case 'pc':
       return `stopped: pc (reached ${hex4(/** @type {number} */ (why.pc))})`;
     case 'drained':

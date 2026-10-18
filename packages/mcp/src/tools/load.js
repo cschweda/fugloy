@@ -85,22 +85,22 @@ export default {
     }
 
     const lines = [];
-    let m = session.machine;
+    // A fresh machine is booted and loaded before it replaces the session's, so a load that
+    // fails leaves the session as it was.
+    const fresh = reset || session.machine === null;
+    const m = fresh ? session.createMachine() : session.requireMachine();
     let boot;
-    if (reset || m === null) {
-      const dropped = m === null ? 0 : m.debug.breaks.length + m.debug.watches.length;
-      m = session.createMachine();
+    if (fresh) {
+      const old = session.machine;
+      const dropped = old === null ? 0 : old.debug.breaks.length + old.debug.watches.length;
       const booted = bootToReady(m);
       boot = booted.ready
         ? `Boot: READY after ${seconds(booted.cycles)} emulated`
         : `Boot: the ROM showed no READY within ${BOOT_SECONDS} s emulated, so the program was loaded where the ROM had got to`;
       if (dropped > 0) boot += `\nThe previous machine's ${dropped} breakpoints and watches went with it.`;
-      session.install(m);
-      session.program = null;
-    } else {
-      boot = 'Boot: none (reset: false loads into the running machine)';
-      session.screenBaseline = Uint8Array.from(m.video.raw);
-    }
+    } else boot = 'Boot: none (reset: false loads into the running machine)';
+    // `screen diff` after the load shows what the program drew, including blocks loaded into video RAM.
+    const baseline = Uint8Array.from(m.video.raw);
 
     /** @type {any} */
     let manifest;
@@ -111,6 +111,8 @@ export default {
     } catch (err) {
       throw new Error(`${file} could not be loaded as ${format === 'cmd' ? 'a .CMD' : format === 'bas' ? 'a .BAS' : 'a .CAS'}: ${err instanceof Error ? err.message.replace(/\.$/, '') : String(err)}.`);
     }
+    if (fresh) session.install(m);
+    session.screenBaseline = baseline;
     const name = manifest.name || basename(file, extname(file)).toUpperCase();
     session.program = { path: file, name, bytes: bytes.length, manifest, sha256: m.debug.loaded?.sha256 ?? '' };
 

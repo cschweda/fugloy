@@ -13,23 +13,23 @@ import { screenDiff } from '../format/screen.js';
  * `until` as the run loop takes it.
  * @param {string} until
  * @param {import('../session.js').Session} session
- * @returns {{ kind: 'break' | 'halt' | 'screen' } | { kind: 'pc', pc: number }}
+ * @returns {{ kind: 'break' | 'halt' | 'screen' | 'settled' } | { kind: 'pc', pc: number }}
  */
 function parseUntil(until, session) {
-  if (until === 'break' || until === 'halt' || until === 'screen') return { kind: until };
+  if (until === 'break' || until === 'halt' || until === 'screen' || until === 'settled') return { kind: until };
   const m = /^pc:(.+)$/i.exec(until.trim());
   if (m) return { kind: 'pc', pc: parseAddr(/** @type {string} */ (m[1]).trim(), session.labels) };
-  throw new Error(`until must be "break", "halt", "screen", or "pc:<addr>" (such as "pc:5200"), not ${JSON.stringify(until)}.`);
+  throw new Error(`until must be "break", "halt", "screen", "settled", or "pc:<addr>" (such as "pc:5200"), not ${JSON.stringify(until)}.`);
 }
 
 export default {
   name: 'run',
   description:
-    'Run the machine. Stops at a breakpoint or stop watch, or at until ("break": only those; "halt": the CPU runs HALT; "screen": video RAM changes, checked every 2,000 T-states; "pc:<addr>": the PC reaches addr), or after cycles (decimal T-states) or seconds (emulated), and always at the emulated cap (limits.runSecondsEmulated, 10 s) or the wall-clock cap (limits.runSecondsWall, 5 s). trace: true records the instructions while it runs. Returns the stop reason, the cycles run, the register block, and with until "screen" the screen diff.',
+    'Run the machine. Stops at a breakpoint or stop watch, or at until ("break": only those; "halt": the CPU runs HALT; "screen": video RAM changes, checked every 2,000 T-states; "settled": video RAM changes and then stays the same for 0.5 s emulated, which reaches a title screen drawn in pieces; "pc:<addr>": the PC reaches addr), or after cycles (decimal T-states) or seconds (emulated), and always at the emulated cap (limits.runSecondsEmulated, 10 s) or the wall-clock cap (limits.runSecondsWall, 5 s). trace: true records the instructions while it runs. Returns the stop reason, the cycles run, the register block, and with until "screen" or "settled" the screen diff.',
   inputSchema: {
     cycles: z.number().int().optional().describe('T-states to run at most, a decimal count'),
     seconds: z.number().optional().describe('Emulated seconds to run at most (at most limits.runSecondsEmulated)'),
-    until: z.string().optional().describe('"break", "halt", "screen", or "pc:<addr>"'),
+    until: z.string().optional().describe('"break", "halt", "screen", "settled", or "pc:<addr>"'),
     trace: z.boolean().optional().describe('Record the executed instructions while running (default false)'),
   },
   /**
@@ -59,7 +59,7 @@ export default {
       runMachine(session, {
         budget,
         ...(until?.kind === 'halt' ? { until: 'halt' } : until?.kind === 'pc' ? { until: { pc: until.pc } } : {}),
-        ...(until?.kind === 'screen' ? { screenFrom: before } : {}),
+        ...(until?.kind === 'screen' || until?.kind === 'settled' ? { screenFrom: before, settle: until.kind === 'settled' } : {}),
       }),
     );
     const lines = [
@@ -69,7 +69,7 @@ export default {
     if (until?.kind === 'break' && m.debug.breaks.length === 0) lines.push('(no breakpoints are set, so only a stop watch or a cap could stop it)');
     if (args.trace) lines.push(`Trace: recorded while running (the last ${limits.traceDepth.toLocaleString('en-US')} instructions are kept)`);
     lines.push(regsBlock(m.cpu.regs, m.cpu.flags, m.cycles));
-    if (until?.kind === 'screen') lines.push(screenDiff(before, m.video.raw, m.video.columns === 32));
+    if (until?.kind === 'screen' || until?.kind === 'settled') lines.push(screenDiff(before, m.video.raw, m.video.columns === 32));
     return lines.join('\n');
   },
 };

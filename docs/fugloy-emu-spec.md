@@ -115,7 +115,7 @@ m.sound.overflowed         // events lost to wrap-around of the 65,536-event rin
 m.sound.clear()            // also done by m.reset() and by restoring a saved state
 
 m.keyboard.press(key) / release(key)   // hold a key now / let it go
-m.keyboard.type(str, { cps = 10, mode = 'matrix' })  // cycle-timed typing through the matrix, or the §6 hook ('hook')
+m.keyboard.type(str, { cps = 10, mode = 'matrix' })  // cycle-timed typing through the matrix, or the §6 hook ('hook'); str is a string, or an array of keys (a character or a key name each: ['A', 'ENTER'])
 m.keyboard.feed(str)       // characters for the ROM keyboard-scan hook (§6); '\n' = ENTER; all-or-nothing
 m.keyboard.pending         // queued events not yet delivered
 m.cassette.insert(bytes, { baud }) / rewind() / motor
@@ -123,7 +123,7 @@ m.cassette.insert(bytes, { baud }) / rewind() / motor
 
 - `video.text()` shows bytes below `$20` as `+$40` (the character generator folds them), and `$80`–`$FF` (graphics and the special set) as `.`; see footnote 1 in §5.
 - `sound.events` returns a copy and allocates one object per event, up to 65,536 per call: fine for a tool call, not for a per-frame loop. The ring keeps the newest events.
-- Keys are a character (`'A'`, `'1'`, `' '`) or a name: `ENTER CLEAR BREAK UP DOWN LEFT RIGHT SHIFT SPACE`. On the Model III an unshifted letter key types the capital, so `'A'` presses the bare A key and `'a'` presses SHIFT+A. `press` and `release` must use the same name; a mismatch leaves the key down.
+- Keys are a character (`'A'`, `'1'`, `' '`) or a name: `ENTER CLEAR BREAK UP DOWN LEFT RIGHT SHIFT SPACE`. `type` given an array types each element as one key, so `type(['ENTER'])` presses ENTER while `type('ENTER')` types five letters; in hook mode every element must be a character. On the Model III an unshifted letter key types the capital, so `'A'` presses the bare A key and `'a'` presses SHIFT+A. `press` and `release` must use the same name; a mismatch leaves the key down.
 - In matrix mode `type` presses each character for half of a `1/cps`-second window and releases it for the other half, starting now or when the typing already queued ends. A program that reads the keyboard slowly can miss a short tap: **Rear Guard needs ENTER held about 0.5 s** (`type('\n', { cps: 1 })`). A high `cps` shortens the hold and can drop keys, and typing at the ROM's line editor with no pause for ENTER can lose characters.
 - The key queue is not machine state: `serializeState` does not carry it, and `m.debug.restore` clears it (§7).
 

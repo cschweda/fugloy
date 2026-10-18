@@ -107,7 +107,7 @@ Schemas are JSON Schema in the SDK; shown here abbreviated. Required fields mark
 
 | Tool | Input | Output |
 |---|---|---|
-| `run` | `cycles?`, `seconds?` (emulated, ≤ limit), `until?` = `"break" \| "halt" \| "screen" \| "pc:<addr>"`, `trace?` (bool) | `stopped: <reason>` (`break`, `watch`, `halt`, `screen`, `pc`, `cycles`, `wallclock`), cycles consumed, register block, and if `until:"screen"` the screen diff. `screen` stops at the first check (every 2,000 T-states) where video RAM differs from the call's start, so a game that draws its title in pieces takes a `run` with `seconds` to reach it |
+| `run` | `cycles?`, `seconds?` (emulated, ≤ limit), `until?` = `"break" \| "halt" \| "screen" \| "settled" \| "pc:<addr>"`, `trace?` (bool) | `stopped: <reason>` (`break`, `watch`, `halt`, `screen`, `settled`, `pc`, `cycles`, `wallclock`), cycles consumed, register block, and if `until` is `"screen"` or `"settled"` the screen diff. `screen` stops at the first check (every 2,000 T-states) where video RAM differs from the call's start; `settled` waits for that first change, then stops once video RAM has stayed the same for 0.5 s emulated (1,013,760 T-states), checked every 2,000 T-states, which reaches a title screen drawn in pieces |
 | `step` | `n?` (1–100) | Trace of the executed instructions plus final register block |
 | `key` | `text?`, `keys?` (array of named keys: `ENTER`, `BREAK`, `CLEAR`, `UP`, `DOWN`, `LEFT`, `RIGHT`, `SHIFT`, `SPACE`), `cps?` (default 20), `mode?` (`"matrix"`, the default, or `"hook"`: the ROM keyboard routine, which takes only characters, `ENTER`, and `SPACE`), `run?` (default true: run until the keyboard queue drains, then 0.2 s) | Cycles consumed; screen diff |
 

@@ -31,7 +31,9 @@ describe.skipIf(config.roms.model3 === undefined)('phase A on the Model III ROM'
     expect(manifest).toMatch(/\nEntry: [0-9A-F]{4}h \(the PC is there now\)\n/);
     expect(manifest).toContain(`Path: ${seaDragon}`);
 
-    // The game's first drawing stops the run; its title follows about 5 s later.
+    // The game's first drawing stops the run; its title follows about 5 s later. until "settled"
+    // cannot reach it: the title's graphics animate and its <ENTER> prompt blinks about every
+    // 0.17 s, so video RAM never stays the same for 0.5 s (see the Task 3 fix-round report).
     const first = await ok(call, 'run', { until: 'screen' });
     expect(first.split('\n')[0]).toBe('stopped: screen (video RAM changed)');
     expect(first).toMatch(/\n\d+ cells? changed/);
