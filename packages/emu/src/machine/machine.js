@@ -54,6 +54,10 @@ export class Machine {
   #checkBreaks = false;
   /** True until a run's first boundary has passed; that boundary is never checked, so a run resumes past a break. */
   #firstBoundary = false;
+  /** @type {number | null} The PC where the last run stopped for a breakpoint: the next run's first boundary skips the check there only. */
+  #resumePc = null;
+  /** True while `step` or `run` executes, so a callback cannot re-enter either. */
+  #busy = false;
   /** Set by the hook when a breakpoint held the boundary, read by `run`. */
   #stopped = false;
 
@@ -127,6 +131,7 @@ export class Machine {
   /** Hardware reset: CPU to $0000, cycle count to 0, RAM kept (TRS80System.reset). */
   reset() {
     this.system.reset();
+    this.#resumePc = null;
     this.sound.clear();
     this.keyboard.clear();
   }
@@ -146,10 +151,15 @@ export class Machine {
     const cpu = this.system.cpu;
     const kb = this.keyboard;
     if (cpu.cycles >= kb.nextAt) kb.drain(cpu.cycles);
-    const first = this.#firstBoundary;
+    // A run's first boundary skips the check only at the PC its predecessor stopped at; a halted
+    // CPU idles at HALT+1 on every boundary, so it is never checked.
+    const pc = cpu.registers.PC;
+    const first = this.#firstBoundary && pc === this.#resumePc;
     this.#firstBoundary = false;
-    if (this.debug.active && this.#checkBreaks && this.debug.beforeInstruction(cpu.registers.PC, first)) {
+    this.#resumePc = null;
+    if (this.debug.active && this.#checkBreaks && !cpu.halted && this.debug.beforeInstruction(pc, first)) {
       this.#stopped = true;
+      this.#resumePc = pc;
       return 'stop';
     }
     if (kb.hasFeed && !cpu.halted) {
@@ -174,19 +184,27 @@ export class Machine {
     const sys = this.system;
     const start = sys.cpu.cycles;
     const debug = this.debug;
+    if (this.#busy) throw new Error('step: the machine is already running; step and run cannot be called from a when or until callback');
+    this.#busy = true;
     this.#checkBreaks = false;
-    for (let k = 0; k < n; k++) {
-      sys.stepInstruction(this.#hook);
-      if (debug.active) debug.afterInstruction();
+    try {
+      for (let k = 0; k < n; k++) {
+        sys.stepInstruction(this.#hook);
+        if (debug.active) debug.afterInstruction();
+      }
+    } finally {
+      this.#busy = false;
     }
     return { cycles: sys.cpu.cycles - start, halted: sys.cpu.halted };
   }
 
   /**
    * Run until a T-state budget is spent or a condition holds, both checked after each
-   * instruction; at least one instruction always runs. The condition wins a tie with the budget,
-   * and a breakpoint at the boundary where the budget ends wins over the budget. A breakpoint
-   * stops the run before its instruction executes; the next run resumes past it.
+   * instruction; at least one instruction always runs. The condition wins a tie with the budget.
+   * A breakpoint stops the run before its instruction executes, and the next run starts past it
+   * (only at that PC, so hit counts do not depend on how a session is split into runs). A
+   * breakpoint at a run's first boundary that it did not just stop at stops with `cycles: 0`
+   * (an interrupt response at that boundary counts). Breakpoints are not checked while halted.
    * @param {{ cycles?: number, until?: Until }} opts
    * @returns {{ reason: 'cycles' | 'halt' | 'predicate', cycles: number } | { reason: 'break' | 'watch', id: number, cycles: number }}
    */
@@ -199,34 +217,33 @@ export class Machine {
     const start = cpu.cycles;
     const target = cycles === undefined ? Infinity : start + cycles;
     const debug = this.debug;
+    if (this.#busy) throw new Error('run: the machine is already running; step and run cannot be called from a when or until callback');
+    this.#busy = true;
     this.#checkBreaks = true;
     this.#firstBoundary = true;
     this.#stopped = false;
-    for (;;) {
-      sys.stepInstruction(this.#hook);
-      if (this.#stopped) {
-        this.#stopped = false;
-        const id = /** @type {number} */ (debug.stopId);
-        debug.stopId = null;
-        return { reason: 'break', id, cycles: cpu.cycles - start };
-      }
-      if (debug.active) {
-        const w = debug.afterInstruction();
-        if (w !== null) return { reason: 'watch', id: w, cycles: cpu.cycles - start };
-      }
-      if (until === 'halt') {
-        if (cpu.halted) return { reason: 'halt', cycles: cpu.cycles - start };
-      } else if (until !== undefined && until(this)) {
-        return { reason: 'predicate', cycles: cpu.cycles - start };
-      }
-      if (cpu.cycles >= target) {
-        if (debug.active && debug.beforeInstruction(cpu.registers.PC, false)) {
+    try {
+      for (;;) {
+        sys.stepInstruction(this.#hook);
+        if (this.#stopped) {
+          this.#stopped = false;
           const id = /** @type {number} */ (debug.stopId);
           debug.stopId = null;
           return { reason: 'break', id, cycles: cpu.cycles - start };
         }
-        return { reason: 'cycles', cycles: cpu.cycles - start };
+        if (debug.active) {
+          const w = debug.afterInstruction();
+          if (w !== null) return { reason: 'watch', id: w, cycles: cpu.cycles - start };
+        }
+        if (until === 'halt') {
+          if (cpu.halted) return { reason: 'halt', cycles: cpu.cycles - start };
+        } else if (until !== undefined && until(this)) {
+          return { reason: 'predicate', cycles: cpu.cycles - start };
+        }
+        if (cpu.cycles >= target) return { reason: 'cycles', cycles: cpu.cycles - start };
       }
+    } finally {
+      this.#busy = false;
     }
   }
 }

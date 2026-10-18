@@ -113,13 +113,12 @@ export class TRS80System {
 
     // beforeExecute returning true has executed the boundary's instruction itself (the
     // Machine's ROM keyboard-scan hook stands in for a RET), so the CPU does not run one.
-    // Returning 'stop' runs nothing: the disk controller ticks only for T-states already spent
-    // (an interrupt response) and the caller sees the boundary unchanged.
+    // Returning 'stop' runs nothing and the disk controller does not tick: like the normal path,
+    // it never ticks for an interrupt response's T-states. The return value is those T-states.
     const before = this.cpu.cycles;
     if (beforeExecute !== undefined) {
       const r = beforeExecute();
       if (r === 'stop') {
-        this.io.fdc.tick(before - start);
         return before - start;
       }
       if (r !== true) this.cpu.executeInstruction();
