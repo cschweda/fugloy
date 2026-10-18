@@ -195,11 +195,15 @@ describe("DiskImage.formatTrack", () => {
 
 describe("FDC WRITE TRACK command", () => {
   function formatOneTrack(fdc, trackNo, stream) {
-    fdc.writeCommand(0xf4); // WRITE TRACK
+    fdc.writeCommand(0xf4); // WRITE TRACK, E = 1
     expect(fdc.readStatus() & ST_BUSY).toBe(ST_BUSY);
     expect(fdc.readStatus() & ST_DRQ).toBe(ST_DRQ);
-    for (const byte of stream) fdc.writeData(byte);
-    fdc.tick(500000); // more than one index revolution
+    // The DOS answers each DRQ as it comes, one byte per byte time, from index to index.
+    let k = 0;
+    for (let t = 0; fdc.status & ST_BUSY && t < 1_000_000; t += 8) {
+      if (fdc.status & ST_DRQ) fdc.writeData(k < stream.length ? stream[k++] : 0x4e);
+      fdc.tick(8);
+    }
   }
 
   it("formats a blank disk track through the command interface", () => {

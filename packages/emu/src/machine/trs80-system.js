@@ -47,6 +47,19 @@ export class TRS80System {
     // Cassette-out sound transitions are stamped in CPU T-states
     this.io.getCycles = () => this.cpu.cycles;
 
+    // The Model III WAIT (port F4 bit 6): the controller runs ahead to its
+    // next DRQ or INTRQ; the CPU's clock catches up, and stepInstruction
+    // does not tick the controller for those T-states again. A port write
+    // from outside an instruction (a debugger poke) does not wait.
+    this._executing = false;
+    this._fdcAhead = 0;
+    this.io.onWait = (runToDrq) => {
+      if (!this._executing) return;
+      const held = runToDrq();
+      this.cpu.cycles += held;
+      this._fdcAhead += held;
+    };
+
     this.memory.loadROM(romData);
 
     this.nextRtcAt = RTC_INTERVAL_TSTATES;
@@ -116,16 +129,20 @@ export class TRS80System {
     // Returning 'stop' runs nothing and the disk controller does not tick: like the normal path,
     // it never ticks for an interrupt response's T-states. The return value is those T-states.
     const before = this.cpu.cycles;
+    this._executing = true;
     if (beforeExecute !== undefined) {
       const r = beforeExecute();
       if (r === 'stop') {
+        this._executing = false;
         return before - start;
       }
       if (r !== true) this.cpu.executeInstruction();
     } else {
       this.cpu.executeInstruction();
     }
-    this.io.fdc.tick(this.cpu.cycles - before);
+    this._executing = false;
+    this.io.fdc.tick(this.cpu.cycles - before - this._fdcAhead);
+    this._fdcAhead = 0;
     return this.cpu.cycles - start;
   }
 

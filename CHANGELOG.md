@@ -97,6 +97,62 @@ on the `emu-phase5` branch:
   the way the Model III ROM does (in CI) and through the real ROM when one is
   configured; a snapshot with disks mounted restores their bytes and write
   protection.
+- The WD1793 follows the Western Digital FD179X data sheet (the FD179X-01
+  sheet of October 1979, whose commands, flags, and status bits the -02 part
+  shares), checked behaviour by behaviour in `test/unit/fdc-wd1793.test.js`
+  (52 tests on synthetic images through the ports). Time is in T-states:
+  the disk turns at 300 rpm (405,504 T-states a revolution), IDs pass at
+  their place on the track (the DMK's raw offsets; JV1 and JV3 sectors
+  spaced evenly in image order), and bytes arrive one byte time apart (65
+  T-states in MFM, 130 in FM). What changed:
+  - Type I: Seek steps from the track register to the data register (it had
+    jumped the head to the data register's track); one step pulse per r1 r0
+    period at the 1 MHz rates (6, 12, 20, 30 ms) instead of a flat 6 ms;
+    Restore loads zero into the track register at Track 00 and gives up with
+    Seek Error after 255 pulses; Step remembers the direction of Restore and
+    Seek too; verify (V) waits the 30 ms settle and checks the first good ID
+    against the track register (Seek Error on a mismatch, CRC Error for a bad
+    ID CRC, Seek Error at the fifth index pulse with no good ID); h loads and
+    unloads the head, which also unloads after 15 idle index pulses (Head
+    Loaded had always read 1); the Type I status is live while busy (Track 00
+    and Index had read 0 until the command ended); no index pulses without a
+    disk.
+  - Type II: the ID must carry the track register's track (not the head's
+    position), the sector register's sector, and, with C = 1, the S flag's
+    side; IDs recorded in the other density are invisible (port F4 bit 7);
+    E adds the 30 ms settle; Record Not Found comes at the fifth index pulse
+    (it had come after 6 ms); Read Sector with m = 1 reads on until a sector
+    is not found (it had read one); Lost Data is set when the computer leaves
+    a byte unread when the next arrives, or does not load a byte to write in
+    time (a zero goes to the disk, or, for the first byte, the command ends);
+    ID and data CRCs are checked on DMK images (and JV3's CRC-error flag),
+    setting CRC Error; a write to a protected disk and a command to a drive
+    that is not ready end at once with an interrupt.
+  - Type III: Read Address returns the next ID's six bytes with its CRC and
+    puts the ID's track (not the head's) in the sector register; Read Track,
+    which had returned nothing, returns a revolution of raw track bytes
+    (DMK) or an IBM layout synthesized from the sectors (JV1, JV3); Write
+    Track raises DRQ at once, writes from index pulse to index pulse one byte
+    per byte time, and ends with Lost Data if no byte was loaded by the first
+    index pulse.
+  - Type IV: Force Interrupt keeps the status bits of the command it stops
+    (it had replaced them with Type I status), interrupts on I0, I1 (ready
+    transitions), I2 (every index pulse), and I3 (at once, holding INTRQ
+    until a D0 lets a status read clear it).
+  - Port F4: bit 6 (WAIT) holds the CPU until DRQ or INTRQ, which the ROM's
+    boot read and the DOSes' INI loops rely on now that bytes are timed; a
+    write with no drive bit selects no drive (it had kept the last one).
+    Ports F4 and E4 follow MAME's Model III driver and the ROM's use of them;
+    the Model III Technical Reference Manual was not at hand (spec §5).
+  - Boot timing on the local disk images (real ROM): the dual-boot
+    Eliminator and Rear Guard DMKs, the Eliminator DMK, and Scarfman reach
+    the same screens as before, more slowly, as a real drive does (Scarfman's
+    title by 10 emulated seconds instead of by 2). The ROM sometimes reads the boot
+    sector twice: the 30 Hz interrupt it leaves enabled can cost a byte, and
+    the ROM retries on Lost Data as it was written to.
+  - `DiskImage.trackIds(track, side)` lists a track's ID fields as the
+    controller meets them, and `DiskImage.rawTrack` gives a DMK track's raw
+    bytes.
 
 Emu phase 4 (`@fugloy/mcp` 0.1.0, MCP phases A–C; MCP spec §5, §11):
 

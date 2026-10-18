@@ -211,7 +211,24 @@ export class DiskImage {
           }
         }
         if (dataOff < 0 || dataOff + size * step > trackLen) continue;
-        out.push({ sector, size, deleted, mfm, step, dataOff });
+        // The ID and data fields' CRCs as the WD1793 checks them (FD179X data sheet, "Read
+        // Sector" and "Read Address"): CRC-CCITT preset FFFF over the address mark and the field,
+        // and in MFM over the three A1 sync bytes before the mark too.
+        const sync = mfm ? [0xa1, 0xa1, 0xa1] : [];
+        const id = [0xfe, at(1), at(2), sector, at(4)];
+        const idCrcOk = crc16([...sync, ...id]) === ((at(5) << 8) | at(6));
+        const field = new Array(size + 3);
+        // A CRC cut off by the end of the track reads as bad.
+        const dataAt = (k) => (dataOff + k * step < trackLen ? b[base + dataOff + k * step] : -1);
+        field[0] = deleted ? 0xf8 : 0xfb;
+        for (let k = 0; k < size + 2; k++) field[k + 1] = dataAt(k);
+        const dataCrc = (field[size + 1] << 8) | field[size + 2];
+        const dataCrcOk = crc16([...sync, ...field.slice(0, size + 1)]) === dataCrc;
+        out.push({
+          sector, size, deleted, mfm, step, dataOff,
+          off, idTrack: at(1), idSide: at(2), sizeCode: at(4) & 3,
+          idCrcOk, dataCrcOk,
+        });
       }
     }
     this._dmkCache.set(key, out);
@@ -338,6 +355,93 @@ export class DiskImage {
     return this.jv3Map
       .filter((e) => e.track === track && e.side === side)
       .map((e) => ({ sector: e.sector, sizeCode: sizeToCode[e.size] ?? 1 }));
+  }
+
+  /**
+   * The ID fields on one track side as the controller meets them in a revolution, for the WD1793's
+   * ID search (FD179X data sheet, "Type II Commands"): each with the ID's track, side, sector, and
+   * size code, its density (`mfm`: true, false, or null when the container does not record it, as
+   * in JV1), where its address mark passes as a fraction of a revolution from the index pulse
+   * (`pos`), how many bytes after that mark the first data byte comes (`dataGap`), whether its ID
+   * and data CRCs are good, and its record type. DMK gives all of these from the raw track. JV1 and
+   * JV3 hold only sectors, so their IDs carry the physical track and side, are spaced evenly round
+   * the track in image order, and use the IBM gaps of the data sheet's "IBM Track Format" (an ID
+   * field of 7 bytes, then Gap II, the sync zeros, the A1s in MFM, and the data mark: 45 bytes in
+   * MFM, 25 in FM). JV3's flag bit 3 marks a data CRC error.
+   * @returns {{track:number, side:number, sector:number, sizeCode:number, size:number,
+   *   mfm:boolean|null, pos:number, dataGap:number, idCrcOk:boolean, dataCrcOk:boolean,
+   *   deleted:boolean}[]}
+   */
+  trackIds(track, side) {
+    const gap = (mfm) => (mfm === false ? 25 : 45);
+    const sizeToCode = { 128: 0, 256: 1, 512: 2, 1024: 3 };
+    if (this.format === "dmk") {
+      const raw = this.dmk.trackLen - DMK_IDAM_TABLE;
+      return this._dmkSectors(track, side).map((s) => ({
+        track: s.idTrack,
+        side: s.idSide,
+        sector: s.sector,
+        sizeCode: s.sizeCode,
+        size: s.size,
+        mfm: s.mfm,
+        pos: (s.off - DMK_IDAM_TABLE) / raw,
+        dataGap: (s.dataOff - s.off) / s.step,
+        idCrcOk: s.idCrcOk,
+        dataCrcOk: s.dataCrcOk,
+        deleted: s.deleted,
+      }));
+    }
+    if (this.format === "jv1") {
+      if (side !== 0 || track >= this.tracks) return [];
+      const n = this.sectorsPerTrack;
+      const base = this.sectorBase ?? this.preferredBase;
+      return Array.from({ length: n }, (_, i) => ({
+        track,
+        side,
+        sector: base + i,
+        sizeCode: 1,
+        size: 256,
+        mfm: null,
+        pos: (i + 0.5) / n,
+        dataGap: 45,
+        idCrcOk: true,
+        dataCrcOk: true,
+        deleted: track === this.dirTrack,
+      }));
+    }
+    const entries = this.jv3Map.filter((e) => e.track === track && e.side === side);
+    return entries.map((e, i) => {
+      const flags = this.bytes[e.headerIndex * 3 + 2];
+      const mfm = (flags & 0x80) !== 0;
+      return {
+        track,
+        side,
+        sector: e.sector,
+        sizeCode: sizeToCode[e.size] ?? 1,
+        size: e.size,
+        mfm,
+        pos: (i + 0.5) / entries.length,
+        dataGap: gap(mfm),
+        idCrcOk: true,
+        dataCrcOk: (flags & 0x08) === 0,
+        deleted: e.deleted,
+      };
+    });
+  }
+
+  /**
+   * A DMK track side's raw bytes (what READ TRACK returns), or null for the sector containers,
+   * which keep no raw track. `doubled` says single-density bytes are stored twice.
+   * @returns {{bytes: Uint8Array, doubled: boolean}|null}
+   */
+  rawTrack(track, side) {
+    if (this.format !== "dmk") return null;
+    const base = this._dmkTrackBase(track, side);
+    if (base < 0) return null;
+    return {
+      bytes: this.bytes.slice(base + DMK_IDAM_TABLE, base + this.dmk.trackLen),
+      doubled: !this.dmk.sdSingleByte,
+    };
   }
 
   /**
@@ -482,6 +586,7 @@ export class DiskImage {
     put(hit.dataOff + hit.size * hit.step, crc >> 8);
     put(hit.dataOff + (hit.size + 1) * hit.step, crc & 0xff);
     hit.deleted = deleted;
+    hit.dataCrcOk = true;
     return true;
   }
 

@@ -75,8 +75,11 @@ const FDC_SCALARS = [
   "status",
   "intrq",
   "commandType",
-  "bufferPos",
-  "writing",
+  "command",
+  "stepDir",
+  "headLoaded",
+  "idlePulses",
+  "intrqCond",
   "writeDeleted",
   "mfm",
   "indexClock",
@@ -173,6 +176,12 @@ export function restoreState(system, state) {
   for (const key of FDC_SCALARS) fdc[key] = state.fdc[key];
   fdc.writeDeleted = !!fdc.writeDeleted; // absent in version-1 saves from before DAM support
   fdc.mfm = state.fdc.mfm ?? true; // absent before WRITE TRACK support
+  // Absent before the emu phase 5 datasheet model: the defaults a reset leaves.
+  fdc.command ??= 0;
+  fdc.stepDir ??= 1;
+  fdc.headLoaded ??= false;
+  fdc.idlePulses ??= 0;
+  fdc.intrqCond ??= 0;
   fdc.physicalTrack = [...state.fdc.physicalTrack];
   fdc.pending = state.fdc.pending ? { ...state.fdc.pending } : null;
   fdc.buffer = state.fdc.buffer ? fromBase64(state.fdc.buffer) : null;
@@ -206,6 +215,7 @@ export function restoreState(system, state) {
 
   system.nextRtcAt = state.nextRtcAt;
   system._nmiWasPending = false;
+  system._fdcAhead = 0;
   system.keyboard.reset(); // held keys don't survive a restore
   io.soundLog = [];
   io.onSoundReset?.(); // the Machine's raw sound ring belongs to the old timeline

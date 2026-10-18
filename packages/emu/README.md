@@ -56,6 +56,11 @@ m.load.dsk(readFileSync('game.dmk'))       // → { format: 'dsk', container: 'd
 m.fdc.drives                               // [{ drive: 0, container: 'dmk', tracks, sides, sectorsPerTrack, writeProtected }, null, null, null]
 ```
 
+The WD1793 behind the drives follows the Western Digital FD179X data sheet in
+T-states (spec §5): heads step at the programmed rate, sectors come round at
+300 rpm, and bytes arrive one byte time apart, so a disk loads as slowly as it
+does on a real drive, and a program that misses a byte sees Lost Data.
+
 `step`, `run`, the registers, memory, the keyboard (matrix typing and a ROM
 keyboard hook), sound events, the loaders, and the disk drives are described
 in spec §3.
