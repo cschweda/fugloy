@@ -60,8 +60,8 @@ describe('phase B tools', () => {
     const { client, close } = await server();
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name)).toEqual([
-      'load', 'reset', 'status', 'run', 'step', 'key', 'regs', 'peek', 'poke', 'disasm', 'screen',
-      'break', 'unbreak', 'watch', 'unwatch', 'hits', 'trace', 'callers',
+      'load', 'reset', 'status', 'run', 'step', 'key', 'regs', 'peek', 'poke', 'disasm', 'screen', 'search',
+      'break', 'unbreak', 'watch', 'unwatch', 'hits', 'trace', 'callers', 'callees',
       'label', 'unlabel', 'labels', 'coverage', 'suggest',
       'snapshot', 'restore', 'snapshots', 'diff',
     ]);

@@ -70,8 +70,8 @@ does take, never ignored.
 | --- | --- |
 | Lifecycle | `load` (`.CMD`, `.BAS`, `.CAS`, detected by content; boots the ROM to `READY` first), `reset`, `status` |
 | Execution | `run` (`cycles`, `seconds`, or `until`: `break`, `halt`, `screen`, `settled`, `pc:<addr>`; `trace`), `step`, `key` (text and named keys, through the keyboard matrix or the ROM's keyboard routine) |
-| Inspection | `regs`, `peek`, `poke`, `disasm` (with coverage marks and names), `screen` (or its diff) |
-| Debugging | `break` (with `<reg> <op> <value>` conditions), `unbreak`, `watch`, `unwatch`, `hits` (with the routine each writing PC is in), `trace`, `callers` |
+| Inspection | `regs`, `peek`, `poke`, `disasm` (with coverage marks and names), `screen` (or its diff), `search` (bytes or text, `fold` for either case and the screen's `00h`–`1Fh` forms; at most 256 addresses) |
+| Debugging | `break` (with `<reg> <op> <value>` conditions), `unbreak`, `watch`, `unwatch`, `hits` (with the routine each writing PC is in), `trace`, `callers`, `callees` (the routines a routine called, as a tree up to 4 levels deep) |
 | Knowledge | `label`, `unlabel`, `labels`, `coverage` (summary, ranges, export), `suggest` (the call targets worth naming next, with what they were seen doing) |
 | Snapshots | `snapshot`, `restore` (`clearDebug` also clears coverage, callers, and the hit log; a snapshot of another program is refused), `snapshots`, `diff` (two snapshots, or one and `now`: changed bytes in runs) |
 
@@ -181,7 +181,6 @@ to a tool's output: `FUGLOY_UPDATE_GOLDEN=1 pnpm vitest run packages/mcp/test/st
 
 ## Not yet
 
-`search` and `callees` (the rest of phase D); resources and prompts
-over the protocol (E); guardrail hardening and the npm release (F). The
+Resources and prompts over the protocol (E); guardrail hardening and the npm release (F). The
 dependencies on `@fugloy/emu`, `@fugloy/disasm`, and `@fugloy/z80` are
 `workspace:*`; `pnpm pack` rewrites them to the local versions.

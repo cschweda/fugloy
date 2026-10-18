@@ -30,6 +30,7 @@ import { decimalFor, parseCount } from './args.js';
 import { cap } from './format/cap.js';
 import { Session } from './session.js';
 import breakTool from './tools/break.js';
+import callees from './tools/callees.js';
 import callers from './tools/callers.js';
 import coverage from './tools/coverage.js';
 import diff from './tools/diff.js';
@@ -46,6 +47,7 @@ import reset from './tools/reset.js';
 import restore from './tools/restore.js';
 import run from './tools/run.js';
 import screen from './tools/screen.js';
+import search from './tools/search.js';
 import snapshot from './tools/snapshot.js';
 import snapshots from './tools/snapshots.js';
 import status from './tools/status.js';
@@ -58,7 +60,7 @@ import unwatch from './tools/unwatch.js';
 import watch from './tools/watch.js';
 
 /** Every tool the server offers, in listing order (the spec §5 tables). */
-export const TOOLS = [load, reset, status, run, step, key, regs, peek, poke, disasm, screen, breakTool, unbreak, watch, unwatch, hits, trace, callers, label, unlabel, labels, coverage, suggest, snapshot, restore, snapshots, diff];
+export const TOOLS = [load, reset, status, run, step, key, regs, peek, poke, disasm, screen, search, breakTool, unbreak, watch, unwatch, hits, trace, callers, callees, label, unlabel, labels, coverage, suggest, snapshot, restore, snapshots, diff];
 
 const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 

@@ -93,6 +93,25 @@ MCP phase D, snapshots and `diff` (`@fugloy/mcp`; MCP spec §3, §5 Snapshots):
   the committed `test/golden/story-02.txt`: the diff after one press of A
   shows the score byte at `$7E10` and the press counter at `$7E20`.
 
+MCP phase D, `search` and `callees` (`@fugloy/mcp`; MCP spec §5):
+
+- `search {bytes | text, range?, fold?}` lists every address where a byte
+  string (hex or an array) or printable ASCII text sits, scanning the 64K
+  address space as the CPU sees it, ROM included, unless `range` narrows it;
+  a match lies wholly inside the range. `fold: true` makes text match either
+  case and the `00h`–`1Fh` bytes the Model III's character generator shows as
+  `@`, `A`–`Z`, and `[` to `_`. At most 256 addresses, eight a line, then a
+  line counting the rest. An empty pattern, both patterns, or neither is
+  refused with a sentence, never answered with every address.
+- `callees {addr, depth?}` draws the routines a routine called since load as
+  an indented tree (depth 1–4, default 2), each with its call count, call
+  sites, and name. It reads coverage's callers map: the `call` and `rst`
+  edges from inside the routine's extent, which runs to its first executed
+  RET as `suggest` defines it. Routines already expanded and calls back into
+  the path are marked rather than drawn again.
+- `poke`'s byte parsing moved to `args.js` for `search`; an empty hex string
+  now says `bytes is empty` rather than `not hex pairs`.
+
 Emu phase 4 (`@fugloy/mcp` 0.1.0, MCP phases A–C; MCP spec §5, §11):
 
 - The stdio server (`bin/fugloy-mcp.js`, MCP SDK 1.32.0, zod 4.6.5, plain
