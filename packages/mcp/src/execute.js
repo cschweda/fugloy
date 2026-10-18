@@ -56,7 +56,8 @@ export function bootToReady(m, limit = BOOT_SECONDS) {
 
 /**
  * @typedef {'halt' | 'drained' | { pc: number }} Until
- * @typedef {{ reason: 'break' | 'watch', id: number, cycles: number }
+ * @typedef {{ reason: 'break', id: number, addr: number, cycles: number }
+ *   | { reason: 'watch', id: number, cycles: number }
  *   | { reason: 'settled', how: 'cycle' | 'quiet', cycles: number }
  *   | { reason: 'halt' | 'screen' | 'pc' | 'drained' | 'cycles' | 'wallclock', cycles: number }} Stop
  */
@@ -111,7 +112,9 @@ export function runMachine(session, { budget, until, screenFrom, settle = false,
     const next = Math.min(target, start + SLICE * (Math.floor(done / SLICE) + 1));
     const r = m.run({ cycles: Math.max(0, next - m.cycles), ...(emuUntil ? { until: emuUntil } : {}) });
     const ran = m.cycles - start;
-    if (r.reason === 'break' || r.reason === 'watch') return { reason: r.reason, id: /** @type {any} */ (r).id, cycles: ran };
+    // A breakpoint stops before its instruction, so the PC is its address (kept here: a once breakpoint is gone already).
+    if (r.reason === 'break') return { reason: 'break', id: /** @type {any} */ (r).id, addr: cpu.registers.PC, cycles: ran };
+    if (r.reason === 'watch') return { reason: 'watch', id: /** @type {any} */ (r).id, cycles: ran };
     if (r.reason === 'halt') return { reason: 'halt', cycles: ran };
     if (r.reason === 'predicate') return { reason: until === 'drained' ? 'drained' : 'pc', cycles: ran };
     if (screenFrom && settle) {
@@ -160,10 +163,8 @@ export const capCycles = (/** @type {import('./config.js').Config} */ config) =>
 export function stoppedLine(stop, session, why) {
   const { limits } = session.config;
   switch (stop.reason) {
-    case 'break': {
-      const b = session.machine?.debug.breaks.find((x) => x.id === stop.id);
-      return `stopped: break (breakpoint ${stop.id}${b ? ` at ${hex4(b.addr)}` : ''})`;
-    }
+    case 'break':
+      return `stopped: break (breakpoint ${stop.id} at ${hex4(stop.addr)})`;
     case 'watch':
       return `stopped: watch (watch ${stop.id}, after the instruction that touched it)`;
     case 'halt':
@@ -188,9 +189,9 @@ export function stoppedLine(stop, session, why) {
 }
 
 /**
- * Turn the instruction trace on for `fn` when `on`, at `limits.traceDepth`, then off again
- * (Ruling 3: trace is on only during a run or step that asks for it). What it recorded stays
- * readable after.
+ * Turn the instruction trace on for `fn` when `on`, then off again (Ruling 3: trace is on only
+ * during a run or step that asks for it), and hand what it recorded, registers included, to the
+ * session's trace log, which keeps it across later runs and steps (src/trace-log.js).
  * @template T
  * @param {import('./session.js').Session} session
  * @param {boolean} on
@@ -200,10 +201,13 @@ export function stoppedLine(stop, session, why) {
 export function withTrace(session, on, fn) {
   const m = session.requireMachine();
   if (!on) return fn();
-  m.debug.trace.enable({ depth: Math.min(1_000_000, Math.max(1, Math.round(session.config.limits.traceDepth))) });
+  const depth = session.trace.depth;
+  m.debug.trace.enable({ depth, regs: true });
+  const from = m.cycles;
   try {
     return fn();
   } finally {
+    session.trace.add(from, m.cycles, m.debug.trace.last(depth));
     m.debug.trace.disable();
   }
 }

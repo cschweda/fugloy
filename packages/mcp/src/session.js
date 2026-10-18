@@ -5,6 +5,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { Machine } from '@fugloy/emu';
+import { TraceLog } from './trace-log.js';
 
 /** The sentence every tool that needs a machine answers before the first `load`. */
 export const NO_MACHINE = 'No program loaded; call load first.';
@@ -44,6 +45,9 @@ export function makeMachine(config, rom = readRom(config)) {
  * @typedef {{ addr: number, name: string, kind?: 'code' | 'data', size?: number, note?: string }} Label
  */
 
+/** `limits.traceDepth` as the emulator takes it: a whole number from 1 to 1,000,000. */
+export const traceDepth = (/** @type {import('./config.js').Config} */ config) => Math.min(1_000_000, Math.max(1, Math.round(config.limits.traceDepth)));
+
 export class Session {
   /** @type {Machine | null} */
   machine = null;
@@ -59,6 +63,8 @@ export class Session {
   /** @param {import('./config.js').Config} config */
   constructor(config) {
     this.config = config;
+    /** The instructions traced runs and steps recorded (src/trace-log.js). */
+    this.trace = new TraceLog(traceDepth(config));
   }
 
   /** A new Machine for this session's config (on `rom` when given); the caller installs it. */
@@ -68,11 +74,13 @@ export class Session {
 
   /**
    * Make `machine` the session's: coverage (and callers) on from the start (Ruling 3), and the
-   * screen baseline at what video RAM holds now. The trace stays off (Ruling 3).
+   * screen baseline at what video RAM holds now. The trace stays off (Ruling 3), and the trace
+   * log starts empty.
    * @param {Machine} machine
    */
   install(machine) {
     this.machine = machine;
+    this.trace.clear();
     machine.debug.coverage.enable();
     this.screenBaseline = Uint8Array.from(machine.video.raw);
   }

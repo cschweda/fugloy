@@ -6,7 +6,10 @@ registers, inject input, read the screen, and record labels and coverage the
 Fugløy disassembler consumes. **In progress (emu phase 4):** the phase A
 tools are in (`load`, `reset`, `status`, `run`, `step`, `key`, `regs`, `peek`,
 `poke`, `screen`), and with them an agent can load Sea Dragon and reach its
-title screen; the phase B and C tools follow (plan:
+title screen; so are the phase B tools (`break`, `unbreak`, `watch`,
+`unwatch`, `hits`, `trace`, `callers`, `disasm`), with which it can find a
+program's print routine (spec §13, story 1; `test/golden/story-01.txt` is
+that session on a synthetic program). The phase C tools follow (plan:
 `docs/superpowers/plans/2026-10-18-emu-phase4-mcp.md`).
 
 Run it from the monorepo with `node packages/mcp/bin/fugloy-mcp.js`. It reads

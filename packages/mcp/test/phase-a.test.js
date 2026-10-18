@@ -148,7 +148,8 @@ describe('phase A tools', () => {
   it('lists the phase A tools', async () => {
     const { client, close } = await server();
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name)).toEqual(['load', 'reset', 'status', 'run', 'step', 'key', 'regs', 'peek', 'poke', 'screen']);
+    const phaseA = ['load', 'reset', 'status', 'run', 'step', 'key', 'regs', 'peek', 'poke', 'screen'];
+    expect(tools.map((t) => t.name).filter((n) => phaseA.includes(n))).toEqual(phaseA);
     await close();
   });
 

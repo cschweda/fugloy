@@ -1,0 +1,87 @@
+> load {"path":"<dir>/raiders.cmd"}
+Loaded RAIDERS from <dir>/raiders.cmd
+Format: .CMD (load module)
+Blocks (1):
+  7000h–706Fh (112 bytes)  record 01
+Entry: 7000h (the PC is there now)
+ROM: unrecognised (SHA-256 bb54154772c1e7d2…)
+Boot: the ROM showed no READY within 5 s emulated, so the program was loaded where the ROM had got to
+Sidecar: no sidecar
+Path: <dir>/raiders.cmd
+
+> run {"until":"screen"}
+stopped: screen (video RAM changed)
+Ran 2,005 cycles (0.001 s emulated)
+PC 700F  SP 7F00  AF 0054  BC 0000  DE 704D  HL 3C0D  IX 0000  IY 0000
+AF' 0000 BC' 0000 DE' 0000 HL' 0000  I 00  R 5F  IFF1 0  IFF2 0  IM 0
+Flags: S0 Z1 H1 PV1 N0 C0     Cycles: 10,139,615
+12 cells changed
+(0,0) ' '→'S'
+(0,1) ' '→'P'
+(0,2) ' '→'A'
+(0,3) ' '→'C'
+(0,4) ' '→'E'
+(0,6) ' '→'R'
+(0,7) ' '→'A'
+(0,8) ' '→'I'
+(0,9) ' '→'D'
+(0,10) ' '→'E'
+(0,11) ' '→'R'
+(0,12) ' '→'S'
+
+> watch {"addr":"3C00","len":1024}
+watch #1 on 3C00h–3FFFh (write)
+
+> key {"keys":["ENTER"]}
+Typed 1 key (matrix, 20 cps)
+Ran 456,207 cycles (0.225 s emulated)
+15 cells changed
+(3,0) ' '→'P'
+(3,1) ' '→'L'
+(3,2) ' '→'A'
+(3,3) ' '→'Y'
+(3,4) ' '→'E'
+(3,5) ' '→'R'
+(3,7) ' '→'1'
+(4,0) ' '→'G'
+(4,1) ' '→'O'
+(4,2) ' '→'O'
+(4,3) ' '→'D'
+(4,5) ' '→'L'
+(4,6) ' '→'U'
+(4,7) ' '→'C'
+(4,8) ' '→'K'
+
+> hits {"n":10}
+Hits (all watches): the newest 10 of 17, newest last
+By pc: 7033h ×17 (in the routine called at 7030h)
+     cycle  pc     addr   value  prev  watch
+10,140,043  7033h  3CC7h  31     20    #1 write
+10,140,149  7033h  3D00h  47     20    #1 write
+10,140,196  7033h  3D01h  4F     20    #1 write
+10,140,243  7033h  3D02h  4F     20    #1 write
+10,140,290  7033h  3D03h  44     20    #1 write
+10,140,337  7033h  3D04h  20     20    #1 write
+10,140,384  7033h  3D05h  4C     20    #1 write
+10,140,431  7033h  3D06h  55     20    #1 write
+10,140,478  7033h  3D07h  43     20    #1 write
+10,140,525  7033h  3D08h  4B     20    #1 write
+
+> callers {"addr":"7030"}
+Control reached 7030h from 4 places, 33 times:
+from   kind  count
+7009h  call  1
+7019h  call  1
+7022h  call  1
+7036h  jr    30
+
+> disasm {"addr":"7030","n":8}
+* 7030  1A           LD A,(DE)
+* 7031  B7           OR A
+* 7032  C8           RET Z
+* 7033  77           LD (HL),A
+* 7034  23           INC HL
+* 7035  13           INC DE
+* 7036  18 F8        JR 7030H
+? 7038  00           NOP
+Marks: * executed, d read or written as data, ? never seen (coverage since load)

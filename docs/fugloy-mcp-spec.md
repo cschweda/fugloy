@@ -101,7 +101,7 @@ Schemas are JSON Schema in the SDK; shown here abbreviated. Required fields mark
 |---|---|---|
 | `load` | `path*`, `model?` (only 3 until emu phase 6), `reset?` (default true: a fresh machine boots its ROM to READY first) | Manifest: format (from the content, never the extension: `.CMD`, `.BAS` tokenized or ASCII, `.CAS` by its leader and sync), blocks loaded (`addr–end (len)`), entry point, which ROM was recognized, whether a sidecar label file was found, the resolved path |
 | `reset` | `keepRam?` (default true; false zeroes `4000h–FFFFh`), `clear?` (also drop breaks/watches) | Register block after reset. Before any `load` it powers on a machine with no program |
-| `status` | — | Model, program name, cycles, PC, counts of breaks/watches/snapshots/labels, trace on/off |
+| `status` | — | Model, program name, cycles, PC, counts of breaks/watches/snapshots/labels, how many traced instructions are kept |
 
 ### Execution
 
@@ -118,7 +118,7 @@ Schemas are JSON Schema in the SDK; shown here abbreviated. Required fields mark
 | `regs` | `format?` | Register block |
 | `peek` | `addr*`, `len?` (default 64, max 1024) | Hex dump with labels; 1024 bytes is 64 lines, inside the output cap |
 | `poke` | `addr*`, `bytes*`, `force?` (needed for ROM, `0000h–37FFh`) | Bytes written and previous values, `old → new` |
-| `disasm` | `addr*`, `n?` (instructions, default 32), `labels?` (default true) | Listing with labels and coverage marks (`*` executed, `?` never seen, `d` read as data) |
+| `disasm` | `addr*`, `n?` (instructions, default 32, at most 512), `labels?` (default true) | Linear listing (`@fugloy/z80`) with coverage marks (`*` executed, `d` read or written as data, `?` never seen) and, after `;`, the names an instruction's targets and operands refer to: session labels first, then the Model III ROM and hardware tables of `@fugloy/disasm` (`VIDEO`, `KEYBOARD+40h`); a labelled address gets a `NAME:` line |
 | `screen` | `diff?` (since last `screen` call or a snapshot name) | Full screen or changed cells as `(row,col) old→new` |
 | `search` | `bytes*` or `text*`, `range?` | Addresses of every match |
 
@@ -126,13 +126,13 @@ Schemas are JSON Schema in the SDK; shown here abbreviated. Required fields mark
 
 | Tool | Input | Output |
 |---|---|---|
-| `break` | `addr*`, `once?`, `condition?` (small expression over regs, e.g. `"A == 0x0D"`) | Breakpoint id |
-| `unbreak` | `id?` or `addr?` or `all?` | Confirmation |
-| `watch` | `addr*`, `len?`, `on?` = `"read" \| "write" \| "both"`, `stop?` | Watch id |
-| `unwatch` | `id?` / `all?` | Confirmation |
-| `hits` | `id?`, `n?` (default 50), `clear?` | Hit log: `cycle pc addr value prev` |
-| `trace` | `n?` (default 100, ≤ depth limit), `since?` (cycle), `regs?` | Trace lines |
-| `callers` | `addr*` | `from kind count` rows |
+| `break` | `addr*`, `once?`, `condition?` (`<reg> <op> <value>` clauses joined by `&&`, nothing else: `reg` is `A F B C D E H L I R`, `AF BC DE HL IX IY SP PC`, or a flag `ZF CF SF PVF HF NF`, with `Z S PV N` also accepted bare; `C` and `H` are the registers, as in Z80 assembly; `op` is `== != < <= > >=`; `value` is written like an address, so bare digits are hex, or is a label) | `breakpoint #N at 5200h`, plus `(once)` and `when A == 0Dh`: the condition as it was read, values in hex |
+| `unbreak` | `id?` or `addr?` (every breakpoint there) or `all?` | What was removed |
+| `watch` | `addr*`, `len?` (default 1), `on?` = `"read" \| "write" \| "both"` (default `"write"`), `stop?` | `watch #N on 3C00h–3FFFh (write)` |
+| `unwatch` | `id?` / `all?` | What was removed; its hits stay in the log |
+| `hits` | `id?`, `n?` (default 50), `clear?`, `format?` | Hit log, newest last: `cycle pc addr value prev` and the watch; first a `By pc:` line counting every hit by the PC that made it, each with the routine it is in (the nearest call target at or below it, within 256 bytes, since load: a heuristic) |
+| `trace` | `n?` (default 100, ≤ depth limit), `regs?` | Trace lines, oldest first, loops collapsed (uncollapsed with `regs`, which adds the registers before each instruction). The rule: `run` with `trace: true` and every `step` record, and nothing else does, since tracing slows emulation about fourfold. Each enables a fresh emulator ring for its own length; the server keeps the newest `limits.traceDepth` instructions across all of them, so a `step` never erases a traced run, and only `load` and `reset` empty it. `… (N cycles ran untraced)` marks execution that was not recorded between two stretches. (`since?` is deferred.) |
+| `callers` | `addr*`, `format?` | `from kind count` rows (`call`, `jp`, `jr`, `rst`, `ret-to`), recorded with coverage from the load; for an address nothing reached, the nearest call target at or below it |
 | `callees` | `addr*`, `depth?` | Addresses this routine calls, as a tree |
 
 ### Knowledge
@@ -243,7 +243,7 @@ The MCP Inspector (`npx @modelcontextprotocol/inspector`) is the manual test har
 | Phase | Scope | Done when |
 |---|---|---|
 | A | `load`, `reset`, `status`, `run`, `step`, `regs`, `peek`, `poke`, `screen`, `key` | Agent can load a game and reach its title screen |
-| B | `break`, `watch`, `hits`, `trace`, `callers`, `disasm` | Story 1 (find the print routine) works |
+| B | `break`, `watch`, `hits`, `trace`, `callers`, `disasm` | Story 1 (find the print routine) works. **Met** for a synthetic program (2026-10-18): `test/story-1.test.js` replays load, run until screen, a video RAM watch, ENTER, hits, callers, and disasm, which name the routine at `7030h` and its three call sites, and byte-compares the committed `test/golden/story-01.txt` |
 | C | `label`, `labels`, `coverage`, `suggest`, sidecar file | Story 3 and 7 work; Fugløy reads the output |
 | D | Snapshots, `diff`, `search`, `callees` | Story 2 (locate variables) works |
 | E | Resources, prompts, ROM symbol tables | `orient` prompt gives a useful first report unaided |
@@ -253,7 +253,7 @@ Phase A can begin the day `@fugloy/emu` boots to `READY` in Node (emu Phase 0), 
 
 ## 12. Open questions
 
-- [ ] Condition expressions on `break`: a tiny custom evaluator, or accept only `reg == value` forms? (A real expression language is a security surface, even in-process.)
+- [x] Condition expressions on `break`: a tiny custom evaluator, or accept only `reg == value` forms? (A real expression language is a security surface, even in-process.) Settled in emu phase 4: only `<reg> <op> <value>` clauses joined by `&&` (§5 `break`).
 - [ ] Should `key` understand BASIC line injection (`10 PRINT "HI"`) as a special case, or is `cps` pacing enough?
 - [ ] Is `suggest`'s heuristic list worth hard-coding, or should it just emit raw counts and leave judgment to the agent?
 - [ ] Streamable HTTP for workbench sharing: in scope for 1.0 or never?

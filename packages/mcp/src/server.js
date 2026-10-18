@@ -24,6 +24,10 @@ import { z } from 'zod';
 import { parseCount } from './args.js';
 import { cap } from './format/cap.js';
 import { Session } from './session.js';
+import breakTool from './tools/break.js';
+import callers from './tools/callers.js';
+import disasm from './tools/disasm.js';
+import hits from './tools/hits.js';
 import key from './tools/key.js';
 import load from './tools/load.js';
 import peek from './tools/peek.js';
@@ -34,9 +38,13 @@ import run from './tools/run.js';
 import screen from './tools/screen.js';
 import status from './tools/status.js';
 import step from './tools/step.js';
+import trace from './tools/trace.js';
+import unbreak from './tools/unbreak.js';
+import unwatch from './tools/unwatch.js';
+import watch from './tools/watch.js';
 
 /** Every tool the server offers, in listing order (the spec §5 tables). */
-export const TOOLS = [load, reset, status, run, step, key, regs, peek, poke, screen];
+export const TOOLS = [load, reset, status, run, step, key, regs, peek, poke, disasm, screen, breakTool, unbreak, watch, unwatch, hits, trace, callers];
 
 const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 

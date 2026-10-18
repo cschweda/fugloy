@@ -22,6 +22,7 @@ export default {
       for (const w of m.debug.watches) m.debug.unwatch(w.id);
     }
     m.debug.trace.clear();
+    session.trace.clear();
     m.debug.clearHits();
     if (!keepRam) m.mem.ram.fill(0);
     m.reset();

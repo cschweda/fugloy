@@ -59,3 +59,35 @@ export function buildCas(name, blocks, entry) {
   out.push(0x78, entry & 0xff, entry >> 8);
   return new Uint8Array(out);
 }
+
+/**
+ * RAIDERS, the story 1 program: PRINT (7030h) copies a zero-ended string from DE to video RAM at
+ * HL. The title is printed from 7009h; the program then waits for ENTER (keyboard row 6, 3840h
+ * bit 0) and prints two more lines from 7019h and 7022h, then loops forever.
+ */
+export const RAIDERS = (() => {
+  const code = new Array(0x70).fill(0);
+  const place = (addr, bytes) => code.splice(addr - 0x7000, bytes.length, ...bytes);
+  const text = (addr, s) => place(addr, [...[...s].map((c) => c.charCodeAt(0)), 0]);
+  place(0x7000, [0x31, 0x00, 0x7f]); //  7000  LD SP,7F00H
+  place(0x7003, [0x21, 0x00, 0x3c]); //  7003  LD HL,3C00H
+  place(0x7006, [0x11, 0x40, 0x70]); //  7006  LD DE,7040H
+  place(0x7009, [0xcd, 0x30, 0x70]); //  7009  CALL 7030H
+  place(0x700c, [0x3a, 0x40, 0x38]); //  700C  LD A,(3840H)
+  place(0x700f, [0xe6, 0x01]); //        700F  AND 01H
+  place(0x7011, [0x28, 0xf9]); //        7011  JR Z,700CH
+  place(0x7013, [0x21, 0xc0, 0x3c]); //  7013  LD HL,3CC0H
+  place(0x7016, [0x11, 0x50, 0x70]); //  7016  LD DE,7050H
+  place(0x7019, [0xcd, 0x30, 0x70]); //  7019  CALL 7030H
+  place(0x701c, [0x21, 0x00, 0x3d]); //  701C  LD HL,3D00H
+  place(0x701f, [0x11, 0x60, 0x70]); //  701F  LD DE,7060H
+  place(0x7022, [0xcd, 0x30, 0x70]); //  7022  CALL 7030H
+  place(0x7025, [0x18, 0xfe]); //        7025  JR 7025H
+  place(0x7030, [0x1a, 0xb7, 0xc8]); //  7030  LD A,(DE) / OR A / RET Z
+  place(0x7033, [0x77, 0x23, 0x13]); //  7033  LD (HL),A / INC HL / INC DE
+  place(0x7036, [0x18, 0xf8]); //        7036  JR 7030H
+  text(0x7040, 'SPACE RAIDERS');
+  text(0x7050, 'PLAYER 1');
+  text(0x7060, 'GOOD LUCK');
+  return buildCmd([{ name: 'RAIDERS' }, { addr: 0x7000, data: code }], 0x7000);
+})();

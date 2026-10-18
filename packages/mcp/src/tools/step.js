@@ -7,7 +7,7 @@ import { traceLines } from '../format/trace.js';
 
 export default {
   name: 'step',
-  description: 'Execute n instructions (a decimal count, default 1, at most limits.stepMax, 100 by default) and show each as a trace line, then the register block. Breakpoints and watch stops do not stop a step.',
+  description: 'Execute n instructions (a decimal count, default 1, at most limits.stepMax, 100 by default) and show each as a trace line, then the register block; they are also recorded for the trace tool. Breakpoints and watch stops do not stop a step.',
   inputSchema: {
     n: z.number().int().optional().describe('Instructions to execute, a decimal count (default 1)'),
   },
@@ -19,10 +19,9 @@ export default {
     const m = session.requireMachine();
     const count = parseCount(n, { name: 'n', min: 1, max: session.config.limits.stepMax });
     // Ruling 3: a step always records its own instructions.
-    const entries = withTrace(session, true, () => {
-      m.step(count);
-      return m.debug.trace.last(count);
-    });
+    withTrace(session, true, () => m.step(count));
+    // The registers recorded with each entry are for the trace tool; a step shows the block once.
+    const entries = session.trace.latest.slice(-count).map(({ pc, bytes, cycles }) => ({ pc, bytes, cycles }));
     const lines = [];
     if (entries.length > 0) lines.push(traceLines(entries, session.labels));
     if (entries.length < count) {

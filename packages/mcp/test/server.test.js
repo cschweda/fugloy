@@ -23,7 +23,7 @@ describe('server', () => {
         'Cycles: 0',
         'PC: none (no machine yet)',
         'Breaks: 0  Watches: 0  Labels: 0',
-        'Trace: off',
+        'Trace: none recorded',
         'ROM: /x/model3.rom',
         'Config: /x/fugloy.mcp.json',
       ].join('\n'),

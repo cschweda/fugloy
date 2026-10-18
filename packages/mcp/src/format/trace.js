@@ -45,3 +45,37 @@ export function traceLines(entries, labels) {
   }
   return out.join('\n');
 }
+
+/**
+ * Merge consecutive repetitions of one PC sequence (period 1 to 64, at least two repeats) into
+ * `{ entries, repeat }`, as `m.debug.trace.collapsed` does (emu spec §7), for entries the server
+ * keeps itself. The longest run covered wins at each point.
+ * @template {{ pc: number }} E
+ * @param {E[]} list
+ * @returns {{ entries: E[], repeat: number }[]}
+ */
+export function collapse(list) {
+  const out = [];
+  const n = list.length;
+  let i = 0;
+  while (i < n) {
+    let bestP = 0;
+    let bestR = 0;
+    for (let p = 1; p <= 64 && i + 2 * p <= n; p++) {
+      let r = 1;
+      while (i + (r + 1) * p <= n && list.slice(i + r * p, i + (r + 1) * p).every((e, k) => e.pc === /** @type {E} */ (list[i + k]).pc)) r++;
+      if (r >= 2 && r * p > bestR * bestP) {
+        bestP = p;
+        bestR = r;
+      }
+    }
+    if (bestP === 0) {
+      out.push({ entries: [/** @type {E} */ (list[i])], repeat: 1 });
+      i++;
+    } else {
+      out.push({ entries: list.slice(i, i + bestP), repeat: bestR });
+      i += bestP * bestR;
+    }
+  }
+  return out;
+}
