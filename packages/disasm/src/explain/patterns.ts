@@ -9,8 +9,8 @@
 import type { Instruction } from '@fugloy/z80';
 import { pair } from '../analysis/regs.js';
 import type { Reg8Name, RegState } from '../analysis/regs.js';
-import { djnzLoop, knownBefore, loopEntry, patchedBytes, walkBack, written } from './track.js';
-import { addrPhrase, addrPiece, byte$, decimal, say, screenCell, word$ } from './machine.js';
+import { djnzLoop, knownBefore, loopEntry, opcodeRewritten, patchedBytes, walkBack, written } from './track.js';
+import { addrPhrase, addrPiece, andList, byte$, decimal, say, screenCell, word$ } from './machine.js';
 import type { Ctx } from './machine.js';
 import type { Explanation, Piece, Sentence } from './types.js';
 
@@ -186,19 +186,38 @@ function counted(c: Ctx, at: number, ins: Instruction, viewer: number): Pattern 
   if (loop === null) return undefined;
   const head = headPiece(c, loop.head);
   const to: Piece[] = viewer === at ? [{ text: 'here' }] : [{ text: 'the DJNZ at ' }, addrPiece(c, at)];
+  const early = exitsPhrase(c, loop.exits);
   let sentence: Sentence;
   if (loop.count !== null) {
     const n = loop.count === 0 ? 256 : loop.count;
-    sentence = say('Repeats the lines from ', head, ' to ', to, n === 1 ? ' once.' : n === 2 ? ' twice.' : ` ${decimal(n)} times.`);
+    const times = n === 1 ? 'once' : n === 2 ? 'twice' : `${decimal(n)} times`;
+    sentence = early.length === 0 ? say('Repeats the lines from ', head, ' to ', to, ` ${times}.`) : say('Repeats the lines from ', head, ' to ', to, ` at most ${times}, leaving early at `, early, '.');
   } else {
-    const changesB = [...range(a, loop.head, at)].some((b) => b.ins.mnemonic === 'CALL' || b.ins.mnemonic === 'RST' || b.ins.mnemonic === 'EXX' || written(b.ins).includes('B'));
+    // By address, as djnzLoop scans: a body with a gap the decoder left is still the whole body.
+    const changesB = [...a.pass1.instructions].some(([p, b]) => p >= loop.head && p < at && (b.mnemonic === 'CALL' || b.mnemonic === 'RST' || b.mnemonic === 'EXX' || written(b).includes('B') || opcodeRewritten(a, p)));
     if (!changesB && loopEntry(a, loop.head, at) !== null) {
-      sentence = say('Repeats the lines from ', head, ' to ', to, ' B times, with B as it was on reaching ', head, '; the lines leading there do not prove its value.');
+      sentence =
+        early.length === 0
+          ? say('Repeats the lines from ', head, ' to ', to, ' B times, with B as it was on reaching ', head, '; the lines leading there do not prove its value.')
+          : say('Repeats the lines from ', head, ' to ', to, ' up to B times, with B as it was on reaching ', head, ', leaving early at ', early, '; the lines leading there do not prove its value.');
     } else {
-      sentence = say('Repeats the lines from ', head, ' to ', to, ' until B counts down to zero; how many times is not proven.');
+      sentence =
+        early.length === 0
+          ? say('Repeats the lines from ', head, ' to ', to, ' until B counts down to zero; how many times is not proven.')
+          : say('Repeats the lines from ', head, ' to ', to, ' until B counts down to zero or it leaves early at ', early, '; how many times is not proven.');
     }
   }
   return { name: 'counted-loop', from: loop.head, to: at, sentences: [sentence] };
+}
+
+/** A loop's early exits as links: all of them up to three, else the first and how many others. Empty when there are none. */
+export function exitsPhrase(c: Ctx, exits: readonly number[]): Piece[] {
+  if (exits.length === 0) return [];
+  if (exits.length > 3) return [addrPiece(c, exits[0]!), { text: ` and ${decimal(exits.length - 1)} others` }];
+  return andList(
+    exits.map((x) => [addrPiece(c, x)]),
+    (p) => p,
+  );
 }
 
 /** The decoded instructions from `from` up to (not including) `end`, in address order; stops at a gap. */
@@ -295,7 +314,8 @@ function wait(c: Ctx, at: number, ins: Instruction): Pattern | undefined {
       reached = true;
       break;
     }
-    if (!delayStep(b.ins) || body.length >= WAIT_MAX - 1) return undefined;
+    // An instruction the program may rewrite may not be a counting step at run time.
+    if (!delayStep(b.ins) || body.length >= WAIT_MAX - 1 || opcodeRewritten(a, b.at)) return undefined;
     body.push(b.ins);
   }
   if (!reached) return undefined;

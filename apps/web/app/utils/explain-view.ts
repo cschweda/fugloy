@@ -145,7 +145,7 @@ export function thinLinks(s: Sentence): Sentence {
 }
 
 /** Sentences of a routine summary that say what it is, how it is reached and how it ends; the rest go behind "More about this routine". */
-const HEAD = ['This is where the program starts', 'This is an entry point', 'It is called from', 'It is jumped to from', 'A jump table entry', 'Jump table entries', 'It ends by', 'None of its paths', 'It is longer than'];
+const HEAD = ['This is where the program starts', 'This is an entry point', 'It is called from', 'It is jumped to from', 'Its address is used at', 'A jump table entry', 'Jump table entries', 'It ends by', 'None of its paths', 'It is longer than'];
 
 /** A routine summary split into what shows at once (its length, who reaches it, how it ends) and the facts behind a disclosure. */
 export function summaryParts(r: RoutineSummary): { head: Sentence[]; more: Sentence[] } {

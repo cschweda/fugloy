@@ -112,6 +112,47 @@ describe('counted loop', () => {
     expect(pat(e)).toEqual(['Repeats the lines from L4E03 to here B times, with B as it was on reaching L4E03; the lines leading there do not prove its value.']);
     expect(pat(e).join(' ')).not.toMatch(/\$[0-9A-F]{2}\b/);
   });
+
+  it('Sea Dragon $54BC DJNZ L54B4: the JR Z out of the body makes 20 a bound', () => {
+    const e = explainLine(sea, 0x54bc);
+    expect(e.pattern).toMatchObject({ name: 'counted-loop', from: 0x54b4, to: 0x54bc });
+    expect(pat(e)).toEqual(['Repeats the lines from L54B4 to here at most 20 times, leaving early at $54B8.']);
+    expect(e.pattern!.sentences[0]!.find((p) => p.text === '$54B8')?.addr).toBe(0x54b8);
+  });
+
+  it('Sea Dragon $5BE0, $564A and $577E: early exits make every count a bound', () => {
+    for (const at of [0x5be0, 0x564a, 0x577e]) expect(pat(explainLine(sea, at)).join(' ')).toMatch(/ at most \d+ times, leaving early at \$[0-9A-F]{4}\.$/);
+  });
+
+  it('early-exit: a synthetic find-a-slot loop is at most 16 times', () => {
+    // 7000 LD HL,3C00H; 7003 LD B,10H; 7005 l: LD A,(HL); 7006 CP 20H; 7008 JR Z,700E; 700A INC HL; 700B DJNZ 7005; 700D RET; 700E LD (HL),2AH; 7010 RET
+    const e = explainLine(raw([0x21, 0x00, 0x3c, 0x06, 0x10, 0x7e, 0xfe, 0x20, 0x28, 0x04, 0x23, 0x10, 0xf8, 0xc9, 0x36, 0x2a, 0xc9]), 0x700b);
+    expect(pat(e)).toEqual(['Repeats the lines from L7005 to here at most 16 times, leaving early at $7008.']);
+  });
+
+  it('early-exit: more than three exits name the first and count the others', () => {
+    // 7000 LD B,8; 7002 l: RET Z; RET Z; RET Z; RET Z; 7006 DJNZ 7002; 7008 RET
+    const e = explainLine(raw([0x06, 0x08, 0xc8, 0xc8, 0xc8, 0xc8, 0x10, 0xfa, 0xc9]), 0x7006);
+    expect(pat(e)).toEqual(['Repeats the lines from L7002 to here at most 8 times, leaving early at $7002 and 3 others.']);
+  });
+
+  it('early-exit with B unproven: up to B times', () => {
+    // 7000 LD B,A; 7001 l: RET Z; 7002 DJNZ 7001; 7004 RET
+    const e = explainLine(raw([0x47, 0xc8, 0x10, 0xfd, 0xc9]), 0x7002);
+    expect(pat(e)).toEqual(['Repeats the lines from L7001 to here up to B times, with B as it was on reaching L7001, leaving early at $7001; the lines leading there do not prove its value.']);
+  });
+
+  it('early-exit with B changed in the body: until B counts down or it leaves early', () => {
+    // 7000 LD B,4; 7002 l: LD B,A; 7003 RET Z; 7004 DJNZ 7002; 7006 RET
+    const e = explainLine(raw([0x06, 0x04, 0x47, 0xc8, 0x10, 0xfc, 0xc9]), 0x7004);
+    expect(pat(e)).toEqual(['Repeats the lines from L7002 to here until B counts down to zero or it leaves early at $7003; how many times is not proven.']);
+  });
+
+  it('changesB scans the body by address, past a gap the decoder left', () => {
+    // 7000 LD B,4; 7002 l: JR 7005; 7004 a data byte; 7005 LD B,A; 7006 DJNZ 7002; 7008 RET
+    const e = explainLine(raw([0x06, 0x04, 0x18, 0x01, 0xff, 0x47, 0x10, 0xfa, 0xc9]), 0x7006);
+    expect(pat(e)).toEqual(['Repeats the lines from L7002 to here until B counts down to zero; how many times is not proven.']);
+  });
 });
 
 describe('wait', () => {

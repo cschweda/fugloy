@@ -157,6 +157,40 @@ describe('summarizeRoutine facts', () => {
     expect(text(must(summarizeRoutine(s2, 0x7000)))).not.toMatch(/It calls/);
   });
 
+  it('rewritten-opcode: an instruction whose first byte the program stores into is an unproven exit', () => {
+    // 7000: LD A,0C9H / LD (7007H),A / LD B,3 / 7007: NOP (becomes RET) / LD (3C00H),A / RET
+    const s = raw([0x3e, 0xc9, 0x32, 0x07, 0x70, 0x06, 0x03, 0x00, 0x32, 0x00, 0x3c, 0xc9]);
+    const t = text(must(summarizeRoutine(s, 0x7000)));
+    expect(t).toMatch(/It ends by returning, or by whatever the instruction at \$7007 becomes \(the program rewrites its first byte\)\./);
+  });
+
+  it('Sea Dragon $525E: a JP NZ whose first byte is rewritten is followed to its target, and is an unproven exit, not a rewritten target', () => {
+    const t = text(must(summarizeRoutine(sea, 0x525e)));
+    expect(t).toMatch(/whatever the instruction at \$525E becomes/);
+    expect(t).not.toMatch(/the jump at \$525E\)/);
+  });
+
+  it('a DJNZ loop with an early exit gives its count as a bound', () => {
+    // 7000 LD HL,3C00H; 7003 LD B,10H; 7005 l: LD A,(HL); 7006 CP 20H; 7008 JR Z,700E; 700A INC HL; 700B DJNZ 7005; 700D RET; 700E LD (HL),2AH; 7010 RET
+    const t = text(must(summarizeRoutine(raw([0x21, 0x00, 0x3c, 0x06, 0x10, 0x7e, 0xfe, 0x20, 0x28, 0x04, 0x23, 0x10, 0xf8, 0xc9, 0x36, 0x2a, 0xc9]), 0x7000)));
+    expect(t).toMatch(/It loops: the lines from L7005 to the DJNZ at \$700B, at most 16 times, leaving early at \$7008\./);
+  });
+
+  it('a start whose address is also used as data may be reached through a pointer', () => {
+    // 7000: CALL 700AH / LD HL,700AH / CALL 7009H / 7009: JP (HL) / 700A: RET
+    const r = must(summarizeRoutine(raw([0xcd, 0x0a, 0x70, 0x21, 0x0a, 0x70, 0xcd, 0x09, 0x70, 0xe9, 0xc9]), 0x700a));
+    expect(text(r)).toMatch(/It is called from one place: \$7000, and its address is used at \$7003, so it may also be reached through a pointer\./);
+  });
+
+  it('a CALL followed by bytes not decoded as code falls past the call; it does not say the code runs into them', () => {
+    // 7000: CALL 7006H / 7003: three declared bytes / 7006: POP HL / JP (HL)
+    const bytes = new Uint8Array([0xcd, 0x06, 0x70, 0x48, 0x49, 0x00, 0xe1, 0xe9]);
+    const s0 = raw([...bytes]);
+    const s = withHintFile(s0, { ...skeletonHints(s0.module, bytes), hints: [{ directive: 'bytes' as const, length: 3, block: 0, offset: 3, line: 1 }] });
+    const t = text(must(summarizeRoutine(s, 0x7000)));
+    expect(t).toMatch(/It ends by falling past the call at \$7000 into bytes not decoded as code at \$7003\./);
+  });
+
   it('a jump into bytes not decoded as code is an unknown exit, not a loop forever', () => {
     // 7000: LD HL,0000H / JP 7001H (inside the LD).
     const r = must(summarizeRoutine(raw([0x21, 0x00, 0x00, 0xc3, 0x01, 0x70]), 0x7003));

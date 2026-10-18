@@ -125,6 +125,16 @@ Explain runs a small, local value tracker. My call on its scope:
   - nothing outside the loop jumps into its body;
   - nothing in the body changes B or calls out.
 
+  If anything in the body can leave the loop without passing the `DJNZ`
+  (an early exit), the count is only a bound ("at most N times").
+- **Rewritten instructions.** When the program refers to a byte inside an
+  instruction, it may rewrite that operand, so the instruction proves
+  nothing it writes. When an instruction provably stores into an
+  instruction's first byte (`LD (nn),r` or `LD (nn),rr` covering it), that
+  instruction may be a different one at run time: the walk forgets every
+  register there, the line says so, and the routine summary and loop counts
+  treat it as an exit whose destination is not proven. A mere pointer to an
+  instruction start (an address the program loads) is not enough.
   Inside the loop, the head is still a merge point, so the body's
   registers stay unknown. (This narrower rule replaced a general "skip the
   loop" exception while the plan was written: a forward branch inside a
@@ -153,7 +163,11 @@ My call, kept small; each pattern names the lines it spans:
   screen" (fill with $20) or "fills the screen with …".
 - **Counted loop:** `DJNZ` with B known on entry to the loop. Says "repeats
   the lines from L… to here N times". Without a known B, it says "repeats
-  B times".
+  B times". An early exit makes the count a bound: when anything in the body
+  can leave it without passing the `DJNZ` (a jump out of the loop or back
+  before its head, a return, an indirect jump, `HALT`, or an instruction
+  whose first byte the program rewrites), it says "at most N times, leaving
+  early at $X" (or "up to B times, …"), naming the exits.
 - **Wait loop:** a short loop of `DEC`, a test and a backward jump, with
   nothing else in it. Says it is a delay, with a T-state estimate when
   the count is known.

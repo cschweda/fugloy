@@ -13,7 +13,7 @@ import type { ListRow, Rows } from './listing.js';
 import { dataRegion } from './region.js';
 import type { Analysis } from '../pipeline.js';
 import type { Session } from '../session.js';
-import { knownBefore, patchedBytes, walkBack, written } from './track.js';
+import { knownBefore, opcodeRewritten, patchedBytes, pointerUses, walkBack, written } from './track.js';
 import { dataReference } from '../analysis/symbols.js';
 import { addrPiece, andList, loaded, say, screenText, tableName, word$ } from './machine.js';
 import type { Ctx } from './machine.js';
@@ -89,7 +89,8 @@ function fromSentences(c: LineCtx, isRoot: boolean): { sentences: Sentence[]; en
   const rest: string[] = [];
   for (const r of c.needs) {
     const halves = r.length === 2 && r !== 'IX' && r !== 'IY' ? [r[0]!, r[1]!] : r === 'IX' ? ['IXH', 'IXL'] : r === 'IY' ? ['IYH', 'IYL'] : [r];
-    const writer = w.chain.find((link) => written(link.ins).some((n) => halves.includes(n)));
+    // An instruction the program may turn into another one may write any register.
+    const writer = w.chain.find((link) => opcodeRewritten(c.a, link.at) || written(link.ins).some((n) => halves.includes(n)));
     if (writer === undefined) rest.push(r);
     else changed.set(writer.at, [...(changed.get(writer.at) ?? []), r]);
   }
@@ -103,7 +104,10 @@ function fromSentences(c: LineCtx, isRoot: boolean): { sentences: Sentence[]; en
   if (w.stop === 'merge') {
     const list = ways(c, w);
     const joined = list.flatMap((p, i) => (i === 0 ? p : [{ text: ', or ' }, ...p]));
-    out.push(say(`${subject} when `, named, ' was reached: ', joined, '.'));
+    // The xrefs are every direct way in; an address the program loads or uses as data may be jumped through as well.
+    const used = pointerUses(c.a, w.at);
+    const pointer: Piece[] = used.length === 0 ? [] : [{ text: '; its address is also used at ' }, ...addrList(c, used), { text: ', so it may also be reached through a pointer' }];
+    out.push(say(`${subject} when `, named, ' was reached: ', joined, pointer, '.'));
   } else if (w.stop === 'root' && w.at === c.addr && isRoot) {
     const start = c.addr === c.a.entry ? 'This is where the program starts (its entry point), so ' : 'This is an entry point the analysis starts from, so ';
     out.push(say(start, `${subject} when ${c.addr === c.a.entry ? 'the program was started' : 'control arrived here'}.`));
@@ -143,23 +147,50 @@ function usersOf(a: Analysis, b: number): { writers: number[]; refs: number[] } 
   return { writers: writers.sort((p, q) => p - q), refs: refs.sort((p, q) => p - q) };
 }
 
-/** The caveat for an instruction whose bytes carry a label: the program may rewrite it, so its numbers are only where they start. */
-function patchedSentence(c: LineCtx): Sentence | undefined {
-  if (c.patched.length === 0) return undefined;
-  const names = andList(c.patched, (b) => [{ text: c.a.symbols.get(b)?.name ?? word$(b), addr: b }]);
+/** Who stores into or refers to the bytes `bytes`: their writers, else the instructions that refer to them. */
+function usersOfAll(a: Analysis, bytes: readonly number[]): { writers: number[]; refs: number[] } {
   const writers = new Set<number>();
   const refs = new Set<number>();
-  for (const b of c.patched) {
-    const u = usersOf(c.a, b);
+  for (const b of bytes) {
+    const u = usersOf(a, b);
     u.writers.forEach((x) => writers.add(x));
     u.refs.forEach((x) => refs.add(x));
   }
   const sorted = (s: Set<number>): number[] => [...s].sort((p, q) => p - q);
-  if (writers.size > 0) {
-    return say('The program rewrites part of this instruction as it runs (', names, ', written at ', addrList(c, sorted(writers)), '), so the numbers shown are only where they start.');
+  return { writers: sorted(writers), refs: sorted(refs) };
+}
+
+/**
+ * The caveats for an instruction the program may rewrite: when it stores into
+ * the first byte, the instruction itself may be a different one at run time;
+ * when a label lies in its other bytes, its numbers are only where they start.
+ */
+function patchedSentences(c: LineCtx): Sentence[] {
+  const out: Sentence[] = [];
+  const name = (b: number): Piece[] => [{ text: c.a.symbols.get(b)?.name ?? word$(b), addr: b }];
+  if (opcodeRewritten(c.a, c.addr)) {
+    const u = usersOfAll(c.a, [c.addr]);
+    out.push(
+      say(
+        'The program stores into the first byte of this instruction as it runs (',
+        name(c.addr),
+        ', written at ',
+        addrList(c, u.writers),
+        '), so at run time it may be a different instruction; this line shows only what it starts as.',
+      ),
+    );
   }
-  const used = refs.size > 0 ? [{ text: ', used at ' }, ...addrList(c, sorted(refs))] : [];
-  return say('The program refers to a byte inside this instruction (', names, used, '), so it may rewrite the instruction as it runs; the numbers shown are only where they start.');
+  const operand = c.patched.filter((b) => b !== c.addr);
+  if (operand.length === 0) return out;
+  const names = andList(operand, name);
+  const u = usersOfAll(c.a, operand);
+  if (u.writers.length > 0) {
+    out.push(say('The program rewrites part of this instruction as it runs (', names, ', written at ', addrList(c, u.writers), '), so the numbers shown are only where they start.'));
+    return out;
+  }
+  const used = u.refs.length > 0 ? [{ text: ', used at ' }, ...addrList(c, u.refs)] : [];
+  out.push(say('The program refers to a byte inside this instruction (', names, used, '), so it may rewrite the instruction as it runs; the numbers shown are only where they start.'));
+  return out;
 }
 
 /** What is at an address the line uses: listing lines, or the table entry, or the screen cell. */
@@ -241,8 +272,7 @@ export function explainLine(s: Session, addr: number): Explanation {
   const ins = a.pass1.instructions.get(at) as Instruction;
   const lc: LineCtx = { ...c, addr: at, ins, regs: knownBefore(a, at).regs, refs: [], needs: [], patched: patchedBytes(a, at, ins) };
   const sentences = words(lc);
-  const caveat = patchedSentence(lc);
-  if (caveat !== undefined) sentences.push(caveat);
+  sentences.push(...patchedSentences(lc));
   const isRoot = rootSet.has(at);
   const from = fromSentences(lc, isRoot);
   sentences.push(...from.sentences);

@@ -9,7 +9,7 @@
  * prove on every path to the line stays unknown.
  */
 import type { Instruction } from '@fugloy/z80';
-import { endsPath } from '../analysis/descent.js';
+import { endsPath, isRst08 } from '../analysis/descent.js';
 import { dataReference } from '../analysis/symbols.js';
 import { stepRegs, unknownRegs } from '../analysis/regs.js';
 import type { Reg8Name, RegState } from '../analysis/regs.js';
@@ -33,6 +33,10 @@ interface Index {
   roots: Set<number>;
   /** Addresses an instruction references as data, or a hint declares a table at: reachable by an indirect transfer. */
   dataRefs: Set<number>;
+  /** Address → the instructions that refer to it as data (`dataReference`). */
+  pointerUses: Map<number, number[]>;
+  /** Addresses an instruction provably stores into: the (nn) of LD (nn),r, and nn and nn+1 of LD (nn),rr. */
+  stores: Set<number>;
 }
 
 const cache = new WeakMap<Analysis, Index>();
@@ -61,11 +65,24 @@ function index(a: Analysis): Index {
   const roots = new Set<number>([...a.roots, ...a.pass1.roots]);
   if (a.entry !== null) roots.add(a.entry);
   const dataRefs = new Set<number>(a.annotations.tables.map((t) => t.addr & 0xffff));
-  for (const ins of a.pass1.instructions.values()) {
+  const pointerUses = new Map<number, number[]>();
+  const stores = new Set<number>();
+  for (const [at, ins] of a.pass1.instructions) {
     const ref = dataReference(ins);
-    if (ref !== null) dataRefs.add(ref & 0xffff);
+    if (ref !== null) {
+      dataRefs.add(ref & 0xffff);
+      const list = pointerUses.get(ref & 0xffff);
+      if (list === undefined) pointerUses.set(ref & 0xffff, [at]);
+      else list.push(at);
+    }
+    const [d, v] = ins.operands;
+    if (ins.mnemonic === 'LD' && d?.kind === 'mem') {
+      stores.add(d.addr & 0xffff);
+      if (v?.kind === 'reg16') stores.add((d.addr + 1) & 0xffff);
+    }
   }
-  const built = { endingAt, into, roots, dataRefs };
+  for (const list of pointerUses.values()) list.sort((p, q) => p - q);
+  const built = { endingAt, into, roots, dataRefs, pointerUses, stores };
   cache.set(a, built);
   return built;
 }
@@ -158,26 +175,84 @@ export function written(ins: Instruction): Reg8Name[] {
   return [...out];
 }
 
+/** The instructions that refer to `addr` as data (an address loaded or used, perhaps as a pointer to jump through), ascending. */
+export function pointerUses(a: Analysis, addr: number): number[] {
+  return [...(index(a).pointerUses.get(addr & 0xffff) ?? [])];
+}
+
 /**
- * The labelled addresses inside an instruction's bytes (at+1..at+len-1): the
- * program refers to them, so it may rewrite the instruction's operand as it
- * runs, and the decoded number is only where it starts.
+ * True when some instruction provably stores into the first byte of the
+ * instruction at `at` (LD (nn),r with nn = at, or LD (nn),rr covering it):
+ * at run time it may be a different instruction altogether. A mere data
+ * reference to an instruction start (a pointer the program loads) is not enough.
+ */
+export function opcodeRewritten(a: Analysis, at: number): boolean {
+  return index(a).stores.has(at & 0xffff) && a.pass1.instructions.has(at & 0xffff);
+}
+
+/**
+ * The bytes of an instruction the program may rewrite as it runs: its first
+ * byte when an instruction stores into it (`opcodeRewritten`), and the
+ * labelled addresses among its other bytes (at+1..at+len-1), which the program
+ * refers to. Either way the decoded numbers are only where they start.
  */
 export function patchedBytes(a: Analysis, at: number, ins: Instruction): number[] {
-  const out: number[] = [];
+  const out: number[] = opcodeRewritten(a, at) ? [at & 0xffff] : [];
   for (let i = 1; i < ins.length; i++) if (a.symbols.has((at + i) & 0xffff)) out.push((at + i) & 0xffff);
   return out;
 }
 
 /**
- * One forward step of the replay. When a label lies inside the instruction's
- * bytes (at+1..at+len-1), the program may rewrite its operand, so whatever it
- * writes is unproven and becomes unknown instead of the decoded value.
+ * One forward step of the replay. When the program may rewrite the
+ * instruction's first byte, it may be any instruction at run time, so every
+ * register becomes unknown. When a label lies inside its other bytes, the
+ * program may rewrite its operand, so whatever it writes is unproven and
+ * becomes unknown instead of the decoded value.
  */
 function step(a: Analysis, at: number, ins: Instruction, regs: RegState): void {
+  if (opcodeRewritten(a, at)) {
+    for (const n of Object.keys(regs) as Reg8Name[]) regs[n] = null;
+    return;
+  }
   if (patchedBytes(a, at, ins).length === 0) return stepRegs(ins, regs);
   stepRegs(ins, regs);
   for (const n of written(ins)) regs[n] = null;
+}
+
+/** The target in a jump's own bytes, or null (indirect, or none). */
+function jumpTarget(ins: Instruction): number | null {
+  for (const o of ins.operands) {
+    if (o.kind === 'imm16') return o.value;
+    if (o.kind === 'rel') return o.target;
+  }
+  return null;
+}
+
+/**
+ * The instructions in head..end-1 that may take control out of the loop
+ * without passing its DJNZ at `end`: a jump whose target lies outside
+ * head..end (before the head too, which may re-enter and reset B), an
+ * indirect jump or one whose target the program may rewrite, any return, HALT,
+ * an instruction whose first byte the program rewrites, and one that falls
+ * into bytes not decoded as code. Ascending.
+ */
+export function loopExits(a: Analysis, head: number, end: number): number[] {
+  const out: number[] = [];
+  for (const [at, ins] of a.pass1.instructions) {
+    if (at < head || at >= end) continue;
+    const f = ins.flow;
+    let exit = opcodeRewritten(a, at) || f.kind === 'return' || f.kind === 'halt';
+    if (!exit && f.kind === 'jump') {
+      const t = jumpTarget(ins);
+      exit = f.indirect || t === null || patchedBytes(a, at, ins).length > 0 || t < head || t > end;
+    }
+    if (!exit && !endsPath(ins)) {
+      const next = at + ins.length + (isRst08(ins) ? 1 : 0);
+      exit = next < end && !a.pass1.instructions.has(next);
+    }
+    if (exit) out.push(at);
+  }
+  return out.sort((p, q) => p - q);
 }
 
 /** True when the instruction may change B. */
@@ -217,12 +292,14 @@ export function loopEntry(a: Analysis, head: number, end: number, anyBackJump = 
 }
 
 /**
- * For a DJNZ at `addr`: its loop (head = target, end = addr) and B's value on
- * entry when proven, else count null. A count of 0 means 256 passes. The count
- * holds only when the loop is entered only by falling into its head
- * (`loopEntry`), and no body instruction writes B or is a CALL, RST or EXX.
+ * For a DJNZ at `addr`: its loop (head = target, end = addr), B's value on
+ * entry when proven, else count null, and the body's early exits
+ * (`loopExits`). A count of 0 means 256 passes. The count holds only when the
+ * loop is entered only by falling into its head (`loopEntry`), and no body
+ * instruction writes B, is a CALL, RST or EXX, or may be rewritten; with exits it is only a
+ * bound: the loop runs at most that many times.
  */
-export function djnzLoop(a: Analysis, addr: number): { head: number; end: number; count: number | null } | null {
+export function djnzLoop(a: Analysis, addr: number): { head: number; end: number; count: number | null; exits: number[] } | null {
   const ins = a.pass1.instructions.get(addr);
   if (ins === undefined || ins.mnemonic !== 'DJNZ') return null;
   const rel = ins.operands.find((o) => o.kind === 'rel');
@@ -231,11 +308,11 @@ export function djnzLoop(a: Analysis, addr: number): { head: number; end: number
   const end = addr;
   // A forward DJNZ is not a loop.
   if (head > end) return null;
-  const loop = { head, end };
+  const loop = { head, end, exits: loopExits(a, head, end) };
   for (const [at, body] of a.pass1.instructions) {
     if (at < head || at >= end) continue;
     const m = body.mnemonic;
-    if (m === 'CALL' || m === 'RST' || m === 'EXX' || writesB(body)) return { ...loop, count: null };
+    if (m === 'CALL' || m === 'RST' || m === 'EXX' || writesB(body) || opcodeRewritten(a, at)) return { ...loop, count: null };
   }
   const regs = loopEntry(a, head, end);
   return { ...loop, count: regs === null ? null : regs.B };

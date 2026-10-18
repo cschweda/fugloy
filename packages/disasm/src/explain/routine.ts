@@ -16,8 +16,8 @@ import type { Analysis } from '../pipeline.js';
 import type { Session } from '../session.js';
 import { addrPhrase, addrPiece, andList, decimal, loaded, nameOf, portPhrase, routineKind, say, screenCell, tableName, word$ } from './machine.js';
 import type { Ctx } from './machine.js';
-import { patternAt, screenRange } from './patterns.js';
-import { djnzLoop, knownBefore, patchedBytes } from './track.js';
+import { exitsPhrase, patternAt, screenRange } from './patterns.js';
+import { djnzLoop, knownBefore, opcodeRewritten, patchedBytes, pointerUses } from './track.js';
 import type { Piece, Sentence } from './types.js';
 
 export interface RoutineSummary {
@@ -54,6 +54,8 @@ interface Exits {
   indirect: string[];
   /** Jumps whose target bytes the program may rewrite: where they are. */
   rewritten: number[];
+  /** Instructions whose first byte the program stores into: at run time they may be anything, so where they lead is not proven. */
+  rewrittenOps: number[];
   /** Jumps into loaded bytes not decoded as code: target → the jumps. */
   undecoded: Map<number, number[]>;
   /** Falling through past the end of the loaded image: the first unloaded address → the instructions that fall there. */
@@ -120,7 +122,7 @@ function targetOf(ins: Instruction): number | null {
   return null;
 }
 
-const emptyExits = (): Exits => ({ returns: false, halts: false, onward: new Map(), runsInto: new Map(), indirect: [], rewritten: [], undecoded: new Map(), runsOff: new Map(), fallsIntoData: new Map() });
+const emptyExits = (): Exits => ({ returns: false, halts: false, onward: new Map(), runsInto: new Map(), indirect: [], rewritten: [], rewrittenOps: [], undecoded: new Map(), runsOff: new Map(), fallsIntoData: new Map() });
 
 const add = (m: Map<number, number[]>, k: number, v: number): void => {
   const list = m.get(k);
@@ -156,6 +158,8 @@ function walk(a: Analysis, ix: Index, start: number, visit: (at: number, ins: In
     count++;
     const ins = a.pass1.instructions.get(at)!;
     visit(at, ins);
+    // Its decoded flow is still followed (it is what the instruction starts as), but where it really leads is not proven.
+    if (opcodeRewritten(a, at)) x.rewrittenOps.push(at);
     const next = (at + ins.length + (isRst08(ins) ? 1 : 0)) & 0xffff;
     const f = ins.flow;
     if (f.kind === 'halt') {
@@ -172,7 +176,7 @@ function walk(a: Analysis, ix: Index, start: number, visit: (at: number, ins: In
         const r = ins.operands.find((o) => o.kind === 'ind');
         const reg = r?.kind === 'ind' ? r.reg : 'HL';
         if (!x.indirect.includes(reg)) x.indirect.push(reg);
-      } else if (patchedBytes(a, at, ins).length > 0) {
+      } else if (patchedBytes(a, at, ins).some((p) => p !== at)) {
         // The program may rewrite the target: where it goes is not proven.
         x.rewritten.push(at);
       } else {
@@ -311,8 +315,13 @@ function summarize(c: Ctx, ix: Index, start: number): RoutineSummary {
     else if (!b.has.has(x.from)) (a.pass1.instructions.has(x.from) ? jumps : table).add(x.from);
   }
   const list = (s: Set<number>): Piece[] => capped([...s].sort((p, q) => p - q).map((x) => [addrPiece(c, x)]));
-  if (callers.size > 0) out.push(say(`It is called from ${callers.size === 1 ? 'one place' : `${decimal(callers.size)} places`}: `, list(callers), '.'));
-  if (jumps.size > 0) out.push(say(`It is jumped to from `, list(jumps), '.'));
+  // The xrefs are every direct way in; an address the program loads or uses as data may be called or jumped through as well.
+  const used = pointerUses(a, start);
+  const usedList = capped(used.map((x) => [addrPiece(c, x)]));
+  const pointer: Piece[] = used.length === 0 ? [] : [{ text: ', and its address is used at ' }, ...usedList, { text: ', so it may also be reached through a pointer' }];
+  if (callers.size > 0) out.push(say(`It is called from ${callers.size === 1 ? 'one place' : `${decimal(callers.size)} places`}: `, list(callers), pointer, '.'));
+  if (jumps.size > 0) out.push(say(`It is jumped to from `, list(jumps), callers.size > 0 ? [] : pointer, '.'));
+  if (callers.size === 0 && jumps.size === 0 && used.length > 0) out.push(say('Its address is used at ', usedList, ', so it may be reached through a pointer.'));
   if (table.size > 0) out.push(say(table.size === 1 ? 'A jump table entry at ' : 'Jump table entries at ', list(table), table.size === 1 ? ' leads to it.' : ' lead to it.'));
 
   // How it ends.
@@ -331,12 +340,31 @@ function summarize(c: Ctx, ix: Index, start: number): RoutineSummary {
     const at = [...b.rewritten].sort((p, q) => p - q);
     ends.push([{ text: `jumping to an address the program rewrites (the ${at.length === 1 ? 'jump' : 'jumps'} at ` }, ...capped(at.map((x) => [addrPiece(c, x)])), { text: ')' }]);
   }
+  if (b.rewrittenOps.length > 0) {
+    const at = [...b.rewrittenOps].sort((p, q) => p - q);
+    ends.push([
+      { text: 'whatever the ' },
+      { text: at.length === 1 ? 'instruction at ' : 'instructions at ' },
+      ...capped(at.map((x) => [addrPiece(c, x)])),
+      { text: at.length === 1 ? ' becomes (the program rewrites its first byte)' : ' become (the program rewrites their first bytes)' },
+    ]);
+  }
   if (b.undecoded.size > 0) {
     ends.push([{ text: 'jumping to ' }, ...capped([...b.undecoded.keys()].sort((p, q) => p - q).map((t) => [addrPiece(c, t)])), { text: `, which ${b.undecoded.size === 1 ? 'is' : 'are'} not decoded as code` }]);
   }
   const fell = (m: Map<number, number[]>): Piece[] => capped([...m.keys()].sort((p, q) => p - q).map((t) => [addrPiece(c, t)]));
   if (b.runsOff.size > 0) ends.push([{ text: 'running off the end of the loaded code at ' }, ...fell(b.runsOff)]);
-  if (b.fallsIntoData.size > 0) ends.push([{ text: 'running into bytes not decoded as code at ' }, ...fell(b.fallsIntoData)]);
+  // After a CALL the routine called may not come back there (it may take the bytes after the call as its parameters).
+  const afterCall = new Map<number, number[]>();
+  const plain = new Map<number, number[]>();
+  for (const [t, froms] of b.fallsIntoData) {
+    for (const f of froms) add(a.pass1.instructions.get(f)?.flow.kind === 'call' ? afterCall : plain, t, f);
+  }
+  if (plain.size > 0) ends.push([{ text: 'running into bytes not decoded as code at ' }, ...fell(plain)]);
+  for (const [t, froms] of [...afterCall].sort((p, q) => p[0] - q[0])) {
+    const calls = [...froms].sort((p, q) => p - q);
+    ends.push([{ text: calls.length === 1 ? 'falling past the call at ' : 'falling past the calls at ' }, ...capped(calls.map((x) => [addrPiece(c, x)])), { text: ' into bytes not decoded as code at ' }, addrPiece(c, t)]);
+  }
   if (b.halts) ends.push([{ text: 'halting' }]);
   if (ends.length > 0) out.push(say('It ends by ', ends.flatMap((p, i) => (i === 0 ? p : [{ text: ', or by ' }, ...p])), b.truncated ? ' (among the paths followed).' : '.'));
   else if (!b.truncated) {
@@ -434,8 +462,15 @@ function summarize(c: Ctx, ix: Index, start: number): RoutineSummary {
         if (p !== undefined && p.name === 'wait' && p.to === at) loops.push([{ text: 'a delay loop at ' }, addrPiece(c, at)]);
         else if (m === 'DJNZ') {
           const loop = djnzLoop(a, at);
-          const times = loop?.count === null || loop === null ? ' (how many times is not proven)' : loop.count === 1 ? ', once' : `, ${decimal(loop.count === 0 ? 256 : loop.count)} times`;
-          loops.push([{ text: 'the lines from ' }, named(c, t, 'code'), { text: ' to the DJNZ at ' }, addrPiece(c, at), { text: times }]);
+          let times: Piece[];
+          if (loop === null || loop.count === null) times = [{ text: ' (how many times is not proven)' }];
+          else {
+            const n = loop.count === 0 ? 256 : loop.count;
+            const count = n === 1 ? 'once' : n === 2 ? 'twice' : `${decimal(n)} times`;
+            // An exit out of the body makes the count only a bound.
+            times = loop.exits.length === 0 ? [{ text: `, ${count}` }] : [{ text: `, at most ${count}, leaving early at ` }, ...exitsPhrase(c, loop.exits)];
+          }
+          loops.push([{ text: 'the lines from ' }, named(c, t, 'code'), { text: ' to the DJNZ at ' }, addrPiece(c, at), ...times]);
         } else loops.push([{ text: 'the lines from ' }, named(c, t, 'code'), { text: ' to the jump back at ' }, addrPiece(c, at)]);
       }
     }

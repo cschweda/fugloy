@@ -112,8 +112,9 @@ function callWords(c: LineCtx): Words | undefined {
     const cond = condition(ins);
     if (m === 'RETI') return [say('Return from an interrupt routine to the code it interrupted (RETI).')];
     if (m === 'RETN') return [say('Return from a non-maskable interrupt routine to the code it interrupted (RETN).')];
-    if (cond !== undefined) return [say(`If ${cond}, return to the caller (the address on top of the stack); otherwise carry on with the next line.`)];
-    return [say('Return to the caller: carry on at the address on top of the stack, which the CALL that came here put there.')];
+    // Usually a CALL put that address there, but a PUSH before a RET is a jump too: never claim which.
+    if (cond !== undefined) return [say(`If ${cond}, return: carry on at the address on top of the stack (usually the one the CALL that came here put there); otherwise carry on with the next line.`)];
+    return [say('Return: carry on at the address on top of the stack (usually the one the CALL that came here put there).')];
   }
   return undefined;
 }

@@ -181,6 +181,35 @@ describe('line sentences on synthetic code', () => {
     expect(lead(e)[1]).toBe('The program refers to a byte inside this instruction (DATA_7004, used at $7000), so it may rewrite the instruction as it runs; the numbers shown are only where they start.');
   });
 
+  it('rewritten-opcode: a store into an instruction\'s first byte says it may be a different instruction, and nothing replays its value', () => {
+    // 7000 LD A,0; 7002 LD (7007H),A; 7005 LD B,3; 7007 LD B,9 (becomes NOP, then $09 runs as ADD HL,BC); 7009 LD A,B; 700A LD (3C00H),A; 700D RET
+    const s = raw([0x3e, 0x00, 0x32, 0x07, 0x70, 0x06, 0x03, 0x06, 0x09, 0x78, 0x32, 0x00, 0x3c, 0xc9]);
+    const at7007 = lead(explainLine(s, 0x7007)).join(' ');
+    expect(at7007).toMatch(/The program stores into the first byte of this instruction as it runs \(DATA_7007, written at \$7002\), so at run time it may be a different instruction; this line shows only what it starts as\./);
+    for (const at of [0x7009, 0x700a]) expect(lead(explainLine(s, at)).join(' ')).not.toMatch(/\$09/);
+    expect(lead(explainLine(s, 0x7009))[0]).toBe('Copy B into A.');
+  });
+
+  it('Sea Dragon $5174: the instruction the program swaps (written at $5C60 and five more) gets the first-byte caveat', () => {
+    expect(lead(explainLine(sea, 0x5174)).join(' ')).toMatch(/stores into the first byte of this instruction as it runs \(L5174, written at \$5C60, \$5C91, \$5D5E and 3 more\)/);
+  });
+
+  it('RET says where it carries on without claiming a CALL put it there', () => {
+    // 7000 LD HL,7006H; 7003 PUSH HL; 7004 RET; 7005 NOP; 7006 RET
+    const s = raw([0x21, 0x06, 0x70, 0xe5, 0xc9, 0x00, 0xc9]);
+    expect(lead(explainLine(s, 0x7004))).toEqual(['Return: carry on at the address on top of the stack (usually the one the CALL that came here put there).']);
+    // 7000 RET Z; 7001 RET
+    expect(lead(explainLine(raw([0xc8, 0xc9]), 0x7000))[0]).toBe(
+      'If the last result was zero (Z flag set), return: carry on at the address on top of the stack (usually the one the CALL that came here put there); otherwise carry on with the next line.',
+    );
+  });
+
+  it('a merge point whose address is also used as data says it may be reached through a pointer', () => {
+    // 7000 LD HL,7008H; 7003 JR Z,7008H; 7005 LD A,1; 7007 NOP; 7008 LD (HL),A; 7009 JP (HL)
+    const s = raw([0x21, 0x08, 0x70, 0x28, 0x03, 0x3e, 0x01, 0x00, 0x77, 0xe9]);
+    expect(lead(explainLine(s, 0x7008)).join(' ')).toMatch(/HL holds whatever it held when L7008 was reached: by falling through from \$7007, or by the jump at \$7003; its address is also used at \$7000, so it may also be reached through a pointer\./);
+  });
+
   it('an unreferenced data label in straight code reports the fall-through', () => {
     // 7000 LD HL,7006H; 7003 LD (7010H),HL; 7006 LD A,(DE); 7007 RET
     const e = explainLine(raw([0x21, 0x06, 0x70, 0x22, 0x10, 0x70, 0x1a, 0xc9]), 0x7006);

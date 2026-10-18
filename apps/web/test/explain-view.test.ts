@@ -105,7 +105,7 @@ describe('explain-view helpers', () => {
     expect(head.map(sentenceText)).toEqual([
       'The routine L497F ($497F) is 53 instructions (139 bytes), counting the code it jumps to but not the routines it calls.',
       'This is an entry point the analysis starts from.',
-      'It is jumped to from $4CC6, $602D, $6042 and $888D.',
+      'It is jumped to from $4CC6, $602D, $6042 and $888D, and its address is used at $8885, so it may also be reached through a pointer.',
       'None of its paths returns or jumps out of it: it loops forever, unless a routine it calls leaves it.',
     ]);
     expect(more.length).toBe(summaryAt(s, 0x49a7)!.sentences.length - 4);

@@ -85,6 +85,19 @@ describe('knownBefore on synthetic code', () => {
     expect(knownBefore(prog([0x00, 0x00, 0x00, 0x0e, 0x09, 0x71, 0xc9]), 0x7005).regs.C).toBe(9);
   });
 
+  it('rewritten-opcode: an instruction whose first byte the program stores into proves nothing, and forgets every register', () => {
+    // 7000 LD A,0; 7002 LD (7007H),A; 7005 LD B,3; 7007 LD B,9 (becomes NOP, then $09 runs as ADD HL,BC); 7009 LD A,B; 700A LD (3C00H),A; 700D RET
+    const a = prog([0x3e, 0x00, 0x32, 0x07, 0x70, 0x06, 0x03, 0x06, 0x09, 0x78, 0x32, 0x00, 0x3c, 0xc9]);
+    expect(allUnknown(knownBefore(a, 0x7009).regs)).toBe(true);
+    expect(knownBefore(a, 0x700a).regs.A).toBeNull();
+  });
+
+  it('a pointer to an instruction start that nothing stores into keeps its values', () => {
+    // 7000 LD HL,7005H; 7003 LD B,3; 7005 LD C,9; 7007 LD A,C; 7008 RET: $7005 is a label (a merge), but its value is local.
+    const a = prog([0x21, 0x05, 0x70, 0x06, 0x03, 0x0e, 0x09, 0x79, 0xc9]);
+    expect(knownBefore(a, 0x7007).regs.C).toBe(9);
+  });
+
   it('cap: a value set more than 32 instructions back is not reached', () => {
     // LD A,5; 40 NOPs; LD (HL),A; RET
     const far = prog([0x3e, 0x05, ...Array(40).fill(0), 0x77, 0xc9]);
@@ -102,7 +115,7 @@ describe('djnzLoop on synthetic code', () => {
   it('loop-count: B on entry, with a forward branch inside the body', () => {
     // 7000 LD B,40H; 7002 l: INC A; 7003 JR Z,7006; 7005 INC C; 7006 skip: NOP; 7007 DJNZ 7002; 7009 RET
     const a = prog([0x06, 0x40, 0x3c, 0x28, 0x01, 0x0c, 0x00, 0x10, 0xf9, 0xc9]);
-    expect(djnzLoop(a, 0x7007)).toEqual({ head: 0x7002, end: 0x7007, count: 0x40 });
+    expect(djnzLoop(a, 0x7007)).toEqual({ head: 0x7002, end: 0x7007, count: 0x40, exits: [] });
   });
 
   it('loop-body-writes: the body knows nothing, the count is still proven', () => {
@@ -110,13 +123,13 @@ describe('djnzLoop on synthetic code', () => {
     const a = prog([0x21, 0xd0, 0x3f, 0x06, 0x05, 0x36, 0x8c, 0x23, 0x10, 0xfb, 0xc9]);
     expect(pair(knownBefore(a, 0x7005).regs, 'HL')).toBeNull();
     expect(knownBefore(a, 0x7005).from).toEqual({ addr: 0x7005, callers: [], jumpers: [0x7008] });
-    expect(djnzLoop(a, 0x7008)).toEqual({ head: 0x7005, end: 0x7008, count: 5 });
+    expect(djnzLoop(a, 0x7008)).toEqual({ head: 0x7005, end: 0x7008, count: 5, exits: [] });
   });
 
   it('second-entry: a jump from outside into the body gives no count', () => {
     // 7000 LD B,5; 7002 JR Z,7005; 7004 l: INC C; 7005 m: INC A; 7006 DJNZ 7004; 7008 RET
     const a = prog([0x06, 0x05, 0x28, 0x01, 0x0c, 0x3c, 0x10, 0xfc, 0xc9]);
-    expect(djnzLoop(a, 0x7006)).toEqual({ head: 0x7004, end: 0x7006, count: null });
+    expect(djnzLoop(a, 0x7006)).toEqual({ head: 0x7004, end: 0x7006, count: null, exits: [] });
   });
 
   it('a second jump into the head gives no count', () => {
@@ -128,7 +141,7 @@ describe('djnzLoop on synthetic code', () => {
   it('body-writes-b: LD B,A in the body gives no count', () => {
     // 7000 LD B,5; 7002 l: LD B,A; 7003 DJNZ 7002; 7005 RET
     const a = prog([0x06, 0x05, 0x47, 0x10, 0xfd, 0xc9]);
-    expect(djnzLoop(a, 0x7003)).toEqual({ head: 0x7002, end: 0x7003, count: null });
+    expect(djnzLoop(a, 0x7003)).toEqual({ head: 0x7002, end: 0x7003, count: null, exits: [] });
   });
 
   it('a body that sets B to a constant gives no count', () => {
@@ -155,7 +168,7 @@ describe('djnzLoop on synthetic code', () => {
   it('an indirect re-entry into the loop gives no count', () => {
     // 7000 LD B,4; 7002 LD HL,7005H; 7005 head: NOP; 7006 DJNZ 7005; 7008 JP (HL)
     const a = prog([0x06, 0x04, 0x21, 0x05, 0x70, 0x00, 0x10, 0xfd, 0xe9]);
-    expect(djnzLoop(a, 0x7006)).toEqual({ head: 0x7005, end: 0x7006, count: null });
+    expect(djnzLoop(a, 0x7006)).toEqual({ head: 0x7005, end: 0x7006, count: null, exits: [] });
   });
 
   it('a data reference into the body gives no count', () => {
@@ -167,7 +180,7 @@ describe('djnzLoop on synthetic code', () => {
   it('a data reference to an operand byte inside the body (self-modifying code) keeps the count', () => {
     // 7000 LD B,4; 7002 head: LD (7006H),A; 7005 LD C,0 (7006 is its operand); 7007 DJNZ 7002; 7009 RET
     const a = prog([0x06, 0x04, 0x32, 0x06, 0x70, 0x0e, 0x00, 0x10, 0xf9, 0xc9]);
-    expect(djnzLoop(a, 0x7007)).toEqual({ head: 0x7002, end: 0x7007, count: 4 });
+    expect(djnzLoop(a, 0x7007)).toEqual({ head: 0x7002, end: 0x7007, count: 4, exits: [] });
     // ...but the rewritten LD C,0 proves nothing about C.
     expect(knownBefore(a, 0x7007).regs.C).toBeNull();
   });
@@ -175,7 +188,28 @@ describe('djnzLoop on synthetic code', () => {
   it('a rewritten LD B,n before the head gives no count', () => {
     // 7000 LD (7004H),A; 7003 LD B,4 (7004 is its operand); 7005 head: NOP; 7006 DJNZ 7005; 7008 RET
     const a = prog([0x32, 0x04, 0x70, 0x06, 0x04, 0x00, 0x10, 0xfd, 0xc9]);
-    expect(djnzLoop(a, 0x7006)).toEqual({ head: 0x7005, end: 0x7006, count: null });
+    expect(djnzLoop(a, 0x7006)).toEqual({ head: 0x7005, end: 0x7006, count: null, exits: [] });
+  });
+
+  it('early-exit: a conditional jump out of the body is an exit; the count stays as a bound', () => {
+    // 7000 LD HL,3C00H; 7003 LD B,10H; 7005 l: LD A,(HL); 7006 CP 20H; 7008 JR Z,700E; 700A INC HL; 700B DJNZ 7005; 700D RET; 700E LD (HL),2AH; 7010 RET
+    const a = prog([0x21, 0x00, 0x3c, 0x06, 0x10, 0x7e, 0xfe, 0x20, 0x28, 0x04, 0x23, 0x10, 0xf8, 0xc9, 0x36, 0x2a, 0xc9]);
+    expect(djnzLoop(a, 0x700b)).toEqual({ head: 0x7005, end: 0x700b, count: 0x10, exits: [0x7008] });
+  });
+
+  it('early-exit: RET Z, JP (HL), HALT and a jump back before the head are exits', () => {
+    // 7000 LD B,10H; 7002 l: RET Z; 7003 DJNZ 7002; 7005 RET
+    expect(djnzLoop(prog([0x06, 0x10, 0xc8, 0x10, 0xfd, 0xc9]), 0x7003)?.exits).toEqual([0x7002]);
+    // 7000 LD B,4; 7002 l: JR NZ,7000 (re-entry above the head resets B); 7004 DJNZ 7002; 7006 RET
+    expect(djnzLoop(prog([0x06, 0x04, 0x20, 0xfc, 0x10, 0xfc, 0xc9]), 0x7004)?.exits).toEqual([0x7002]);
+    // 7000 LD B,4; 7002 l: JR NC,7005; 7004 HALT; 7005 DJNZ 7002; 7007 JP (HL)
+    expect(djnzLoop(prog([0x06, 0x04, 0x30, 0x01, 0x76, 0x10, 0xfb, 0xe9]), 0x7005)?.exits).toEqual([0x7004]);
+  });
+
+  it('rewritten-opcode: an instruction whose first byte the program stores into is an exit', () => {
+    // 7000 LD A,0; 7002 LD (7008H),A; 7005 LD B,5; 7007 l: INC C; 7008 INC A (rewritten); 7009 DJNZ 7007; 700B RET
+    const a = prog([0x3e, 0x00, 0x32, 0x08, 0x70, 0x06, 0x05, 0x0c, 0x3c, 0x10, 0xfc, 0xc9]);
+    expect(djnzLoop(a, 0x7009)?.exits).toEqual([0x7008]);
   });
 
   it('is null for a forward DJNZ, which is not a loop', () => {
@@ -205,7 +239,7 @@ describe('Sea Dragon, with hints', () => {
   });
 
   it('counts the DJNZ loop at $49B1', () => {
-    expect(djnzLoop(sea, 0x49ca)).toEqual({ head: 0x49b1, end: 0x49ca, count: 0x40 });
+    expect(djnzLoop(sea, 0x49ca)).toEqual({ head: 0x49b1, end: 0x49ca, count: 0x40, exits: [] });
   });
 
   it('knows nothing at L5FC4, and names its two jumpers', () => {
