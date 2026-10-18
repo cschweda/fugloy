@@ -53,3 +53,6 @@ apps/web/.output
 apps/web/public/examples
 apps/web/public/og-image.png
 apps/web/dist
+
+# Tarballs staged by ./publish.sh check
+.release/

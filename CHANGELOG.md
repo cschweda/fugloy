@@ -72,6 +72,12 @@ Emu phase 2:
 
 ### Changed
 
+- Releases: `./publish.sh` publishes the `@fugloy` packages to npm in two
+  steps, `check <set>` (every check, the packed tarballs installed and run,
+  staged in `.release/`) and `publish` (those tarballs, with npm's two-factor
+  code). The packages gained a `LICENSE`, a `README.md` where they had none,
+  repository links, and a `publishConfig` that drops the `source` export
+  condition, which points at TypeScript files the tarballs do not carry.
 - The load hand-off: `fastLoadCmd` and `fastLoadSystem` now clear a latched
   interrupt request, a pending `DD`/`FD` prefix, and HALT, and complete an `EI`
   still in flight, before jumping to the entry. A caller that relied on a

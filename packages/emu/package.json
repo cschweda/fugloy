@@ -17,5 +17,17 @@
   "devDependencies": {
     "@fugloy/disasm": "workspace:*",
     "@fugloy/z80": "workspace:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cschweda/fugloy.git",
+    "directory": "packages/emu"
+  },
+  "homepage": "https://github.com/cschweda/fugloy#readme",
+  "bugs": {
+    "url": "https://github.com/cschweda/fugloy/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
