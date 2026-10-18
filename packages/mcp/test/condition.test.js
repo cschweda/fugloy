@@ -50,7 +50,7 @@ describe('compileCondition', () => {
 
   it('refuses anything else, showing the accepted form', () => {
     const form =
-      'Write <reg> <op> <value>, joined by && (such as "A == 0D && HL >= 3C00"): reg is A F B C D E H L I R, AF BC DE HL IX IY SP PC, or a flag ZF CF SF PVF HF NF (Z S PV N also work; C and H are the registers); op is == != < <= > >=; value is written like an address (bare digits are hex: 0D, 0x0D, $0D, 0Dh) or is a label.';
+      'Write <reg> <op> <value>, joined by && (such as "A == 0D && HL >= 3C00"): reg is A F B C D E H L I R, AF BC DE HL IX IY SP PC, or a flag ZF CF SF PVF HF NF (Z S PV N also work; C and H are the registers); op is == != < <= > >=; value is a number written like an address (bare digits are hex: 0D, 0x0D, $0D, 0Dh) or a label, never another register.';
     const refused = (text) => {
       try {
         compileCondition(text);
@@ -65,6 +65,13 @@ describe('compileCondition', () => {
     expect(refused('A == 100')).toBe(`The condition "A == 100" is not understood: A is 8 bits, so 100h (256) can never match; the most is FFh. ${form}`);
     expect(refused('Z == 2')).toBe(`The condition "Z == 2" is not understood: the flag Z is 0 or 1, not 2h. ${form}`);
     expect(refused('A == (HL)')).toMatch(/^The condition "A == \(HL\)" is not understood: "\(HL\)" is not a value: .* \(only && joins clauses; there is no \|\|, !, or parentheses\)\. Write /);
+    // A register or flag name as the value is refused, never read as hex (DE is not 00DEh).
+    expect(refused('HL == DE')).toBe(`The condition "HL == DE" is not understood: "DE" is a register name, not a value: values are numbers, and comparing one register or flag with another is not supported; write 0xDE for the hex constant. ${form}`);
+    expect(refused('A == b')).toBe(`The condition "A == b" is not understood: "b" is a register name, not a value: values are numbers, and comparing one register or flag with another is not supported; write 0xb for the hex constant. ${form}`);
+    expect(refused('A == CF')).toMatch(/: "CF" is a flag name, not a value: .*; write 0xCF for the hex constant\. /);
+    expect(refused('PC == SP')).toBe(`The condition "PC == SP" is not understood: "SP" is a register name, not a value: values are numbers, and comparing one register or flag with another is not supported. ${form}`);
+    expect(compileCondition('HL == 0xDE').text).toBe('HL == 00DEh');
+    expect(compileCondition('A == 0B').text).toBe('A == 0Bh');
     expect(refused('  ')).toBe(`The condition is empty. ${form}`);
     expect(refused('A == 0D &&')).toBe(`The condition "A == 0D &&" is not understood: a clause is empty around &&. ${form}`);
   });

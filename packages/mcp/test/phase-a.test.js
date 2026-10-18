@@ -317,7 +317,7 @@ describe('phase A tools', () => {
     expect((await call('run', { cycles: 10, seconds: 1 })).text).toBe('Give cycles or seconds, not both.');
     expect((await call('run', { seconds: 11 })).text).toBe('seconds must be more than 0 and at most 10 (limits.runSecondsEmulated), not 11.');
     expect((await call('run', { cycles: 30_000_000 })).text).toBe('cycles must be between 1 and 20275200, not 30000000.');
-    expect((await call('run', { cycles: '400' })).text).toBe('The argument "cycles" is a decimal number; write 1024, not "400" (lengths and counts are never hex or strings).');
+    expect((await call('run', { cycles: '400' })).text).toBe('The argument "cycles" is a decimal number; write 400, not "400" (lengths and counts are never hex or strings).');
     await close();
   });
 
@@ -426,7 +426,7 @@ describe('phase A tools', () => {
     expect(await ok(call, 'peek', { addr: '7040h', len: 2 })).toBe('7040  12 34                                             .4');
     expect((await ok(call, 'peek', { addr: 0x7000 })).split('\n')).toHaveLength(4);
     expect(await call('peek', { addr: '7000', len: '400' })).toEqual({
-      text: 'The argument "len" is a decimal number; write 1024, not "400" (lengths and counts are never hex or strings).',
+      text: 'The argument "len" is a decimal number; write 400, not "400" (lengths and counts are never hex or strings).',
       isError: true,
     });
     expect((await call('peek', { addr: '7000', len: 1025 })).text).toBe('len must be between 1 and 1024, not 1025.');

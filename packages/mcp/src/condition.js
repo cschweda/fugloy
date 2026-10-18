@@ -3,7 +3,9 @@
  * expression language. `reg` is an 8-bit register, a 16-bit pair, IX IY SP PC, or a flag; `op`
  * is one of == != < <= > >=; `value` is written like an address (bare digits are hex) or is a
  * label. C and H are the registers, as in Z80 assembly; the carry and half-carry flags are CF
- * and HF (every flag also takes the F suffix, and Z S PV N work bare).
+ * and HF (every flag also takes the F suffix, and Z S PV N work bare). A value spelled like a
+ * register or flag (`HL == DE`, `A == B`) is refused rather than read as hex (DE would be 00DEh):
+ * register-to-register comparison is not supported, and 0xDE says the hex constant.
  */
 import { parseAddr } from './args.js';
 
@@ -40,7 +42,7 @@ const OPS = {
 
 /** The accepted form, ending every refusal. */
 export const CONDITION_FORM =
-  'Write <reg> <op> <value>, joined by && (such as "A == 0D && HL >= 3C00"): reg is A F B C D E H L I R, AF BC DE HL IX IY SP PC, or a flag ZF CF SF PVF HF NF (Z S PV N also work; C and H are the registers); op is == != < <= > >=; value is written like an address (bare digits are hex: 0D, 0x0D, $0D, 0Dh) or is a label.';
+  'Write <reg> <op> <value>, joined by && (such as "A == 0D && HL >= 3C00"): reg is A F B C D E H L I R, AF BC DE HL IX IY SP PC, or a flag ZF CF SF PVF HF NF (Z S PV N also work; C and H are the registers); op is == != < <= > >=; value is a number written like an address (bare digits are hex: 0D, 0x0D, $0D, 0Dh) or a label, never another register.';
 
 const NO_OTHERS = ' (only && joins clauses; there is no ||, !, or parentheses)';
 
@@ -70,6 +72,11 @@ export function compileCondition(text, labels) {
     const [, name, op, valueText] = /** @type {[string, string, string, string]} */ (/** @type {unknown} */ (m));
     const operand = OPERANDS[name.toUpperCase()];
     if (operand === undefined) throw refuse(`${name} is not a register or a flag`);
+    const asOperand = OPERANDS[valueText.toUpperCase()];
+    if (asOperand !== undefined) {
+      const hex = /^[0-9a-f]+$/i.test(valueText) ? `; write 0x${valueText} for the hex constant` : '';
+      throw refuse(`"${valueText}" is a ${asOperand.flag ? 'flag' : 'register'} name, not a value: values are numbers, and comparing one register or flag with another is not supported${hex}`);
+    }
     let value;
     try {
       value = parseAddr(valueText, labels);

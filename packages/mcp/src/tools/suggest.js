@@ -6,12 +6,9 @@
  */
 import { SYNTH_NAME } from '@fugloy/disasm';
 import { z } from 'zod';
-import { hex4, parseCount } from '../args.js';
+import { hex4, parseCount, ROM_END } from '../args.js';
 import { routineNotes } from '../attribution.js';
 import { sharedNote } from './coverage.js';
-
-/** Below this address is the ROM. */
-const RAM = 0x3800;
 
 export default {
   name: 'suggest',
@@ -32,7 +29,7 @@ export default {
     /** @type {{ addr: number, calls: number, sites: number }[]} */
     const targets = [];
     for (const [addr, edges] of callerMap) {
-      if (addr < RAM) continue;
+      if (addr < ROM_END) continue;
       const label = session.labels.get(addr);
       if (label !== undefined && !SYNTH_NAME.test(label.name)) continue;
       let calls = 0;

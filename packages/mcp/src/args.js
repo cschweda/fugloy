@@ -10,6 +10,27 @@
 /** @param {number} n as `5200h`: uppercase digits, four wide, lowercase h. */
 export const hex4 = (n) => `${n.toString(16).toUpperCase().padStart(4, '0')}h`;
 
+/** The first address above the ROM ($0000-$37FF on the Model III). */
+export const ROM_END = 0x3800;
+
+/** Model numbers as the TRS-80 names them (`Model ${MODELS[n]}`). */
+export const MODELS = /** @type {Record<number, string>} */ ({ 1: 'I', 3: 'III', 4: '4' });
+
+/** C0 controls and DEL, which §8 forbids in a name, evidence, or note. */
+export const CONTROL = /[\u0000-\u001f\u007f]/;
+
+/**
+ * What to write instead of a string given where a decimal count belongs: its digits when they
+ * are decimal (`"5"` → 5), the decimal value of a hex spelling (`"0x400"` → 1024), else 1024.
+ * @param {string} given
+ */
+export function decimalFor(given) {
+  const text = given.trim();
+  if (/^\d+$/.test(text)) return String(Number.parseInt(text, 10));
+  const hex = /^(?:0x|\$)([0-9a-f]+)$/i.exec(text)?.[1] ?? /^([0-9a-f]+)h$/i.exec(text)?.[1];
+  return hex === undefined ? '1024' : String(Number.parseInt(hex, 16));
+}
+
 const FORMS = 'write 5200, 0x5200, $5200, 5200h, a decimal number such as 20992, or a label name';
 
 /**
@@ -54,7 +75,7 @@ export function parseAddr(value, labels) {
  */
 export function parseCount(value, { name, min = 0, max = Infinity }) {
   if (value === undefined || value === null) throw new Error(`${name} is required.`);
-  if (typeof value === 'string') throw new Error(`${name} is a decimal count; write 1024, not ${JSON.stringify(value)}.`);
+  if (typeof value === 'string') throw new Error(`${name} is a decimal count; write ${decimalFor(value)}, not ${JSON.stringify(value)}.`);
   if (typeof value !== 'number' || !Number.isInteger(value)) throw new Error(`${name} must be a whole number, not ${JSON.stringify(value)}.`);
   if (value < min || value > max) {
     throw new Error(max === Infinity ? `${name} must be at least ${min}, not ${value}.` : `${name} must be between ${min} and ${max}, not ${value}.`);

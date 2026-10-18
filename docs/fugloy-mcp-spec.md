@@ -56,7 +56,7 @@ Config file `fugloy.mcp.json` in cwd or `~/.config/fugloy/`:
 
 **Addresses.** Accept `"5200"`, `"0x5200"`, `"$5200"`, `20992`, or a known label name. Always echo back as `5200h`. Ranges as `"5200-52FF"` or `{ addr, len }`.
 
-**Lengths and counts are decimal.** `len`, `n`, `cycles`, `seconds` are plain integers, never hex. A bare string `"400"` as an address means `0400h`; as a length it is refused with a message saying so. This is the single most likely agent mistake, so the error text is explicit.
+**Lengths and counts are decimal.** `len`, `n`, `cycles`, `seconds` are plain integers, never hex. A bare string `"400"` as an address means `0400h`; as a length it is refused with a message saying so, which echoes what was probably meant (`write 400, not "400"`; `write 1024, not "0x400"`). This is the single most likely agent mistake, so the error text is explicit.
 
 **Bytes out.** Hex dump, 16 per line, with ASCII gutter, labels interleaved on their own line when a labeled address falls in range:
 
@@ -95,6 +95,8 @@ Every tool result is text (`type: "text"`) in v0.1. Structured JSON is offered a
 
 Schemas are JSON Schema in the SDK; shown here abbreviated. Required fields marked `*`.
 
+**Arguments are strict.** Each schema is listed with `additionalProperties: false`, and an argument a tool does not declare is refused, never dropped: `run { untill: "screen" }` answers `The argument "untill" is not one run takes; it takes cycles, seconds, until, trace.` instead of running 5,000 cycles without it. Every tool also takes `offset` (§7, paging), which the list leaves out. A misspelled name is reported before a required argument it leaves missing. When the server is built with the SDK's `maxToolInputElements`, that ceiling is kept and refused in a sentence too.
+
 ### Lifecycle
 
 | Tool | Input | Output |
@@ -118,7 +120,7 @@ Schemas are JSON Schema in the SDK; shown here abbreviated. Required fields mark
 | `regs` | `format?` | Register block |
 | `peek` | `addr*`, `len?` (default 64, max 1024) | Hex dump with labels; 1024 bytes is 64 lines, inside the output cap |
 | `poke` | `addr*`, `bytes*`, `force?` (needed for ROM, `0000h–37FFh`) | Bytes written and previous values, `old → new` |
-| `disasm` | `addr*`, `n?` (instructions, default 32, at most 512), `labels?` (default true) | Linear listing (`@fugloy/z80`) with coverage marks (`*` executed, `d` read or written as data, `?` never seen) and, after `;`, the names an instruction's targets and operands refer to: session labels first, then the Model III ROM and hardware tables of `@fugloy/disasm` (`VIDEO`, `KEYBOARD+40h`); a labelled address gets a `NAME:` line |
+| `disasm` | `addr*`, `n?` (instructions, default 32, at most 512), `labels?` (default true) | Linear listing (`@fugloy/z80`) with coverage marks (`*` executed, as an instruction or as another instruction's operand, `d` read or written as data, `?` never seen; when a line starts on a byte executed only as an operand, a closing note names the first such address, since the listing is out of step with the code there) and, after `;`, the names an instruction's targets and operands refer to: session labels first, then the Model III ROM and hardware tables of `@fugloy/disasm` (`VIDEO`, `KEYBOARD+40h`); a labelled address gets a `NAME:` line |
 | `screen` | `diff?` (since last `screen` call or a snapshot name) | Full screen or changed cells as `(row,col) old→new` |
 | `search` | `bytes*` or `text*`, `range?` | Addresses of every match |
 
@@ -126,7 +128,7 @@ Schemas are JSON Schema in the SDK; shown here abbreviated. Required fields mark
 
 | Tool | Input | Output |
 |---|---|---|
-| `break` | `addr*`, `once?`, `condition?` (`<reg> <op> <value>` clauses joined by `&&`, nothing else: `reg` is `A F B C D E H L I R`, `AF BC DE HL IX IY SP PC`, or a flag `ZF CF SF PVF HF NF`, with `Z S PV N` also accepted bare; `C` and `H` are the registers, as in Z80 assembly; `op` is `== != < <= > >=`; `value` is written like an address, so bare digits are hex, or is a label) | `breakpoint #N at 5200h`, plus `(once)` and `when A == 0Dh`: the condition as it was read, values in hex |
+| `break` | `addr*`, `once?`, `condition?` (`<reg> <op> <value>` clauses joined by `&&`, nothing else: `reg` is `A F B C D E H L I R`, `AF BC DE HL IX IY SP PC`, or a flag `ZF CF SF PVF HF NF`, with `Z S PV N` also accepted bare; `C` and `H` are the registers, as in Z80 assembly; `op` is `== != < <= > >=`; `value` is a number written like an address, so bare digits are hex, or is a label; a value spelled like a register or flag, as in `HL == DE` or `A == B`, is refused rather than read as hex (`DE` would be `00DEh`): comparing one register with another is not supported, and the refusal says to write `0xDE` for the hex constant) | `breakpoint #N at 5200h`, plus `(once)` and `when A == 0Dh`: the condition as it was read, values in hex |
 | `unbreak` | `id?` or `addr?` (every breakpoint there) or `all?` | What was removed |
 | `watch` | `addr*`, `len?` (default 1), `on?` = `"read" \| "write" \| "both"` (default `"write"`), `stop?` | `watch #N on 3C00h–3FFFh (write)` |
 | `unwatch` | `id?` / `all?` | What was removed; its hits stay in the log |
@@ -139,10 +141,10 @@ Schemas are JSON Schema in the SDK; shown here abbreviated. Required fields mark
 
 | Tool | Input | Output |
 |---|---|---|
-| `label` | `addr*`, `name*` (an identifier the disassembler accepts: `nameProblem` of `@fugloy/disasm`, so no mnemonic, register, or generated `SUB_hhhh` shape, and not a name another address has), `kind?` = `"code" \| "data"`, `size?`, `note?` (a remark for a human: §8's `note`) | `Labelled 7030h PRINT (code).` and the sidecar path written; a second label at one address replaces the first and says so |
+| `label` | `addr*`, `name*` (an identifier the disassembler accepts: `nameProblem` of `@fugloy/disasm`, so no mnemonic, register, or generated `SUB_hhhh` shape, and not a name another address has), `kind?` = `"code" \| "data"`, `size?`, `note?` (a remark for a human: §8's `note`) | `Labelled 7030h PRINT (code).` and the sidecar path written; a second label at one address replaces the first and says so. A name of hex digits only (`CAFE`) is accepted with a `Note:` line, since address arguments refuse it as ambiguous and the label must be referred to by its decimal address |
 | `unlabel` | `addr*` or `name*` | `Removed PRINT at 7030h.` and the sidecar path; removes a label of any source |
 | `labels` | `range?`, `source?` | Table of labels by address: kind, size, source, name, and after `;` the note and evidence |
-| `coverage` | `mode?` = `"summary" \| "ranges" \| "export"`, `path?` (export only), `format?` (summary and ranges) | Summary: % of loaded bytes executed (an instruction or its operand), counts of code ranges and data ranges (read or written, never executed), bytes never seen, and what ran outside the loaded blocks; ranges: the loaded blocks as a table of code, data, and never-seen ranges; export: the §8 file merged with the sidecar's earlier coverage, this session appended, written to `path` or the sidecar |
+| `coverage` | `mode?` = `"summary" \| "ranges" \| "export"`, `path?` (export only), `overwrite?` (export only), `format?` (summary and ranges) | Summary: % of loaded bytes executed (an instruction or its operand), counts of code ranges and data ranges (read or written, never executed), bytes never seen, and what ran outside the loaded blocks; ranges: the loaded blocks as a table of code, data, and never-seen ranges; export: the §8 file merged with the sidecar's earlier coverage, this session appended, written to `path` or the sidecar. An existing file at `path` that is not a §8 label file (not JSON, or not the format: a `.hints` file, notes, anything else) is refused unless `overwrite: true`; a label file there is replaced, and the result says it replaced a file. A case variant of the sidecar's path on a case-insensitive volume is the sidecar, even before it exists |
 | `suggest` | `minCalls?` (default 5) | Call targets with no name yet (no label, or only a generated `SUB_hhhh`) outside the ROM, reached by `CALL` or `RST` at least `minCalls` times, most calls first: calls, callers (distinct sites), and notes by address, heuristic (Ruling 4 of the emu phase 4 plan): `writes video RAM`, `reads the keyboard`, `writes port FFh (sound)`, `loops ≥ 1000× a call`. The routine runs from the target to its first executed unconditional `RET`, `RETN`, or `RETI`, ending early before a byte never executed or at another call target, within 256 bytes. The agent's starting list for story 7 |
 
 ### Snapshots
@@ -189,7 +191,7 @@ Prompts are where the reverse-engineering method lives. The tools are deliberate
 | Snapshots | 16 | Each is ~64–128 KB |
 | `poke` into ROM | Refused unless `force: true` | Catches agent mistakes |
 | `load` outside `fixtures` dir | Allowed, but the path is echoed back | Transparency about what ran |
-| Filesystem writes | Only the sidecar label file and explicit `coverage export` paths | The server never writes elsewhere |
+| Filesystem writes | Only the sidecar label file and explicit `coverage export` paths; an existing file at such a path that is not a label file only with `overwrite: true` | The server never writes elsewhere |
 
 No tool is destructive beyond the emulated machine's RAM and the label sidecar. There is no `delete` of program files.
 

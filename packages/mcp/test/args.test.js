@@ -55,8 +55,8 @@ describe('counts', () => {
   const opts = { name: 'len', min: 1, max: 1024 };
 
   it('refuses a string length with the decimal hint', () => {
-    expect(() => parseCount('400', opts)).toThrow('len is a decimal count; write 1024, not "400".');
-    expect(() => parseCount('0x10', { name: 'n', min: 0 })).toThrow('n is a decimal count; write 1024, not "0x10".');
+    expect(() => parseCount('400', opts)).toThrow('len is a decimal count; write 400, not "400".');
+    expect(() => parseCount('0x10', { name: 'n', min: 0 })).toThrow('n is a decimal count; write 16, not "0x10".');
   });
 
   it('accepts integers inside the bounds and refuses the rest', () => {

@@ -1,9 +1,5 @@
 /** `status`: what the session holds, before or after a load (docs/fugloy-mcp-spec.md §5). */
-
-const MODEL_NAMES = { 1: 'I', 3: 'III', 4: '4' };
-
-/** @param {number} n as `5200h`. */
-const hex4 = (n) => `${n.toString(16).toUpperCase().padStart(4, '0')}h`;
+import { hex4, MODELS } from '../args.js';
 
 export default {
   name: 'status',
@@ -13,7 +9,7 @@ export default {
   handler(session) {
     const { config, machine, program } = session;
     const lines = [
-      `Model: ${MODEL_NAMES[config.defaultModel] ?? config.defaultModel}`,
+      `Model: ${MODELS[config.defaultModel] ?? config.defaultModel}`,
       `Program: ${program ? `${program.name} (${program.path})` : 'none (call load)'}`,
       `Cycles: ${machine ? machine.cycles.toLocaleString('en-US') : 0}`,
       `PC: ${machine ? hex4(machine.cpu.regs.pc) : 'none (no machine yet)'}`,

@@ -10,7 +10,7 @@ import { resolve } from 'node:path';
 import { COVERAGE, decodeRle } from '@fugloy/emu';
 import { z } from 'zod';
 import { hex4 } from '../args.js';
-import { adoptExport, exportFile, refuseLink, sameFile, sidecarRefusal, writeLabelJson, writeSidecarFile } from '../sidecar.js';
+import { adoptExport, exportFile, notLabelFile, refuseLink, sameFile, samePath, sidecarRefusal, writeLabelJson, writeSidecarFile } from '../sidecar.js';
 
 const CODE = COVERAGE.EXEC | COVERAGE.OPERAND;
 const DATA = COVERAGE.READ | COVERAGE.WRITE;
@@ -87,21 +87,23 @@ function spans(/** @type {Uint8Array} */ mask) {
 export default {
   name: 'coverage',
   description:
-    'What the loaded program\'s bytes did since load (recorded from the load; nothing needs turning on). mode "summary" (default): the share of loaded bytes executed, and how many code ranges (executed) and data ranges (read or written, never executed) there are. mode "ranges": the loaded blocks as a table of code, data, and never-seen ranges. format: "json" gives either as JSON. mode "export": write the full label and coverage file (emu spec §8) that Fugløy\'s disassembler reads, merged with the coverage of earlier sessions in the sidecar file, with this session appended, to path (any file) or, by default, the sidecar <program>.fugloy.json beside the program.',
+    'What the loaded program\'s bytes did since load (recorded from the load; nothing needs turning on). mode "summary" (default): the share of loaded bytes executed, and how many code ranges (executed) and data ranges (read or written, never executed) there are. mode "ranges": the loaded blocks as a table of code, data, and never-seen ranges. format: "json" gives either as JSON. mode "export": write the full label and coverage file (emu spec §8) that Fugløy\'s disassembler reads, merged with the coverage of earlier sessions in the sidecar file, with this session appended, to path or, by default, the sidecar <program>.fugloy.json beside the program. An existing file at path that is not a label file is not replaced unless overwrite is true.',
   inputSchema: {
     mode: z.enum(['summary', 'ranges', 'export']).optional().describe('"summary" (default), "ranges", or "export"'),
     path: z.string().optional().describe('For mode "export": the file to write (default: the sidecar beside the program)'),
     format: z.enum(['text', 'json']).optional().describe('For "summary" and "ranges": "text" (default) or "json"'),
+    overwrite: z.boolean().optional().describe('For mode "export" with path: replace a file there that is not a label file (default false; a label file is always replaced)'),
   },
   /**
    * @param {import('../session.js').Session} session
-   * @param {{ mode?: 'summary' | 'ranges' | 'export', path?: string, format?: 'text' | 'json' }} args
+   * @param {{ mode?: 'summary' | 'ranges' | 'export', path?: string, format?: 'text' | 'json', overwrite?: boolean }} args
    */
-  handler(session, { mode = 'summary', path, format = 'text' }) {
+  handler(session, { mode = 'summary', path, format = 'text', overwrite = false }) {
     const { m, program, sidecar } = session.requireProgram();
     if (path !== undefined && mode !== 'export') throw new Error('path is only for mode "export".');
+    if (overwrite && mode !== 'export') throw new Error('overwrite is only for mode "export".');
     const { blocks, mask } = loadedBlocks(program);
-    if (mode === 'export') return exportTo(session, path, mask);
+    if (mode === 'export') return exportTo(session, path, mask, overwrite);
 
     const bits = m.debug.coverage.bits;
     const c = classify(mask, (a) => (bits[a] & CODE) !== 0, (a) => (bits[a] & DATA) !== 0);
@@ -139,27 +141,33 @@ export default {
  * @param {import('../session.js').Session} session
  * @param {string | undefined} path
  * @param {Uint8Array} mask the loaded addresses
+ * @param {boolean} overwrite replace a file at `path` that is not a label file
  */
-function exportTo(session, path, mask) {
+function exportTo(session, path, mask, overwrite) {
   const { program, sidecar } = session.requireProgram();
   if (program.sharesCoverageWith !== undefined) {
     throw new Error(`The coverage on this machine includes ${program.sharesCoverageWith}, loaded before ${program.name} with reset: false, so it is not ${program.name}'s to export; load ${program.name} again with reset (the default), run it, then export.`);
   }
   if (path !== undefined && path.trim() === '') throw new Error('path is empty; give the file to export to, or leave path out to write the sidecar.');
-  const target = path === undefined ? sidecar.path : resolve(process.cwd(), path);
-  refuseLink(target);
-  if (existsSync(target) && statSync(target).isDirectory()) throw new Error(`${target} is a folder; give a file path to export to.`);
+  const given = path === undefined ? sidecar.path : resolve(process.cwd(), path);
+  refuseLink(given);
+  if (existsSync(given) && statSync(given).isDirectory()) throw new Error(`${given} is a folder; give a file path to export to.`);
   // By identity, not spelling: a case variant on a case-insensitive volume, or a path through a
-  // linked folder, names the same file.
-  if (sameFile(target, program.path)) throw new Error(`${target} is the program itself; give another path to export to.`);
-  if (sameFile(target, session.config.roms.model3)) throw new Error(`${target} is the ROM; give another path to export to.`);
-  const toSidecar = target === sidecar.path || sameFile(target, sidecar.path);
+  // linked folder, names the same file (the sidecar's even before it exists).
+  if (sameFile(given, program.path)) throw new Error(`${given} is the program itself; give another path to export to.`);
+  if (sameFile(given, session.config.roms.model3)) throw new Error(`${given} is the ROM; give another path to export to.`);
+  const toSidecar = samePath(given, sidecar.path);
+  const target = toSidecar ? sidecar.path : given;
   const refusal = sidecarRefusal(sidecar);
   if (refusal !== null && (toSidecar || sameFile(target, sidecar.readFrom))) {
     throw new Error(`The ${refusal.replace(/^the /, '')}, so it is not overwritten; give path to export elsewhere, or fix or remove it and load again.`);
   }
-  const file = exportFile(session);
   const replaced = !toSidecar && existsSync(target);
+  if (replaced && !overwrite) {
+    const why = notLabelFile(target);
+    if (why !== null) throw new Error(`${target} exists and ${why}, so it is not overwritten; give another path, or pass overwrite: true to replace it.`);
+  }
+  const file = exportFile(session);
   if (toSidecar) {
     try {
       writeSidecarFile(session, file);

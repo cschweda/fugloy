@@ -9,11 +9,9 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, extname, isAbsolute, relative, resolve } from 'node:path';
 import { detectFormat } from '@fugloy/disasm';
 import { z } from 'zod';
-import { hex4 } from '../args.js';
+import { hex4, MODELS } from '../args.js';
 import { bootToReady, BOOT_SECONDS, seconds } from '../execute.js';
 import { readSidecar, sidecarLine, sidecarState } from '../sidecar.js';
-
-const MODEL_NAMES = { 1: 'Model I', 4: 'Model 4' };
 
 /**
  * A cassette image: an optional leader of 00 or 55 bytes, the sync byte (A5 at 500 baud, 7F at
@@ -71,9 +69,8 @@ export default {
   handler(session, { path, model, reset = true }) {
     const { config } = session;
     if (model !== undefined && model !== 3) {
-      const name = MODEL_NAMES[/** @type {1 | 4} */ (model)];
-      if (name === undefined) throw new Error(`model must be 3 (the Model III), not ${model}.`);
-      throw new Error(`There is no ${name} yet: only the Model III exists until emu phase 6 adds the Model I and the Model 4; call load with model 3 or without model.`);
+      if (MODELS[model] === undefined) throw new Error(`model must be 3 (the Model III), not ${model}.`);
+      throw new Error(`There is no Model ${MODELS[model]} yet: only the Model III exists until emu phase 6 adds the Model I and the Model 4; call load with model 3 or without model.`);
     }
     if (path.trim() === '') throw new Error('path is empty; give the program file to load.');
     const file = locate(path, config);

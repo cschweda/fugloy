@@ -64,7 +64,7 @@ export class Session {
   facts = new Uint8Array(0x10000);
   /** @type {Uint8Array | null} Video RAM as the last `screen` call saw it. */
   screenBaseline = null;
-  /** @type {{ key: string, text: string } | null} The last full tool result, for `offset` paging. */
+  /** @type {{ key: string, text: string, isError: boolean } | null} The last full tool result, for `offset` paging. */
   lastOutput = null;
 
   /** @param {import('./config.js').Config} config */

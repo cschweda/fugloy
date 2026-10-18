@@ -94,12 +94,44 @@ describe('arguments', () => {
 
   it('answers a wrong-typed argument with a plain sentence naming it', async () => {
     const { call, close } = await connect({ tools });
-    expect(await call('count', { n: '400' })).toEqual({ text: 'The argument "n" is a decimal number; write 1024, not "400" (lengths and counts are never hex or strings).', isError: true });
+    expect(await call('count', { n: '400' })).toEqual({ text: 'The argument "n" is a decimal number; write 400, not "400" (lengths and counts are never hex or strings).', isError: true });
+    // The hint echoes what was meant: the digits given, or a hex spelling's decimal value.
+    expect((await call('count', { n: '5' })).text).toContain('write 5, not "5"');
+    expect((await call('count', { n: '0x400' })).text).toContain('write 1024, not "0x400"');
+    expect((await call('count', { n: 'many' })).text).toContain('write 1024, not "many"');
     expect(await call('count', { n: 1.5 })).toMatchObject({ isError: true, text: expect.stringContaining('The argument "n" is not valid') });
     expect(await call('count', {})).toEqual({ text: 'The argument "n" is required.', isError: true });
     expect(await call('count', { n: 3, word: 7 })).toMatchObject({ isError: true, text: expect.stringContaining('The argument "word"') });
     expect(await call('count', { n: 3 })).toEqual({ text: 'n=3 word=-', isError: false });
     for (const bad of [{ n: '400' }, {}]) expect((await call('count', bad)).text).not.toContain('MCP error');
+    await close();
+  });
+
+  it('refuses an argument the tool does not take, naming the ones it does', async () => {
+    const quiet = { name: 'quiet', description: 'no arguments', handler: () => 'ran' };
+    const { call, close } = await connect({ tools: [...tools, quiet] });
+    expect(await call('count', { n: 3, wrod: 'x' })).toEqual({ text: 'The argument "wrod" is not one count takes; it takes n, word.', isError: true });
+    // A misspelled name is named even when it leaves a required argument missing.
+    expect(await call('count', { m: 3 })).toEqual({ text: 'The argument "m" is not one count takes; it takes n, word.', isError: true });
+    expect(await call('count', { n: 3, a: 1, b: 2 })).toEqual({ text: 'The arguments "a" and "b" are not ones count takes; it takes n, word.', isError: true });
+    expect(await call('quiet', { verbose: true })).toEqual({ text: 'The argument "verbose" is not one quiet takes; it takes no arguments.', isError: true });
+    expect(await call('quiet', { offset: 0 })).toEqual({ text: 'ran', isError: false });
+    await close();
+  });
+
+  it('refuses a real tool\'s misspelled argument instead of running without it', async () => {
+    const { call, close } = await connect();
+    expect(await call('run', { untill: 'screen' })).toEqual({ text: 'The argument "untill" is not one run takes; it takes cycles, seconds, until, trace.', isError: true });
+    await close();
+  });
+
+  it('keeps the SDK\'s maxToolInputElements ceiling, in a sentence', async () => {
+    const { call, close } = await connect({ tools, maxToolInputElements: 3 });
+    expect(await call('count', { n: 3, word: 'x' })).toEqual({ text: 'n=3 word=x', isError: false });
+    expect(await call('count', { n: 3, word: 'x', offset: 0, extra: [1] })).toEqual({
+      text: 'The arguments to count hold more than 3 values (array elements and object members, counted together); send fewer.',
+      isError: true,
+    });
     await close();
   });
 
@@ -114,6 +146,9 @@ describe('arguments', () => {
     expect(schema.properties.offset).toMatchObject({ type: 'integer', minimum: 0 });
     expect(schema.required).toContain('n');
     expect(schema.required).not.toContain('offset');
+    expect(schema.additionalProperties).toBe(false);
+    // The SDK's element ceiling is read from this internal; an SDK that renames it fails here.
+    expect(createServer({ config: testConfig(), tools, maxToolInputElements: 7 })._maxToolInputElements).toBe(7);
     const res = await client.callTool({ name: 'count', arguments: { n: 'x' } });
     expect(res.isError).toBe(true);
     expect(res.content[0].text.startsWith('The argument "n"')).toBe(true);
@@ -133,6 +168,18 @@ describe('arguments', () => {
     expect(page.text).not.toContain('run 2');
     expect(await call('bump', { tag: 'b', offset: next })).toEqual({ text: 'offset continues the last output of bump; call bump again without offset first.', isError: true });
     expect(runs).toBe(1);
+    await close();
+  });
+
+  it('a page of an error result is still an error', async () => {
+    const failing = { name: 'fail', description: 'long error', handler: () => ({ text: Array.from({ length: 40 }, (_, k) => `why ${k}`).join('\n'), isError: true }) };
+    const { call, close } = await connect({ config: testConfig({ limits: { ...testConfig().limits, outputBytes: 80 } }), tools: [failing] });
+    const first = await call('fail');
+    expect(first.isError).toBe(true);
+    const next = Number(/use offset=(\d+)\)$/.exec(first.text)[1]);
+    const page = await call('fail', { offset: next });
+    expect(page.isError).toBe(true);
+    expect(page.text.split('\n')[0]).toBe(`why ${next}`);
     await close();
   });
 

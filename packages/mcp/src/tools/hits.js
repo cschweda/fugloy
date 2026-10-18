@@ -2,8 +2,8 @@
 import { z } from 'zod';
 import { hex4, parseCount } from '../args.js';
 import { routineOf, watchList } from '../points.js';
+import { h2 } from '../format/hex.js';
 
-const h2 = (/** @type {number} */ n) => n.toString(16).toUpperCase().padStart(2, '0');
 /** How many PCs the `By pc:` line names before it says how many more there are. */
 const BY_PC = 8;
 

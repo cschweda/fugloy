@@ -39,7 +39,13 @@ cp .mcp.json.example .mcp.json              # Claude Code starts the server for 
 ```
 
 It is committed as an example, not as `.mcp.json`, so the server starts only
-for those who copy it (`.mcp.json` is gitignored). The server reads
+for those who copy it (`.mcp.json` is gitignored). Start Claude Code at the
+repository root: the paths in it (`packages/mcp/bin/fugloy-mcp.js`,
+`./fugloy.mcp.json`) are relative to the server's working directory, which is
+the folder Claude Code was started in. Because it sets `FUGLOY_CONFIG`, the
+server exits at startup, with one line on stderr naming the path, when
+`fugloy.mcp.json` is missing; Claude Code then shows the `trs80` server as
+failed. Copy the example config first. The server reads
 `fugloy.mcp.json` from `$FUGLOY_CONFIG`, else the working directory, else
 `~/.config/fugloy/` (spec §3); paths in it are relative to the file, and its
 `limits` override the guardrails of spec §7. You bring the ROM: see "Getting
@@ -56,7 +62,9 @@ lists the tools and calls them by hand.
 One machine per server process, a Model III; nothing runs between calls.
 Every result is text, and every error is a sentence the agent can act on.
 Addresses are hex (`5200`, `0x5200`, `$5200`, `5200h`), a JSON number
-(decimal), or a label name; lengths and counts are decimal.
+(decimal), or a label name; lengths and counts are decimal. Arguments are
+strict: a name a tool does not take (`untill`) is refused with the names it
+does take, never ignored.
 
 | Group | Tools |
 | --- | --- |
@@ -80,7 +88,10 @@ Labels live in `<program>.fugloy.json` beside the program (`SEADRG01.CMD` →
 merges this session's coverage and callers into it. Those are the only files
 the server writes; it refuses to overwrite a sidecar that is broken, was
 written for another program, is a link, or was edited by hand since it last
-read it. The disassembler reads the same file:
+read it, and an export `path` that holds anything but a label file unless
+`overwrite: true`. Sidecars beside the committed examples are gitignored
+(`examples/**/*.fugloy.json`), so running the story prompts leaves the tree
+clean. The disassembler reads the same file:
 
 ```sh
 pnpm fugloy SEADRG01.CMD --labels SEADRG01.fugloy.json

@@ -5,11 +5,8 @@
  */
 import { nameProblem } from '@fugloy/disasm';
 import { z } from 'zod';
-import { hex4, parseAddr, parseCount } from '../args.js';
+import { CONTROL, hex4, parseAddr, parseCount } from '../args.js';
 import { writeSidecar } from '../sidecar.js';
-
-/** C0 controls and DEL, which §8 forbids in a name, evidence, or note. */
-export const CONTROL = /[\u0000-\u001f\u007f]/;
 
 /** Why each kind of name problem is one, for the refusal. */
 const WHY = [
@@ -58,16 +55,20 @@ export default {
     session.labels.set(at, label);
     const done = `Labelled ${hex4(at)} ${name} (${kindText(label)})`;
     const replaced = old !== undefined && old.name !== name ? `, replacing ${old.name}` : '';
+    // An all-hex name reads as a hex address too, so address arguments refuse it as ambiguous.
+    const hexName = /^[0-9a-f]+$/i.test(name)
+      ? `\nNote: ${name} is all hex digits, so an address argument "${name}" is refused as ambiguous (it is also ${hex4(Number.parseInt(name, 16) & 0xffff)}); refer to this label as ${at} (decimal), or relabel it with a name that has a letter past F.`
+      : '';
     if (sidecar.ignored !== null) {
       return {
-        text: `${done}${replaced} for this session only: the sidecar ${sidecar.readFrom} was ignored at load (${sidecar.ignored}), so it was not overwritten; fix or remove it and load again, or save with coverage mode "export" and a path.`,
+        text: `${done}${replaced} for this session only: the sidecar ${sidecar.readFrom} was ignored at load (${sidecar.ignored}), so it was not overwritten; fix or remove it and load again, or save with coverage mode "export" and a path.${hexName}`,
         isError: true,
       };
     }
     try {
-      return `${done}${replaced}.\nWrote ${writeSidecar(session)}.`;
+      return `${done}${replaced}.\nWrote ${writeSidecar(session)}.${hexName}`;
     } catch (err) {
-      return { text: `${done}${replaced} in this session, but ${err instanceof Error ? err.message : String(err)}`, isError: true };
+      return { text: `${done}${replaced} in this session, but ${err instanceof Error ? err.message : String(err)}${hexName}`, isError: true };
     }
   },
 };

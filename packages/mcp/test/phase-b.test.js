@@ -152,7 +152,7 @@ describe('phase B tools', () => {
     expect(json.overflowed).toBe(false);
     expect(json.hits[0]).toMatchObject({ id: 1, kind: 'write', pc: 0x7033, addr: 0x3c00, value: 0x53, prev: 0x20 });
     expect((await call('hits', { id: 7 })).text).toBe('There is no watch #7; the watches are #1 on 3C00h–3FFFh.');
-    expect((await call('hits', { n: '5' })).text).toBe('The argument "n" is a decimal number; write 1024, not "5" (lengths and counts are never hex or strings).');
+    expect((await call('hits', { n: '5' })).text).toBe('The argument "n" is a decimal number; write 5, not "5" (lengths and counts are never hex or strings).');
     // The By-pc attribution the text shows is in the JSON too, every PC of it.
     expect(json.byPc).toEqual([{ pc: 0x7033, count: 13, routine: 0x7030 }]);
     // The emulator's log is one for every watch, so clearing one watch's hits is refused.
@@ -214,6 +214,15 @@ describe('phase B tools', () => {
         '* 700F  E6 01        AND 01H',
         '* 7011  28 F9        JR Z,700CH',
         'Marks: * executed, d read or written as data, ? never seen (coverage since load)',
+      ].join('\n'),
+    );
+    // Started mid-instruction: the operand bytes were executed (as LD HL,3C00H's), not never seen.
+    expect(await ok(call, 'disasm', { addr: '7004', n: 2 })).toBe(
+      [
+        '* 7004  00           NOP',
+        '* 7005  3C           INC A',
+        'Marks: * executed, d read or written as data, ? never seen (coverage since load)',
+        '(7004h was executed as an operand of an instruction that starts before it, so this listing is out of step with the code there; start disasm at an address marked * by its own instruction)',
       ].join('\n'),
     );
     const tail = (await ok(call, 'disasm', { addr: '7036', n: 4 })).split('\n');

@@ -1,7 +1,6 @@
 /** The register block (docs/fugloy-mcp-spec.md §4) and its JSON form. */
+import { h2, h4 } from './hex.js';
 
-const h2 = (/** @type {number} */ n) => (n & 0xff).toString(16).toUpperCase().padStart(2, '0');
-const h4 = (/** @type {number} */ n) => (n & 0xffff).toString(16).toUpperCase().padStart(4, '0');
 const pair = (/** @type {number} */ hi, /** @type {number} */ lo) => ((hi & 0xff) << 8) | (lo & 0xff);
 
 /**

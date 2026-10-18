@@ -59,7 +59,7 @@ beforeAll(() => {
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 beforeEach(() => {
-  for (const f of ['raiders.fugloy.json', 'chores.fugloy.json', 'elsewhere.json']) rmSync(at(f), { force: true });
+  for (const f of ['raiders.fugloy.json', 'chores.fugloy.json', 'elsewhere.json', 'notes.hints', 'RAIDERS.FUGLOY.JSON']) rmSync(at(f), { force: true });
 });
 
 const server = () => connect({ config: testConfig({ roms: { model3: at('synthetic.rom') } }) });
@@ -135,6 +135,21 @@ describe('phase C tools', () => {
     expect((await call('unlabel', { name: 'NOPE' })).text).toBe('No label is named NOPE.');
     expect(await ok(call, 'unlabel', { addr: '7040' })).toMatch(/^Removed BANNER at 7040h\.\nWrote /);
     expect(await ok(call, 'status', {})).toContain('Labels: 1');
+    await close();
+  });
+
+  it('label warns when a name is all hex digits, which address arguments refuse as ambiguous', async () => {
+    const { call, close } = await server();
+    await ok(call, 'load', { path: at('raiders.cmd') });
+    const out = await ok(call, 'label', { addr: '7040', name: 'CAFE', kind: 'data' });
+    expect(out.split('\n')).toEqual([
+      'Labelled 7040h CAFE (data).',
+      `Wrote ${at('raiders.fugloy.json')}.`,
+      'Note: CAFE is all hex digits, so an address argument "CAFE" is refused as ambiguous (it is also CAFEh); refer to this label as 28736 (decimal), or relabel it with a name that has a letter past F.',
+    ]);
+    expect((await call('peek', { addr: 'CAFE', len: 1 })).text).toMatch(/^"CAFE" is ambiguous/);
+    expect(await ok(call, 'peek', { addr: 28736, len: 1 })).toContain('; CAFE');
+    expect(await ok(call, 'label', { addr: '7050', name: 'PLAYER' })).not.toContain('Note:');
     await close();
   });
 
@@ -221,6 +236,26 @@ describe('phase C tools', () => {
     expect(parseLabelFile(readFileSync(at('elsewhere.json'), 'utf8')).errors).toEqual([]);
     expect((await call('coverage', { mode: 'export', path: dir })).text).toBe(`${dir} is a folder; give a file path to export to.`);
     expect((await call('coverage', { mode: 'export', path: at('raiders.cmd') })).text).toBe(`${at('raiders.cmd')} is the program itself; give another path to export to.`);
+    await close();
+  });
+
+  it('coverage export replaces a label file at path, but nothing else unless overwrite is true', async () => {
+    const hints = '; my hand-written hints\nblock 0:0 code\n';
+    writeFileSync(at('notes.hints'), hints);
+    const { call, close } = await raidersPlayed();
+    expect(await call('coverage', { mode: 'export', path: at('notes.hints') })).toEqual({
+      text: `${at('notes.hints')} exists and it is not JSON, so it is not overwritten; give another path, or pass overwrite: true to replace it.`,
+      isError: true,
+    });
+    expect(readFileSync(at('notes.hints'), 'utf8')).toBe(hints);
+    writeFileSync(at('elsewhere.json'), '{"version": 1}');
+    expect((await call('coverage', { mode: 'export', path: at('elsewhere.json') })).text).toMatch(new RegExp(`^${at('elsewhere.json').replace(/[.$]/g, '\\$&')} exists and it is not a label file \\(`));
+    expect((await call('coverage', { overwrite: true })).text).toBe('overwrite is only for mode "export".');
+    // overwrite: true replaces it; a label file there is replaced without it.
+    const out = await ok(call, 'coverage', { mode: 'export', path: at('notes.hints'), overwrite: true });
+    expect(out).toContain(`(it replaced the file that was at ${at('notes.hints')})`);
+    expect(parseLabelFile(readFileSync(at('notes.hints'), 'utf8')).errors).toEqual([]);
+    expect(await ok(call, 'coverage', { mode: 'export', path: at('notes.hints') })).toContain('(it replaced the file');
     await close();
   });
 
@@ -311,6 +346,18 @@ describe('phase C tools', () => {
     expect((await again.call('coverage', { mode: 'export', path: at('RAIDERS.FUGLOY.JSON') })).text).toMatch(/^The sidecar .* was ignored at load/);
     expect(readFileSync(at('raiders.fugloy.json'), 'utf8')).toBe('broken');
     await again.close();
+  });
+
+  // On a case-insensitive volume a case variant of the sidecar's path is the sidecar even before
+  // it exists, so the export is adopted as the sidecar and a later label can rewrite it.
+  it.skipIf(!CASE_INSENSITIVE)('coverage export to a case variant of a sidecar that does not exist yet writes the sidecar', async () => {
+    const { call, close } = await raidersPlayed();
+    const out = await ok(call, 'coverage', { mode: 'export', path: at('RAIDERS.FUGLOY.JSON') });
+    expect(out.split('\n')[0]).toBe(`Wrote ${at('raiders.fugloy.json')}: 2 labels, 1 session`);
+    expect(out).not.toContain('replaced');
+    expect((await ok(call, 'label', { addr: '7030', name: 'PRINT' })).split('\n').at(-1)).toBe(`Wrote ${at('raiders.fugloy.json')}.`);
+    expect(parseLabelFile(readFileSync(at('raiders.fugloy.json'), 'utf8')).file.sessions).toHaveLength(1);
+    await close();
   });
 
   it('after load with reset: false of another program, export refuses and suggest says why', async () => {

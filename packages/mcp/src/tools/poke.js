@@ -1,10 +1,9 @@
 /** `poke`: write bytes into memory and show what they replaced (docs/fugloy-mcp-spec.md §4, §5, §7). */
 import { z } from 'zod';
-import { hex4, parseAddr } from '../args.js';
+import { hex4, parseAddr, ROM_END } from '../args.js';
+import { h2 } from '../format/hex.js';
 
-const ROM_END = 0x3800;
 const KEYBOARD_END = 0x3c00;
-const h2 = (/** @type {number} */ n) => n.toString(16).toUpperCase().padStart(2, '0');
 
 /** Bytes from a hex string ("21003C", spaces allowed) or an array of 0-255. */
 function parseBytes(/** @type {string | number[]} */ value) {

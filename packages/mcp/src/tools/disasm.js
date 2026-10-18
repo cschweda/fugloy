@@ -7,10 +7,9 @@ import { selectSymbols } from '@fugloy/disasm';
 import { COVERAGE } from '@fugloy/emu';
 import { decode, formatInstruction } from '@fugloy/z80';
 import { z } from 'zod';
-import { parseAddr, parseCount } from '../args.js';
+import { hex4, parseAddr, parseCount } from '../args.js';
+import { h2, h4 } from '../format/hex.js';
 
-const h2 = (/** @type {number} */ n) => n.toString(16).toUpperCase().padStart(2, '0');
-const h4 = (/** @type {number} */ n) => (n & 0xffff).toString(16).toUpperCase().padStart(4, '0');
 
 /** @type {import('@fugloy/disasm').SymbolSet | undefined} */
 let symbols;
@@ -73,7 +72,7 @@ function operandNames(ins, labels) {
 export default {
   name: 'disasm',
   description:
-    'Disassemble n instructions (a decimal count, default 32, at most 512) linearly from addr. Each line: a mark (* executed, d read or written as data, ? never seen, from coverage since load), the address, the bytes, the instruction, and after ; the names its targets and operands refer to: your labels first, then the Model III ROM and hardware tables. A labelled address gets a NAME: line. labels: false leaves names out. Linear decoding can start mid-instruction or run into data; the marks show where it has.',
+    'Disassemble n instructions (a decimal count, default 32, at most 512) linearly from addr. Each line: a mark (* executed, as an instruction or as part of one, d read or written as data, ? never seen, from coverage since load), the address, the bytes, the instruction, and after ; the names its targets and operands refer to: your labels first, then the Model III ROM and hardware tables. A labelled address gets a NAME: line. labels: false leaves names out. Linear decoding can start mid-instruction or run into data; the marks show where it has, and a closing note names the first line that starts on a byte executed only as another instruction\'s operand.',
   inputSchema: {
     addr: z.union([z.string(), z.number()]).describe('Start address: 5200, 0x5200, $5200, 5200h, a decimal number, or a label name'),
     n: z.number().int().optional().describe('Instructions to list, a decimal count (default 32)'),
@@ -90,6 +89,8 @@ export default {
     const bytes = m.mem.read(start, count * 4);
     const bits = m.debug.coverage.bits;
     const lines = [];
+    /** @type {number | undefined} The first line that starts on a byte executed only as an operand. */
+    let misaligned;
     let off = 0;
     for (let k = 0; k < count; k++) {
       const at = (start + off) & 0xffff;
@@ -100,7 +101,11 @@ export default {
       }
       let mark = '?';
       if (bits[at] & COVERAGE.EXEC) mark = '*';
-      else {
+      else if (bits[at] & COVERAGE.OPERAND) {
+        // Executed, but as an operand of an instruction that starts earlier: this decode is out of step there.
+        mark = '*';
+        misaligned ??= at;
+      } else {
         for (let i = 0; i < ins.length; i++) if (bits[(at + i) & 0xffff] & (COVERAGE.READ | COVERAGE.WRITE)) mark = 'd';
       }
       const names = labels ? operandNames(ins, session.labels) : [];
@@ -109,6 +114,9 @@ export default {
       off += ins.length;
     }
     lines.push('Marks: * executed, d read or written as data, ? never seen (coverage since load)');
+    if (misaligned !== undefined) {
+      lines.push(`(${hex4(misaligned)} was executed as an operand of an instruction that starts before it, so this listing is out of step with the code there; start disasm at an address marked * by its own instruction)`);
+    }
     return lines.join('\n');
   },
 };

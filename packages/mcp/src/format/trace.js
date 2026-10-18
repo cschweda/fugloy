@@ -1,8 +1,6 @@
 /** Trace lines (docs/fugloy-mcp-spec.md §4): `PC  bytes  mnemonic ; label [cycles]`, loops collapsed. */
 import { decode, formatInstruction } from '@fugloy/z80';
-
-const h2 = (/** @type {number} */ n) => (n & 0xff).toString(16).toUpperCase().padStart(2, '0');
-const h4 = (/** @type {number} */ n) => (n & 0xffff).toString(16).toUpperCase().padStart(4, '0');
+import { h2, h4 } from './hex.js';
 
 /** @param {{ pc: number, bytes: ArrayLike<number>, cycles: number, regs?: any }} e */
 function line(e, labels) {

@@ -19,7 +19,7 @@
  *
  * These are the only files the server writes (MCP spec §7).
  */
-import { lstatSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { lstatSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, join } from 'node:path';
 import { mergeLabelFiles, parseLabelFile } from '@fugloy/emu';
 
@@ -62,6 +62,57 @@ export function sameFile(a, b) {
   } catch {
     return false;
   }
+}
+
+/** `RaIdErS` → `rAiDeRs`. */
+const swapCase = (/** @type {string} */ s) => [...s].map((c) => (c === c.toUpperCase() ? c.toLowerCase() : c.toUpperCase())).join('');
+
+/** Whether the folder `dir` is on a volume that ignores case: some entry of it is found again by its case-swapped name. */
+function foldsCase(/** @type {string} */ dir) {
+  let entries;
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return false;
+  }
+  const entry = entries.find((e) => swapCase(e) !== e);
+  return entry !== undefined && sameFile(join(dir, entry), join(dir, swapCase(entry)));
+}
+
+/**
+ * Whether two paths name the same file, existing or not: `sameFile`, or else the same folder (by
+ * identity) and names that differ only in case on a volume that ignores case. So a case variant
+ * of the sidecar's path is the sidecar before the sidecar exists.
+ * @param {string} a
+ * @param {string | null | undefined} b
+ */
+export function samePath(a, b) {
+  if (b === null || b === undefined) return false;
+  if (sameFile(a, b)) return true;
+  if (basename(a).toLowerCase() !== basename(b).toLowerCase() || !sameFile(dirname(a), dirname(b))) return false;
+  return basename(a) === basename(b) || foldsCase(dirname(a));
+}
+
+/**
+ * Why the existing file at `path` is not a label file (a clause), or null when it is one, so
+ * `coverage export` may replace it without `overwrite`.
+ * @param {string} path
+ */
+export function notLabelFile(path) {
+  let text;
+  try {
+    text = readFileSync(path, 'utf8');
+  } catch (err) {
+    return `it could not be read (${err instanceof Error ? err.message : String(err)})`;
+  }
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    return 'it is not JSON';
+  }
+  const { file, errors } = parseLabelFile(json);
+  return file === null ? `it is not a label file (${errors[0] ?? 'it breaks the format'})` : null;
 }
 
 /** Refuse a path that is a symbolic link (dangling or not): the server never writes through one. */
