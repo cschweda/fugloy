@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="docs/images/og-image.png"><img src="docs/images/og-image.svg" alt="Fugløy: a Z80 disassembler for the TRS-80. Disassemble, label, reassemble, byte for byte. Beside it, Fugløy's own pass 1 listing of a short Model III routine, with its video and DOS addresses named." width="100%"></a>
+  <a href="docs/images/og-image.png"><img src="docs/images/og-image.svg" alt="Fugløy: a Z80 toolkit for the TRS-80. Disassemble, explain, emulate, label: a disassembler, a web workbench with the Explain tutor, an emulator, and an MCP server. Beside it, Fugløy's own pass 1 listing of a short Model III routine, with its ROM, video, and DOS addresses named." width="100%"></a>
 </p>
 
 # Fugløy
