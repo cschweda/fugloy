@@ -190,8 +190,10 @@ function linkList(addrs: readonly number[]): Piece[] {
 
 /**
  * What a label row says about its label: who calls it and jumps to it (links;
- * a jump-table entry is "reached from the table entry at"), and whether it is
- * the entry point. Null when the explanation carries no label.
+ * a jump-table entry is "reached from the table entry at"), where its address
+ * is held as a number (so it may be reached through a pointer), the calls and
+ * jumps that only start out leading here because the program rewrites them,
+ * and whether it is the entry point. Null when the explanation carries no label.
  */
 export function labelSentences(s: Session, e: Explanation): Sentence[] | null {
   const l = e.label;
@@ -208,7 +210,21 @@ export function labelSentences(s: Session, e: Explanation): Sentence[] | null {
     const joined = parts.flatMap((p, i) => (i === 0 ? p : [{ text: '; ' }, ...p]));
     const first = joined[0]!;
     out.push([{ ...first, text: first.text[0]!.toUpperCase() + first.text.slice(1) }, ...joined.slice(1), { text: '.' }]);
-  } else out.push([{ text: 'No call or jump to it was found.' }]);
+  }
+  if (l.pointers.length > 0) {
+    out.push(parts.length > 0 ? [{ text: 'Its address is also used at ' }, ...linkList(l.pointers), { text: ', so it may also be reached through a pointer.' }] : [{ text: 'Its address is used at ' }, ...linkList(l.pointers), { text: ', so it may be reached through a pointer.' }]);
+  }
+  if (l.rewritten.length > 0) {
+    const kinds = new Set(l.rewritten.map((x) => (ins.get(x)?.flow.kind === 'call' ? 'call' : ins.get(x)?.flow.kind === 'jump' ? 'jump' : 'instruction')));
+    const kind = kinds.size === 1 ? [...kinds][0]! : 'instruction';
+    const one = l.rewritten.length === 1;
+    out.push([
+      { text: `The ${kind}${one ? '' : 's'} at ` },
+      ...linkList(l.rewritten),
+      { text: one ? ' starts out leading here, but the program rewrites it as it runs, so it may lead elsewhere.' : ' start out leading here, but the program rewrites them as it runs, so they may lead elsewhere.' },
+    ]);
+  }
+  if (parts.length === 0 && l.pointers.length === 0) out.push([{ text: l.rewritten.length > 0 ? 'No other call or jump to it was found.' : 'No call or jump to it was found.' }]);
   if (l.entry) out.push([{ text: e.addr === s.analysis.entry ? 'This is where the program starts (its entry point).' : 'This is an entry point the analysis starts from.' }]);
   return out;
 }

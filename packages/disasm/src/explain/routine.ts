@@ -17,7 +17,7 @@ import type { Session } from '../session.js';
 import { addrPhrase, addrPiece, andList, decimal, loaded, nameOf, portPhrase, routineKind, say, screenCell, tableName, word$ } from './machine.js';
 import type { Ctx } from './machine.js';
 import { exitsPhrase, patternAt, screenRange } from './patterns.js';
-import { djnzLoop, knownBefore, opcodeRewritten, patchedBytes, pointerUses } from './track.js';
+import { djnzLoop, knownBefore, opcodeRewritten, patchedBytes, pointerUses, sourceRewritten } from './track.js';
 import type { Piece, Sentence } from './types.js';
 
 export interface RoutineSummary {
@@ -309,8 +309,7 @@ function summarize(c: Ctx, ix: Index, start: number): RoutineSummary {
   for (const x of a.pass1.xrefs) {
     if (x.to !== start) continue;
     // A call or jump whose target bytes the program may rewrite does not prove it comes here.
-    const from = a.pass1.instructions.get(x.from);
-    if (from !== undefined && patchedBytes(a, x.from, from).length > 0) continue;
+    if (sourceRewritten(a, x.from)) continue;
     if (x.kind === 'call' || x.kind === 'ccall' || x.kind === 'rst') callers.add(x.from);
     else if (!b.has.has(x.from)) (a.pass1.instructions.has(x.from) ? jumps : table).add(x.from);
   }

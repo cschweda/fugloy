@@ -44,7 +44,13 @@ export interface Explanation {
   pattern?: { name: string; from: number; to: number; sentences: Sentence[] };
   previews: Preview[];
   details?: Details;
-  label?: { name: string; callers: number[]; jumpers: number[]; entry: boolean };
+  /**
+   * A label row: its callers and jumpers (only those proven to lead here),
+   * whether it is an entry point, the instructions that hold its address as a
+   * number (`pointers`: it may be reached through them), and the calls and
+   * jumps that start out leading here but whose bytes the program rewrites.
+   */
+  label?: { name: string; callers: number[]; jumpers: number[]; entry: boolean; pointers: number[]; rewritten: number[] };
   region?: DataRegion;
 }
 

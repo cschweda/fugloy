@@ -147,4 +147,21 @@ describe('Explain never states what is not proven', () => {
     expect(opcodeRewritten(d.analysis, 0x700b)).toBe(false);
     expect(knownBefore(d.analysis, 0x700f).regs.A).toBe(0x05);
   });
+
+  it('a label reached by a jump whose target bytes are rewritten: the jump is not stated, the pointer is', () => {
+    // 7000 LD HL,7010H; 7003 LD A,20H; 7005 LD (700AH),A; 7008 NOP; 7009 JP 7010H (becomes JP 7020H); 700C-700F NOP; 7010 RET
+    const s = raw([0x21, 0x10, 0x70, 0x3e, 0x20, 0x32, 0x0a, 0x70, 0x00, 0xc3, 0x10, 0x70, 0x00, 0x00, 0x00, 0x00, 0xc9]);
+    const l = explainLine(s, 0x7010).label!;
+    expect(l.jumpers).not.toContain(0x7009);
+    expect(l.rewritten).toEqual([0x7009]);
+    expect(l.pointers).toEqual([0x7000]);
+  });
+
+  it('where a value comes from: a jump whose target bytes are rewritten is only a possible way in', () => {
+    // As above, with 7010 LD (HL),A; 7011 RET: HL is whatever it was when L7010 was reached.
+    const s = raw([0x21, 0x10, 0x70, 0x3e, 0x20, 0x32, 0x0a, 0x70, 0x00, 0xc3, 0x10, 0x70, 0x00, 0x00, 0x00, 0x00, 0x77, 0xc9]);
+    const t = lead(explainLine(s, 0x7010));
+    expect(t).not.toMatch(/by the jump at \$7009/);
+    expect(t).toMatch(/perhaps by the instruction at \$7009, which starts out leading here but which the program rewrites/);
+  });
 });

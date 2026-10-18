@@ -90,7 +90,10 @@ These would make it a failure even if it technically works:
 - **Before anything is clicked.** Explain shows a one-line prompt:
   "Click a line to have it explained."
 - A **label row** explains the label: who calls it or jumps to it (links),
-  and whether it is the entry point.
+  where its address is held as a number (so it may be reached through a
+  pointer), and whether it is the entry point. A call or jump whose bytes
+  the program rewrites is not listed as a way in; the row says it only
+  starts out leading there.
 - A **data row** says these are bytes the code is not known to run, and
   then explains the **data region** the row belongs to (see below). It
   reminds the reader of the key that turns data into code, and back.
@@ -144,7 +147,9 @@ Explain runs a small, local value tracker. My call on its scope:
   its cap, computed on first need and cached; while it runs, only the
   operand stores count, so the pass cannot depend on itself. The repeating
   block moves (`LDIR`, `LDDR`, `INIR`, `INDR`) are not counted: a loader's
-  `LDIR` copies the whole program to where it runs. A mere pointer to an instruction start (an address the program loads) is
+  `LDIR` copies the whole program to where it runs. A call or jump whose
+  bytes the program may rewrite is not stated as a way into its target.
+  A mere pointer to an instruction start (an address the program loads) is
   not enough.
   Inside the loop, the head is still a merge point, so the body's
   registers stay unknown. (This narrower rule replaced a general "skip the

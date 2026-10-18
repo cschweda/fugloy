@@ -124,4 +124,20 @@ describe('explain-view helpers', () => {
     expect(labelSentences(r, explainAt(r, 0x7000))!.map(sentenceText)).toEqual(['Jumped to from $7001.', 'This is where the program starts (its entry point).']);
     expect(labelSentences(s, explainAt(s, 0x49a7))).toBeNull();
   });
+
+  it('labelSentences: a jump whose target bytes the program rewrites is not stated as a way in; a pointer to the label is', () => {
+    // 7000 LD HL,7010H; 7003 LD A,20H; 7005 LD (700AH),A; 7008 NOP; 7009 JP 7010H (becomes JP 7020H); 700C-700F NOP; 7010 RET
+    const s = openProgram(new Uint8Array([0x21, 0x10, 0x70, 0x3e, 0x20, 0x32, 0x0a, 0x70, 0x00, 0xc3, 0x10, 0x70, 0x00, 0x00, 0x00, 0x00, 0xc9]), { base: 0x7000 });
+    const t = labelSentences(s, explainAt(s, 0x7010))!;
+    const text = t.map(sentenceText);
+    expect(text.join(' ')).not.toMatch(/Jumped to from \$7009/);
+    expect(text.join(' ')).not.toMatch(/No call or jump to it was found/);
+    expect(text).toContain('Its address is used at $7000, so it may be reached through a pointer.');
+    expect(text).toContain('The jump at $7009 starts out leading here, but the program rewrites it as it runs, so it may lead elsewhere.');
+    expect(t.flat().find((p) => p.text === '$7000')?.addr).toBe(0x7000);
+    // A label with jumps that do arrive and a pointer: both.
+    // 7000 LD HL,7006H; 7003 JP 7006H; 7006 RET
+    const r = openProgram(new Uint8Array([0x21, 0x06, 0x70, 0xc3, 0x06, 0x70, 0xc9]), { base: 0x7000 });
+    expect(labelSentences(r, explainAt(r, 0x7006))!.map(sentenceText)).toEqual(['Jumped to from $7003.', 'Its address is also used at $7000, so it may also be reached through a pointer.']);
+  });
 });

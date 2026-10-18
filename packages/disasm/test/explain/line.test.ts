@@ -49,7 +49,7 @@ describe('Sea Dragon goldens (Model III, TRSDOS 1.3, seadrg01.hints)', () => {
       'HL holds whatever it held when L5FC4 was reached: by falling through from $5FC3, or by the jumps at $5FD6 and $5FDE.',
     ]);
     expect(e.previews).toEqual([]);
-    expect(e.label).toEqual({ name: 'L5FC4', callers: [], jumpers: [0x5fd6, 0x5fde], entry: false });
+    expect(e.label).toEqual({ name: 'L5FC4', callers: [], jumpers: [0x5fd6, 0x5fde], entry: false, pointers: [], rewritten: [] });
     const links = e.sentences[1]!.filter((p) => p.addr !== undefined).map((p) => p.addr);
     expect(links).toEqual([0x5fc4, 0x5fc3, 0x5fd6, 0x5fde]);
   });
