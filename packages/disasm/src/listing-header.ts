@@ -156,7 +156,7 @@ export function listsAsCode(line: BasLine, map: ByteMap): boolean {
  * of the analysis, which the rows' comment column reads too.
  */
 export function pass1Header(analysis: Analysis, opts: RenderOptions, notes: ReadonlyMap<number, ExternalNote>): string[] {
-  const { module: mod, pass1, roots, symbols, annotations, hints, entries, space, externals } = analysis;
+  const { module: mod, pass1, roots, symbols, annotations, hints, labels, entries, space, externals } = analysis;
   const { image } = mod;
   const { map } = pass1;
   const runs = image.runs();
@@ -213,6 +213,9 @@ export function pass1Header(analysis: Analysis, opts: RenderOptions, notes: Read
   if (hints !== undefined) {
     out.push(`; hints: ${hints.source === undefined ? '' : `${hints.source}: `}${plural(hints.matched, 'block')} matched, ${hints.unmatched} unmatched, ${plural(hints.applied, 'hint')} applied`);
   }
+  if (labels !== undefined) {
+    out.push(`; labels: ${labels.source === undefined ? '' : `${labels.source}: `}${plural(labels.names, 'name')}, ${plural(labels.roots, 'root')}, ${plural(labels.dataRuns, 'data run')} applied`);
+  }
   for (const s of symbols.list()) {
     if (map.kind(s.addr) !== Kind.Tail) continue;
     let owner = s.addr;
@@ -228,6 +231,7 @@ export function pass1Header(analysis: Analysis, opts: RenderOptions, notes: Read
     }
   }
   for (const w of hints?.warnings ?? []) out.push(`; warning: ${w}`);
+  for (const w of labels?.warnings ?? []) out.push(`; warning: ${w}`);
   for (const e of analysis.relocationErrors) out.push(`; warning: ${e}`);
   if (mod.format === 'cmd') out.push(...cmdDetails(mod));
   return out;

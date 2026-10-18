@@ -191,6 +191,16 @@ The hint file is the one piece of persistent state in v1. Decisions, made now:
 
 Part 2 adds annotations for stores that patch code and for interrupt hooks; the format is designed to take new directives without a version bump.
 
+### Label and coverage file (`--labels`)
+
+Added 2026-10-18 (emu phase 3). The emulator writes a JSON label and coverage file for a program it ran (`docs/label-format.md`, §8 of the emu spec); `@fugloy/disasm` reads it on its own, from the format document (`parseLabelFile`, `labelAnnotations`, `withLabelFile`), and the CLI applies it with `--labels <path>`:
+
+- **What applies.** Every label inside loaded memory: `kind: code` becomes a root; a valid name becomes a user name (a name of the generated shape, `L`, `SUB_`, `DATA_`, or `TBL_` and four hex digits, means "no name given": the address is still a root, Ruling 9); `evidence` becomes the comment `observed: <evidence>`; `kind: data` with a `size` types that many bytes as `DB`. Every `EXEC` bit inside loaded memory becomes a root (an instruction that only ran is not marked `entry` in the listing), and each maximal run of loaded bytes that was read and neither executed nor fetched as an operand gets `nocode` at its start. Coverage keys other than `"0:0"` draw a warning and are ignored.
+- **Addresses are runtime addresses**, because they came from the running machine: the file applies to the analysis space, so under a relocate hint a label at the destination applies and one at the moved source's file address is outside loaded memory.
+- **Identity (Ruling 10).** A label file is keyed by address, so one whose `program.sha256` is present and differs from the SHA-256 of the program file is refused: nothing applies and the CLI exits 2 (a hint file, matched by content, only warns). A file without `sha256` applies.
+- **Hints win (Ruling 11).** Hint names and comments stand; a label name the hint file uses elsewhere is dropped; a label override that overlaps a hint override is dropped; entries are unioned.
+- **Output.** The listing header carries `; labels: <file>: N names, N roots, N data runs applied` after the hints line, and the file's warnings as `; warning:` lines; the IR carries the same summary as `labels`. `--labels` is refused with `--sweep` and with `--write-hints`; a file that does not parse, or is refused, prints `fugloy: <path>: <message>` and exits 2.
+
 ## Web app
 
 A static Nuxt 4 site running the core library in the browser. Files never leave the machine. Built in phase 4 to the design in `docs/superpowers/specs/2026-10-17-phase4-web-workbench-design.md`; this section records what it does.
@@ -282,7 +292,7 @@ Total v1: roughly four to five months of spare time. Part 2 is not estimated unt
 ## Stack
 
 - **Core:** TypeScript, zero runtime dependencies, ESM only, built with `tsc` project references (tsup was dropped during phase 1: TypeScript 7's native compiler has no JS API for tsup's `.d.ts` plugin, and a dependency-free ESM library needs no bundler). MIT.
-- **CLI:** Node, thin wrapper over the core.
+- **CLI:** Node, thin wrapper over the core: `fugloy <file>` with `--base`, `--rebase`, `--entry`, `--hints`, `--write-hints`, `--labels` (the emulator's label and coverage file, above), `--machine`, `--dos`, `--format`, `--sweep`, `--color`, and `-o`.
 - **Web:** Nuxt 4 with Nuxt UI, pnpm, static generation, no server routes, in `apps/web` (the name is settled; the emu spec's `apps/workbench` is not used). Netlify. `apps/web` pins TypeScript 5.9 for itself, apart from the root's TypeScript 7, because `vue-tsc` (which `nuxt typecheck` runs) needs TypeScript 5's JavaScript API; the workspace packages still build with TypeScript 7. PDF.js (`pdfjs-dist`) is a dependency of `apps/web` only.
 - **Tests:** Vitest; Playwright for the browser flow; zmac installed in CI. GitHub Actions.
 - **Repo:** pnpm monorepo. v1 creates `packages/z80` (table and semantics), `packages/disasm` (loaders, passes, IR, emitters), `packages/cli`, `apps/web`, `fixtures/synthetic`. Part 2 adds `packages/emulator`, `packages/recomp`, `packages/runtime`. ROM images and copyrighted programs live outside the repo; public-domain programs are committed under `examples/`.

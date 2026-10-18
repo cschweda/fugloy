@@ -22,6 +22,7 @@ import type { MinedEntry } from './basic/entries.js';
 import { basStructure, codeLineLabel } from './basic/structure.js';
 import { emptyAnnotations } from './hints/apply.js';
 import type { Annotations, Override } from './hints/apply.js';
+import type { LabelsSummary } from './labels/apply.js';
 import { blockIdentities } from './hints/identity.js';
 import type { Module } from './ir.js';
 import type { SymbolSet } from './symbols/select.js';
@@ -46,6 +47,8 @@ export interface AnalyzeOptions {
   annotations?: Annotations;
   /** Where the annotations came from, for the listing header and the IR. */
   hints?: HintsSummary;
+  /** How a label and coverage file applied; its decisions are already merged into `annotations`. */
+  labels?: LabelsSummary;
   /** The base a rebased .BAS program was saved from; operands into the old range are then stale. */
   rebasedFrom?: number;
   /** The ROM, hardware, and DOS names to give addresses outside the image, from `selectSymbols`; without it nothing is named. */
@@ -68,6 +71,7 @@ export interface Analysis {
   /** The table entries the instructions' operands and the DW words are named with (each gets a zmac EQU), in table order then by key; empty without `tables`. An RST vector or service call that only a comment names is not here. */
   tablesUsed: TableEntry[];
   hints?: HintsSummary;
+  labels?: LabelsSummary;
   /** Entry points a .BAS program's text plants, with evidence (null address when unresolved); empty for other formats. */
   entries: MinedEntry[];
   /** Heuristic suggestions that change nothing until declared in a hint file. */
@@ -152,6 +156,7 @@ export function analyze(mod: Module, opts: AnalyzeOptions = {}): Analysis {
   const tablesUsed = externalUses(pass1.instructions.values(), externals, symbols);
   const analysis: Analysis = { module: mod, pass1, entry, roots: pass1.roots, transfer, annotations, symbols, externals, tablesUsed, entries, proposals, space, relocationErrors };
   if (opts.hints !== undefined) analysis.hints = opts.hints;
+  if (opts.labels !== undefined) analysis.labels = opts.labels;
   if (opts.rebasedFrom !== undefined) analysis.rebasedFrom = opts.rebasedFrom & 0xffff;
   return analysis;
 }

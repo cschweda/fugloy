@@ -35,6 +35,8 @@ export interface Annotations {
   notes: Map<number, string[]>;
   /** Regions that execute elsewhere; every other address here is already a runtime address. */
   relocations: Relocation[];
+  /** Entries known only because a label file saw them execute: roots, but not marked `entry` in the listing. */
+  executed?: number[];
 }
 
 export interface Applied {

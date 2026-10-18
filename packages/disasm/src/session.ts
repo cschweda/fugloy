@@ -14,13 +14,17 @@ import { loadRaw } from './raw.js';
 import { detectFormat } from './detect.js';
 import { emitZmac } from './emit/zmac.js';
 import { applyHints, emptyAnnotations } from './hints/apply.js';
-import type { Applied } from './hints/apply.js';
+import type { Annotations, Applied } from './hints/apply.js';
 import { parseHints } from './hints/format.js';
 import type { HintFile } from './hints/format.js';
 import { basIdentityNormalizer, blockIdentities, programHash } from './hints/identity.js';
 import type { IdentityNormalizer } from './hints/identity.js';
+import { analysisSpace } from './analysis/relocate.js';
 import { buildIr } from './ir.js';
 import type { Module } from './ir.js';
+import { labelAnnotations, mergeAnnotations } from './labels/apply.js';
+import type { LabelsSummary } from './labels/apply.js';
+import type { LabelFile } from './labels/format.js';
 import { renderBasListing, renderPass1Listing } from './listing.js';
 import { selectSymbols } from './symbols/select.js';
 import type { SymbolSelection } from './symbols/select.js';
@@ -51,6 +55,10 @@ export interface Session {
   /** Where the hint file came from (a file name), for the listing header. */
   readonly hintSource: string | undefined;
   readonly applied: Applied;
+  /** The label and coverage file applied under the hints, if any. */
+  readonly labelFile: LabelFile | undefined;
+  /** Where the label file came from (a file name), for the listing header. */
+  readonly labelSource: string | undefined;
   readonly analysis: Analysis;
   /** A .BAS with nothing but BASIC in it lists as BASIC. */
   readonly plainBasic: boolean;
@@ -58,7 +66,7 @@ export interface Session {
 
 export class OpenError extends Error {
   constructor(
-    readonly kind: 'format' | 'hints',
+    readonly kind: 'format' | 'hints' | 'labels',
     message: string,
     readonly details: readonly string[] = [],
   ) {
@@ -92,6 +100,8 @@ interface Parts {
   applied: Applied;
   /** Whether a hint file was applied; the analysis header then carries a summary. */
   hinted: boolean;
+  labelFile: LabelFile | undefined;
+  labelSource: string | undefined;
   rebasedFrom: number | undefined;
 }
 
@@ -106,11 +116,13 @@ function build(p: Parts): Session {
         warnings: p.applied.warnings,
       }
     : undefined;
+  const { annotations, labels } = withLabels(p);
   const analysis = analyze(p.module, {
     entries: [...p.entries],
-    annotations: p.applied.annotations,
+    annotations,
     ...(p.selection === undefined ? {} : { tables: selectSymbols(p.selection) }),
     ...(summary === undefined ? {} : { hints: summary }),
+    ...(labels === undefined ? {} : { labels }),
     ...(p.rebasedFrom === undefined ? {} : { rebasedFrom: p.rebasedFrom }),
   });
   // Notes that no row shows: the analysis decides where instructions start, so this is known only now.
@@ -119,10 +131,37 @@ function build(p: Parts): Session {
   if (lost.length > 0 && analysis.hints !== undefined) analysis.hints = { ...analysis.hints, warnings: applied.warnings };
   // A .BAS with neither hidden code nor a planted entry lists as plain BASIC unless pass 1 was asked for.
   const plainBasic =
-    p.module.format === 'bas' && p.entries.length === 0 && p.hintFile.hints.length === 0 && p.rebasedFrom === undefined && analysis.entries.length === 0 && p.module.lines.every((l) => l.parsed);
+    p.module.format === 'bas' && p.entries.length === 0 && p.hintFile.hints.length === 0 && p.labelFile === undefined && p.rebasedFrom === undefined && analysis.entries.length === 0 && p.module.lines.every((l) => l.parsed);
   const session: Session = { ...p, applied, analysis, plainBasic };
   if (applied !== p.applied) applyResult.set(session, p.applied);
   return session;
+}
+
+/**
+ * The hint annotations with the label file's merged under them (Ruling 11). The label file's addresses are
+ * runtime addresses, so it applies to the analysis space the hints' relocations make. Its summary counts
+ * what survived the merge.
+ */
+function withLabels(p: Parts): { annotations: Annotations; labels: LabelsSummary | undefined } {
+  const hints = p.applied.annotations;
+  if (p.labelFile === undefined) return { annotations: hints, labels: undefined };
+  const { space } = analysisSpace(p.module.image, hints.relocations);
+  const own = labelAnnotations(p.labelFile, space.image, p.hash);
+  if (own.refused !== null) throw new OpenError('labels', own.refused);
+  const annotations = mergeAnnotations(hints, own.annotations);
+  const warnings = [...own.summary.warnings];
+  // A hint name at the same address simply wins; one the hints use elsewhere costs the label its name, which is worth saying.
+  for (const [addr, name] of own.annotations.names) {
+    if (!hints.names.has(addr) && annotations.names.get(addr) !== name) warnings.push(`label ${name} at $${hex4(addr)}: the hint file already uses the name; the name is skipped`);
+  }
+  const labels: LabelsSummary = {
+    ...(p.labelSource === undefined ? {} : { source: p.labelSource }),
+    names: [...own.annotations.names].filter(([addr, name]) => annotations.names.get(addr) === name && hints.names.get(addr) !== name).length,
+    roots: own.summary.roots,
+    dataRuns: own.annotations.overrides.filter((o) => o.kind === 'nocode' && annotations.overrides.includes(o)).length,
+    warnings,
+  };
+  return { annotations, labels };
 }
 
 /** The hint file's own result for a session whose warnings had notes added, so a rebuild adds them afresh. */
@@ -155,6 +194,8 @@ const partsOf = (s: Session, hinted: boolean): Parts => ({
   hintSource: s.hintSource,
   applied: applyResult.get(s) ?? s.applied,
   hinted,
+  labelFile: s.labelFile,
+  labelSource: s.labelSource,
   rebasedFrom: s.analysis.rebasedFrom,
 });
 
@@ -181,6 +222,8 @@ export function openProgram(bytes: Uint8Array, opts: OpenOptions = {}): Session 
     hintSource: undefined,
     applied: noHintsApplied(),
     hinted: false,
+    labelFile: undefined,
+    labelSource: undefined,
     rebasedFrom: opts.rebasedFrom,
   });
 }
@@ -195,6 +238,11 @@ export function withHintText(s: Session, text: string, source?: string): Session
   const parsed = parseHints(text);
   if (parsed.errors.length > 0) throw new OpenError('hints', 'the hint file does not parse', parsed.errors.map((e) => `line ${e.line}: ${e.message}`));
   return withHintFile(s, parsed.file, source);
+}
+
+/** Applies a label and coverage file under the session's hints; throws an OpenError of kind 'labels' when it was written for another program. */
+export function withLabelFile(s: Session, file: LabelFile, source?: string): Session {
+  return build({ ...partsOf(s, s.analysis.hints !== undefined), labelFile: file, labelSource: source });
 }
 
 export function withSelection(s: Session, selection: SymbolSelection | undefined): Session {
