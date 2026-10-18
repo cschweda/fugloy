@@ -1,5 +1,5 @@
 /**
- * TRS-80 System, Model III or Model I
+ * TRS-80 System, Model III, Model I, or Model 4
  *
  * Owns and wires the machine: Z80 CPU, memory map, I/O ports, and the
  * keyboard matrix, laid out by the model description (models.js). Runs the
@@ -8,7 +8,9 @@
  * ROM's clock/cursor services depend on, or the Model I Expansion
  * Interface's 40 Hz clock, through its latch at $37E0
  * (devices/interrupt-latch.js); a Model I without the Expansion Interface
- * has no clock and takes no interrupts.
+ * has no clock and takes no interrupts. The Model 4 starts at the Model
+ * III's clock and timer and switches to 4.05504 MHz with a 60 Hz timer when
+ * port $EC bit 6 is set (`selectClock`; models.js cites the sources).
  *
  * Rendering is the caller's concern: read `memory.videoRam` (or
  * `screenText()`) and consult `memory.videoDirty`. Keyboard input goes
@@ -16,7 +18,7 @@
  */
 
 import { Z80CPU } from "../cpu/z80cpu.js";
-import { MemorySystem } from "./memory.js";
+import { MemorySystem, Model4Memory } from "./memory.js";
 import { IOSystem, MODE_32COL_BIT, M1_MODESEL_BIT } from "./io.js";
 import { TIMER_BIT } from "../devices/interrupt-latch.js";
 import { KeyboardMatrix } from "../devices/keyboard.js";
@@ -30,7 +32,7 @@ export const RTC_INTERVAL_TSTATES = CPU_CLOCK_HZ / RTC_HZ; // 67,584
 export class TRS80System {
   /**
    * @param {{ romData: Uint8Array, log?: (level: string, text: string) => void,
-   *   model?: 1 | 3 | import('./models.js').Model, ram?: number, expansion?: boolean, lowercase?: boolean }} opts
+   *   model?: 1 | 3 | 4 | import('./models.js').Model, ram?: number, expansion?: boolean, lowercase?: boolean }} opts
    *   the model (a number or a description; the Model III by default), its RAM in K (the model's
    *   default), and the Model I's Expansion Interface (fitted by default) and lowercase modification
    *   (not fitted by default); the Machine checks them
@@ -42,8 +44,19 @@ export class TRS80System {
     this.rtcInterval = desc.clockHz / desc.timerHz;
     this.expansion = expansion;
     this.lowercase = lowercase;
-    this.memory = new MemorySystem({ model: desc, ram: ram ?? desc.defaultRam, lowercase });
+    this.memory = desc.id === 4
+      ? new Model4Memory({ model: desc, ram: ram ?? desc.defaultRam })
+      : new MemorySystem({ model: desc, ram: ram ?? desc.defaultRam, lowercase });
     this.io = new IOSystem({ model: desc, expansion });
+    // The Model 4's port $84 goes to its memory maps
+    if (this.memory instanceof Model4Memory) {
+      const memory = this.memory;
+      this.io.onMapWrite = (value) => memory.setMapRegister(value);
+      // and its port $EC bit 6 to the clock
+      this.io.onClockSelect = (fast) => this.selectClock(fast);
+    }
+    /** True while the Model 4 runs at its 4 MHz clock (port $EC bit 6); always false on other models. */
+    this.fast = false;
     // The Model I's Expansion Interface addresses go to the I/O decode
     if (this.io.latch !== null) this.memory.expansion = this.io;
     // The 32-column bit: port $EC bit 2 on the Model III, port $FF bit 3 (MODESEL) on the Model I
@@ -91,6 +104,28 @@ export class TRS80System {
   }
 
   /**
+   * The Model 4's clock switch: `clockHz` and the timer go to the model's fast clock and timer
+   * (4,055,040 Hz and 60 Hz) or back to its Model III ones (2,027,520 Hz and 30 Hz). The timer
+   * ticks every 67,584 T-states at either clock, so its schedule (`nextRtcAt`) stands. What times
+   * itself in T-states of the clock follows it: the disk controller (a disk turns in real time, so
+   * at 4 MHz a revolution takes twice the T-states; `rescale` false, for a save state's restore,
+   * leaves its counters as the state saved them) and the cassette recording's decode scale. A
+   * tape already playing keeps the clock it was inserted at (spec §5). Other models ignore it.
+   * @param {boolean} fast
+   * @param {{ rescale?: boolean }} [opts]
+   */
+  selectClock(fast, { rescale = true } = {}) {
+    const desc = this.model;
+    if (desc.fastClockHz === undefined || desc.fastTimerHz === undefined) return;
+    if (fast === this.fast) return;
+    this.fast = fast;
+    this.clockHz = fast ? desc.fastClockHz : desc.clockHz;
+    this.rtcInterval = this.clockHz / (fast ? desc.fastTimerHz : desc.timerHz);
+    this.io.fdc.setCpuHz(this.clockHz, { rescale });
+    this.io.cassette.timeScale = MODEL_III.clockHz / this.clockHz;
+  }
+
+  /**
    * Hardware reset (the orange button): CPU restarts at 0x0000, interrupt
    * latches clear, screen blanks. RAM contents survive, as on the real
    * machine.
@@ -135,7 +170,7 @@ export class TRS80System {
   stepInstruction(beforeExecute) {
     const start = this.cpu.cycles;
     if (this.cpu.cycles >= this.nextRtcAt) {
-      if (this.model.id === 3) this.io.raiseRTC();
+      if (this.model.id !== 1) this.io.raiseRTC();
       else if (this.io.latch !== null) this.io.latch.raise(TIMER_BIT);
       this.nextRtcAt += this.rtcInterval;
     }

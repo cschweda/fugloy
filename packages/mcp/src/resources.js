@@ -11,7 +11,7 @@
  */
 import { selectSymbols } from '@fugloy/disasm';
 import { hex4, MODELS } from './args.js';
-import { screenText } from './format/screen.js';
+import { geometryOf, screenText } from './format/screen.js';
 import labels from './tools/labels.js';
 import status from './tools/status.js';
 
@@ -81,7 +81,7 @@ export const RESOURCES = [
     description: 'The screen as text, as the screen tool shows it (reading it does not reset screen diff\'s baseline).',
     read: (session) => textOf(() => {
       const m = session.requireMachine();
-      return screenText(m.video.raw, m.video.columns === 32);
+      return screenText(m.video.raw, geometryOf(m));
     }),
   },
   {
@@ -111,7 +111,7 @@ export const ROM_SYMBOLS = {
     if (model === '3') return romSymbolsText(3);
     if (model === '1') return romSymbolsText(1);
     if (model === '4') {
-      return 'There are no Model 4 symbols here yet: the Model 4 comes in its own plan once a Model 4 ROM and boot disk are supplied; read fugloy://rom/3/symbols (the Model III) or fugloy://rom/1/symbols (the Model I).';
+      return 'There is no Model 4 table: the Model 4 runs here in Model III mode, where disasm and callees name from the Model III\'s tables (its ROM differs from the Model III\'s in 727 bytes, so a name from them is unchecked on the Model 4); read fugloy://rom/3/symbols (the Model III).';
     }
     return `${JSON.stringify(model)} is not a model; read fugloy://rom/3/symbols (the Model III) or fugloy://rom/1/symbols (the Model I).`;
   },

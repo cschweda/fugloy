@@ -8,6 +8,7 @@ import { Machine } from '@fugloy/emu';
 import { MODELS } from './args.js';
 import { recordFacts } from './attribution.js';
 import { TraceLog } from './trace-log.js';
+import { geometryOf } from './format/screen.js';
 
 /** The sentence every tool that needs a machine answers before the first `load`. */
 export const NO_MACHINE = 'No program loaded; call load first.';
@@ -21,24 +22,30 @@ export function stderrLog(level, text) {
   process.stderr.write(`[emu ${level}] ${text}\n`);
 }
 
-/** The models the server builds: the Model I and the Model III (emu phase 6 split the Model 4 off). */
-export const BUILT_MODELS = /** @type {const} */ ([1, 3]);
+/** The models the server builds: the Model I, the Model III, and the Model 4 (emu phase 6b). */
+export const BUILT_MODELS = /** @type {const} */ ([1, 3, 4]);
 
-/** `Model I` or `Model III`. */
+/** What each model's ROM is called in a sentence. */
+const ROM_WHAT = /** @type {Record<number, string>} */ ({ 1: 'Model I Level II ROM', 3: 'Model III ROM', 4: 'Model 4 ROM' });
+
+/** The RAM each model is built with: 48K, and the Model 4's full 128K. */
+export const RAM_OF = /** @type {Record<number, number>} */ ({ 1: 48, 3: 48, 4: 128 });
+
+/** `Model I`, `Model III`, or `Model 4`. */
 export const modelName = (/** @type {number} */ model) => `Model ${MODELS[model] ?? model}`;
 
 /**
- * Read the ROM a config names for `model` (`roms.model1` or `roms.model3`). Throws a sentence
- * when none is configured or the file is missing.
+ * Read the ROM a config names for `model` (`roms.model1`, `roms.model3`, or `roms.model4`).
+ * Throws a sentence when none is configured or the file is missing.
  * @param {import('./config.js').Config} config
- * @param {1 | 3} [model]
+ * @param {1 | 3 | 4} [model]
  * @returns {Uint8Array}
  */
 export function readRom(config, model = 3) {
   const key = `model${model}`;
   const path = config.roms[key];
   if (path === undefined) {
-    const what = model === 1 ? 'Model I Level II ROM' : 'Model III ROM';
+    const what = ROM_WHAT[model] ?? `${modelName(model)} ROM`;
     throw new Error(`No ${what} is configured; set roms.${key} in fugloy.mcp.json (see the MCP spec §3).`);
   }
   if (!existsSync(path)) throw new Error(`The configured ${modelName(model)} ROM ${path} does not exist; fix roms.${key} in ${config.source ?? 'fugloy.mcp.json'}.`);
@@ -47,17 +54,17 @@ export function readRom(config, model = 3) {
 
 /**
  * A Machine of `model` (by default the config's defaultModel) on `rom` (by default the config's
- * ROM for that model), with 48K, logging to stderr. A configured ROM the emulator recognises as
- * another model's is refused with a sentence naming the config entry to fix.
+ * ROM for that model), with 48K (the Model 4 with 128K), logging to stderr. A configured ROM the
+ * emulator recognises as another model's is refused with a sentence naming the config entry to fix.
  * @param {import('./config.js').Config} config
  * @param {Uint8Array} [rom]
- * @param {1 | 3} [model]
+ * @param {1 | 3 | 4} [model]
  */
 export function makeMachine(config, rom, model = config.defaultModel ?? 3) {
   const given = rom !== undefined;
   const image = rom ?? readRom(config, model);
   try {
-    return new Machine({ model, ram: 48, roms: { level2: image }, log: stderrLog });
+    return new Machine({ model, ram: /** @type {any} */ (RAM_OF[model] ?? 48), roms: { level2: image }, log: stderrLog });
   } catch (err) {
     // The emulator names the model a recognised ROM belongs to ("…: construct the Machine with
     // model: 3"); that one is put in the server's terms. Anything else (a wrong size) is the emulator's sentence.
@@ -81,14 +88,49 @@ export function makeMachine(config, rom, model = config.defaultModel ?? 3) {
 
 /**
  * @typedef {{ name: string, path: string, sha256: string }} ProgramId The program a snapshot belongs to.
- * @typedef {{ name: string, state: any, cycles: number, kb: number, memory: Uint8Array, columns32: boolean, program: ProgramId | null }} Snapshot
- *   `state` is `m.debug.snapshot()`; `memory` is video RAM and RAM ($3C00-$FFFF, 50,176 bytes) for `diff`;
- *   `columns32` is whether the screen was in 32-column mode, for `screen diff` against it;
- *   `program` is null for a machine with no program loaded (powered on by `reset`).
+ * @typedef {{ memory: Uint8Array, mapRegister: number | null, geometry: import('./format/screen.js').Geometry }} DiffView
+ *   What `diff` compares: `memory` is $3C00-$FFFF (50,176 bytes) as the CPU sees it, video RAM
+ *   and RAM (on the Model 4, in the memory map and page in force); `mapRegister` the Model 4's
+ *   port $84 byte then (null on the other models); `geometry` the screen's layout then.
+ * @typedef {DiffView & { name: string, state: any, cycles: number, kb: number, video: Uint8Array, program: ProgramId | null }} Snapshot
+ *   `state` is `m.debug.snapshot()`; `video` all of video RAM (1K, or the Model 4's 2K) for
+ *   `screen diff` against it; `program` is null for a machine with no program loaded (powered on by `reset`).
  */
 
-/** The bytes a snapshot keeps for `diff`: video RAM then RAM, $3C00-$FFFF. */
+/** The first address a snapshot keeps for `diff`: video RAM then RAM, $3C00-$FFFF. */
 export const DIFF_START = 0x3c00;
+
+/**
+ * The machine's $3C00-$FFFF as `diff` compares it. On the Model III and Model I that is video
+ * RAM and `m.mem.ram` (from $4000) as stored; on the Model 4, whose `m.mem.ram` is its 32K banks
+ * in physical order, it is what the CPU reads in the map and page in force (peeked: the
+ * keyboard, in map 2 at $F400-$F7FF, reads as the matrix does with no key down).
+ * @param {Machine} m
+ * @returns {DiffView}
+ */
+export function diffView(m) {
+  const memory = new Uint8Array(0x10000 - DIFF_START);
+  const mem = /** @type {any} */ (m.system.memory);
+  if (m.model === 4) memory.set(m.mem.read(DIFF_START, memory.length));
+  else {
+    memory.set(m.video.raw, 0);
+    memory.set(m.mem.ram, 0x4000 - DIFF_START);
+  }
+  return { memory, mapRegister: m.model === 4 ? mem.mapRegister : null, geometry: geometryOf(m) };
+}
+
+/**
+ * Where a CPU address shows video RAM in a diff view, as the offset into the 2K, or -1 (the
+ * Model III's $3C00-$3FFF is offsets 0-1023; the Model 4 shows its 1K page at $3C00 in maps 0-1
+ * and all 2K at $F800 in map 2, and none in map 3).
+ * @param {DiffView} view
+ * @param {number} addr
+ */
+export function videoOffset(view, addr) {
+  const reg = view.mapRegister;
+  if (reg === null || (reg & 3) < 2) return addr >= DIFF_START && addr < 0x4000 ? (reg !== null && reg & 0x80 ? 0x400 : 0) + addr - DIFF_START : -1;
+  return (reg & 3) === 2 && addr >= 0xf800 ? addr - 0xf800 : -1;
+}
 
 /** `limits.snapshots` as a cap: a whole number, at least 1. */
 export const snapshotCap = (/** @type {import('./config.js').Config} */ config) => Math.max(1, Math.floor(config.limits.snapshots ?? 16));
@@ -128,7 +170,7 @@ export class Session {
    * A new Machine for this session's config (on `rom` when given), of `model`: by default the
    * running machine's, else the config's defaultModel. The caller installs it.
    * @param {Uint8Array} [rom]
-   * @param {1 | 3} [model]
+   * @param {1 | 3 | 4} [model]
    */
   createMachine(rom, model = this.machine?.model ?? this.config.defaultModel ?? 3) {
     return makeMachine(this.config, rom, model);
@@ -172,12 +214,9 @@ export class Session {
   takeSnapshot(name) {
     const m = this.requireMachine();
     const state = m.debug.snapshot();
-    const memory = new Uint8Array(0x10000 - DIFF_START);
-    memory.set(m.video.raw, 0);
-    memory.set(m.mem.ram, 0x4000 - DIFF_START);
     const p = this.program;
     /** @type {Snapshot} */
-    const snap = { name, state, cycles: m.cycles, kb: Math.ceil(JSON.stringify(state).length / 1024), memory, columns32: m.video.columns === 32, program: p === null ? null : { name: p.name, path: p.path, sha256: p.sha256 } };
+    const snap = { name, state, cycles: m.cycles, kb: Math.ceil(JSON.stringify(state).length / 1024), ...diffView(m), video: Uint8Array.from(m.video.raw), program: p === null ? null : { name: p.name, path: p.path, sha256: p.sha256 } };
     const replaced = this.snapshots.delete(name);
     let evicted = null;
     if (this.snapshots.size >= snapshotCap(this.config)) {

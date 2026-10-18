@@ -21,15 +21,15 @@ public-domain games on its own (story 7, below).
 `@fugloy/mcp` is on npm (0.1.1 since 2026-10-18, with disk images and the Model I): run it from npm with Node 22 or later
 (`npx -y @fugloy/mcp`; for development, use the clone setup below,
 `node packages/mcp/bin/fugloy-mcp.js`). Write a `fugloy.mcp.json` that names
-your Model III ROM, and your Model I Level II ROM if you have one (paths in it
-are relative to the file):
+your Model III ROM, and your Model I Level II ROM and Model 4 ROM if you have
+them (paths in it are relative to the file):
 
 ```json
-{ "roms": { "model3": "./roms/model3.rom", "model1": "./roms/level2.rom" } }
+{ "roms": { "model3": "./roms/model3.rom", "model1": "./roms/level2.rom", "model4": "./roms/model4.rom" } }
 ```
 
-`"defaultModel": 1` makes the Model I what `load` builds when it is not given
-a `model` (the default is 3).
+`"defaultModel": 1` (or `4`) makes the Model I (or the Model 4) what `load`
+builds when it is not given a `model` (the default is 3).
 
 and give Claude Code the server, in `.mcp.json` in the folder you start it
 in, or with `claude mcp add`:
@@ -153,9 +153,29 @@ run      until=settled               → "BY: WAYNE WESTMORELAND & TERRY GILMAN"
 key      keys=["ENTER"] cps=1        → "1 OR 2 PLAYERS?"
 ```
 
+The Model 4 (unreleased, emu phase 6b): `load` with `model: 4` builds a 128K
+Model 4 on `roms.model4` and boots it to `READY` in Model III mode (memory map
+0, 2 MHz, 64 by 16), answering its `Cass ?` and `Memory Size?` for you; the
+manifest says `Model: Model 4 (128K; its ROM boots it in Model III mode:
+memory map 0, 2 MHz, 64 by 16)`. Model III programs and disks run on it as on
+the Model III (Sea Dragon reaches its title, Scarfman boots from disk).
+A program that switches to native mode is followed: emulated seconds count on
+the clock it selects (2 or 4 MHz), `screen` shows 80 by 24 when it selects
+that, `snapshot` and `diff` compare `3C00h`–`FFFFh` as the CPU saw it in the
+memory map and page in force (a `Note:` says when two sides are in different
+maps, and video RAM the screen does not show is marked `video RAM off
+screen`), and coverage is kept and exported per map and page. `disasm` and
+`callees` name from the Model III tables (no Model 4 table is cited yet):
+
+```
+load     seadrg01.cmd  model=4       → Model: Model 4 (128K; its ROM boots it in Model III mode: …)
+                                       ROM: model4-trs32; Boot: READY after …
+run      until=settled               → "BY: Wayne Westmoreland & Terry Gilman"
+```
+
 Switching models needs a fresh machine: `load` with `reset: false` and another
-`model` is refused. `disasm` and `callees` name from the Model I's ROM tables,
-and `fugloy://rom/1/symbols` lists them.
+`model` is refused. `disasm` and `callees` name from the Model I's ROM tables
+on the Model I, and `fugloy://rom/1/symbols` lists them.
 
 Labels live in `<program>.fugloy.json` beside the program (`SEADRG01.CMD` →
 `SEADRG01.fugloy.json`), in the format of
@@ -312,7 +332,9 @@ ran.
 14K ROM and synthetic programs; `test/phase-a-rom.test.js` and
 `test/story-7-rom.test.js` need the Model III ROM named in `fugloy.mcp.json`
 and skip without it, as `test/model1-rom.test.js` does without the Model I's
-(`test/model1.test.js` runs the Model I on a synthetic 12K ROM in CI). Golden transcripts are committed only for sessions on
+(`test/model1.test.js` runs the Model I on a synthetic 12K ROM in CI) and
+`test/model4-rom.test.js` without the Model 4's (`test/model4.test.js` runs the
+Model 4 on a synthetic 14K ROM in CI). Golden transcripts are committed only for sessions on
 the synthetic ROM, since a real ROM's screen text would be in them: stories
 1, 2, and 3 (`test/golden/story-0N.txt`, scripts in `test/stories.js`;
 story 3 is coverage telling code, data, and never-seen bytes apart), each
@@ -343,7 +365,8 @@ not in emu 0.2.0.
 
 ## Not yet
 
-No Model 4 (split off from emu phase 6 until a Model 4 ROM and boot disk are
-supplied), the Model I only at 48K with the Expansion Interface (the emu takes
+No Model 4 native DOS yet (no LS-DOS 6 or TRSDOS 6 disk has been booted, and
+`load` boots the Model 4 in Model III mode only) and no Model 4 ROM symbol
+table, the Model 4 only at 128K (the emu also takes 64K), the Model I only at 48K with the Expansion Interface (the emu takes
 4–48K and `expansion: false`; `load` does not offer them), disk images in
 drive 0 only (unreleased, emu phase 5), and stdio only (Streamable HTTP is an open question, spec §12).

@@ -100,13 +100,13 @@ describe('phase E resources', () => {
     await close();
   });
 
-  it('the ROM symbols resource serves the Model I too, and says the Model 4 is not here', async () => {
+  it('the ROM symbols resource serves the Model I too, and points the Model 4 at the Model III\'s', async () => {
     const { client, close } = await server();
     const text = await read(client, 'fugloy://rom/1/symbols');
     expect(text.split('\n')[0]).toMatch(/^Model I ROM and hardware symbols \(\d+ entries\)/);
     expect(text).toMatch(/^3C00h–3FFFh\s+region\s+/m);
     expect(text).toMatch(/^37E0h\s+/m);
-    expect(await read(client, 'fugloy://rom/4/symbols')).toBe('There are no Model 4 symbols here yet: the Model 4 comes in its own plan once a Model 4 ROM and boot disk are supplied; read fugloy://rom/3/symbols (the Model III) or fugloy://rom/1/symbols (the Model I).');
+    expect(await read(client, 'fugloy://rom/4/symbols')).toBe('There is no Model 4 table: the Model 4 runs here in Model III mode, where disasm and callees name from the Model III\'s tables (its ROM differs from the Model III\'s in 727 bytes, so a name from them is unchecked on the Model 4); read fugloy://rom/3/symbols (the Model III).');
     expect(await read(client, 'fugloy://rom/x/symbols')).toBe('"x" is not a model; read fugloy://rom/3/symbols (the Model III) or fugloy://rom/1/symbols (the Model I).');
     await close();
   });

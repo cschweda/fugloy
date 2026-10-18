@@ -31,7 +31,8 @@ const screenOf = (/** @type {import('@fugloy/emu').Machine} */ m) => m.video.tex
 /**
  * Boot a fresh machine to READY as the emu integration tests do (boot-helpers.js,
  * model1-boot.test.js): in quarter-second slices, ENTER at the ROM's questions (the Model III's
- * Cass?, at 1,500 baud, then Memory Size?; the Model I's MEMORY SIZE?, MEM SIZE? in Level II 1.3),
+ * Cass?, at 1,500 baud, then Memory Size?; the Model 4 ROM's Cass ? and Memory Size? in Model III
+ * mode; the Model I's MEMORY SIZE?, MEM SIZE? in Level II 1.3),
  * then a quarter second more once READY shows, so the cursor settles. A ROM that never shows
  * READY (a synthetic test ROM, or not a BASIC ROM) is run for `limit` seconds and left there.
  * @param {import('@fugloy/emu').Machine} m
@@ -40,7 +41,7 @@ const screenOf = (/** @type {import('@fugloy/emu').Machine} */ m) => m.video.tex
  */
 export function bootToReady(m, limit = BOOT_SECONDS) {
   const quarter = clockOf(m) / 4;
-  const questions = m.model === 1 ? ['SIZE?'] : ['Cass?', 'Memory Size?'];
+  const questions = m.model === 1 ? ['SIZE?'] : m.model === 4 ? ['Cass ?', 'Memory Size?'] : ['Cass?', 'Memory Size?'];
   let answered = 0;
   for (let t = 0; t < limit * 4; t++) {
     const text = screenOf(m);

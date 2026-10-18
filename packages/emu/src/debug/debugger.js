@@ -68,9 +68,15 @@ export class Debugger {
    */
   hooks;
   /**
-   * @type {{ enable(): void, disable(): void, clear(): void, readonly enabled: boolean, readonly bits: Uint8Array }}
-   * Per-byte coverage and the callers map, behind one switch (phase 3 Ruling 6). `bits` is live;
-   * `disable` keeps what was recorded and `clear` empties both.
+   * @type {{ enable(): void, disable(): void, clear(): void, readonly enabled: boolean, readonly bits: Uint8Array,
+   *   readonly keys: string[], bitsOf(key: string): Uint8Array | undefined }}
+   * Per-byte coverage and the callers map, behind one switch (phase 3 Ruling 6). `disable` keeps
+   * what was recorded and `clear` empties both. Coverage is kept per `(map, page)` (spec §8): the
+   * Model III and Model I have only `"0:0"`; the Model 4 keeps one bitfield for each memory map
+   * (port $84 bits 0-1) and 128K page select (bits 4-6, always 0 with 64K) it has run in, keyed
+   * `"<map>:<page>"`. `bits` is the live bitfield of the map and page in force now, `keys` the
+   * keys recorded (`"0:0"` always first, the rest in the order first seen), and `bitsOf` one
+   * key's live bitfield.
    */
   coverage;
   /**
@@ -119,6 +125,14 @@ export class Debugger {
   /** True during the keyboard hook's stand-in RET. */
   #inStandIn = false;
   #bits = new Uint8Array(0x10000);
+  /** True on a machine whose memory has maps and pages (the Model 4), so the bitfield follows them. */
+  #banked = false;
+  /** The memory, for its `map` and `page` on the Model 4. @type {any} */
+  #memory;
+  /** The `(map, page)` `#bits` belongs to, as map × 8 + page. */
+  #covKey = 0;
+  /** @type {Map<number, Uint8Array>} Every `(map, page)`'s bitfield, by map × 8 + page; `0` (`"0:0"`) always present. */
+  #covByKey = new Map();
   /** @type {Map<number, Map<number, CallerEdge>>} target → (from * 8 + kind index) → edge */
   #callers = new Map();
   /** @type {string | null} The current instruction's `instructionInfo` kind (null unless coverage looked it up). */
@@ -153,6 +167,8 @@ export class Debugger {
   #loaded = null;
   /** @type {{ addr: number, bytes: Uint8Array }[]} What the last load placed in memory: each landed manifest block's bytes, read back once the loader finished. */
   #placed = [];
+  /** The Model 4's port $84 byte when the last load placed its bytes (0 on the other models). */
+  #placedReg = 0;
 
   /** @param {any} machine */
   constructor(machine) {
@@ -160,6 +176,9 @@ export class Debugger {
     const cpu = machine.system.cpu;
     this.#cpu = cpu;
     const memory = machine.system.memory;
+    this.#memory = memory;
+    this.#banked = typeof memory.setMapRegister === 'function';
+    this.#covByKey.set(0, this.#bits);
     // The debugger's own reads (an old value, the look-ahead, the trace, the label file) peek: a
     // CPU read of the Model I's $37E0 clears the latch's clock bit, and one of $37EC drops the
     // WD1771's INTRQ. With no Expansion Interface (every Model III) a read has no side effect, and
@@ -212,14 +231,25 @@ export class Debugger {
         dbg.#refresh();
       },
       clear() {
-        dbg.#bits.fill(0);
+        for (const b of dbg.#covByKey.values()) b.fill(0);
+        // Keep "0:0" and the bitfield in force (their arrays stay the same); forget the rest.
+        for (const k of [...dbg.#covByKey.keys()]) if (k !== 0 && k !== dbg.#covKey) dbg.#covByKey.delete(k);
         dbg.#callers.clear();
       },
       get enabled() {
         return dbg.#covOn;
       },
       get bits() {
+        if (dbg.#banked) dbg.#syncBits();
         return dbg.#bits;
+      },
+      get keys() {
+        if (dbg.#banked) dbg.#syncBits();
+        return [...dbg.#covByKey.keys()].map(keyText);
+      },
+      bitsOf(key) {
+        const m = /^(\d):(\d)$/.exec(String(key));
+        return m === null ? undefined : dbg.#covByKey.get(Number(m[1]) * 8 + Number(m[2]));
       },
     };
     this.trace = {
@@ -317,6 +347,7 @@ export class Debugger {
    */
   recordLoad(manifest, bytes) {
     this.#loaded = { manifest: JSON.parse(JSON.stringify(manifest)), sha256: sha256Hex(bytes) };
+    this.#placedReg = this.#banked ? this.#memory.mapRegister : 0;
     // A copy of what landed, so the label file can tell which loaded bytes changed since (a
     // block still `predicted` has not landed). Read after the loader, so a later block wins.
     const read = this.#plain.peek;
@@ -341,21 +372,40 @@ export class Debugger {
    * @returns {import('./label-file.js').LabelFile}
    */
   labelFile({ name, started, input } = {}) {
-    const bits = this.#bits.slice();
+    if (this.#banked) this.#syncBits();
+    /** @type {Map<number, Uint8Array>} */
+    const copies = new Map();
+    for (const [k, b] of this.#covByKey) copies.set(k, b.slice());
+    // The loaded bytes are compared in the map and page they were loaded in (on the Model 4 the
+    // register is set back to the load's for the comparison, then restored; nothing else reads it).
+    const memory = this.#memory;
+    const now = this.#banked ? memory.mapRegister : 0;
+    const then = this.#banked ? this.#placedReg : 0;
     const read = this.#plain.peek;
-    for (const { addr, bytes } of this.#placed) {
-      for (let i = 0; i < bytes.length; i++) {
-        const a = (addr + i) & 0xffff;
-        if (read(a) !== bytes[i]) bits[a] |= WRITE;
+    if (then !== now) memory.setMapRegister(then);
+    try {
+      const key = this.#banked ? memory.map * 8 + memory.page : 0;
+      let bits = copies.get(key);
+      if (bits === undefined) copies.set(key, (bits = new Uint8Array(0x10000)));
+      for (const { addr, bytes } of this.#placed) {
+        for (let i = 0; i < bytes.length; i++) {
+          const a = (addr + i) & 0xffff;
+          if (read(a) !== bytes[i]) bits[a] |= WRITE;
+        }
       }
+    } finally {
+      if (then !== now) memory.setMapRegister(now);
     }
+    /** @type {Map<string, Uint8Array>} */
+    const coverage = new Map();
+    for (const [k, b] of copies) coverage.set(keyText(k), b);
     return writeLabelFile({
       name,
       started,
       input,
       loaded: this.#loaded,
       userLabels: [...this.#labels.values()],
-      bits,
+      bits: coverage,
       callerMap: this.callerMap(),
       cycles: this.#cpu.cycles,
       model: this.#machine.model,
@@ -542,6 +592,7 @@ export class Debugger {
     const len = info.len;
     this.#len = len;
     if (this.#covOn) {
+      if (this.#banked) this.#syncBits();
       this.#kind = info.kind;
       this.#target = info.target;
       const bits = this.#bits;
@@ -622,6 +673,21 @@ export class Debugger {
     else edges.set(key, { from: pc, kind: EDGE_KINDS[e], count: 1 });
   }
 
+  /**
+   * Point `#bits` at the bitfield of the Model 4's map and page in force now, making it on first
+   * use. Called before each mark, so a mark lands in the `(map, page)` of the access, interrupt
+   * responses and a restored state included.
+   */
+  #syncBits() {
+    const memory = this.#memory;
+    const k = memory.map * 8 + memory.page;
+    if (k === this.#covKey) return;
+    this.#covKey = k;
+    let b = this.#covByKey.get(k);
+    if (b === undefined) this.#covByKey.set(k, (b = new Uint8Array(0x10000)));
+    this.#bits = b;
+  }
+
   /** The instrumented `readMemory`: fetches pass straight through. */
   #read = (/** @type {number} */ addr) => {
     const value = this.#plain.readMemory(addr);
@@ -630,7 +696,10 @@ export class Debugger {
       if (k < this.#len && addr === ((this.#pc + k) & 0xffff)) return value;
     }
     addr &= 0xffff;
-    if (this.#marking) this.#bits[addr] |= READ;
+    if (this.#marking) {
+      if (this.#banked) this.#syncBits();
+      this.#bits[addr] |= READ;
+    }
     if (this.#watchMask[addr] & 1) this.#hit('read', addr, value, value);
     if (this.#onMemRead !== null) this.#onMemRead(addr, value, this.#accessPc());
     return value;
@@ -643,7 +712,10 @@ export class Debugger {
     const watched = (this.#watchMask[addr] & 2) !== 0;
     const prev = watched || this.#onMemWrite !== null ? this.#plain.peek(addr) : 0;
     this.#plain.writeMemory(addr, value);
-    if (this.#marking) this.#bits[addr] |= WRITE;
+    if (this.#marking) {
+      if (this.#banked) this.#syncBits();
+      this.#bits[addr] |= WRITE;
+    }
     if (watched) this.#hit('write', addr, value, prev);
     if (this.#onMemWrite !== null) this.#onMemWrite(addr, value, prev, this.#accessPc());
   };
@@ -729,6 +801,9 @@ export class Debugger {
     this.active = this.#covOn || this.#traceOn || this.#breaks.size > 0 || this.#watches.size > 0 || this.#onMemRead !== null || this.#onMemWrite !== null || this.#onPort !== null;
   }
 }
+
+/** A `(map, page)` key, map × 8 + page, as the label file writes it: `"2:1"`. */
+const keyText = (/** @type {number} */ k) => `${k >> 3}:${k & 7}`;
 
 /**
  * @param {Map<number, CallerEdge>} edges

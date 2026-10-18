@@ -96,9 +96,12 @@ export function decodeRle(text) {
 /**
  * Write the §8 object from a debugger session.
  * @param {{ name?: string, started?: string, input?: string,
- *   loaded: { manifest: any, sha256: string } | null, userLabels: Label[], bits: Uint8Array,
- *   callerMap: Map<number, CallerEdge[]>, cycles: number, model?: 1 | 3 }} session
- *   `model` is the machine's (default 3, the Model III), recorded as `program.model`
+ *   loaded: { manifest: any, sha256: string } | null, userLabels: Label[], bits: Uint8Array | Map<string, Uint8Array>,
+ *   callerMap: Map<number, CallerEdge[]>, cycles: number, model?: 1 | 3 | 4 }} session
+ *   `bits` is the 65,536 coverage bytes of `"0:0"`, or a map of `"<map>:<page>"` keys to theirs
+ *   (the Model 4's); `"0:0"` is always written, first, and another key only when a bit in it is
+ *   set, the rest in ascending map, then page. `model` is the machine's (default 3, the Model
+ *   III), recorded as `program.model`.
  * @returns {LabelFile}
  */
 export function writeLabelFile({ name, started, input, loaded, userLabels, bits, callerMap, cycles, model = 3 }) {
@@ -141,9 +144,20 @@ export function writeLabelFile({ name, started, input, loaded, userLabels, bits,
   }
   for (const l of userLabels) labels.set(l.addr, { ...l });
 
-  /** @type {CoverageObject} */
-  const cov = /** @type {any} */ ({ encoding: 'rle-hex' });
-  for (const [field, mask] of COVERAGE_FIELDS) /** @type {any} */ (cov)[field] = encodeRle(bits, mask);
+  const byKey = bits instanceof Map ? bits : new Map([['0:0', bits]]);
+  const keyOrder = (/** @type {string} */ k) => k.split(':').map(Number);
+  const keys = [...byKey.keys()]
+    .filter((k) => k === '0:0' || /** @type {Uint8Array} */ (byKey.get(k)).some((v) => v !== 0))
+    .sort((x, y) => (x === '0:0' ? -1 : y === '0:0' ? 1 : keyOrder(x)[0] - keyOrder(y)[0] || keyOrder(x)[1] - keyOrder(y)[1]));
+  /** @type {Record<string, CoverageObject>} */
+  const coverage = {};
+  for (const key of ['0:0', ...keys.filter((k) => k !== '0:0')]) {
+    const b = byKey.get(key) ?? new Uint8Array(SPACE);
+    /** @type {CoverageObject} */
+    const cov = /** @type {any} */ ({ encoding: 'rle-hex' });
+    for (const [field, mask] of COVERAGE_FIELDS) /** @type {any} */ (cov)[field] = encodeRle(b, mask);
+    coverage[key] = cov;
+  }
 
   /** @type {Record<string, CallerEdge[]>} */
   const callers = {};
@@ -160,7 +174,7 @@ export function writeLabelFile({ name, started, input, loaded, userLabels, bits,
     load,
     entry,
     labels: [...labels.values()].sort((a, b) => a.addr - b.addr),
-    coverage: { '0:0': cov },
+    coverage,
     callers,
     sessions: [session],
   };

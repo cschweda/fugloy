@@ -6,7 +6,7 @@
  * has no header and is known only by its size (the emu `DiskImage` decides all three containers,
  * as `m.fdc.mount` does; emu phase 5 plan, Ruling 4). With `reset` (the default) a fresh Machine
  * of the model asked for (`model`, else the config's defaultModel: the Model I or the Model III,
- * emu phase 6) boots its ROM to READY first, as the emu integration tests do; a disk image instead
+ * emu phase 6, or the Model 4, emu phase 6b, whose ROM boots it in Model III mode) boots its ROM to READY first, as the emu integration tests do; a disk image instead
  * goes into drive 0 of a fresh Machine, which the ROM boots from. Coverage is on from the start
  * (Ruling 3).
  */
@@ -91,17 +91,20 @@ export const MODEL1_BOOT_SECTOR = 0x4200;
 export const bootSectorOf = (/** @type {number} */ n) => (n === 1 ? MODEL1_BOOT_SECTOR : BOOT_SECTOR);
 
 /**
- * `model` as load takes it: 1 or 3, or undefined for the config's defaultModel. Throws a sentence otherwise.
+ * `model` as load takes it: 1, 3, or 4, or undefined for the config's defaultModel. Throws a sentence otherwise.
  * @param {unknown} model
- * @returns {1 | 3 | undefined}
+ * @returns {1 | 3 | 4 | undefined}
  */
 export function checkModel(model) {
-  if (model === undefined || model === 1 || model === 3) return model;
-  if (model === 4) {
-    throw new Error('There is no Model 4 yet: it needs a Model 4 ROM and boot disk to prove it boots, and comes in its own plan once one is supplied; call load with model 1 (the Model I) or 3 (the Model III).');
-  }
-  throw new Error(`model must be 1 (the Model I) or 3 (the Model III), not ${String(model)}.`);
+  if (model === undefined || model === 1 || model === 3 || model === 4) return model;
+  throw new Error(`model must be 1 (the Model I), 3 (the Model III), or 4 (the Model 4), not ${String(model)}.`);
 }
+
+/** The manifest's `Model:` line for a machine other than the Model III (whose manifest is as it was before the others came). */
+const MODEL_LINE = /** @type {Record<number, string>} */ ({
+  1: 'Model: Model I (48K, with the Expansion Interface)',
+  4: 'Model: Model 4 (128K; its ROM boots it in Model III mode: memory map 0, 2 MHz, 64 by 16)',
+});
 
 /** How long `load` lets the ROM take to read a disk's boot sector and jump to it. */
 export const DISK_BOOT_SECONDS = 5;
@@ -128,10 +131,10 @@ function locate(/** @type {string} */ given, /** @type {import('../config.js').C
 export default {
   name: 'load',
   description:
-    'Load a .CMD, .BAS (tokenized or ASCII), or .CAS program, or a JV1, JV3, or DMK disk image, detected from its content. By default a fresh machine (model 1, the Model I, or 3, the Model III; the config\'s defaultModel when model is not given) boots its ROM to READY first; reset: false loads into the machine as it is. A disk image goes into drive 0 of a fresh machine, and the ROM boots it: load runs until the ROM jumps to the boot sector (4300h on the Model III, 4200h on the Model I; or 5 s emulated), and the disk\'s own loader then reads the rest as the machine runs, which takes seconds of emulated time (the drive turns at 300 rpm), so follow it with run until "settled", repeated until the program\'s screen appears; with reset: false the disk is only put in drive 0 of the running machine, and reset boots from it. Returns the manifest: format, blocks, entry point, the ROM, the sidecar label file (<program>.fugloy.json beside the program, or failing that in the fixtures folder, whose labels are loaded; writes always go beside the program; one that cannot be used is reported and left alone), and the resolved path. Coverage is recorded from the start.',
+    'Load a .CMD, .BAS (tokenized or ASCII), or .CAS program, or a JV1, JV3, or DMK disk image, detected from its content. By default a fresh machine (model 1, the Model I; 3, the Model III; or 4, the Model 4, whose ROM boots it in Model III mode; the config\'s defaultModel when model is not given) boots its ROM to READY first; reset: false loads into the machine as it is. A disk image goes into drive 0 of a fresh machine, and the ROM boots it: load runs until the ROM jumps to the boot sector (4300h on the Model III and the Model 4, 4200h on the Model I; or 5 s emulated), and the disk\'s own loader then reads the rest as the machine runs, which takes seconds of emulated time (the drive turns at 300 rpm), so follow it with run until "settled", repeated until the program\'s screen appears; with reset: false the disk is only put in drive 0 of the running machine, and reset boots from it. Returns the manifest: format, blocks, entry point, the ROM, the sidecar label file (<program>.fugloy.json beside the program, or failing that in the fixtures folder, whose labels are loaded; writes always go beside the program; one that cannot be used is reported and left alone), and the resolved path. Coverage is recorded from the start.',
   inputSchema: {
     path: z.string().describe('The program file; relative paths resolve against the working folder, then the config\'s fixtures folder'),
-    model: z.number().int().optional().describe('The machine model: 1 (the Model I, with the Expansion Interface: roms.model1) or 3 (the Model III: roms.model3); default the config\'s defaultModel. A different model than the running machine\'s needs reset'),
+    model: z.number().int().optional().describe('The machine model: 1 (the Model I, with the Expansion Interface: roms.model1), 3 (the Model III: roms.model3), or 4 (the Model 4, 128K, booted in Model III mode: roms.model4); default the config\'s defaultModel. A different model than the running machine\'s needs reset'),
     reset: z.boolean().optional().describe('Make a fresh machine and boot it to READY first (default true); false loads into the running machine'),
   },
   /**
@@ -236,8 +239,8 @@ export default {
     }
     else if (manifest.entry !== undefined && manifest.entry !== null) lines.push(`Entry: ${hex4(manifest.entry)} (the PC is there now)`);
     else lines.push('Entry: none (a BASIC program; key RUN to start it)');
-    // The Model III's manifest is as it was before the Model I came; a Model I's names its model.
-    if (m.model !== 3) lines.push(`Model: ${modelName(m.model)} (48K, with the Expansion Interface)`);
+    // The Model III's manifest is as it was before the Model I came; another model's names it.
+    if (m.model !== 3) lines.push(MODEL_LINE[m.model] ?? `Model: ${modelName(m.model)}`);
     lines.push(`ROM: ${m.rom.recognized ?? `unrecognised (SHA-256 ${m.rom.sha256.slice(0, 16)}…)`}`);
     lines.push(boot);
     lines.push(sidecarLine(session.sidecar));

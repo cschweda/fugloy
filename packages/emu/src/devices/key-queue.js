@@ -122,7 +122,7 @@ export class KeyQueue {
   #matrix;
   /** @type {() => number} */
   #now;
-  /** @type {number} */
+  /** @type {() => number} */
   #clockHz;
   /** @type {KeyEvent[]} Matrix events in time order. */
   #events = [];
@@ -144,12 +144,13 @@ export class KeyQueue {
   /**
    * @param {import('./keyboard.js').KeyboardMatrix} matrix
    * @param {() => number} now the CPU's T-state count
-   * @param {number} [clockHz] the CPU clock `type`'s cps counts in (the Model III's by default)
+   * @param {number | (() => number)} [clockHz] the CPU clock `type`'s cps counts in (the Model III's
+   *   by default), or a function returning it when the clock can change (the Model 4's switch)
    */
   constructor(matrix, now, clockHz = CPU_CLOCK_HZ) {
     this.#matrix = matrix;
     this.#now = now;
-    this.#clockHz = clockHz;
+    this.#clockHz = typeof clockHz === 'function' ? clockHz : () => clockHz;
   }
 
   /**
@@ -190,7 +191,7 @@ export class KeyQueue {
     if (mode === 'hook') return this.feed(str);
     if (mode !== 'matrix') throw new Error(`type: mode must be 'matrix' or 'hook', not ${String(mode)}`);
     if (!(cps > 0) || !Number.isFinite(cps)) throw new Error(`type: cps must be a positive number, not ${String(cps)}`);
-    const period = Math.round(this.#clockHz / cps);
+    const period = Math.round(this.#clockHz() / cps);
     const hold = Math.round(period / 2);
     const keys = Array.from(str, (ch) => this.#mapped(ch, 'type'));
     this.#compact();

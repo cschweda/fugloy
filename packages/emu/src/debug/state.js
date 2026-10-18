@@ -3,7 +3,8 @@
  * restore it into a system booted from the same ROM.
  *
  * The state carries everything the machine needs to resume mid-program:
- * CPU registers and interrupt state, RAM and video RAM, the I/O latches,
+ * CPU registers and interrupt state, RAM and video RAM (all of the Model 4's
+ * banks and its 2K, and its port $84 register), the I/O latches,
  * the FDC (including an in-flight command), the cassette tape, and the
  * full contents of every mounted disk (writes are in-memory, so the disk
  * bytes ARE the disk state). The ROM itself is NOT included — a state is
@@ -139,6 +140,8 @@ export function serializeState(system) {
   // they were, and from a Model I's without the interface) and its lowercase modification
   if (io.latch) state.latch = io.latch.bits;
   if (system.model?.id === 1) state.lowercase = !!system.lowercase;
+  // The Model 4's port $84 register (memory map, video page, 128K page), absent from other states
+  if (system.model?.id === 4) state.memory.map = system.memory.mapRegister;
   for (const key of CPU_SCALARS) state.cpu[key] = cpu[key];
   for (const key of IO_SCALARS) state.io[key] = io[key];
   for (const key of FDC_SCALARS) state.fdc[key] = fdc[key];
@@ -184,6 +187,10 @@ export function restoreState(system, state) {
   if (ram.length !== system.memory.ram.length) {
     throw new Error(`This ${system.model?.name ?? "Model III"} save state has ${ram.length / 1024}K of RAM; the machine has ${system.memory.ram.length / 1024}K, and a state restores only into a machine with the same RAM`);
   }
+  const videoRam = fromBase64(state.memory.videoRam);
+  if (videoRam.length !== system.memory.videoRam.length) {
+    throw new Error(`This ${system.model?.name ?? "Model III"} save state has ${videoRam.length} bytes of video RAM; the machine has ${system.memory.videoRam.length}, and a state restores only into a machine with the same video RAM`);
+  }
 
   // A Model I state restores only into a Model I fitted the same way: the Expansion Interface
   // (its latch, its disk controller) and the lowercase modification (what video RAM holds).
@@ -210,9 +217,13 @@ export function restoreState(system, state) {
   cpu.wz ??= 0; // absent in version-1 saves from before emu phase 1
   cpu.afterPrefix ??= false; // likewise
   for (const key of IO_SCALARS) io[key] = state.io[key];
+  // The Model 4's clock follows its mode register's bit 6; the state's disk counters are already
+  // in that clock's T-states, so nothing is rescaled.
+  if (system.model?.id === 4) system.selectClock((io.modeRegister & 0x40) !== 0, { rescale: false });
 
   system.memory.ram.set(ram);
-  system.memory.videoRam.set(fromBase64(state.memory.videoRam));
+  system.memory.videoRam.set(videoRam);
+  if (system.model?.id === 4) system.memory.setMapRegister(state.memory.map ?? 0);
   system.memory.videoDirty = true;
 
   for (const key of FDC_SCALARS) fdc[key] = state.fdc[key];
