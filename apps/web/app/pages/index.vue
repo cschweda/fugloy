@@ -683,7 +683,7 @@ onBeforeUnmount(() => {
             <ManualTab :request="manualRequest" @back="backToListing" />
           </div>
           <div id="right-panel-run" v-show="rightTab === 'run'" role="tabpanel" aria-labelledby="right-tab-run" class="flex min-h-0 flex-1 flex-col" data-testid="run-panel" data-own-keys>
-            <component :is="RunTab" v-if="RunTab !== null && run !== null && sources !== null" :run="run" :sources="sources" :scroll-listing="scrollTo" />
+            <component :is="RunTab" v-if="RunTab !== null && run !== null && sources !== null" :run="run" :sources="sources" :scroll-listing="scrollTo" :shown="rightTab === 'run'" />
             <div v-else-if="runError !== null" class="fg-panel" data-testid="run-load-error">
               <p role="alert">{{ runError }}</p>
               <p><button type="button" class="fg-button" @click="runTab.load()">Retry</button></p>

@@ -37,8 +37,9 @@ test('open the site, Write a program, press Run: the screen is blank, with no RO
   await expect.poll(() => centre(page)).toEqual(BG);
   // The Model III's raster: 64x16 cells of 8x12 from its own character generator.
   expect(await page.getByTestId('trs-canvas').evaluate((c: HTMLCanvasElement) => [c.width, c.height])).toEqual([512, 192]);
-  // Run doesn't move the focus; the screen says how to type to it.
-  await expect(page.getByTestId('run-run')).toBeFocused();
+  // 5D: this tab's Run ▶ gives the screen the focus; without it, the screen says how to type to it.
+  await expect(page.getByTestId('trs-screen')).toBeFocused();
+  await page.getByTestId('run-run').focus();
   await expect(page.getByTestId('trs-screen')).toContainText('Click the screen to type to the TRS-80.');
   // The listing refreshed quietly: the program is open, and Source ✎ is still the left tab.
   await expect(page.getByTestId('file-name')).toHaveText('clear-screen.cmd');
@@ -286,7 +287,7 @@ test('the screen-text mirror lists the screen, closed until opened, and every de
   // Tab from Run ▶ reaches each control in turn.
   await page.getByTestId('run-run').focus();
   const order: string[] = [];
-  for (let k = 0; k < 12; k++) {
+  for (let k = 0; k < 24; k++) {
     await page.keyboard.press('Tab');
     order.push(await page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.testid ?? document.activeElement?.tagName ?? ''));
   }

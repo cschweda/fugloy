@@ -8,25 +8,35 @@
 // the host keeps it so. The box around it is the focus element:
 // keys reach the machine only while it has focus (attachKeyboard), Tab leaves it, and blur
 // releases every key. While a program runs and the screen does not have
-// focus, it says how to type to it. Under it, outside its application role, the screen as text
-// (ScreenText, 5C), which each draw refreshes.
+// focus, it says how to type to it. With no machine and a `notice` (5D: no ROM for the model), the
+// tube shows the notice's lines in the model's own font, and the box carries data-notice="no-rom".
+// The screen as text (ScreenText, 5C) is RunTab's, in its Debugger.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { Machine } from '@fugloy/emu';
-import ScreenText from './ScreenText.vue';
 import { attachKeyboard } from '~/utils/emulator/keyboard';
-import { renderScreen, SCREEN_BG, screenSize, screenView, tubeWidth } from '~/utils/emulator/screen';
-import type { ScreenView } from '~/utils/emulator/screen';
+import { renderNotice, renderScreen, SCREEN_BG, screenSize, screenView, tubeWidth } from '~/utils/emulator/screen';
+import type { ScreenFont, ScreenView } from '~/utils/emulator/screen';
+import type { ModelId } from '~/utils/store';
 
-const props = defineProps<{ machine: Machine | null; running: boolean }>();
+const props = defineProps<{
+  machine: Machine | null;
+  running: boolean;
+  /** Lines the tube shows while there is no machine (the no-ROM notice); null for a blank tube. */
+  notice?: readonly string[] | null;
+  /** The model whose 64x16 tube and font show with no machine (the Model III's by default). */
+  model?: ModelId;
+}>();
 
-/** The tube with no machine: a Model III's 64x16. */
-const BLANK: ScreenView = { columns: 64, rows: 16, wide: false, inverse: false, font: 'model3', altCharset: false };
-const BLANK_SIZE = screenSize(BLANK);
+const FONTS: Readonly<Record<ModelId, ScreenFont>> = { 1: 'model1', 3: 'model3', 4: 'model4' };
+/** The tube with no machine: the model's 64x16. */
+const blank = (): ScreenView => ({ columns: 64, rows: 16, wide: false, inverse: false, font: FONTS[props.model ?? 3], altCharset: false });
+/** The canvas's size before its first draw: a Model III's. */
+const BLANK_SIZE = screenSize({ columns: 64, rows: 16, wide: false, inverse: false, font: 'model3', altCharset: false });
+const showingNotice = computed(() => props.machine === null && (props.notice ?? null) !== null);
 
 const host = ref<HTMLElement | null>(null);
 const box = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
-const text = ref<InstanceType<typeof ScreenText> | null>(null);
 const focused = ref(false);
 const rasterHeight = ref(BLANK_SIZE.height);
 const hostWidth = ref(0);
@@ -49,25 +59,29 @@ function context(): CanvasRenderingContext2D | null {
   return canvas.value?.getContext('2d') ?? null;
 }
 
-/** Draws the machine's screen now (only what changed costs anything), or a blank tube with no machine; the text mirror follows. */
+/** Draws the machine's screen now (only what changed costs anything), or with no machine the notice or a blank tube. */
 function draw(): void {
-  paint();
-  text.value?.refresh();
-}
-
-function paint(): void {
   const c = canvas.value;
   const ctx = context();
   if (c === null || ctx === null) return;
   const m = props.machine;
   if (m === null) {
-    // No machine (a Run that did not start): a blank 64x16 tube.
-    rasterHeight.value = BLANK_SIZE.height;
+    // No machine (off, or a Run that did not start): the model's 64x16 tube, blank or with the notice.
+    const view = blank();
+    const size = screenSize(view);
+    rasterHeight.value = size.height;
     image = null;
-    c.width = BLANK_SIZE.width;
-    c.height = BLANK_SIZE.height;
-    ctx.fillStyle = `rgb(${SCREEN_BG[0]},${SCREEN_BG[1]},${SCREEN_BG[2]})`;
-    ctx.fillRect(0, 0, c.width, c.height);
+    c.width = size.width;
+    c.height = size.height;
+    const notice = props.notice ?? null;
+    if (notice === null) {
+      ctx.fillStyle = `rgb(${SCREEN_BG[0]},${SCREEN_BG[1]},${SCREEN_BG[2]})`;
+      ctx.fillRect(0, 0, c.width, c.height);
+      return;
+    }
+    const img = ctx.createImageData(size.width, size.height);
+    renderNotice(notice, view, img.data, size.width);
+    ctx.putImageData(img, 0, 0);
     return;
   }
   const view = screenView(m);
@@ -88,6 +102,10 @@ watch(
     draw();
   },
 );
+// The notice and the blank tube's model matter only with no machine.
+watch([() => props.notice, () => props.model], () => {
+  if (props.machine === null) draw();
+});
 
 onMounted(() => {
   draw();
@@ -122,6 +140,7 @@ defineExpose({
       aria-roledescription="TRS-80 screen"
       aria-label="TRS-80 screen. While it has focus, the keys you type go to the TRS-80; press Tab to leave."
       data-testid="trs-screen"
+      :data-notice="showingNotice ? 'no-rom' : undefined"
       @focus="focused = true"
       @blur="focused = false"
       @mousedown="box?.focus()"
@@ -129,7 +148,6 @@ defineExpose({
       <canvas ref="canvas" class="fg-trs-canvas" v-bind="BLANK_SIZE" data-testid="trs-canvas" />
       <p v-if="running && !focused" class="fg-trs-hint" aria-hidden="true">Click the screen to type to the TRS-80.</p>
     </div>
-    <ScreenText ref="text" :machine="machine" />
   </div>
 </template>
 

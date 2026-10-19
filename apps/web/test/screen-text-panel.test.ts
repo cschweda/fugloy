@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// The screen-text mirror (phase 5C Ruling 13), under the TRS-80 screen: a "Screen text" disclosure,
+// The screen-text mirror (phase 5C Ruling 13; in 5D inside Run ▶'s Debugger, not the screen): a "Screen text" disclosure,
 // closed by default, holding the screen's rows as a list (a blank row reads "blank"). While open it
 // refreshes at most twice a second, only when the text changed, with no live region of its own.
 // "Speak screen changes" (opt-in) speaks through the announcer at most once a second.
@@ -144,18 +144,11 @@ describe('the screen-text mirror', () => {
     expect(region()).toBe('The screen changed (5 rows).');
   });
 
-  it('sits under the TRS-80 screen, outside its application role, and follows each draw', async () => {
+  it('is not inside the TRS-80 screen (5D: Run ▶\'s Debugger holds it and refreshes it each frame)', async () => {
     const m = machine();
     w = mount(defineComponent({ setup: () => () => h(TrsScreen, { machine: m, running: true }) }), { attachTo: document.body });
     await nextTick();
-    const app = document.querySelector('[data-testid="trs-screen"]')!;
-    expect(details()).not.toBeNull();
-    expect(app.contains(details())).toBe(false);
-    await open();
-    put(m, 0, 'DRAWN');
-    vi.advanceTimersByTime(600);
-    (w.findComponent(TrsScreen).vm as unknown as { draw(): void }).draw();
-    await nextTick();
-    expect(items()[0]).toBe('DRAWN');
+    expect(document.querySelector('[data-testid="trs-screen"]')).not.toBeNull();
+    expect(details()).toBeNull();
   });
 });

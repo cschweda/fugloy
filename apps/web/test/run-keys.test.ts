@@ -254,6 +254,46 @@ describe('the Run tab', () => {
     }
   });
 
+  it('turns the machine on the first time it shows, only with a ROM for the model and nothing run or said yet (5D)', async () => {
+    sources = createSources({ open: async () => null, starter: async () => starter });
+    await sources.start();
+    await sources.create();
+    const powerOn = vi.mocked(fakeRun.powerOn);
+    powerOn.mockClear();
+    // No ROM: the tube says so, and nothing is turned on.
+    let t = attach(RunTab, { run: fakeRun, sources, shown: true });
+    await flushPromises();
+    expect(powerOn).not.toHaveBeenCalled();
+    expect(t.get('[data-testid="trs-screen"]').attributes('data-notice')).toBe('no-rom');
+    t.unmount();
+    const have = vi.spyOn(fakeRoms, 'have').mockReturnValue(true);
+    const info = vi.spyOn(fakeRoms, 'info').mockReturnValue({ name: 'model3.rom', recognized: null } as unknown as ReturnType<Roms['info']>);
+    try {
+      // Hidden, then shown: on at the first show only.
+      t = attach(RunTab, { run: fakeRun, sources, shown: false });
+      await flushPromises();
+      expect(powerOn).not.toHaveBeenCalled();
+      expect(t.get('[data-testid="trs-screen"]').attributes('data-notice')).toBeUndefined();
+      await t.setProps({ shown: true });
+      await flushPromises();
+      expect(powerOn).toHaveBeenCalledTimes(1);
+      await t.setProps({ shown: false });
+      await t.setProps({ shown: true });
+      await flushPromises();
+      expect(powerOn).toHaveBeenCalledTimes(1);
+      t.unmount();
+      // Something already said (a Run from Source ✎ that refused): left as it is.
+      fakeRun.message.value = 'The program has 1 error, so it did not run.';
+      attach(RunTab, { run: fakeRun, sources, shown: true });
+      await flushPromises();
+      expect(powerOn).toHaveBeenCalledTimes(1);
+    } finally {
+      fakeRun.message.value = null;
+      have.mockRestore();
+      info.mockRestore();
+    }
+  });
+
   it('says a refused ROM in the alert region, and good news in the status region', async () => {
     sources = createSources({ open: async () => null, starter: async () => starter });
     await sources.start();
@@ -315,6 +355,27 @@ describe('the Run tab while debugging (5C)', () => {
     // Follow is the coordinator's, kept for the session.
     await t.get('[data-testid="run-follow"]').setValue(true);
     expect(run.debug.follow.value).toBe(true);
+  });
+
+  it('opens the Debugger when the Run attaches it, and its Screen text follows each frame (5D)', async () => {
+    const { run, clock, t } = await debugTab();
+    const box = t.get<HTMLDetailsElement>('[data-testid="debugger"]').element;
+    expect(box.open).toBe(false);
+    await button(t, 'run-run').trigger('click');
+    await flushPromises();
+    clock.frame();
+    await flushPromises();
+    expect(box.open).toBe(true);
+    const mirror = t.get<HTMLDetailsElement>('[data-testid="screen-text"]').element;
+    mirror.open = true;
+    mirror.dispatchEvent(new Event('toggle'));
+    await flushPromises();
+    run.runner.value!.machine.mem.write(0x3c00, new TextEncoder().encode('FRAMED'));
+    // The mirror reads at most twice a second: past that, the next frame refreshes it.
+    await new Promise((r) => setTimeout(r, 550));
+    clock.frame();
+    await flushPromises();
+    expect(t.findAll('[data-testid="screen-text-row"]')[0]!.text()).toMatch(/^FRAMED/);
   });
 
   it('Run to Here with no line in Source says how to give it one', async () => {
