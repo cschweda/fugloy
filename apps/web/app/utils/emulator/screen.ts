@@ -56,6 +56,18 @@ export function screenSize(view: ScreenView): { width: number; height: number } 
   return { width: across * SETS[view.font].width, height: view.rows * cellHeight(view) };
 }
 
+/**
+ * The tube's width in CSS pixels for a raster `rasterHeight` rows high in a host `available`
+ * pixels wide: the widest 4:3 tube that fits whose height is a whole multiple of the rows (so
+ * every model scales by a whole number down the screen), in steps of rasterHeight x 4/3 (256 for
+ * 192 rows, 320 for 240). Null when not even one step fits: then the tube takes the host's width.
+ */
+export function tubeWidth(rasterHeight: number, available: number): number | null {
+  const unit = (rasterHeight * 4) / 3;
+  const k = Math.floor(available / unit);
+  return k >= 1 ? k * unit : null;
+}
+
 /** The view a machine's screen is in now. */
 export function screenView(m: Machine): ScreenView {
   const v = m.video;

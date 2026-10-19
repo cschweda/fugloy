@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { CG_MODEL1, CG_MODEL1_LOWERCASE, CG_MODEL3, CG_MODEL4 } from '../app/utils/emulator/glyphs.generated';
 import type { GlyphSet } from '../app/utils/emulator/glyphs.generated';
 import { Machine } from '@fugloy/emu';
-import { SCREEN_BG, SCREEN_FG, renderNotice, renderScreen, screenSize, screenView } from '../app/utils/emulator/screen';
+import { SCREEN_BG, SCREEN_FG, renderNotice, renderScreen, screenSize, screenView, tubeWidth } from '../app/utils/emulator/screen';
 import type { ScreenView } from '../app/utils/emulator/screen';
 import { stubRom } from '../app/utils/emulator/stub-rom';
 
@@ -219,5 +219,22 @@ describe('renderNotice', () => {
     raw[0] = 0x41;
     raw[64] = 0x42;
     expect(renderScreen(raw, M1, out, width)).toBe(true);
+  });
+});
+
+describe('tubeWidth', () => {
+  it('picks the widest 4:3 tube that fits whose height is a whole multiple of the raster rows, on every model', () => {
+    // Model I (384x192): k=3 is 768 wide, 576 high, three screen pixels per row.
+    expect(tubeWidth(screenSize(M1).height, 800)).toBe(768);
+    expect((768 * 3) / 4 / screenSize(M1).height).toBe(3);
+    // Model III/4 (512x192): the same steps of 256.
+    expect(tubeWidth(screenSize(M3).height, 800)).toBe(768);
+    expect(tubeWidth(screenSize(M3).height, 767)).toBe(512);
+    expect(tubeWidth(screenSize(M3).height, 256)).toBe(256);
+    // Model 4 80x24 (640x240): steps of 320.
+    expect(tubeWidth(screenSize(M4WIDE).height, 1000)).toBe(960);
+    // Narrower than one step: the host's whole width (null).
+    expect(tubeWidth(192, 255)).toBeNull();
+    expect(tubeWidth(240, 0)).toBeNull();
   });
 });

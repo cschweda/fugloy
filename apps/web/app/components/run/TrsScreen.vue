@@ -1,10 +1,11 @@
 <script setup lang="ts">
 // The TRS-80's screen (plan 5B, Rulings 4 and 9; 5D's tube): a canvas one pixel per character
 // generator pixel (384x192 on the Model I, 512x192 on the Model III and 4, 640x240 at the Model 4's
-// 80x24), shown at 4:3 on a black tube with pixelated scaling. Its width is the largest whole
-// multiple of half the raster's width that fits the host (so each pixel scales by a whole number
-// down the screen, and by a whole or half number across), or the host's whole width when not even
-// one fits; a ResizeObserver on the host keeps it so. The box around it is the focus element:
+// 80x24), shown at 4:3 on a black tube with pixelated scaling. Its width is tubeWidth's: the
+// widest 4:3 tube that fits the host whose height is a whole multiple of the raster's rows (each
+// row k screen pixels high on every model; across, the scale is k x 2/3 on the Model I and k / 2
+// on the III and 4), or the host's whole width when not even one step fits; a ResizeObserver on
+// the host keeps it so. The box around it is the focus element:
 // keys reach the machine only while it has focus (attachKeyboard), Tab leaves it, and blur
 // releases every key. While a program runs and the screen does not have
 // focus, it says how to type to it. Under it, outside its application role, the screen as text
@@ -13,7 +14,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { Machine } from '@fugloy/emu';
 import ScreenText from './ScreenText.vue';
 import { attachKeyboard } from '~/utils/emulator/keyboard';
-import { renderScreen, SCREEN_BG, screenSize, screenView } from '~/utils/emulator/screen';
+import { renderScreen, SCREEN_BG, screenSize, screenView, tubeWidth } from '~/utils/emulator/screen';
 import type { ScreenView } from '~/utils/emulator/screen';
 
 const props = defineProps<{ machine: Machine | null; running: boolean }>();
@@ -27,17 +28,16 @@ const box = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
 const text = ref<InstanceType<typeof ScreenText> | null>(null);
 const focused = ref(false);
-const raster = ref(BLANK_SIZE.width);
+const rasterHeight = ref(BLANK_SIZE.height);
 const hostWidth = ref(0);
 let image: ImageData | null = null;
 let detach: (() => void) | null = null;
 let resize: ResizeObserver | null = null;
 
-/** The tube's CSS width: k x (raster width / 2) for the largest whole k that fits, else the host's. */
-const tubeWidth = computed((): string => {
-  const unit = raster.value / 2;
-  const k = Math.floor(hostWidth.value / unit);
-  return k >= 1 ? `${k * unit}px` : '100%';
+/** The tube's CSS width (tubeWidth's), or the host's whole width when not even one step fits. */
+const tubeCss = computed((): string => {
+  const w = tubeWidth(rasterHeight.value, hostWidth.value);
+  return w === null ? '100%' : `${w}px`;
 });
 
 function measure(): void {
@@ -62,7 +62,7 @@ function paint(): void {
   const m = props.machine;
   if (m === null) {
     // No machine (a Run that did not start): a blank 64x16 tube.
-    raster.value = BLANK_SIZE.width;
+    rasterHeight.value = BLANK_SIZE.height;
     image = null;
     c.width = BLANK_SIZE.width;
     c.height = BLANK_SIZE.height;
@@ -72,7 +72,7 @@ function paint(): void {
   }
   const view = screenView(m);
   const { width, height } = screenSize(view);
-  raster.value = width;
+  rasterHeight.value = height;
   if (image === null || c.width !== width || c.height !== height) {
     c.width = width;
     c.height = height;
@@ -116,7 +116,7 @@ defineExpose({
     <div
       ref="box"
       class="fg-trs"
-      :style="{ width: tubeWidth }"
+      :style="{ width: tubeCss }"
       tabindex="0"
       role="application"
       aria-roledescription="TRS-80 screen"

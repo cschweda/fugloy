@@ -104,8 +104,8 @@ a few lines of its own source that blank the screen and halt; a program that
 calls the ROM is stopped with a sentence naming its line. **Open as source
 ✎**, in the Program tab and Export ▾, turns a disassembly into a source:
 Sea Dragon opened that way reassembles byte for byte and, on your Model III
-ROM, runs to its title screen. The screen's characters are drawn from
-X.Org's public-domain misc-misc fonts, not from a TRS-80 character ROM.
+ROM, runs to its title screen. The screen's characters are the TRS-80's
+own character generators (each model's), from xtrs's `trs_chars.c`.
 
 **The running line** (plan phase 5C, merged to main 2026-10-19) shows a
 program running: the line it is on is lit live, with a fading trail of the
