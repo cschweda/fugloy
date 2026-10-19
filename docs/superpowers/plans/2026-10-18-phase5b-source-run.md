@@ -48,7 +48,7 @@
    - `dt` is capped at 1/30 s, so a hidden tab does not cause a catch-up storm.
    - `clockHz` is read every frame, because the Model 4 can switch clock.
    - A hidden page stops rAF, which pauses the program.
-4. **Glyphs: X.Org `font-misc-misc` `6x12.bdf`, and `6x10.bdf` for 80×24, public domain.** The headers carry "Public domain font. Share and enjoy." (gitlab.freedesktop.org/xorg/font/misc-misc).
+4. **Glyphs: X.Org `font-misc-misc` `6x12.bdf`, and `6x10.bdf` for 80×24, public domain.** The headers carry `COPYRIGHT "Public domain terminal emulator font.  Share and enjoy."` (gitlab.freedesktop.org/xorg/font/misc-misc, pinned at commit `c4e2af05`, font-misc-misc 1.1.3).
    - 6×12 is exactly the Model III's cell: 384×192 / 64×16.
    - `scripts/build-glyphs.ts` converts a local copy once into the committed `utils/emulator/glyphs.generated.ts`, covering 20H–7EH; 7FH is self-drawn. It records the source URL and SHA-256, and refuses a BDF without the public-domain line.
    - 80H–BFH are computed as 2×3 blocks. Bit 0 is top-left, 1 top-right, 2 middle-left, 3 middle-right, 4 bottom-left, 5 bottom-right.
@@ -65,8 +65,8 @@
 
    A program that needs the ROM is caught twice, each time with a sentence naming the line:
    - **Statically:** a `kind: 'rom'` symbol used, an `RST`, or a `CALL`/`JP` target below the ROM's end.
-   - **At run time:** the HALT trap (PC inside the ROM). The caller is found from the stacked return address through `sourceMap.lineOf`. `EI` under the stub stops at the `$0038` trap with a sentence.
-   - Confirm with a test whether emu leaves PC on the HALT or past it.
+   - **At run time:** the HALT trap (PC inside the ROM). The caller is found from the stacked return address through `sourceMap.lineOf`. `EI` under the stub stops at the `$0038` trap with a sentence once an interrupt is delivered: always on the Model I (its clock interrupt has no mask), and on the Model III and 4 only after the program unmasks one at port `E0H` (the ROM normally does; with every source masked a bare `EI` runs on, as on the hardware).
+   - Confirmed by a test: emu leaves PC just past the HALT, so the trap reads the HALT at PC-1.
 6. **ROMs: per model, by hash.**
    - Stored in the IndexedDB `roms` store keyed by model (`1 | 3 | 4`) as `{ bytes, sha256, recognized, name, addedAt }`.
    - A `ROM_HASHES` name gives the model by its prefix. A file Fugløy doesn't recognise is kept only at a size the model takes, with the model chosen by the user, and marked as not recognised.

@@ -221,6 +221,27 @@ Workbench, phase 5B (Source and Run), in progress on branch `phase5b` (plan
   never replaces one) and never a ROM. The site now depends on `@fugloy/asm`,
   `@fugloy/emu`, and CodeMirror 6 (`@codemirror/state`, `view`, `commands`,
   `lint`; MIT), none of them yet on the first screen.
+- **The emulator runtime** (`apps/web/app/utils/emulator/`, no DOM; not yet
+  in the page). With no ROM, a program runs on Fugløy's own stub ROM
+  (`stub-rom.z`: DI, a stack, a blank screen, HALT; assembled by asm at run
+  time and padded with HALT to the model's ROM size, so it holds no Tandy
+  code). A program that needs the ROM is caught twice, each time with a
+  sentence naming the line: before running (a ROM routine's name, an RST,
+  or a CALL or JP into the ROM), and at run time, when PC lands in the
+  stub's HALTs (emu leaves PC just past a HALT, which a test checks), naming
+  the calling line, or the EI line for an interrupt at `$0038`. On the
+  Model III every interrupt stays masked until a program unmasks one at port
+  `E0H`, so a bare EI runs on there, as on the hardware; the Model I's clock
+  interrupt cannot be masked. A user ROM boots to READY once per ROM per page
+  session, answering Cass? and Memory Size? (SIZE? on the Model I), and its
+  snapshot is kept. The runner paces frames by elapsed time at the machine's
+  clock, capped at a 30th of a second, carrying overshoot. `renderScreen`
+  draws video RAM into an RGBA buffer: 2x3 graphics blocks, 32-column
+  doubling, and the Model 4's 80x24 and inverse video. Its glyphs are X.Org
+  font-misc-misc's `6x12.bdf` and `6x10.bdf` (public domain), converted by
+  `apps/web/scripts/build-glyphs.ts`, which refuses a font whose header does
+  not say so, into `glyphs.generated.ts`, which records each font's pinned
+  URL and SHA-256. `attachKeyboard` passes keys from the screen element only.
 
 ### Testing
 

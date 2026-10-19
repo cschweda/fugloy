@@ -83,6 +83,11 @@ const byline = (s: Source): string => (s.author === s.publisher ? s.author : `${
         <a href="https://openfontlicense.org/" rel="noopener noreferrer" target="_blank">SIL Open Font License 1.1</a>.
         It is served from this site, from the <a href="https://fontsource.org/fonts/jetbrains-mono" rel="noopener noreferrer" target="_blank">Fontsource</a> package.
       </li>
+      <li data-testid="credit-glyphs">
+        The emulated TRS-80 screen's characters come from the X.Org
+        <a href="https://gitlab.freedesktop.org/xorg/font/misc-misc" rel="noopener noreferrer" target="_blank">misc-misc</a> fonts (<code>6x12</code> and <code>6x10</code>), which are in the public domain.
+        Nothing is copied from a TRS-80's character ROM.
+      </li>
     </ul>
 
     <h2 id="source">Source</h2>

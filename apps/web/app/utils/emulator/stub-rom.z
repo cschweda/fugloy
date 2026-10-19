@@ -1,0 +1,19 @@
+; stub-rom.z: Fugløy's stand-in for the TRS-80 ROM, for running a program
+; that never calls the ROM when no ROM has been added. It holds no Tandy code.
+; It clears the screen and stops; the program is then loaded and started.
+; Every other byte of the ROM's space is HALT (76H), so a program that calls
+; or jumps into the ROM, or takes an interrupt at 0038H, halts there, and the
+; Run tab names the line that did it.
+
+        ORG     0000H
+
+        DI                      ; no interrupts: there is no handler at 0038H
+        LD      SP,0            ; the stack starts at the top of memory
+        LD      HL,3C00H        ; the screen: 3C00H-3FFFH, 64 by 16
+        LD      DE,3C01H
+        LD      BC,3FFH
+        LD      (HL),20H        ; a space in the first cell ...
+        LDIR                    ; ... copied along the other 1023
+        HALT                    ; done: wait for the program to be loaded
+
+        END

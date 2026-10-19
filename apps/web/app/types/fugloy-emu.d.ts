@@ -18,14 +18,15 @@ declare module '@fugloy/emu' {
 
   export interface KeyboardMatrix {
     keyDown(key: string, code: string): boolean;
-    keyUp(code: string): void;
+    keyUp(code: string): boolean;
     reset(): void;
   }
 
   export class TRS80System {
     constructor(options: { romData: Uint8Array });
     cpu: { strictMode: boolean };
-    memory: { videoRam: Uint8Array };
+    /** `inverse` is the Model 4's inverse video (port $84 bit 3); undefined on the other models. */
+    memory: { videoRam: Uint8Array; inverse?: boolean };
     keyboard: KeyboardMatrix;
     bootToCassetteBasic(): boolean;
     runSeconds(seconds: number): number;
@@ -37,6 +38,11 @@ declare module '@fugloy/emu' {
   export interface CmdManifest {
     entry: number;
     [key: string]: unknown;
+  }
+
+  /** A save state from `m.debug.snapshot()`: plain, serializable data. */
+  export interface Snapshot {
+    readonly [key: string]: unknown;
   }
 
   export class Machine {
@@ -51,7 +57,9 @@ declare module '@fugloy/emu' {
     readonly mem: { read(addr: number, len: number): Uint8Array; write(addr: number, bytes: Uint8Array): void };
     readonly video: { readonly raw: Uint8Array; readonly columns: number; readonly rows: number; text(): string[] };
     readonly load: { cmd(bytes: Uint8Array): CmdManifest };
-    readonly debug: { snapshot(): unknown; restore(snap: unknown): void };
+    readonly debug: { snapshot(): Snapshot; restore(snap: Snapshot): void };
+    /** Typing through the matrix at `cps` characters a second (default 20). */
+    readonly keyboard: { type(text: string, opts?: { cps?: number }): void };
     reset(): void;
     step(n?: number): { cycles: number; halted: boolean };
     run(opts?: { cycles?: number; until?: unknown }): RunResult;
