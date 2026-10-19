@@ -17,9 +17,11 @@
 // disclosure (the step controls, Follow, the registers, the breakpoints, Screen text), the ROM.
 // The Debugger opens by itself when a source Run attaches the debugger and when a run pauses; the
 // user's toggle otherwise stands, and the debug keys work with it closed. The first time the tab
-// shows, with a ROM for the model and nothing run or said yet, the machine is turned on. The screen
-// takes the focus after Power on and Reset while the tab shows, and when this tab's Run ▶ or a
-// Program to try starts a program (Ctrl/⌘+Enter elsewhere leaves it). With no ROM for the model and
+// shows, with a ROM for the model and nothing run or said yet, the machine is turned on; the screen
+// takes the focus then only if the focus has not moved meanwhile and is not on a tab or in Source ✎
+// (a keyboard user arrowing through the tabs, or one already typing, keeps it). The screen takes the
+// focus after Power on and Reset while the tab shows, and when this tab's Run ▶ or a Program to try
+// starts a program (Ctrl/⌘+Enter elsewhere leaves it). With no ROM for the model and
 // no machine, the tube says so in its own font.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import TrsScreen from './TrsScreen.vue';
@@ -105,10 +107,15 @@ function pauseOrContinue(): void {
 function focusScreen(): void {
   screen.value?.focus();
 }
-/** Power on (or Reset): the screen takes the focus once the machine is on, if the tab still shows. */
-async function turnOn(how: 'on' | 'reset'): Promise<void> {
+/** Power on (or Reset): the screen takes the focus once the machine is on, if the tab still shows (and `mayFocus` agrees). */
+async function turnOn(how: 'on' | 'reset', mayFocus: () => boolean = () => true): Promise<void> {
   await (how === 'on' ? run.powerOn() : run.reset());
-  if (props.shown !== false && run.power.value === 'on') focusScreen();
+  if (props.shown !== false && run.power.value === 'on' && mayFocus()) focusScreen();
+}
+/** The focus is where it was (`from`), and not on a tab or in the editor. */
+function focusStayed(from: Element | null): boolean {
+  const now = document.activeElement;
+  return now === from && now?.closest('[role="tab"], .cm-editor') == null;
 }
 function togglePower(): void {
   if (run.power.value === 'off') void turnOn('on');
@@ -140,9 +147,10 @@ let firstShow = true;
 async function onShown(): Promise<void> {
   if (!firstShow) return;
   firstShow = false;
+  const from = document.activeElement;
   await Promise.all([roms.start(), sources.start()]);
   if (gone || !props.shown || run.busy.value || run.power.value !== 'off' || run.message.value !== null || !roms.have(model.value)) return;
-  await turnOn('on');
+  await turnOn('on', () => focusStayed(from));
 }
 watch(
   () => props.shown,
@@ -161,7 +169,7 @@ async function addRom(file: File): Promise<void> {
   romMessage.value = null;
   const r = await roms.add(file, undefined, model.value);
   romProblem.value = !r.ok;
-  romMessage.value = r.ok ? `${file.name} is kept in this browser as the ${MODEL_NAMES[r.model]} ROM. Press Run to use it.` : r.reason;
+  romMessage.value = r.ok ? `${file.name} is kept in this browser as the ${MODEL_NAMES[r.model]} ROM. Press Power on to turn it on, or Run ▶ to run your source on it.` : r.reason;
 }
 
 function onPick(e: Event): void {
@@ -276,7 +284,7 @@ defineExpose({ focusScreen });
     </div>
     <ProgramsToTry @run="tryProgram" />
     <details class="fg-run-debugger" data-testid="debugger" ref="debuggerBox">
-      <summary>Debugger</summary>
+      <summary data-testid="debugger-summary">Debugger</summary>
       <div class="fg-run-debug" role="group" aria-label="Debugger controls">
         <button type="button" class="fg-button" data-testid="run-step" :disabled="!underWay" title="Step: run one instruction (F11 or F7)" @click="debug.step()">Step</button>
         <button type="button" class="fg-button" data-testid="run-step-over" :disabled="!underWay" title="Step Over: run one instruction, or a whole CALL, RST or block instruction (F10)" @click="debug.stepOver()">Step Over</button>

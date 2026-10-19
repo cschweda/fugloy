@@ -27,6 +27,12 @@ const NAMES: Record<number, string> = { 1: 'Model I', 3: 'Model III', 4: 'Model 
 const NO_ROM_POWER = (m: number): string => `There is no ${NAMES[m]} ROM in this browser, so the ${NAMES[m]} cannot be turned on. Add your ROM below.`;
 const EXAMPLE_NEEDS_ROM = (title: string, m: number): string => `${title} needs the ${NAMES[m]} ROM, which is not in this browser yet. Add your ROM below, then press Run again.`;
 const POWERED_ON = (m: number): string => `The ${NAMES[m]} is on. Type to it on the screen.`;
+const POWERED_OFF = (m: number): string => `The ${NAMES[m]} is off. Press Power on to turn it on again.`;
+const BG = [0, 0, 0, 0xff]; // the black tube
+
+/** The canvas's centre pixel, RGBA. */
+const centre = (page: Page): Promise<number[]> =>
+  page.getByTestId('trs-canvas').evaluate((c: HTMLCanvasElement) => Array.from(c.getContext('2d')!.getImageData(c.width >> 1, c.height >> 1, 1, 1).data));
 
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'];
 const axe = async (page: Page): Promise<string[]> => {
@@ -185,14 +191,49 @@ test.describe('on the Model III ROM', () => {
     const power = page.getByTestId('machine-power');
     await power.click();
     await expect(power).toHaveText('Power on');
-    // Off with a ROM: a blank tube, no notice.
+    // Off with a ROM: a blank tube, no notice, and the machine says it is off.
     await expect(screen).not.toHaveAttribute('data-notice', 'no-rom');
+    await expect(page.getByTestId('run-message')).toHaveText(POWERED_OFF(3));
+    await expect.poll(() => centre(page)).toEqual(BG);
+    expect(await page.evaluate(() => window.__fugloyTest!.runnerState())).toBe('idle');
     await power.click();
     await expect(power).toHaveText('Power off');
     await expect(screen).toBeFocused();
+    // Stop on the machine with no program turns it off the same way.
+    await expect.poll(async () => (await rows(page)).join('\n'), { timeout: 3000 }).toContain('Cass?');
+    await page.getByTestId('run-stop').click();
+    await expect(power).toHaveText('Power on');
+    await expect(page.getByTestId('run-message')).toHaveText(POWERED_OFF(3));
+    await expect.poll(() => centre(page)).toEqual(BG);
+    await power.click();
+    await expect(power).toHaveText('Power off');
 
     await page.getByTestId('run-model').selectOption('1');
     await expect(screen).toHaveAttribute('data-notice', 'no-rom');
     await expect(page.getByTestId('run-message')).toHaveText(NO_ROM_POWER(1));
+  });
+
+  test('opening Run ▶ by keyboard on the tablist powers on and leaves the focus on the tab', async ({ page }) => {
+    await writeProgram(page);
+    await page.getByTestId('run-rom-input').setInputFiles(ROM!);
+    await expect(page.getByTestId('run-rom-have')).toBeVisible();
+    // A program open, on the Program tab: Run ▶ has not shown yet in this page.
+    await page.goto('/');
+    await page.waitForFunction(() => window.__fugloyTest !== undefined, undefined, { timeout: 30_000 });
+    await page.getByTestId('open-sea-dragon').click();
+    await expect(page.getByTestId('workbench')).toBeVisible();
+    // Program, then Manual, then Run ▶, arrowing through the right tablist.
+    await page.locator('#right-tab-program').focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(page.locator('#right-tab-manual')).toBeFocused();
+    await page.keyboard.press('ArrowRight');
+    const tab = page.locator('#right-tab-run');
+    await expect(tab).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByTestId('run-message')).toHaveText(POWERED_ON(3));
+    await expect(page.getByTestId('machine-power')).toHaveText('Power off');
+    // Give a late focus the time to arrive: it never does.
+    await page.waitForTimeout(300);
+    await expect(tab).toBeFocused();
+    await expect(page.getByTestId('trs-screen')).not.toBeFocused();
   });
 });

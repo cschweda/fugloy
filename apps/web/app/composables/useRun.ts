@@ -16,10 +16,13 @@
 //
 // 5D: the TRS-80 is simply on. `powerOn` boots the model's stored ROM live, with no program: a
 // programless runner (`result: null`), never attached to `debug`, running the ROM's own start-up in
-// the frame loop. `reset` does it again, `powerOff` stops it. `runExample` runs a bundled game's main
+// the frame loop. `reset` does it again, `powerOff` turns it off: the runner is forgotten, so the tube
+// goes dark, and Stop on the machine with no program does the same (Stop on a program keeps 5B's last
+// frame and STOPPED). `runExample` runs a bundled game's main
 // build, also programless, on the booted snapshot. A Run, a power-on and a Program to try each
 // replace whatever runs (one runner), and share the generation counter, so each cancels another
-// still loading. Changing the model while the machine is on turns the new model on.
+// still loading, and each is `busy` while it loads. Changing the model while the machine is on turns
+// the new model on.
 import { computed, effectScope, ref, shallowRef, watch } from 'vue';
 import type { ComputedRef, Ref, ShallowRef } from 'vue';
 import type { AsmResult, Diagnostic } from '@fugloy/asm';
@@ -58,6 +61,7 @@ const MODEL_NAMES: Readonly<Record<Model, string>> = { 1: 'Model I', 3: 'Model I
 export const NO_ROM_POWER = (m: Model): string => `There is no ${MODEL_NAMES[m]} ROM in this browser, so the ${MODEL_NAMES[m]} cannot be turned on. Add your ROM below.`;
 export const EXAMPLE_NEEDS_ROM = (title: string, m: Model): string => `${title} needs the ${MODEL_NAMES[m]} ROM, which is not in this browser yet. Add your ROM below, then press Run again.`;
 export const POWERED_ON = (m: Model): string => `The ${MODEL_NAMES[m]} is on. Type to it on the screen.`;
+export const POWERED_OFF = (m: Model): string => `The ${MODEL_NAMES[m]} is off. Press Power on to turn it on again.`;
 const EXAMPLE_RUNNING = (title: string, m: Model): string => `${title} is running on your ${MODEL_NAMES[m]} ROM.`;
 const EXAMPLE_FAILED = (title: string): string => `${title} could not be loaded: the connection may have dropped, or the site was updated since this page opened. Press Run again, or reload the page if that fails.`;
 const POWER_FAILED = (m: Model, err: unknown): string =>
@@ -102,7 +106,7 @@ export interface Run {
   powerOn(): Promise<void>;
   /** Turns the machine's model on again from the start. */
   reset(): Promise<void>;
-  /** The same as `stop()`. */
+  /** Stops anything running or loading and forgets the runner: the tube goes dark, and the machine says it is off. */
   powerOff(): void;
   /** Pauses the runner itself (the machine, or a Program to try: neither has the debugger). */
   pauseMachine(): void;
@@ -202,6 +206,18 @@ function buildRun(deps: RunDeps): Run {
 
   /** Bumped by every stop, Run, power-on and Program to try: one that began under an older one is cancelled. */
   let generation = 0;
+  /** The generation of the Run loading now, if one is: a second press of Run waits on it, not a power-on or a Program to try. */
+  let runLoading = -1;
+
+  /** `work` with `busy` set while it loads, cleared after unless something newer began meanwhile. */
+  async function loading(gen: number, work: () => Promise<void>): Promise<void> {
+    busy.value = true;
+    try {
+      await work();
+    } finally {
+      if (gen === generation) busy.value = false;
+    }
+  }
 
   /** Cancels whatever is still loading (a Run, a power-on, a Program to try); returns the new generation. */
   function cancelLoading(): number {
@@ -253,8 +269,12 @@ function buildRun(deps: RunDeps): Run {
   /** Turns `model` on (or the current source's, or the Model III's), live from its stored ROM. */
   async function boot(model: Model | null): Promise<void> {
     const gen = cancelLoading();
-    const stale = (): boolean => gen !== generation;
     clearRunner();
+    await loading(gen, () => booting(gen, model));
+  }
+
+  async function booting(gen: number, model: Model | null): Promise<void> {
+    const stale = (): boolean => gen !== generation;
     await sources.start();
     if (stale()) return;
     const got = await parts(stale);
@@ -280,6 +300,10 @@ function buildRun(deps: RunDeps): Run {
     const ex = exampleById(id);
     const model = ex.machine as Model;
     const gen = cancelLoading();
+    await loading(gen, () => trying(gen, id, ex, model));
+  }
+
+  async function trying(gen: number, id: ExampleId, ex: { title: string; mainBuild: string }, model: Model): Promise<void> {
     const stale = (): boolean => gen !== generation;
     const got = await parts(stale);
     if (got === null) return;
@@ -355,10 +379,20 @@ function buildRun(deps: RunDeps): Run {
   }
 
   function stop(): void {
-    const loading = busy.value;
+    // The machine on with no program has nothing to keep on the tube: Stop turns it off.
+    const r = runner.value;
+    if (r !== null && kind.value === 'on' && r.state !== 'stopped') return powerOff();
+    const wasLoading = busy.value;
     cancelLoading();
     runner.value?.stop();
-    if (loading) say(STOPPED);
+    if (wasLoading) say(STOPPED);
+  }
+
+  function powerOff(): void {
+    const m = machineModel.value ?? sources.current.value?.model ?? 3;
+    cancelLoading();
+    clearRunner();
+    say(POWERED_OFF(m));
   }
 
   /** Stops the running program with `why` in place of the usual sentence. */
@@ -389,20 +423,16 @@ function buildRun(deps: RunDeps): Run {
 
   return {
     async run() {
-      if (busy.value) return;
+      if (busy.value && runLoading === generation) return;
       const gen = cancelLoading();
-      busy.value = true;
-      try {
-        await go(gen);
-      } finally {
-        if (gen === generation) busy.value = false;
-      }
+      runLoading = gen;
+      await loading(gen, () => go(gen));
     },
     stop,
     power,
     powerOn: () => boot(null),
     reset: () => boot(machineModel.value),
-    powerOff: () => stop(),
+    powerOff,
     pauseMachine() {
       runner.value?.pause();
     },

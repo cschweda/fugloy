@@ -10,7 +10,8 @@ import { flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import { parseCmd } from '@fugloy/emu';
 import * as realKit from '../app/utils/emulator/kit';
-import { createRun, EXAMPLE_NEEDS_ROM, NO_ROM_POWER, POWERED_ON } from '../app/composables/useRun';
+import { createRun, EXAMPLE_NEEDS_ROM, NO_ROM_POWER, POWERED_OFF, POWERED_ON, STOPPED } from '../app/composables/useRun';
+import type { RunKit } from '../app/composables/useRun';
 import { createSources } from '../app/composables/useSources';
 import { createWorkbench } from '../app/composables/useWorkbench';
 import type { Roms } from '../app/composables/useRoms';
@@ -33,13 +34,20 @@ function fakeRoms(stored: Partial<Record<ModelId, Uint8Array>> = {}): Roms {
 
 const seaDragon = new Uint8Array(readFileSync(fileURLToPath(new URL('../../../examples/sea-dragon/seadrg01.cmd', import.meta.url))));
 
-async function setup(opts: { roms?: Roms; text?: string | null; fetch?: typeof fetch } = {}) {
+/** The kit, arriving only when `arrive` is called. */
+function slowKit() {
+  let arrive!: () => void;
+  const ready = new Promise<void>((r) => (arrive = r));
+  return { kit: async (): Promise<RunKit> => (await ready, realKit), arrive };
+}
+
+async function setup(opts: { roms?: Roms; text?: string | null; fetch?: typeof fetch; kit?: () => Promise<RunKit> } = {}) {
   const sources = createSources({ open: async () => null, starter: async () => LOOP });
   await sources.start();
   if (opts.text !== null) await sources.create({ name: 'loop.z', text: opts.text ?? LOOP });
   const clock = fakeClock();
   const wb = createWorkbench({ readExample: async () => null });
-  const run = createRun({ sources, roms: opts.roms ?? fakeRoms({ 3: realKit.stubRom(3) }), wb, kit: async () => realKit, runner: clock, fetch: opts.fetch });
+  const run = createRun({ sources, roms: opts.roms ?? fakeRoms({ 3: realKit.stubRom(3) }), wb, kit: opts.kit ?? (async () => realKit), runner: clock, fetch: opts.fetch });
   return { sources, clock, run };
 }
 
@@ -93,6 +101,67 @@ describe('the machine session', () => {
     run.powerOff();
     expect(second.state).toBe('stopped');
     expect(run.power.value).toBe('off');
+  });
+
+  it('Final review 1: Power off forgets the runner and says the machine is off, not STOPPED', async () => {
+    const { run } = await setup();
+    await run.powerOn();
+    const r = run.runner.value!;
+    run.powerOff();
+    expect(r.state).toBe('stopped');
+    expect(run.runner.value).toBeNull();
+    expect(run.state.value).toBe('idle');
+    expect(run.machineModel.value).toBeNull();
+    expect(run.power.value).toBe('off');
+    expect(run.message.value).toBe(POWERED_OFF(3));
+    expect(POWERED_OFF(3)).toBe('The Model III is off. Press Power on to turn it on again.');
+    expect(run.problem.value).toBe(false);
+  });
+
+  it('Final review 1: Stop on the machine with no program turns it off too; Stop on a program keeps its last frame and STOPPED', async () => {
+    const { run } = await setup();
+    await run.powerOn();
+    run.stop();
+    expect(run.runner.value).toBeNull();
+    expect(run.power.value).toBe('off');
+    expect(run.message.value).toBe(POWERED_OFF(3));
+    await run.run();
+    const prog = run.runner.value!;
+    expect(run.power.value).toBe('program');
+    run.stop();
+    expect(run.runner.value).toBe(prog);
+    expect(run.state.value).toBe('stopped');
+    expect(run.message.value).toBe(STOPPED);
+  });
+
+  it('Final review 4: busy is set while a power-on and a Program to try load, and cleared after', async () => {
+    const slow = slowKit();
+    const { run } = await setup({ kit: slow.kit, fetch: (async () => new Response(seaDragon)) as unknown as typeof fetch });
+    const on = run.powerOn();
+    await Promise.resolve();
+    expect(run.busy.value).toBe(true);
+    slow.arrive();
+    await on;
+    expect(run.busy.value).toBe(false);
+    expect(run.power.value).toBe('on');
+    const tried = run.runExample('sea-dragon');
+    expect(run.busy.value).toBe(true);
+    await tried;
+    expect(run.busy.value).toBe(false);
+    expect(run.power.value).toBe('program');
+  });
+
+  it('Final review 4: a Run during a power-on still loading is not swallowed by its busy', async () => {
+    const slow = slowKit();
+    const { run } = await setup({ kit: slow.kit });
+    const on = run.powerOn();
+    await Promise.resolve();
+    expect(run.busy.value).toBe(true);
+    const r = run.run();
+    slow.arrive();
+    await Promise.all([on, r]);
+    expect(run.power.value).toBe('program');
+    expect(run.busy.value).toBe(false);
   });
 
   it('Pause and Continue act on the machine itself', async () => {
@@ -187,7 +256,10 @@ describe('the machine session', () => {
   });
 
   it("the sentences name each model as rom-ids does", () => {
-    for (const m of [1, 3, 4] as const) expect(POWERED_ON(m)).toBe(`The ${MODEL_NAMES[m]} is on. Type to it on the screen.`);
+    for (const m of [1, 3, 4] as const) {
+      expect(POWERED_ON(m)).toBe(`The ${MODEL_NAMES[m]} is on. Type to it on the screen.`);
+      expect(POWERED_OFF(m)).toBe(`The ${MODEL_NAMES[m]} is off. Press Power on to turn it on again.`);
+    }
   });
 
   it('a Program to try that cannot be fetched says so, and leaves the machine on', async () => {

@@ -220,7 +220,7 @@ describe('the Run tab', () => {
     expect(drop.defaultPrevented).toBe(true);
     expect(added).toEqual([{ name: 'level2.rom', model: undefined, fallback: 1 }]);
     expect(pageDrops).toEqual([]);
-    expect(document.querySelector('[data-testid="run-rom-status"]')!.textContent).toBe('level2.rom is kept in this browser as the Model III ROM. Press Run to use it.');
+    expect(document.querySelector('[data-testid="run-rom-status"]')!.textContent).toBe('level2.rom is kept in this browser as the Model III ROM. Press Power on to turn it on, or Run ▶ to run your source on it.');
   });
 
   it('Run, Stop and the model select drive Run and the source', async () => {
