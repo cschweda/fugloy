@@ -44,6 +44,21 @@ declare module '@fugloy/emu' {
     readonly [key: string]: unknown;
   }
 
+  /** `m.cpu.regs`: a fresh copy of the registers each read; `a2`… are the alternates. */
+  export interface Regs {
+    a: number; f: number; b: number; c: number; d: number; e: number; h: number; l: number;
+    a2: number; f2: number; b2: number; c2: number; d2: number; e2: number; h2: number; l2: number;
+    ix: number; iy: number; sp: number; pc: number; i: number; r: number;
+    iff1: boolean; iff2: boolean; im: number;
+  }
+
+  export interface BreakInfo {
+    id: number;
+    addr: number;
+    once: boolean;
+    hits: number;
+  }
+
   export class Machine {
     constructor(options: { model?: Model; ram?: 4 | 16 | 32 | 48 | 64 | 128; roms: { level2: Uint8Array }; expansion?: boolean; lowercase?: boolean });
     readonly model: Model;
@@ -52,7 +67,11 @@ declare module '@fugloy/emu' {
     readonly cycles: number;
     readonly rom: { bytes: number; sha256: string; recognized: string | null };
     readonly system: TRS80System;
-    readonly cpu: { readonly regs: { pc: number; sp: number; [reg: string]: number | boolean } };
+    readonly cpu: {
+      readonly regs: Regs;
+      /** True while the CPU sits in a HALT (PC just past it), until an interrupt or a reset. */
+      readonly halted: boolean;
+    };
     readonly mem: { read(addr: number, len: number): Uint8Array; write(addr: number, bytes: Uint8Array): void };
     readonly video: {
       readonly raw: Uint8Array;
@@ -69,6 +88,12 @@ declare module '@fugloy/emu' {
     readonly debug: {
       snapshot(): Snapshot;
       restore(snap: Snapshot): void;
+      /** Stop before the instruction at `addr`; `once` removes it after its first hit, `when` gates each hit. Returns its id. */
+      break(addr: number, opts?: { once?: boolean; when?: ((m: Machine) => boolean) | undefined }): number;
+      /** False when no breakpoint has that id. */
+      unbreak(id: number): boolean;
+      /** The breakpoints, in id order. */
+      readonly breaks: BreakInfo[];
       /** The instruction trace: a ring of the last `depth` instructions run (a halted CPU's idling is not one). */
       readonly trace: {
         enable(opts: { depth: number; regs?: boolean }): void;

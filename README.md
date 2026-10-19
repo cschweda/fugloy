@@ -33,7 +33,7 @@ for writing new programs.
 | Part | What it does | Status | Where |
 | --- | --- | --- | --- |
 | **Disassembler** | Loads `.CMD`, `.BAS`, and raw files by content; recursive descent; labels; cited ROM, hardware, and DOS names; hint files; hidden code in BASIC; rebasing and relocation; zmac source that reassembles byte for byte; JSON IR; reads the emulator's label files | Released, 1.2.0 on npm | `@fugloy/disasm`, the `fugloy` command in `@fugloy/cli`, opcode tables in `@fugloy/z80` |
-| **Web workbench** | The disassembler in the browser: facing pages, the four public-domain games one click away, editing by keyboard, the **Explain** tab, block comments, exports; and **Source ✎** and **Run ▶**, where Z80 source you type (or a disassembly opened as source) runs on an emulated TRS-80 with one press | Live; Source ✎ and Run ▶ merged to main and live (plan phase 5B) | [app.fugloy.dev](https://app.fugloy.dev/), source in `apps/web` |
+| **Web workbench** | The disassembler in the browser: facing pages, the four public-domain games one click away, editing by keyboard, the **Explain** tab, block comments, exports; and **Source ✎** and **Run ▶**, where Z80 source you type (or a disassembly opened as source) runs on an emulated TRS-80 with one press, and the running line: the line a program is on lit live with its trail, in the source and in its listing, with breakpoints, stepping, the registers, and a screen-text mirror | Live; Source ✎ and Run ▶ merged to main and live (plan phase 5B); the running line (5C) merged and live | [app.fugloy.dev](https://app.fugloy.dev/), source in `apps/web` |
 | **Emulator** | A headless, deterministic Model III and Model I that passes ZEXDOC and ZEXALL, runs `.CMD`, `.BAS`, and `.CAS` programs and disk images, and has a debugger that writes label and coverage files | 0.4.0 on npm (2026-10-18; the Model 4, emu phase 6b), after 0.3.0 (disks and the Model I, phases 5–7) | `packages/emu` (`@fugloy/emu`) |
 | **MCP server** | Lets an AI assistant such as Claude Code load a program, run it, set breakpoints and watches, read the screen, and name what it finds in the same label file | 0.1.1 on npm (2026-10-18), MCP phases A–F; disk images and the Model I; 0.1.2 (the Model 4) also published 2026-10-18 | `packages/mcp` (`@fugloy/mcp`) |
 | **Assembler** | Z80 source to a `.CMD`, with errors as sentences on the right line, ROM routines by name per model, a note where the Model I and Model III ROMs differ, and zmac's bytes on every source the disassembler writes | Merged to main (plan phase 5A), unreleased; releases with core | `packages/asm` (`@fugloy/asm`), the `fugloy asm` command |
@@ -104,12 +104,27 @@ a few lines of its own source that blank the screen and halt; a program that
 calls the ROM is stopped with a sentence naming its line. **Open as source
 ✎**, in the Program tab and Export ▾, turns a disassembly into a source:
 Sea Dragon opened that way reassembles byte for byte and, on your Model III
-ROM, runs to its title screen. The editor, the assembler, and the emulator
-load only when Source ✎ or Run ▶ is first opened, so the first screen's
-JavaScript grows by 4,577 bytes gzip (247,655 before, 252,232 after: the
-generated page's module script and modulepreloads with their static imports,
-each gzipped at level 9). The screen's characters are drawn from X.Org's
-public-domain misc-misc fonts, not from a TRS-80 character ROM.
+ROM, runs to its title screen. The screen's characters are drawn from
+X.Org's public-domain misc-misc fonts, not from a TRS-80 character ROM.
+
+**The running line** (plan phase 5C, merged to main 2026-10-19) shows a
+program running: the line it is on is lit live, with a fading trail of the
+lines just before it, in Source ✎ and in a disassembled listing of the same
+program, relocated code included. Click the gutter (or press F9) to set a
+breakpoint; it is saved with the source. Paused, the line holds a solid band
+and ▶, the registers and flags show beside the screen with changed values
+marked, and Continue (F5), Step (F11 or F7), Step Over (F10), and Run to
+Here (Ctrl/⌘+F10) move it on; F6 pauses and Shift+F5 stops. Once Source ✎
+or Run ▶ has been opened, F5 runs the source from anywhere in the workbench,
+the Listing included, so F5 no longer reloads the page. A screen reader
+hears each pause and step, and a **Screen text** disclosure under the screen
+reads the TRS-80's screen as rows. On your Model III ROM, a breakpoint on
+Sea Dragon's print routine stops on its line. The editor, the assembler, the
+emulator, and the debugger load only when Source ✎ or Run ▶ is first opened,
+so the first screen's JavaScript is 252,315 bytes gzip, 4,660 over the
+247,655 before phase 5B (the generated page's module script and
+modulepreloads with their static imports, each gzipped at level 9;
+`pnpm --filter @fugloy/web size:first-screen` measures it).
 
 ### The emulator
 
@@ -194,8 +209,8 @@ set of places, such as `RST 1` or `DB` of an address that does not fit a
 byte. There it gives an error rather than zmac's guess, and it never gives
 different bytes. The syntax, every message, the stricter list, and the API
 are in its [README](packages/asm/README.md). The workbench's editor and Run
-button (5B) are built on it, as [above](#the-web-workbench); the running line
-(5C) is next, in the
+button (5B) and the running line (5C) are built on it, as
+[above](#the-web-workbench), following the
 [phase 5 design](docs/superpowers/specs/2026-10-18-phase5-assembler-ide-design.md).
 
 ### What's ahead
@@ -207,10 +222,6 @@ From the roadmap in [CLAUDE.md](CLAUDE.md) and the
   built the Model 4's hardware and Model III mode; an LS-DOS 6 or TRSDOS 6
   boot waits for a disk), and a Model I differential reference. Disk images
   (phase 5) and the Model I (phase 6) are released in `@fugloy/emu` 0.3.0.
-- **The running line** (plan phase 5C; the assembler, 5A, is merged, and
-  Source ✎ and Run ▶, 5B, are built): watch a program run beside its
-  source with the running line lit, step it, and set breakpoints, an IDE in
-  the way Inform 7 has one for its language.
 - **Learn assembly with Fugløy** (phase 6): an introduction to assembly for
   people who have never programmed, on the small and regular Z80, with
   Explain's tutor voice on each line written and a tutorial that builds a
@@ -358,11 +369,15 @@ What people come to Fugløy for, and how each one is done today.
   Claude Code found and labelled Sea Dragon's print routine with it unaided,
   and labelled 18 to 24 routines in each of Sea Dragon, Eliminator, and Rear
   Guard from the `label-pass` prompt.
+- **As someone learning assembly,** I want to write Z80 code and run it at
+  once. *Today:* Source ✎ and Run ▶ in the workbench assemble and run it with
+  one press; the running line, with breakpoints and stepping, is merged to
+  main (2026-10-19).
 
 Planned, per the roadmap:
 
-- **As someone learning assembly,** I want to write Z80 code and run it at
-  once. *Planned:* phase 5's assembler and IDE in the workbench.
+- **As someone who has never programmed,** I want lessons that build a game
+  from a blank page. *Planned:* phase 6, Learn assembly with Fugløy.
 
 ## Status
 
@@ -414,7 +429,8 @@ roadmap in [CLAUDE.md](CLAUDE.md)). Phase 5 has begun: its assembler,
 releases with the next core version; the workbench's Source ✎ and Run ▶
 (5B), where Z80 code is written, assembled, and run on an emulated Model I,
 III, or 4 with one press, are merged to main (2026-10-19); the running line
-(5C) follows. Every change is
+(5C), with breakpoints, stepping, and the registers, is merged to main
+(2026-10-19), and with it phase 5's deliverable is met. Every change is
 recorded in [CHANGELOG.md](CHANGELOG.md); core releases are tagged `vX.Y.Z`
 on `main`, the emulator's `emu-vX.Y.Z`, and the MCP server's `mcp-vX.Y.Z`.
 

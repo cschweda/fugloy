@@ -2,12 +2,15 @@
 // assemble the source; on errors, say so (useRun sends them to Source ✎); otherwise turn the ROM
 // notes into warnings, write the .CMD (for the listing), refuse code in the ROM's space on any
 // ROM, and with no ROM stored refuse a program that needs one (romUse) and use the stub. Then a
-// fresh Machine from the booted snapshot, in a Runner, started. `kit` is the kit module itself,
-// passed in so the tests can replace a part of it.
+// fresh Machine from the booted snapshot, in a Runner (not started; useRun starts it), with a
+// Stepper (5C) holding the source's breakpoints, applied before the first frame. The Stepper's
+// temporary breakpoints are cleared on every pause and stop, before the caller's onPause and
+// onStop. `kit` is the kit module itself, passed in so the tests can replace a part of it.
 import type { AsmResult, Diagnostic } from '@fugloy/asm';
 import type { Model } from '@fugloy/emu';
 import type { RunKit } from './kit';
 import type { Runner, RunnerOptions } from './runner';
+import type { Stepper } from './stepping';
 
 export const STUB_RUNNING = "Running on Fugløy's stub ROM (no ROM needed for this program).";
 
@@ -17,6 +20,8 @@ export interface RunInput {
   /** The stored ROM for the model, or null to run on the stub. */
   rom: Uint8Array | null;
   runner: Omit<RunnerOptions, 'machine' | 'result' | 'stub'>;
+  /** The source's breakpoints, as source lines (5C Ruling 8). */
+  breakpoints?: readonly number[];
 }
 
 /** What one Run came to. `bytes` is the program's .CMD, whenever it assembled to one. */
@@ -30,6 +35,10 @@ export type RunOutcome = {
   /** The first error's line, when it did not assemble. */
   errorLine: number | null;
   runner: Runner | null;
+  /** The runner's breakpoints and stepping, whenever there is a runner. */
+  stepper: Stepper | null;
+  /** The breakpoint lines with no instruction to stop at. */
+  inactive: number[];
 };
 
 const plural = (n: number, one: string): string => `${n} ${one}${n === 1 ? '' : 's'}`;
@@ -37,7 +46,7 @@ const plural = (n: number, one: string): string => `${n} ${one}${n === 1 ? '' : 
 export function runOnce(kit: RunKit, input: RunInput): RunOutcome {
   const { text, model, rom } = input;
   const result = kit.assemble(text, { model });
-  const base = { result, diagnostics: result.diagnostics, notes: [] as Diagnostic[], bytes: null, errorLine: null, runner: null, problem: true };
+  const base = { result, diagnostics: result.diagnostics, notes: [] as Diagnostic[], bytes: null, errorLine: null, runner: null, stepper: null, inactive: [] as number[], problem: true };
   if (!result.ok) {
     const errors = result.diagnostics.filter((d) => d.severity === 'error');
     const first = errors[0]!;
@@ -59,8 +68,25 @@ export function runOnce(kit: RunKit, input: RunInput): RunOutcome {
   if (refused !== null) return { ...base, notes, bytes, message: refused.text };
   try {
     const machine = kit.prepareMachine({ model, rom: rom ?? kit.stubRom(model), result, cmd: bytes });
-    const runner = kit.createRunner({ ...input.runner, machine, result, stub: rom === null });
-    return { ...base, notes, bytes, runner, problem: false, message: rom === null ? STUB_RUNNING : `Running on your ${kit.MODEL_NAMES[model]} ROM.` };
+    const opts = input.runner;
+    let stepper: Stepper | null = null;
+    const runner = kit.createRunner({
+      ...opts,
+      machine,
+      result,
+      stub: rom === null,
+      onPause: (r) => {
+        stepper?.clearTemps();
+        opts.onPause?.(r);
+      },
+      onStop: (r) => {
+        stepper?.clearTemps();
+        opts.onStop?.(r);
+      },
+    });
+    stepper = kit.createStepper(runner);
+    const { inactive } = stepper.setBreakpoints(input.breakpoints ?? []);
+    return { ...base, notes, bytes, runner, stepper, inactive, problem: false, message: rom === null ? STUB_RUNNING : `Running on your ${kit.MODEL_NAMES[model]} ROM.` };
   } catch (err) {
     // The boot's own failures are sentences already; anything else is the emulator's, wrapped in one.
     const message =

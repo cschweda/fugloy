@@ -125,7 +125,7 @@ watch(leftTab, (t) => {
 watch(rightTab, (t) => {
   if (t === 'run') void runTab.load();
 });
-const sourcePanel = ref<{ showLine(line: number): void } | null>(null);
+const sourcePanel = ref<{ cursorToLine(line: number): void } | null>(null);
 /** The workbench shows with a program open, or while writing one (Ruling 12). */
 const workbenchOpen = computed(() => session.value !== null || wb.writing.value);
 /** Bumped by Close and by leaving the page: a press still loading Run's own module then runs nothing. */
@@ -149,7 +149,7 @@ watch(
     leftTab.value = 'source';
     await sourceTab.load();
     await nextTick();
-    sourcePanel.value?.showLine(r.line);
+    sourcePanel.value?.cursorToLine(r.line);
   },
 );
 // Leaving the workbench stops the program (its frames would run on unseen), or a Run still loading.
@@ -517,25 +517,7 @@ function rerender(kind: 'tables' | 'names'): void {
   session.value = withHintFile(s, { ...s.hintFile, hints }, s.hintSource);
 }
 
-declare global {
-  interface Window {
-    /** Drives the workbench from the Playwright checks (test/e2e). Takes only bytes it is handed; fetches nothing. */
-    __fugloyTest?: {
-      rowCount: () => number;
-      scrollToAddr: (addr: number) => void;
-      setCursor: (addr: number | null) => void;
-      rerender: (kind: 'tables' | 'names') => void;
-      load: (bytes: number[], name: string, hints?: string, base?: number) => void;
-      /** The open program's loaded bytes, in address order. */
-      loadedBytes: () => number[];
-      /** Presses Run ▶. */
-      run: () => Promise<void>;
-      /** The running machine's screen as text rows (m.video.text()); empty with no machine. */
-      screenText: () => string[];
-      runnerState: () => string;
-    };
-  }
-}
+// window.__fugloyTest is declared in app/types/e2e-hook.d.ts, shared with the specs.
 
 onMounted(() => {
   document.addEventListener('drop', onDocumentDrop);
@@ -569,6 +551,28 @@ function installTestHook(): void {
     run: () => runNow(),
     screenText: () => run.value?.runner.value?.machine.video.text() ?? [],
     runnerState: () => run.value?.state.value ?? 'idle',
+    pause: () => run.value?.debug.pause(),
+    debugMode: () => run.value?.debug.mode.value ?? 'idle',
+    listingMarks: () => run.value?.debug.listing.value ?? null,
+    frameCost: async (ms) => {
+      // Times the coordinator's frame (useRun calls debug.frame through the object, so a wrapper sees each one).
+      const d = run.value?.debug as unknown as { frame(r: unknown): void } | undefined;
+      if (d === undefined) return { frames: 0, mean: 0, p95: 0, max: 0 };
+      const orig = d.frame;
+      const times: number[] = [];
+      d.frame = (r) => {
+        const t = performance.now();
+        orig(r);
+        times.push(performance.now() - t);
+      };
+      await new Promise((done) => setTimeout(done, ms));
+      d.frame = orig;
+      const frames = times.length;
+      // None counted: nothing ran, or useRun stopped calling debug.frame through the object.
+      if (frames === 0) throw new Error(`frameCost counted no frames in ${ms} ms. Start the program running, then measure again.`);
+      const sorted = times.slice().sort((a, b) => a - b);
+      return { frames, mean: times.reduce((a, b) => a + b, 0) / frames, p95: sorted[Math.min(frames - 1, Math.floor(0.95 * frames))]!, max: sorted[frames - 1]! };
+    },
   };
 }
 onBeforeUnmount(() => {
@@ -679,7 +683,7 @@ onBeforeUnmount(() => {
             <ManualTab :request="manualRequest" @back="backToListing" />
           </div>
           <div id="right-panel-run" v-show="rightTab === 'run'" role="tabpanel" aria-labelledby="right-tab-run" class="flex min-h-0 flex-1 flex-col" data-testid="run-panel" data-own-keys>
-            <component :is="RunTab" v-if="RunTab !== null && run !== null && sources !== null" :run="run" :sources="sources" />
+            <component :is="RunTab" v-if="RunTab !== null && run !== null && sources !== null" :run="run" :sources="sources" :scroll-listing="scrollTo" />
             <div v-else-if="runError !== null" class="fg-panel" data-testid="run-load-error">
               <p role="alert">{{ runError }}</p>
               <p><button type="button" class="fg-button" @click="runTab.load()">Retry</button></p>

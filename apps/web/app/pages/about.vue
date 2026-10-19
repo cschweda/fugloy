@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// About: what Fugløy is, where your files go (nowhere), how storage and Back up / Restore work, ROMs and the stub ROM, and credits.
+// About: what Fugløy is, where your files go (nowhere), how storage and Back up / Restore work, ROMs and the stub ROM, the debug keys and the screen-text mirror, and credits.
 import { SYMBOL_SOURCES } from '@fugloy/disasm';
 import type { Source } from '@fugloy/disasm';
 import { EXAMPLES } from '~/data/examples';
@@ -56,6 +56,28 @@ const byline = (s: Source): string => (s.author === s.publisher ? s.author : `${
       It turns off interrupts, sets up a stack, blanks the screen, and halts, and the rest of the ROM's space is filled with HALT, so it holds no Tandy code.
       A program that calls or jumps into the ROM is stopped with a sentence naming its line, before it runs or the moment it gets there.
       One that only reads the ROM's bytes (through a pointer, say) is not stopped: on the stub it reads HALT instructions, not Tandy's code.
+    </p>
+
+    <h2 id="keys">Keys in Source ✎ and Run ▶</h2>
+    <p>
+      While a program runs, the line it is on is lit in <strong class="fg-strong">Source ✎</strong>, with a fading trail of the lines just before it, and in the listing when the listing shows the same program.
+      Click the gutter beside a line to set a breakpoint there; breakpoints are saved with the source. These keys work once Source ✎ or Run ▶ has been opened:
+    </p>
+    <ul class="fg-credits" data-testid="debug-keys">
+      <li><strong class="fg-strong">F5</strong>: run the source, or continue a paused program. Once Source ✎ or Run ▶ has been opened, F5 runs the source from anywhere in the workbench, the Listing included, so it no longer reloads the page.</li>
+      <li><strong class="fg-strong">F6</strong>: pause. <strong class="fg-strong">Shift+F5</strong>: stop.</li>
+      <li><strong class="fg-strong">F9</strong>: set or clear a breakpoint on the cursor's line, in the editor or in a listing of the running program.</li>
+      <li><strong class="fg-strong">F10</strong>: step over (a CALL, an RST, or a repeating block instruction runs to its end). <strong class="fg-strong">F11</strong> or <strong class="fg-strong">F7</strong>: step one instruction (macOS keeps F11 for Show Desktop).</li>
+      <li><strong class="fg-strong">Ctrl+F10</strong> or <strong class="fg-strong">⌘+F10</strong>: run to the cursor's line.</li>
+      <li><strong class="fg-strong">Ctrl+Enter</strong> or <strong class="fg-strong">⌘+Enter</strong>: run, from anywhere in the workbench.</li>
+    </ul>
+    <p>
+      The keys wait while you type in a text field. None of them reaches the TRS-80: other keys reach it only while its screen has focus.
+      A screen reader hears each pause and step, and the registers beside the screen mark the values that changed.
+    </p>
+    <p data-testid="screen-text-about">
+      Under the TRS-80's screen, <strong class="fg-strong">Screen text</strong> opens a list of the screen's rows as text, for a screen reader or for copying, with graphics read as spaces and an empty row read as "blank".
+      It is closed until you open it, and <strong class="fg-strong">Speak screen changes</strong>, off until you turn it on, reads out the rows that change, at most once a second.
     </p>
 
     <h2 id="credits">Credits</h2>

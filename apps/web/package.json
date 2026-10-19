@@ -16,6 +16,7 @@
     "test:seo": "pnpm run generate && FUGLOY_REQUIRE_SEO=1 vitest run test/seo.test.ts",
     "check:prefetch": "pnpm run generate && pnpm run test:prefetch",
     "test:prefetch": "FUGLOY_REQUIRE_PREFETCH=1 vitest run test/prefetch.test.ts",
+    "size:first-screen": "node scripts/first-screen-size.mjs",
     "test:e2e": "playwright test",
     "render-brand": "tsx scripts/render-brand.ts",
     "outline-card-text": "tsx scripts/outline-card-text.ts",

@@ -125,6 +125,33 @@ describe('backup', () => {
     expect(json).not.toContain('f'.repeat(64));
   });
 
+  it('carries each source\'s breakpoints, and a restore keeps them', async () => {
+    await a.putSource({ id: 's1', name: 'loop.z', text: ' NOP\n NOP\n', model: 3, savedAt: 1, breakpoints: [2] });
+    await a.putSource({ id: 's2', name: 'plain.z', text: ' HALT\n', model: 3, savedAt: 2 });
+    const json = await makeBackup(a);
+    const parsed = JSON.parse(json);
+    expect(parsed.fugloyBackup).toBe(1);
+    expect(parsed.sources).toEqual([
+      { id: 's1', name: 'loop.z', text: ' NOP\n NOP\n', model: 3, savedAt: 1, breakpoints: [2] },
+      { id: 's2', name: 'plain.z', text: ' HALT\n', model: 3, savedAt: 2 },
+    ]);
+    const b = await fresh();
+    const r = await restoreBackup(b, json, async () => true);
+    expect(r.sources).toEqual({ added: 2, skipped: 0 });
+    const all = await b.allSources();
+    expect(all.find((x) => x.id === 's1')!.breakpoints).toEqual([2]);
+    expect(all.find((x) => x.id === 's2')!.breakpoints).toBeUndefined();
+  });
+
+  it('restores an older backup whose sources have no breakpoints, and rejects malformed ones', async () => {
+    const old = JSON.stringify({ fugloyBackup: 1, exportedAt: '', programs: [], sources: [{ id: 'o1', name: 'old.z', text: ' NOP\n', model: 3, savedAt: 1 }] });
+    const r = await restoreBackup(a, old, async () => true);
+    expect(r.sources).toEqual({ added: 1, skipped: 0 });
+    expect((await a.allSources())[0]).toMatchObject({ id: 'o1', name: 'old.z' });
+    const bad = JSON.stringify({ fugloyBackup: 1, exportedAt: '', programs: [], sources: [{ id: 'o2', name: 'bad.z', text: '', model: 3, savedAt: 1, breakpoints: ['5'] }] });
+    await expect(restoreBackup(a, bad, async () => true)).rejects.toThrow(/a source entry is malformed/);
+  });
+
   it('writes no sources key when there are none', async () => {
     await a.putHints('h1', { name: 'one.hints', text: HINTS });
     expect(JSON.parse(await makeBackup(a)).sources).toBeUndefined();

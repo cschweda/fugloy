@@ -21,6 +21,7 @@
 import { romNames } from '@fugloy/asm';
 import type { AsmResult, ListingLine, RomName } from '@fugloy/asm';
 import type { Model } from '@fugloy/emu';
+import { codeOf, isData } from '../source/lines';
 import { MODEL_NAMES } from './rom-ids';
 import { romEnd } from './stub-rom';
 
@@ -52,34 +53,7 @@ export const romAdvice = (model: Model, instead = 'do this in your own code'): s
 /** How a name is described: `$VDCLS, the ROM's routine at $01C9 (clear the screen)`. */
 export const describeRom = (r: RomName): string => `${r.name}, the ROM's ${r.entry.kind} at ${hex4(r.value)} (${r.entry.purpose})`;
 
-/** The source text without its comment (a `;` outside quotes) and without quoted strings. */
-function codeOf(text: string): string {
-  let out = '';
-  let quote: string | null = null;
-  for (const ch of text) {
-    if (quote !== null) {
-      if (ch === quote) quote = null;
-      continue;
-    }
-    if (ch === ';') break;
-    if (ch === '"' || ch === "'") {
-      // AF' is a register, not a string.
-      if (ch === "'" && /AF$/i.test(out)) {
-        out += ch;
-        continue;
-      }
-      quote = ch;
-      out += ' ';
-      continue;
-    }
-    out += ch;
-  }
-  return out;
-}
-
-const DATA = /^(?:[^\s:;]+:?)?\s+(DB|DEFB|DEFM|DW|DEFW|DS|DEFS)\b/i;
 const ORIGIN = /^(?:[^\s:;]+:?)?\s+(ORG|\.PHASE)\b/i;
-const isData = (code: string): boolean => DATA.test(code) || /^(DB|DEFB|DEFM|DW|DEFW|DS|DEFS)\b/i.test(code.trim());
 
 const escape = (s: string): string => s.replace(/[$.*+?^{}()|[\]\\]/g, '\\$&');
 

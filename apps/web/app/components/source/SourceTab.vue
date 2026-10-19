@@ -5,16 +5,30 @@
 // exact rewrite, a Fix button. The toolbar picks, makes, renames, deletes and
 // downloads sources (useSources, Ruling 11). The page loads this component
 // lazily, so CodeMirror and asm stay off the first screen.
+//
+// 5C: the running line and its trail come from the page's Run (`useRun().debug`), shown only while
+// the text is the one the Run assembled (otherwise one sentence says why). A set reaches the editor
+// only when it changes, and never while this panel is hidden: the latest is sent once it shows. A
+// pause brings its line into view without moving the selection; while running, Follow does so at
+// most 4 times a second, once the line has left view. The gutter's breakpoints are the source's;
+// the hollow ones (no instruction to stop at) come from this tab's own assembly of the text on
+// screen, so they are right before any Run and after edits. The debug keys (utils/running/
+// debug-keys) are installed here and by Run ▶: F9 toggles the cursor line's breakpoint, and Run to
+// Here runs to the cursor line when focus is, or was last, in this editor.
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { assemble } from '@fugloy/asm';
-import type { Diagnostic } from '@fugloy/asm';
+import type { AsmResult, Diagnostic } from '@fugloy/asm';
 import CodeEditor from './CodeEditor.vue';
 import ConfirmDialog from '~/components/ConfirmDialog.vue';
 import { useSources } from '~/composables/useSources';
 import { useOpenAsSource } from '~/composables/useOpenAsSource';
+import { useRun } from '~/composables/useRun';
+import { SOURCE_CHANGED } from '~/composables/useDebug';
 import { download } from '~/utils/exports';
 import { RECHECK_DELAY_MS, severityWord } from '~/utils/source/diagnostics';
 import { fixExpected } from '~/utils/source/fix';
+import { inactiveReason } from '~/utils/source/lines';
+import { speakAnnouncements } from '~/utils/running/announce';
 import type { AsmFix } from '~/utils/source/diagnostics';
 import type { RunReport } from '~/composables/useRun';
 
@@ -24,6 +38,9 @@ const emit = defineEmits<{ run: []; fix: [fix: AsmFix] }>();
 
 const sources = useSources();
 const current = sources.current;
+const run = useRun();
+const debug = run.debug;
+const root = ref<HTMLElement | null>(null);
 const editor = ref<InstanceType<typeof CodeEditor> | null>(null);
 const diagnostics = shallowRef<readonly Diagnostic[]>([]);
 /** The text asm read for `diagnostics`, so a fix from a list older than the latest typing is refused. */
@@ -52,6 +69,126 @@ function cancelCheck(): void {
 }
 onBeforeUnmount(cancelCheck);
 
+// The running line (5C).
+/** The marks the editor should show: none once the text is not what the Run assembled. */
+const shownMarks = computed(() => (debug.live.value ? debug.marks.value : []));
+/** The running line is hidden because the source changed since the Run. */
+const runChanged = computed(() => debug.dirty.value && debug.marks.value.length > 0);
+const keyOf = (set: readonly { line: number; class: string }[]): string => set.map((m) => `${m.line}:${m.class}`).join();
+/** The key of the set the editor has, and a line a pause asked to bring into view while hidden. */
+let sentKey = '';
+let pendingShow: number | null = null;
+let followAt = -Infinity;
+const FOLLOW_INTERVAL_MS = 250;
+const shown = (): boolean => root.value !== null && (typeof root.value.checkVisibility !== 'function' || root.value.checkVisibility());
+
+function deliver(): void {
+  const ed = editor.value;
+  if (ed === null || !shown()) return;
+  if (pendingShow !== null && debug.live.value) ed.scrollToLine(pendingShow);
+  pendingShow = null;
+  const set = shownMarks.value;
+  const key = keyOf(set);
+  if (key === sentKey) return;
+  sentKey = key;
+  ed.setLineDecorations(set);
+  // Follow: while running, bring the line back into view once it leaves, at most 4 times a second.
+  const line = set.find((m) => m.class === 'fg-run-now')?.line;
+  if (!debug.follow.value || debug.mode.value !== 'running' || line === undefined) return;
+  const at = performance.now();
+  if (at - followAt < FOLLOW_INTERVAL_MS || ed.lineVisible(line)) return;
+  followAt = at;
+  ed.scrollToLine(line);
+}
+watch(shownMarks, deliver);
+// A scroll waiting for the panel to show is stale once the program moves on.
+watch(debug.mode, (m) => {
+  if (m !== 'paused') pendingShow = null;
+});
+
+/** The last assembly of a text, from check() or from a Run: the hollow breakpoints' source. */
+const asm = shallowRef<{ text: string; result: AsmResult } | null>(null);
+interface Hollow {
+  lines: number[];
+  why: Map<number, string>;
+}
+let lastHollow: Hollow = { lines: [], why: new Map() };
+/** The breakpoints with no instruction to stop at, by the latest assembly of the text on screen (the last known while a new one is pending). */
+const hollow = computed<Hollow>(() => {
+  const a = asm.value;
+  if (a === null || a.text !== current.value?.text) return lastHollow;
+  const why = new Map<number, string>();
+  for (const line of debug.breakpoints.value) {
+    const r = inactiveReason(a.result, line);
+    if (r !== null) why.set(line, r);
+  }
+  lastHollow = { lines: [...why.keys()], why };
+  return lastHollow;
+});
+const noStop = (line: number): string => `Line ${line} has no instruction to stop at.`;
+function showBreakpoints(): void {
+  const h = hollow.value;
+  editor.value?.setBreakpoints(debug.breakpoints.value, h.lines, (line) => h.why.get(line) ?? noStop(line));
+}
+watch([debug.breakpoints, hollow], showBreakpoints);
+
+// A pause or step: its line into view, now or once the panel shows.
+watch(debug.reveal, (r) => {
+  if (r === null || r.line === null || !debug.live.value) return;
+  pendingShow = r.line;
+  deliver();
+});
+
+// Hidden (v-show) and shown again: send what changed meanwhile.
+let observer: IntersectionObserver | null = null;
+onMounted(() => {
+  if (typeof IntersectionObserver !== 'function' || root.value === null) return;
+  observer = new IntersectionObserver((entries) => {
+    if (entries.some((e) => e.isIntersecting)) deliver();
+  });
+  observer.observe(root.value);
+});
+onBeforeUnmount(() => observer?.disconnect());
+
+/** In utils/lazy's loadFailed words (lazy code does not import utils/lazy), naming what is lost. */
+const KEYS_FAILED = 'The debug keys could not be loaded: the connection may have dropped, or the site was updated since this page opened. Reload the page to use F9, F10 and the other debug keys.';
+// The debug keys (they track where focus was last, the editor or the listing, themselves).
+let uninstallKeys: (() => void) | null = null;
+let unspeak: (() => void) | null = null;
+let gone = false;
+const loadKeys = () => import('~/utils/running/debug-keys');
+onMounted(async () => {
+  unspeak = speakAnnouncements(debug);
+  // A chunk of its own, shared with Run ▶; tried twice, then this tab's status line says so.
+  const m = await loadKeys()
+    .catch(() => loadKeys())
+    .catch(() => null);
+  if (gone) return;
+  if (m === null) {
+    problem.value = KEYS_FAILED;
+    return;
+  }
+  uninstallKeys = m.installDebugKeys(debug, {
+    runNow: () => emit('run'),
+    stop: () => run.stop(),
+    // The listing's line comes from the Run itself (debug.listingLine), which debug-keys asks.
+    cursorLine: (where) => (where === 'source' ? (editor.value?.cursorLine() ?? null) : null),
+    say: (text) => {
+      run.message.value = text;
+      run.problem.value = true;
+    },
+  });
+});
+onBeforeUnmount(() => {
+  gone = true;
+  unspeak?.();
+  uninstallKeys?.();
+});
+
+function onBreakpoints(lines: number[]): void {
+  debug.setBreakpoints(lines);
+}
+
 /** Assembles the current source now and shows what asm says. */
 function check(): void {
   cancelCheck();
@@ -62,7 +199,9 @@ function check(): void {
   }
   let diags: readonly Diagnostic[];
   try {
-    diags = assemble(src.text, { model: src.model }).diagnostics;
+    const result = assemble(src.text, { model: src.model });
+    asm.value = { text: src.text, result };
+    diags = result.diagnostics;
   } catch (err) {
     diags = [];
     problem.value = err instanceof Error ? err.message : String(err);
@@ -88,6 +227,8 @@ function onText(text: string): void {
   if (src === null) return;
   // The reassembly note describes the text as it was opened: the first edit makes it stale.
   if (opened.note.value?.sourceId === src.id) opened.note.value = null;
+  // A pause's line is in the old text.
+  pendingShow = null;
   sources.update(src.id, { text });
   scheduleCheck();
 }
@@ -105,6 +246,10 @@ watch(
   [() => current.value?.id, () => current.value?.model, () => editor.value !== null],
   ([id, , mounted]) => {
     if (id === undefined || !mounted) return;
+    // A new document (or editor) has no marks yet.
+    sentKey = '';
+    showBreakpoints();
+    deliver();
     check();
     if (pendingReveal !== null) editor.value?.revealLine(pendingReveal);
     pendingReveal = null;
@@ -117,6 +262,9 @@ watch(
   () => props.report,
   (r) => {
     if (r != null && r.text === current.value?.text) {
+      // The Run assembled this text: its result stands in for the check it cancels.
+      const result = run.lastResult.value;
+      if (result !== null) asm.value = { text: r.text, result };
       cancelCheck();
       show(r.diagnostics, r.text);
     }
@@ -225,8 +373,8 @@ defineExpose({
     show(diags, text ?? current.value?.text ?? '');
   },
   revealLine: reveal,
-  /** Scrolls to a line and puts the cursor there without taking the focus (Run never moves it), once the editor is there. */
-  showLine(line: number): void {
+  /** Moves the cursor to a line and scrolls it into view, without taking the focus (Run never moves it), once the editor is there. */
+  cursorToLine(line: number): void {
     if (editor.value === null) pendingReveal = line;
     else editor.value.revealLine(line);
   },
@@ -242,7 +390,7 @@ defineExpose({
 </script>
 
 <template>
-  <section class="fg-source" aria-label="Source" data-testid="source-tab">
+  <section ref="root" class="fg-source" aria-label="Source" data-testid="source-tab">
     <div class="fg-source-bar" role="group" aria-label="Sources">
       <label for="source-pick" class="sr-only">Source</label>
       <select id="source-pick" class="fg-input fg-mono" data-testid="source-pick" :value="current?.id ?? ''" :disabled="current === null" @change="pick">
@@ -275,6 +423,7 @@ defineExpose({
       {{ problem ?? sources.saveError.value ?? sources.unavailable.value }}
     </p>
     <p v-if="openNote !== null" class="fg-source-note" role="note" data-testid="source-open-note">{{ openNote }}</p>
+    <p v-if="runChanged" class="fg-source-note" role="note" data-testid="source-run-changed">{{ SOURCE_CHANGED }}</p>
     <CodeEditor
       v-if="ready && current !== null"
       ref="editor"
@@ -283,6 +432,8 @@ defineExpose({
       :text="current.text"
       :label="`Source of ${current.name}, Z80 assembly. Tab types a tab; press Escape, then Tab, to leave the editor.`"
       @update:text="onText"
+      @update:breakpoints="onBreakpoints"
+      @toggle-breakpoint="debug.toggleBreakpoint"
       @run="emit('run')"
       @fix="onFix"
       @stale-fix="check"

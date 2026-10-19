@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hintedFiles, lazyClosure, unflagLazy } from '../lazy-chunks';
+import { hintedFiles, lazyClosure, LAZY_ROOTS, unflagLazy } from '../lazy-chunks';
 import type { Manifest } from '../lazy-chunks';
 
 /** A manifest shaped like Nuxt's: the entry, a page, the Source tab and the chunks it shares. */
@@ -47,6 +47,15 @@ describe('lazy chunks', () => {
 
   it('refuse a root that matches nothing, so a moved folder cannot bring the prefetch back silently', () => {
     expect(() => unflagLazy(manifest(), ['components/gone/'])).toThrow('no client-manifest entry starts with components/gone/');
+  });
+
+  it("include 5C's utils/running/, and throw when nothing in the manifest is under it", () => {
+    expect(LAZY_ROOTS).toContain('utils/running/');
+    const m = manifest();
+    for (const r of LAZY_ROOTS) if (r !== 'utils/running/') m[`${r}x.ts`] = { file: `${r.replace(/\W/g, '')}.js` };
+    expect(() => unflagLazy(m)).toThrow('no client-manifest entry starts with utils/running/');
+    m['utils/running/debug-keys.ts'] = { file: 'debug-keys.js' };
+    expect(() => unflagLazy(m)).not.toThrow();
   });
 
   it('read the prefetch, preload and modulepreload hints from a page', () => {

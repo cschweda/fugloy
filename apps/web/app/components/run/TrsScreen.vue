@@ -3,9 +3,11 @@
 // 480x240 for the Model 4's 80x24), shown 768x576 or 640x480 with pixelated scaling. The box
 // around it is the focus element: keys reach the machine only while it has focus (attachKeyboard),
 // Tab leaves it, and blur releases every key. While a program runs and the screen does not have
-// focus, it says how to type to it.
+// focus, it says how to type to it. Under it, outside its application role, the screen as text
+// (ScreenText, 5C), which each draw refreshes.
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { Machine } from '@fugloy/emu';
+import ScreenText from './ScreenText.vue';
 import { attachKeyboard } from '~/utils/emulator/keyboard';
 import { renderScreen, SCREEN_BG, screenSize, screenView } from '~/utils/emulator/screen';
 
@@ -13,6 +15,7 @@ const props = defineProps<{ machine: Machine | null; running: boolean }>();
 
 const box = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
+const text = ref<InstanceType<typeof ScreenText> | null>(null);
 const focused = ref(false);
 const wide = ref(false);
 let image: ImageData | null = null;
@@ -22,8 +25,13 @@ function context(): CanvasRenderingContext2D | null {
   return canvas.value?.getContext('2d') ?? null;
 }
 
-/** Draws the machine's screen now (only what changed costs anything), or a blank tube with no machine. */
+/** Draws the machine's screen now (only what changed costs anything), or a blank tube with no machine; the text mirror follows. */
 function draw(): void {
+  paint();
+  text.value?.refresh();
+}
+
+function paint(): void {
   const c = canvas.value;
   const ctx = context();
   if (c === null || ctx === null) return;
@@ -72,21 +80,24 @@ defineExpose({
 </script>
 
 <template>
-  <div
-    ref="box"
-    class="fg-trs"
-    :class="{ 'fg-trs-wide': wide }"
-    tabindex="0"
-    role="application"
-    aria-roledescription="TRS-80 screen"
-    aria-label="TRS-80 screen. While it has focus, the keys you type go to the TRS-80; press Tab to leave."
-    data-testid="trs-screen"
-    @focus="focused = true"
-    @blur="focused = false"
-    @mousedown="box?.focus()"
-  >
-    <canvas ref="canvas" class="fg-trs-canvas" width="384" height="192" data-testid="trs-canvas" />
-    <p v-if="running && !focused" class="fg-trs-hint" aria-hidden="true">Click the screen to type to the TRS-80.</p>
+  <div class="fg-trs-host">
+    <div
+      ref="box"
+      class="fg-trs"
+      :class="{ 'fg-trs-wide': wide }"
+      tabindex="0"
+      role="application"
+      aria-roledescription="TRS-80 screen"
+      aria-label="TRS-80 screen. While it has focus, the keys you type go to the TRS-80; press Tab to leave."
+      data-testid="trs-screen"
+      @focus="focused = true"
+      @blur="focused = false"
+      @mousedown="box?.focus()"
+    >
+      <canvas ref="canvas" class="fg-trs-canvas" width="384" height="192" data-testid="trs-canvas" />
+      <p v-if="running && !focused" class="fg-trs-hint" aria-hidden="true">Click the screen to type to the TRS-80.</p>
+    </div>
+    <ScreenText ref="text" :machine="machine" />
   </div>
 </template>
 

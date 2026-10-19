@@ -201,3 +201,92 @@ test('Open as source ✎ turns Sea Dragon into a source beside its listing; with
   // The disassembly stays open: a Run of the source never replaces a program opened from a file.
   await expect(page.getByTestId('file-name')).toHaveText('seadrg01.cmd');
 });
+
+test('debugging from the keyboard (5C): F9 sets a breakpoint, Run stops there, F10 steps, the list removes it, F5 continues; axe clean paused and running', async ({ page }) => {
+  await ready(page);
+  await page.getByTestId('write-program').click();
+  const content = page.locator('.cm-content');
+  await expect(content).toContainText('ORG');
+  await content.click();
+  await page.keyboard.press('ControlOrMeta+a');
+  // Line 2 LD A,1; 3 INC A; 4 DEC A; 5 JR LOOP.
+  await page.keyboard.type('\tORG\t7000H\nSTART:\tLD\tA,1\nLOOP:\tINC\tA\n\tDEC\tA\n\tJR\tLOOP\n\tEND\tSTART\n');
+  // The cursor to line 4, then F9 (the editor's line, from the keyboard alone).
+  await page.locator('.cm-line').nth(3).click();
+  await page.keyboard.press('F9');
+  await expect(page.getByTestId('breakpoint-text')).toHaveText('Line 4: DEC A');
+  // What the page saw of each key: whether the debug keys claimed it.
+  await page.evaluate(() => {
+    const w = window as unknown as { seen: string[] };
+    w.seen = [];
+    window.addEventListener('keydown', (e) => w.seen.push(`${e.shiftKey ? 'Shift+' : ''}${e.key}:${e.defaultPrevented}`));
+  });
+  await page.keyboard.press('ControlOrMeta+Enter');
+  await expect.poll(() => page.evaluate(() => window.__fugloyTest!.runnerState())).toBe('paused');
+  await expect(page.getByTestId('run-message')).toHaveText('Paused at line 4, DEC A, at a breakpoint.');
+  await expect(page.getByTestId('debug-announcer')).toHaveText('Paused at line 4, DEC A, at a breakpoint.');
+  await expect(page.locator('.cm-line.fg-run-paused')).toContainText('DEC');
+  await expect(page.getByTestId('registers')).toContainText('Half-carry');
+  // The whole workbench while paused: Source ✎ (its gutter and ▶) and Run ▶.
+  let r = await new AxeBuilder({ page }).include('[data-testid="workbench"]').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']).analyze();
+  expect(r.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
+
+  // F10 steps one line; F11 and F7 step too.
+  await page.keyboard.press('F10');
+  await expect(page.getByTestId('run-message')).toHaveText(/^Line 5, JR LOOP\./);
+  await page.keyboard.press('F11');
+  await expect(page.getByTestId('run-message')).toHaveText(/^Line 3, INC A\./);
+  await page.keyboard.press('F7');
+  await expect(page.getByTestId('run-message')).toHaveText(/^Line 4, DEC A\./);
+  await expect(page.getByTestId('debug-announcer')).toHaveText(/^Line 4, DEC A\./);
+  // The keys work while the Follow checkbox has focus (it is not a text field).
+  await page.getByTestId('run-follow').focus();
+  await page.keyboard.press('F10');
+  await expect(page.getByTestId('run-message')).toHaveText(/^Line 5, JR LOOP\./);
+
+  // The breakpoint list, by keyboard: Tab to Remove, Enter.
+  const remove = page.getByTestId('breakpoint-remove');
+  await remove.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('breakpoint')).toHaveCount(0);
+  await expect(page.getByTestId('breakpoints')).toBeFocused();
+  // …and shows it.
+  expect(await page.getByTestId('breakpoints').evaluate((el) => getComputedStyle(el).outlineStyle)).not.toBe('none');
+
+  // F5 continues; while running, F5 is swallowed: no reload under the program.
+  await page.keyboard.press('F5');
+  await expect.poll(() => page.evaluate(() => window.__fugloyTest!.runnerState())).toBe('running');
+  await page.keyboard.press('F5');
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => window.__fugloyTest?.runnerState())).toBe('running');
+  r = await new AxeBuilder({ page }).include('[data-testid="workbench"]').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']).analyze();
+  expect(r.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
+  // Shift+F5 stops it.
+  await page.keyboard.press('Shift+F5');
+  await expect.poll(() => page.evaluate(() => window.__fugloyTest!.runnerState())).toBe('stopped');
+  const seen = await page.evaluate(() => (window as unknown as { seen: string[] }).seen);
+  expect(seen.filter((k) => /^(Shift\+)?F\d/.test(k))).toEqual(['F10:true', 'F11:true', 'F7:true', 'F10:true', 'F5:true', 'F5:true', 'Shift+F5:true']);
+});
+
+test('the screen-text mirror lists the screen, closed until opened, and every debug control is in the Tab order', async ({ page }) => {
+  await ready(page);
+  await page.getByTestId('write-program').click();
+  await expect(page.locator('.cm-content')).toContainText('ORG');
+  await page.evaluate(() => window.__fugloyTest!.run());
+  await expect.poll(() => page.evaluate(() => window.__fugloyTest!.runnerState())).toBe('running');
+  const mirror = page.getByTestId('screen-text');
+  await expect(mirror).not.toHaveAttribute('open', '');
+  await page.getByTestId('screen-text-summary').focus();
+  await page.keyboard.press('Enter');
+  await expect(mirror).toHaveAttribute('open', '');
+  await expect(page.getByTestId('screen-text-row')).toHaveCount(16);
+  await expect(page.getByTestId('screen-text-row').first()).toHaveText('blank');
+  // Tab from Run ▶ reaches each control in turn.
+  await page.getByTestId('run-run').focus();
+  const order: string[] = [];
+  for (let k = 0; k < 12; k++) {
+    await page.keyboard.press('Tab');
+    order.push(await page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.testid ?? document.activeElement?.tagName ?? ''));
+  }
+  for (const id of ['run-stop', 'run-pause', 'run-step', 'run-step-over', 'run-to-here', 'run-follow', 'trs-screen', 'screen-text-summary', 'screen-text-speak']) expect(order).toContain(id);
+});

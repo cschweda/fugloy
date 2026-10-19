@@ -100,6 +100,7 @@ m.clockHz                  // the CPU clock in Hz now: clockHz(m.model), or on t
 ```js
 m.cpu.regs                 // { a, f, b, c, d, e, h, l, a2, f2, b2, c2, d2, e2, h2, l2, ix, iy, sp, pc, i, r, iff1, iff2, im }
 m.cpu.flags                // { s, z, h, pv, n, c } decoded from F
+m.cpu.halted               // true while the CPU sits in a HALT (PC just past it), until an interrupt or a reset; read-only
 m.mem.read(addr, len)      // Uint8Array copy; addresses wrap at 64K; peeks (the Model I's latch at $37E0 is not cleared)
 m.mem.write(addr, bytes)   // CPU writes: on a Model I, $37E0-$37E3 (drive select), $37E8-$37EB (printer), and $37EC-$37EF (the WD1771) act on the devices
 m.mem.ram                  // live Uint8Array: RAM from $4000 on the Model III and Model I; on the Model 4
