@@ -24,7 +24,8 @@ export function createProgress(
   lessonText: (slug: string) => string,
   storage: () => Storage | null = defaultStorage,
 ): Progress {
-  const edits = new Map<string, string>();
+  // Memory is authoritative for a slug once written or cleared this visit (null = cleared).
+  const edits = new Map<string, string | null>();
   const doneSet = new Set<string>();
   let doneLoaded = false;
 
@@ -51,13 +52,14 @@ export function createProgress(
 
   return {
     edit(slug) {
+      if (edits.has(slug)) return edits.get(slug) ?? null;
       try {
         const v = store()?.getItem(EDIT + slug);
         if (typeof v === 'string') return v;
       } catch {
         /* fall back to memory */
       }
-      return edits.get(slug) ?? null;
+      return null;
     },
     saveEdit(slug, text) {
       if (text === lessonText(slug)) {
@@ -72,7 +74,7 @@ export function createProgress(
       }
     },
     clearEdit(slug) {
-      edits.delete(slug);
+      edits.set(slug, null);
       try {
         store()?.removeItem(EDIT + slug);
       } catch {

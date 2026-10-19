@@ -79,4 +79,20 @@ describe('lesson progress', () => {
     s.setItem('fugloy:learn:done', '{"a":1}');
     expect(createProgress(lessonText, () => s).done().size).toBe(0);
   });
+
+  it('keeps answers right when reads work but writes and removals throw', () => {
+    const s = fake();
+    s.data.set('fugloy:learn:edit:a', 'old');
+    const boom = () => { throw new Error('quota'); };
+    const ro = { ...s, getItem: s.getItem, setItem: boom, removeItem: boom } as unknown as Storage;
+    const p = createProgress(lessonText, () => ro);
+    expect(p.edit('a')).toBe('old');
+    p.saveEdit('a', 'new');
+    expect(p.edit('a')).toBe('new');
+    p.clearEdit('a');
+    expect(p.edit('a')).toBeNull();
+    p.saveEdit('a', 'again');
+    p.saveEdit('a', 'original a');
+    expect(p.edit('a')).toBeNull();
+  });
 });
