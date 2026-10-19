@@ -61,7 +61,7 @@ A screen-reader text mirror of the TRS-80 screen comes with it. 5C completes pha
 
 1. **The trace is on for every run** (`TRACE_DEPTH` 65,536), with a real ROM too.
    - Why: a PC sample per frame gives one random point per frame, so a 5-line loop would flicker between samples instead of showing the loop. The trace gives the actual recent lines.
-   - Cost: about 7% of emulation, which runs at about 40× real time, so about 0.03 ms per 16.7 ms frame.
+   - Cost: about 7% of emulation, which runs at about 40× real time, so about 0.03 ms per 16.7 ms frame. (Measured in Task 5 at depth 65,536 on Sea Dragon: about 18%, 40.8× to 33.5× real time, so about 0.09 ms per frame. Still small; the ruling stands.)
    - A deeper trace also lets a pause inside the ROM name the program's last line.
    - No zero-allocation `trace.pcs()` is added to emu. 256 small objects a frame are cheap, and an emu change would add release coupling. Revisit if the Task 5 perf check fails.
 2. **The trail, per frame:**

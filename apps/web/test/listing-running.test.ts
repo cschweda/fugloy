@@ -482,4 +482,45 @@ describe.skipIf(rom === null)('Sea Dragon, opened as source, on the real Model I
     expect(scroll).toHaveBeenLastCalledWith(addr);
     expect(codeRows.has(addr)).toBe(true);
   });
+
+  it('a breakpoint on the print routine ($6140, relocated code) stops on its own line', async () => {
+    const wb = createWorkbench({ readExample: async () => null });
+    wb.openBytes(new Uint8Array(readFileSync(resolve(repo, 'examples/sea-dragon/seadrg01.cmd'))), 'seadrg01.cmd', {
+      selection: { machine: 3, dos: defaultDos(3) },
+      hintText: readFileSync(resolve(repo, 'examples/sea-dragon/seadrg01.hints'), 'utf8'),
+      hintSource: 'seadrg01.hints',
+    });
+    const session = wb.session.value!;
+    const sources = createSources({ open: async () => null });
+    await sources.start();
+    await sources.fromSession(session, renderSession(session, 'zmac'));
+    const roms: Roms = { ...noRoms, have: (m) => m === 3, bytes: async (m) => (m === 3 ? rom : null) };
+    const clock = fakeClock();
+    const run = createRun({ sources, roms, wb, kit: async () => realKit, runner: clock });
+    cleanups.push(() => run.stop());
+    const scroll = vi.fn<(addr: number) => void>();
+    cleanups.push(installListingFollow(run.debug, scroll, { now: clock.now }));
+    await run.run();
+    // The hints name the routine PRINT_TEXT; it loads at $69C1 and runs at $6140.
+    const result = run.lastResult.value!;
+    const line = result.sourceMap.lineOf(0x6140)!;
+    expect(line).not.toBeNull();
+    const text = sources.current.value!.text.split('\n');
+    expect(text.slice(Math.max(0, line - 3), line).join('\n')).toContain('PRINT_TEXT');
+    run.debug.toggleBreakpoint(line);
+    await flushPromises();
+    expect(run.debug.inactive.value).toEqual([]);
+    for (let k = 0; k < 600 && run.debug.mode.value !== 'paused'; k++) {
+      clock.frame();
+      await flushPromises();
+    }
+    expect(run.debug.mode.value).toBe('paused');
+    expect(run.runner.value!.machine.cpu.regs.pc).toBe(0x6140);
+    expect(run.debug.reveal.value!.line).toBe(line);
+    expect(run.message.value).toMatch(new RegExp(`^Paused at line ${line}, .*, at a breakpoint\\.$`));
+    // The listing follows: its paused row is the routine's, with the breakpoint's dot, and it scrolled there.
+    expect(run.debug.listing.value!.marks).toContainEqual({ addr: 0x6140, class: 'fg-run-paused' });
+    expect(run.debug.listing.value!.breaks).toEqual([0x6140]);
+    expect(scroll).toHaveBeenLastCalledWith(0x6140);
+  });
 });

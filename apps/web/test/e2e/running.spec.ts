@@ -134,3 +134,48 @@ test('a program opened from a file that is not the running one shows no marks, a
   await page.keyboard.press('F9');
   await expect(page.getByTestId('run-message')).toHaveText('This listing is not the program that is running. Set breakpoints in Source ✎.');
 });
+
+// The running line's cost per frame (Review Focus 1). A tight loop runs for 3 s with Source ✎ shown,
+// so every frame reads the trace, maps it to lines and, when the set changes, dispatches to the
+// editor. FUGLOY_PERF=1 holds it to a mean under 1 ms and a p95 under 2 ms, with no long task
+// (over 50 ms) while it runs, as 5B's Run had none; without it the numbers are printed only.
+const PERF = process.env.FUGLOY_PERF === '1';
+
+test('a tight loop running for 3 s costs the running line under 1 ms a frame', async ({ page }) => {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __longTasks: number[] };
+    w.__longTasks = [];
+    new PerformanceObserver((list) => {
+      for (const e of list.getEntries()) w.__longTasks.push(e.duration);
+    }).observe({ type: 'longtask', buffered: true });
+  });
+  await ready(page);
+  await page.getByTestId('write-program').click();
+  const content = page.locator('.cm-content');
+  await expect(content).toContainText('ORG');
+  await content.click();
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.type(PROGRAM);
+  await page.getByTestId('run-run').click();
+  await expect.poll(() => page.evaluate(() => window.__fugloyTest!.debugMode())).toBe('running');
+  // Let the Run settle (its first frames load the kit's last parts), then measure from a clean slate.
+  await page.waitForTimeout(500);
+  await page.evaluate(() => {
+    (window as unknown as { __longTasks: number[] }).__longTasks = [];
+  });
+  const cost = await page.evaluate(() => window.__fugloyTest!.frameCost(3000));
+  const longTasks = await page.evaluate(() => [...(window as unknown as { __longTasks: number[] }).__longTasks]);
+  const report = `running line, tight loop for 3 s: ${cost.frames} frames, mean ${cost.mean.toFixed(3)} ms, p95 ${cost.p95.toFixed(3)} ms, max ${cost.max.toFixed(3)} ms; long tasks: ${longTasks.length}${longTasks.length > 0 ? ` (max ${Math.max(...longTasks).toFixed(1)} ms)` : ''}`;
+  console.log(report);
+  test.info().annotations.push({ type: 'perf', description: report });
+  // About 60 frames a second; a background tab or a stall would show far fewer.
+  expect(cost.frames).toBeGreaterThan(60);
+  // The marks are live: Source ✎ shows the running line.
+  await expect(page.locator('.cm-line.fg-run-now')).toHaveCount(1);
+  if (PERF) {
+    expect(cost.mean).toBeLessThan(1);
+    expect(cost.p95).toBeLessThan(2);
+    expect(longTasks.filter((d) => d > 50)).toEqual([]);
+  }
+  await page.getByTestId('run-stop').click();
+});

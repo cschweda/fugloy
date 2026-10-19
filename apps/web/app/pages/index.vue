@@ -557,24 +557,21 @@ function installTestHook(): void {
     frameCost: async (ms) => {
       // Times the coordinator's frame (useRun calls debug.frame through the object, so a wrapper sees each one).
       const d = run.value?.debug as unknown as { frame(r: unknown): void } | undefined;
-      if (d === undefined) return { frames: 0, mean: 0, max: 0 };
+      if (d === undefined) return { frames: 0, mean: 0, p95: 0, max: 0 };
       const orig = d.frame;
-      let total = 0;
-      let max = 0;
-      let frames = 0;
+      const times: number[] = [];
       d.frame = (r) => {
         const t = performance.now();
         orig(r);
-        const dt = performance.now() - t;
-        total += dt;
-        max = Math.max(max, dt);
-        frames++;
+        times.push(performance.now() - t);
       };
       await new Promise((done) => setTimeout(done, ms));
       d.frame = orig;
+      const frames = times.length;
       // None counted: nothing ran, or useRun stopped calling debug.frame through the object.
       if (frames === 0) throw new Error(`frameCost counted no frames in ${ms} ms. Start the program running, then measure again.`);
-      return { frames, mean: frames === 0 ? 0 : total / frames, max };
+      const sorted = times.slice().sort((a, b) => a - b);
+      return { frames, mean: times.reduce((a, b) => a + b, 0) / frames, p95: sorted[Math.min(frames - 1, Math.floor(0.95 * frames))]!, max: sorted[frames - 1]! };
     },
   };
 }

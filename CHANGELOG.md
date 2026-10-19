@@ -402,6 +402,202 @@ Fugløy's stub ROM; a disassembly opens as such a source:
   When Run ▶ first opens: the Run tab and screen, and emu. On the first Run:
   the kit. After Open as source: the reassembly check.
 
+Workbench, phase 5C (the running line), built on branch `phase5c`
+(2026-10-19), all five tasks done, not yet merged (plan
+`docs/superpowers/plans/2026-10-19-phase5c-running-line.md`). With it phase
+5's deliverable is met. While a program runs, the line it is on is lit live,
+with a fading trail of the lines just before it, in **Source ✎** and in a
+disassembled listing of the same program; paused, the user has Continue,
+Step, Step Over and Run to Here, breakpoints, and the registers:
+
+- **The running line and its trail** (`utils/emulator/running.ts`, no DOM).
+  Each frame reads emu's instruction trace once (`trace.last(256)`):
+  - `now` is the line at PC (through asm's `linesOf`, the candidate whose
+    bytes match memory; a single candidate is taken as is, so code that
+    rewrites its own operands still shows). On a HALT it is the HALT's own
+    line.
+  - The trail is up to 5 more distinct program lines, newest first, each the
+    candidate matching the trace entry's own bytes, in classes
+    `fg-run-trail-1` to `-5` that fade in steps.
+  - When PC is in the ROM and the window holds no program line, one deeper
+    search (4,096, then 65,536 entries) finds the line that called it, shown
+    as `fg-run-out` ("in the ROM, called from here") until program lines come
+    back; a search that found nothing is not repeated.
+  - Line lookups are cached per Run, so only shared addresses compare bytes.
+- **The trace is on for every Run** (`TRACE_DEPTH` 65,536), on a real ROM
+  too, so a 5-line loop shows as the loop rather than one sampled point a
+  frame, and a pause in the ROM can name the program's last line. Measured
+  on Sea Dragon (20 emulated seconds, three runs each): about 40.8× real
+  time without it, 33.5× with it, so it costs about 18% of emulation, about
+  0.09 ms of a 16.7 ms frame. (The plan had estimated 7%; its Ruling 1
+  records the measured figure.)
+- **One coordinator**, `composables/useDebug.ts`, made by `createRun` (so it
+  lives in Run's chunk) and exposed as `run.debug`. A mark set is published
+  only when its key (`line:class,…`) changes, at most 30 times a second; with
+  `prefers-reduced-motion: reduce` (followed live) there is no trail and the
+  line moves at most 4 times a second. The registers refresh on a 250 ms beat
+  while running and on every pause. `run.state` now reports `'paused'`.
+- **In Source ✎**: the running line is a green band, the trail fades out
+  behind it, the paused line is an orange band with a 3 px bar, and the line
+  a stopped program last ran gets a red one until the next edit or Run.
+  Nothing is sent while the panel is hidden; the latest set (and a pending
+  pause scroll) arrives when it shows. Once the text differs from what the
+  Run assembled, the marks go and Source says "The source has changed since
+  this Run, so the running line is not shown. Press Run to see it again."
+- **Breakpoints** are emu breakpoints (`m.debug.break`), one per line at the
+  line's first address, set by a click in a new gutter left of the line
+  numbers or by F9.
+  - ● marks a breakpoint; ○ marks one that cannot stop, titled "Line N has
+    no instruction to stop at." or, on DB, DW, DS and their DEF spellings,
+    "Line N holds data, not an instruction to stop at." Hollow marks come
+    from Source's own 250 ms assembly, so they show before any Run.
+  - On the paused line ▶ replaces ●: red when the line holds a breakpoint,
+    orange otherwise.
+  - They move with the text through CodeMirror's change mapping (a line
+    deleted whole loses its breakpoint, and undo brings it back), are saved
+    on the source as `breakpoints?: number[]` with the 500 ms autosave, and
+    go into the backup (still `fugloyBackup: 1`; `isSource` accepts the
+    optional array, and an older backup restores as before).
+  - Where lines share a run address, a breakpoint checks that memory holds
+    its line's bytes, so relocated code stops only on the right line.
+  - They are applied when a Run starts; a toggle while running applies at
+    once, except after an edit, when it waits for the next Run. A breakpoint
+    on the entry line stops before the first instruction.
+  - The **breakpoint list** in Run ▶ shows each as "Line N: text" with Go to
+    line and Remove; after a Remove, focus moves to the next Remove or to the
+    list.
+- **Stepping** (`utils/emulator/stepping.ts`). runOnce owns one Stepper per
+  Run, which clears every temporary breakpoint on any pause or stop.
+  - **Step** runs one instruction.
+  - **Step Over** decodes the instruction at PC: CALL (taken or not), RST,
+    and LDIR, LDDR, CPIR, CPDR, INIR, INDR, OTIR and OTDR set one-shot
+    breakpoints past it that wait for SP to come back (a 64K ring, so SP
+    wrapping from 0 is handled, and recursion stops only on the way out);
+    RST 08H also gets one past its inline byte. A user breakpoint reached
+    first wins.
+  - **Run to Here** runs to the Source cursor's line, or the listing
+    cursor's line when focus was last in the listing, with the same byte
+    check at a shared address.
+  - **Continue** after a pause that was not a breakpoint's steps past PC
+    first (until the trace shows the instruction at PC ran, at most 1,000
+    steps, since a pending interrupt's handler runs first), so it never stops
+    again where it stands.
+  - Step or Step Over while running pauses first. A HALT with interrupts off
+    says "The CPU is halted (HALT) with interrupts off, so it will not move
+    on. Press Stop, then Run."
+- **Run ▶'s debugger controls**, in a "Debugger controls" group in the bar:
+  Pause/Continue, Step, Step Over, Run to Here, and **Follow** (off by
+  default): with Follow on, the editor and the listing keep the running line
+  in view, at most 4 times a second and only once it leaves view. A pause or
+  step always brings the line into view, without moving the cursor or focus.
+  Stop now works while paused too.
+- **The registers panel** beside the screen: AF, BC, DE, HL, IX, IY, SP, PC,
+  the alternates, I, R, IM, and IFF1/IFF2 as "interrupts on/off"; the flags
+  spelled out (Sign, Zero, Half-carry, Parity/Overflow, Add/Subtract, Carry)
+  as 0 or 1. Values changed since the previous pause are marked in orange and
+  bold, with the word "changed" for screen readers; PC and R, which change
+  with every instruction, are never marked. No live region.
+- **The debug keys** (`utils/running/debug-keys.ts`, a new lazy root), one
+  document listener while Source ✎ or Run ▶ is mounted:
+  - F5 runs the source when nothing runs (so F5 no longer reloads the page
+    once the workbench's Source ✎ or Run ▶ has been opened, even while you
+    read a disassembly) and continues a paused program; F6 pauses; Shift+F5
+    stops; F9 toggles a breakpoint on the cursor's line in the editor or a
+    following listing; F10 steps over; F11 or F7 steps (macOS gives F11 to
+    Show Desktop); Ctrl/⌘+F10 runs to the cursor's line.
+  - While a program runs or is paused, F5, Shift+F5 and Ctrl/⌘+F5 are
+    swallowed everywhere, text fields and dialogs included, so no reload ends
+    it. With no program, Shift+F5 and Ctrl/⌘+F5 reload as usual.
+  - They wait in text-entry fields and under an open dialog, and work on
+    buttons, checkboxes, the editor, and the TRS-80 screen. Shift+F10, Alt
+    with an F-key, and keys already handled are left alone.
+  - F5, F6, F7, F9, F10 and F11 never reach the TRS-80's keyboard matrix; F8
+    still does.
+  - F9 in a listing that cannot take a breakpoint says why: "This listing is
+    not the program that is running. Set breakpoints in Source ✎.", or one
+    of four sentences for nothing run yet, a stopped program, an edited
+    source, and a cursor on no instruction.
+  - The module is loaded by dynamic `import()`, so it is a manifest entry the
+    prefetch check can see. If it cannot load, Run ▶ says "The debugger could
+    not be loaded: … Reload the page.", and Source ✎ retries once, then says
+    the debug keys could not be loaded.
+- **Announcements** (`utils/running/announce.ts`): one visually hidden
+  `role="status"` region on `document.body`, outside the panels. A pause says
+  "Paused at line 12, LD A,(HL), at a breakpoint."; in the ROM, "Paused at
+  $0049 in the ROM (wait for a key); the program's last line was 23."; a step
+  says "Line 13, INC HL. Changed: HL, F." Step Over's and Run to Here's own
+  stops are announced as steps. Steps are debounced by 150 ms, so a held F10
+  speaks only the last; screen sentences have their own slot. The run
+  message shows the same sentence, with `aria-live` off while it repeats the
+  announcer's. The announcer is installed apart from the keys chunk, so a
+  pause is spoken even if the keys fail to load.
+- **The screen-text mirror** (`ScreenText.vue`, under the screen, outside its
+  application role): a **Screen text** disclosure, closed by default, holding
+  an `<ol>` of the screen's rows, graphics read as spaces, trailing spaces
+  trimmed, an empty row read as "blank" (the Model I without lowercase reads
+  as its screen shows; the Model 4's 80 columns and inverse video are
+  handled). While open it refreshes at most twice a second, only when the
+  text changed. **Speak screen changes**, off by default, speaks up to 3
+  changed rows ("Row 4: SCORE 120.") or "The screen changed (9 rows).", at
+  most once a second, starting from the screen as it was when switched on.
+- **The listing follows the run** when the open session is the running
+  source's own listing, or its loaded bytes equal the Run's on every byte asm
+  loaded (Open as source, checked once per session and Run; an empty image
+  follows nothing). It is lit through one `<style id="fg-running-line">`
+  (`utils/running/listing-style.ts`) whose rules name rows by
+  `[data-addr]`, rewritten only when the set changes and removed on stop and
+  Close; so `ListingView` and `ListingRow` are unchanged and virtualisation
+  needs nothing. The colours are Source's, as a gradient under the cursor and
+  selection; breakpoints show as ● and the paused row as ▶. A pause or step
+  scrolls the listing to its row (through RunTab's new `scrollListing` prop,
+  the only first-screen change), or, if the Listing tab is hidden, once it
+  shows. Stated gap: rows that share a run address all light.
+- **Sea Dragon on the user's Model III ROM** (local tests, gated on
+  `fugloy.mcp.json`): opened as source and run to its title, its listing
+  follows by the byte compare, lit marks fall in its relocated code
+  (`$497F`–`$8880`, where it runs, not where it loads), and a breakpoint on
+  its print routine, `PRINT_TEXT` at `$6140`, stops with PC at `$6140` on
+  that line, the listing's paused row and ● on it, and the listing scrolled
+  there.
+- **Cost per frame.** A tight loop running for 3 s in Chromium: 180 frames,
+  the running-line update 0.033 ms mean (0.044 ms in a full e2e run), 0.1 ms
+  p95 (the timer's resolution), 0.1–0.2 ms max, and no long task, as 5B's Run had none (measured
+  on main d7e0497 with the same loop). `FUGLOY_PERF=1` holds it under 1 ms
+  mean and 2 ms p95 with no long task over 50 ms.
+- **First-screen size.** The same method as 5B's, now committed as
+  `apps/web/scripts/first-screen-size.mjs` (`pnpm --filter @fugloy/web
+  size:first-screen`, after a plain `generate`; it refuses an E2E build and
+  exits 1 over the 252,775-byte budget). Main at d7e0497 is **252,232
+  bytes** (18 files); this branch is **252,314 bytes** (18 files), **+82**,
+  461 under the budget (main a6b7831's 247,655 + 5,120). Two `v-model`
+  checkboxes would have pulled Vue's `vModelCheckbox` into the shared
+  runtime chunk (+201 B), so Follow and Speak use `:checked` and `@change`.
+  The lazy chunks grow: Source ✎ 104,620 → 107,044 (+2,424), Run ▶ 4,743 →
+  8,354 (+3,611), the kit 5,622 → 7,741 (+2,119), and the new debug keys
+  chunk is 1,468. `utils/running/` joins the prefetch check's lazy roots.
+- **Interfaces.** `RunInput.breakpoints`, and `RunOutcome.stepper` and
+  `inactive`; the kit exports the trail, stepping, register and screen-text
+  helpers, `romEnd`, `romNameAt` and `inactiveReason`; `StoredSource` and
+  `useSources.update` take `breakpoints`; the e2e hook gains `pause`,
+  `debugMode`, `listingMarks` and `frameCost` (typed once, in
+  `app/types/e2e-hook.d.ts`).
+- **Hand checks before release** (Playwright's synthetic keys cannot show
+  them):
+  - **Screen readers (VoiceOver and NVDA):** a pause is spoken once, from
+    the announcer; after it, the next run message (for example "Run to Here
+    runs to the line under the cursor…") is spoken too. Run ▶'s message
+    turns `aria-live` off while it repeats the announcer's sentence and back
+    on for the next one; check that the pair honours the change. Steps
+    while F10 is held are spoken once, the last.
+  - **Firefox F7:** check that `preventDefault` stops caret browsing
+    (Ruling 10). If it does not, drop the F7 alias for Step.
+  - **Chrome F5 and F11:** check that a real F5 does not reload while a
+    program runs, and whether F11 still goes to fullscreen (macOS gives F11
+    to Show Desktop first; that is why F7 exists).
+- **The About page** gains **Keys in Source ✎ and Run ▶** (the debug keys,
+  that they wait in text fields and never reach the TRS-80, and that F5
+  never reloads under a program) and the screen-text mirror.
+
 ### Testing
 
 - zmac referees asm everywhere the round-trip harness assembles. Its
@@ -429,32 +625,16 @@ Fugløy's stub ROM; a disassembly opens as such a source:
   assembles as one name.
 - `packages/emu/test/rom.d.ts` types the ROM config helper for the
   TypeScript tests.
-
-### Phase 5C, the running line (in progress on branch `phase5c`)
-
-Task 5 writes the full entry. Recorded here so they are not lost:
-
-- **F5 no longer reloads the page while the workbench is open.** Once
-  Source ✎ or Run ▶ has been opened, F5 runs the source when nothing is
-  running (even while you read a disassembly) and continues a paused
-  program. While a program runs or is paused, F5, Shift+F5 and Ctrl/⌘+F5
-  are swallowed everywhere, text fields and dialogs included, so no reload
-  ends it; outside text fields Shift+F5 stops it. With no program, Shift+F5
-  and Ctrl/⌘+F5 reload as usual. The debug keys (F5, F6, F7, F9, F10, F11,
-  Ctrl/⌘+F10) work on buttons and checkboxes, and wait in text-entry fields.
-- **Hand checks before release** (Playwright's synthetic keys cannot show
-  them):
-  - **Screen readers (VoiceOver and NVDA):** a pause is spoken once, from
-    the announcer; after it, the next run message (for example "Run to Here
-    runs to the line under the cursor…") is spoken too. Run ▶'s message
-    turns `aria-live` off while it repeats the announcer's sentence and back
-    on for the next one; check that the pair honours the change. Steps
-    while F10 is held are spoken once, the last.
-  - **Firefox F7:** check that `preventDefault` stops caret browsing
-    (Ruling 10). If it does not, drop the F7 alias for Step.
-  - **Chrome F5 and F11:** check that a real F5 does not reload while a
-    program runs, and whether F11 still goes to fullscreen (macOS gives F11
-    to Show Desktop first; that is why F7 exists).
+- Phase 5C's tests: `running-line`, `stepping`, `registers`, `screen-text`,
+  `debug`, `source-breakpoints`, `debug-keys`, `registers-panel`,
+  `screen-text-panel`, `keys-chunk` and `listing-running` (two gated Sea
+  Dragon cases on the real ROM), plus additions to the runtime, run, Run
+  keys, sources, backup, Source tab and lazy-chunks tests; `pnpm test:web`
+  is 500 passed, 1 skipped (with `fugloy.mcp.json` present). The e2e adds
+  keyboard debugging and the screen-text mirror to `run.spec.ts`, and
+  `running.spec.ts` (the listing following a gutter breakpoint, F10, F9 in
+  the listing, F5, axe clean paused and running; an unrelated listing; and
+  the 3 s frame-cost case): 94 passed, 2 skipped.
 
 ## [mcp 0.1.2] - 2026-10-18
 

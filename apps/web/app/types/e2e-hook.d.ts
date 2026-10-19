@@ -20,7 +20,7 @@ interface FugloyTestHook {
   /** What the listing's <style> lights, by address; null when the listing does not follow, or nothing runs. */
   listingMarks: () => { marks: { addr: number; class: string }[]; breaks: number[] } | null;
   /** The running-line update's cost per frame over `ms` milliseconds; throws when no frame ran. */
-  frameCost: (ms: number) => Promise<{ frames: number; mean: number; max: number }>;
+  frameCost: (ms: number) => Promise<{ frames: number; mean: number; p95: number; max: number }>;
 }
 
 interface Window {
