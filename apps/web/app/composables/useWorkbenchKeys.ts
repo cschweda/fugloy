@@ -1,9 +1,10 @@
 // The workbench's one key handler. Bindings are keyed by `keyId`; a binding
 // marked `listing` fires only while the listing (or nothing in particular) has
 // focus, so Enter and the arrows keep their usual meaning on buttons, tabs and
-// menus elsewhere. Keys wait while a text field has focus or a dialog is open.
+// menus elsewhere. Keys wait while a text field has focus or a dialog is open,
+// and never fire inside a panel marked `data-own-keys` (utils/keys `ownsKeys`).
 import { onBeforeUnmount, onMounted } from 'vue';
-import { isTyping, keyId, modalOpen } from '../utils/keys';
+import { isTyping, keyId, modalOpen, ownsKeys } from '../utils/keys';
 
 export interface KeyBinding {
   run: () => void;
@@ -19,7 +20,7 @@ export function useWorkbenchKeys(opts: {
   inListing: (target: EventTarget | null) => boolean;
 }): void {
   function onKeydown(e: KeyboardEvent): void {
-    if (!opts.active() || isTyping(e.target) || modalOpen(document) || e.defaultPrevented) return;
+    if (!opts.active() || isTyping(e.target) || ownsKeys(e.target) || modalOpen(document) || e.defaultPrevented) return;
     const binding = opts.keys[keyId(e)];
     if (binding === undefined) return;
     if (binding.listing === true && !(e.target === document.body || opts.inListing(e.target))) return;

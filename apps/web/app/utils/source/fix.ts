@@ -16,6 +16,18 @@ export function fixRange(doc: Text, fix: AsmFix): { from: number; to: number } |
 }
 
 /**
+ * The text a fix replaces in the source asm assembled (`text`), so the editor
+ * can refuse it once the document no longer holds that text there; null when
+ * the fix's line or columns are not in that source. Lines end in LF, CRLF or
+ * CR, as CodeMirror splits them.
+ */
+export function fixExpected(text: string, fix: AsmFix): string | null {
+  const line = text.split(/\r\n|\r|\n/)[fix.line - 1];
+  if (line === undefined || fix.column < 1 || fix.endColumn < fix.column || fix.endColumn - 1 > line.length) return null;
+  return line.slice(fix.column - 1, fix.endColumn - 1);
+}
+
+/**
  * The transaction that applies the fix, or null when it no longer fits: its
  * line is gone, or (given `expected`, the text it was made for) the text there
  * has changed since asm looked.

@@ -278,11 +278,16 @@ Workbench, phase 5B (Source and Run), in progress on branch `phase5b` (plan
   as one undo step, and only if the line still holds the text asm saw. The
   toolbar picks, makes, renames, deletes (after a confirm) and downloads
   sources as `.z`. Ctrl+Enter / ⌘+Enter in the editor emits Run; Tab types a
-  tab, and Esc then Tab leaves the editor. Sources are flushed on leave with
-  the hints. The tab, CodeMirror and asm load in one lazy chunk when the tab
-  first opens (120.2 KB gzip, 372 KB raw, plus 0.6 KB of CSS); the build
-  does not prefetch it. The first screen's JavaScript grew by 1.3 KB gzip
-  (250,399 to 251,670 bytes: the module script, its modulepreloads and
+  tab, and Esc then Tab leaves the editor. The workbench's keys (G, N, ;,
+  Ctrl+Z...) never fire inside the Source panel, which is marked
+  `data-own-keys`, a rule any panel can opt into. Sources are flushed on
+  leave with the hints. The tab, CodeMirror and asm load in one lazy chunk
+  when the tab first opens (120.4 KB gzip, 373 KB raw, plus 0.6 KB of CSS),
+  with a loading line, and a sentence and Retry if the chunk cannot be
+  fetched. The build prefetches nothing a lazy root (`apps/web/lazy-chunks.ts`)
+  reaches, and `pnpm --filter @fugloy/web check:prefetch` checks every
+  generated page for it. The first screen's JavaScript grew by 1.5 KB gzip
+  (250,399 to 251,976 bytes: the module script, its modulepreloads and
   their static imports).
 
 ### Testing

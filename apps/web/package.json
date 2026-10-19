@@ -14,6 +14,7 @@
     "pretest": "nuxt prepare && pnpm run prepare-assets",
     "test": "vitest run",
     "test:seo": "pnpm run generate && FUGLOY_REQUIRE_SEO=1 vitest run test/seo.test.ts",
+    "check:prefetch": "pnpm run generate && FUGLOY_REQUIRE_PREFETCH=1 vitest run test/prefetch.test.ts",
     "test:e2e": "playwright test",
     "render-brand": "tsx scripts/render-brand.ts",
     "outline-card-text": "tsx scripts/outline-card-text.ts",

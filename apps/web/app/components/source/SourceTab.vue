@@ -5,7 +5,7 @@
 // exact rewrite, a Fix button. The toolbar picks, makes, renames, deletes and
 // downloads sources (useSources, Ruling 11). The page loads this component
 // lazily, so CodeMirror and asm stay off the first screen.
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { assemble } from '@fugloy/asm';
 import type { Diagnostic } from '@fugloy/asm';
 import CodeEditor from './CodeEditor.vue';
@@ -13,6 +13,7 @@ import ConfirmDialog from '~/components/ConfirmDialog.vue';
 import { useSources } from '~/composables/useSources';
 import { download } from '~/utils/exports';
 import { RECHECK_DELAY_MS, severityWord } from '~/utils/source/diagnostics';
+import { fixExpected } from '~/utils/source/fix';
 import type { AsmFix } from '~/utils/source/diagnostics';
 
 const emit = defineEmits<{ run: []; fix: [fix: AsmFix] }>();
@@ -21,6 +22,8 @@ const sources = useSources();
 const current = sources.current;
 const editor = ref<InstanceType<typeof CodeEditor> | null>(null);
 const diagnostics = shallowRef<readonly Diagnostic[]>([]);
+/** The text asm read for `diagnostics`, so a fix from a list older than the latest typing is refused. */
+let assembledText = '';
 const ready = ref(false);
 const problem = ref<string | null>(null);
 
@@ -57,8 +60,13 @@ function check(): void {
     diags = [];
     problem.value = err instanceof Error ? err.message : String(err);
   }
+  show(diags, src.text);
+}
+
+function show(diags: readonly Diagnostic[], text: string): void {
   diagnostics.value = diags;
-  editor.value?.setDiagnostics(diags);
+  assembledText = text;
+  editor.value?.setDiagnostics(diags, text);
 }
 
 function scheduleCheck(): void {
@@ -108,8 +116,12 @@ function fixLabel(fix: AsmFix): string {
   return `Fix line ${fix.line}: write ${fix.replacement}`;
 }
 
+/** The list's Fix: applied only if the line still holds what asm saw; either way the editor keeps the focus (the button may be gone). */
 function applyListFix(fix: AsmFix): void {
-  editor.value?.applyFix(fix);
+  const applied = editor.value?.applyFix(fix, fixExpected(assembledText, fix)) ?? false;
+  // A list older than the latest typing: bring it up to date now.
+  if (!applied) check();
+  editor.value?.focus();
 }
 
 // The toolbar.
@@ -133,7 +145,7 @@ function startRename(): void {
   renameText.value = current.value.name;
   renameError.value = null;
   renaming.value = true;
-  setTimeout(() => renameInput.value?.select(), 0);
+  void nextTick(() => renameInput.value?.select());
 }
 
 async function submitRename(): Promise<void> {
@@ -179,11 +191,10 @@ function downloadSource(): void {
 }
 
 defineExpose({
-  /** Shows asm's diagnostics from a fresh assembly (Run does one) without waiting. */
-  showDiagnostics(diags: readonly Diagnostic[]): void {
+  /** Shows asm's diagnostics from a fresh assembly of `text` (Run does one; the current text by default) without waiting. */
+  showDiagnostics(diags: readonly Diagnostic[], text?: string): void {
     cancelCheck();
-    diagnostics.value = diags;
-    editor.value?.setDiagnostics(diags);
+    show(diags, text ?? current.value?.text ?? '');
   },
   revealLine: reveal,
   /** Reveals the first error (else the first problem), if there is one. */
@@ -240,6 +251,7 @@ defineExpose({
       @update:text="onText"
       @run="emit('run')"
       @fix="onFix"
+      @stale-fix="check"
     />
     <p class="fg-source-hint fg-muted">Tab types a tab. To leave the editor, press Esc, then Tab.</p>
     <div class="fg-source-diags" data-testid="source-diags">

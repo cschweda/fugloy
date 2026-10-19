@@ -11,6 +11,17 @@ export function isTyping(target: EventTarget | null): boolean {
   return el.isContentEditable === true || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName);
 }
 
+/**
+ * True when the key press comes from inside a panel that keeps its own keys,
+ * marked `data-own-keys` (the Source panel; Task 4's Run panel): the
+ * workbench's bindings (G, N, ;, Esc, Ctrl+Z…) never fire there, even on a
+ * plain button.
+ */
+export function ownsKeys(target: EventTarget | null): boolean {
+  const el = target as { closest?: unknown } | null;
+  return el !== null && typeof el.closest === 'function' && (el as Element).closest('[data-own-keys]') !== null;
+}
+
 /** True while a modal dialog is open: the workbench's keys wait until it closes. */
 export function modalOpen(root: Pick<Document, 'querySelector'>): boolean {
   return root.querySelector('dialog[open]') !== null;

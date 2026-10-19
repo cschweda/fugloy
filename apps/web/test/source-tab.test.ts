@@ -107,6 +107,27 @@ describe('the Source tab', () => {
     expect((w.emitted('fix') ?? []).length).toBe(1);
   });
 
+  it('refuses a list fix made before the latest typing, refreshes the list, and keeps the focus in the editor', async () => {
+    const { w, view } = await open();
+    vi.useFakeTimers();
+    typeAll(view(), BROKEN);
+    await vi.advanceTimersByTimeAsync(250);
+    // Within the 250 ms, line 3 changes under the stale list: its Fix must not land on the new text.
+    const v = view();
+    const line3 = v.state.doc.line(3);
+    v.dispatch({ changes: { from: line3.from, to: line3.to, insert: '\tPOP\tA' }, userEvent: 'input.type' });
+    await w.get('[data-testid="source-diag-fix"]').trigger('click');
+    expect(v.state.doc.line(3).text).toBe('\tPOP\tA');
+    expect(w.emitted('fix')).toBeUndefined();
+    // The list is brought up to date at once (POP A is the same 8080 slip).
+    expect(w.findAll('[data-testid="source-diag"]').map((d) => d.text())).toEqual([expect.stringContaining('LDA'), expect.stringContaining('POP works on register pairs')]);
+    expect(document.activeElement).toBe(v.contentDOM);
+    // A fresh fix applies, and the focus is in the editor, not on the removed button.
+    await w.get('[data-testid="source-diag-fix"]').trigger('click');
+    expect(v.state.doc.line(3).text).toBe('\tPOP AF');
+    expect(document.activeElement).toBe(v.contentDOM);
+  });
+
   it('emits run on Ctrl+Enter in the editor, without inserting a line', async () => {
     const { w, view } = await open();
     const before = view().state.doc.toString();

@@ -2,6 +2,7 @@ import { copyFile, rm } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fugloyAliases } from './aliases';
+import { unflagLazy } from './lazy-chunks';
 
 // pdf.js's decoders (JBIG2 and JPEG 2000 in wasm, which archive.org scans use),
 // standard fonts, CMaps and ICC profiles, served from the site's own assets at
@@ -18,17 +19,11 @@ export default defineNuxtConfig({
   // The crawler must not follow the About page's link to /pdfjs/LICENSE: the file is copied in after prerendering.
   nitro: { preset: 'static', publicAssets: pdfjsAssets, prerender: { ignore: ['/pdfjs/'] } },
   hooks: {
-    // Source ✎'s lazy chunk (CodeMirror and asm, plan 5B) is fetched when the tab
-    // first opens, never prefetched with the first screen.
+    // The lazily loaded parts (Source ✎: CodeMirror and asm, plan 5B) are fetched
+    // when first opened, never prefetched with the first screen (lazy-chunks.ts;
+    // `pnpm --filter @fugloy/web check:prefetch` checks the generated pages).
     'build:manifest'(manifest) {
-      const lazy = Object.entries(manifest).filter(([key]) => key.includes('components/source/'));
-      const css = new Set(lazy.flatMap(([, entry]) => entry.css ?? []));
-      for (const [key, entry] of Object.entries(manifest)) {
-        if (lazy.some(([k]) => k === key) || css.has(key) || css.has(entry.file)) {
-          entry.prefetch = false;
-          entry.preload = false;
-        }
-      }
+      unflagLazy(manifest);
     },
     // After the public assets are copied: pdf.js's licence beside its files
     // (Apache-2.0 §4(a); the minified chunk loses its header), and no QuickJS

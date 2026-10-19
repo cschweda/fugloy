@@ -15,7 +15,7 @@ import { lintGutter, setDiagnostics as setLint } from '@codemirror/lint';
 import type { Diagnostic } from '@fugloy/asm';
 import { columnsToRange, toCmDiagnostics } from '~/utils/source/diagnostics';
 import type { AsmFix } from '~/utils/source/diagnostics';
-import { fixRange, fixSpec } from '~/utils/source/fix';
+import { fixExpected, fixSpec } from '~/utils/source/fix';
 import { sourceMarks } from '~/utils/source/decorate';
 
 const props = defineProps<{
@@ -25,7 +25,7 @@ const props = defineProps<{
   /** What screen readers call the editor. */
   label: string;
 }>();
-const emit = defineEmits<{ 'update:text': [text: string]; run: []; fix: [fix: AsmFix] }>();
+const emit = defineEmits<{ 'update:text': [text: string]; run: []; fix: [fix: AsmFix]; 'stale-fix': [] }>();
 
 const host = ref<HTMLElement | null>(null);
 let view: EditorView | null = null;
@@ -70,6 +70,9 @@ const theme = EditorView.theme(
   { dark: true },
 );
 
+// No lintKeymap: its panel (Mod-Shift-m) and F8 duplicate the list under the
+// editor, which is the keyboard and screen-reader route to every diagnostic
+// and its Fix; the marks and their tooltips are for the mouse.
 function extensions(): Extension[] {
   return [
     lineNumbers(),
@@ -130,9 +133,14 @@ watch(
   (label) => view?.dispatch({ effects: labelCompartment.reconfigure(EditorView.contentAttributes.of({ 'aria-label': label })) }),
 );
 
-/** Applies an asm fix as one undo step; `expected` is the text it was made for, so a stale fix does nothing. Returns whether it applied. */
-function applyFix(fix: AsmFix, expected?: string): boolean {
-  if (view === null) return false;
+/**
+ * Applies an asm fix as one undo step. `expected` is the text it replaces in
+ * the source asm assembled (`fixExpected`), so a fix offered before later
+ * typing does nothing; null (the fix is not in that source) always refuses.
+ * Returns whether it applied.
+ */
+function applyFix(fix: AsmFix, expected?: string | null): boolean {
+  if (view === null || expected === null) return false;
   const spec = fixSpec(view.state.doc, fix, expected);
   if (spec === null) return false;
   view.dispatch(spec);
@@ -141,14 +149,17 @@ function applyFix(fix: AsmFix, expected?: string): boolean {
 }
 
 defineExpose({
-  /** Shows asm's diagnostics as marks, each fix as a Fix action in its tooltip. */
-  setDiagnostics(diags: readonly Diagnostic[]): void {
+  /**
+   * Shows asm's diagnostics as marks, each fix as a Fix action in its tooltip.
+   * `assembled` is the text asm read (the document now, by default); a fix is
+   * refused once the document no longer holds what it replaces.
+   */
+  setDiagnostics(diags: readonly Diagnostic[], assembled?: string): void {
     if (view === null) return;
     const doc = view.state.doc;
+    const text = assembled ?? doc.toString();
     const marks = toCmDiagnostics(doc, diags, (fix) => {
-      // The text the fix was made for, so a fix offered before later typing is refused.
-      const r = fixRange(doc, fix);
-      applyFix(fix, r === null ? undefined : doc.sliceString(r.from, r.to));
+      if (!applyFix(fix, fixExpected(text, fix))) emit('stale-fix');
     });
     view.dispatch(setLint(view.state, marks));
   },

@@ -3,7 +3,7 @@ import { EditorState } from '@codemirror/state';
 import type { Transaction } from '@codemirror/state';
 import { history, undo } from '@codemirror/commands';
 import { assemble } from '@fugloy/asm';
-import { fixSpec } from '../app/utils/source/fix';
+import { fixExpected, fixSpec } from '../app/utils/source/fix';
 import { lineMarks } from '../app/utils/source/decorate';
 
 const SRC = '\tORG\t7000H\n\tPUSH\tA\t; save it\n\tJP\tHL\n';
@@ -44,6 +44,17 @@ describe('applying a fix', () => {
     expect(fixSpec(state.doc, fix, 'PUSH\tA')).not.toBeNull();
     expect(fixSpec(state.doc, fix, 'POP\tA')).toBeNull();
     expect(fixSpec(state.doc, { ...fix, line: 40 })).toBeNull();
+  });
+});
+
+describe('the text a fix was made for', () => {
+  it('is the slice of the assembled source the fix replaces, on LF, CRLF or CR lines', () => {
+    const fix = assemble(SRC).diagnostics.find((d) => d.message.startsWith('PUSH'))!.fix!;
+    expect(fixExpected(SRC, fix)).toBe('PUSH\tA');
+    expect(fixExpected(SRC.replace(/\n/g, '\r\n'), fix)).toBe('PUSH\tA');
+    expect(fixExpected(SRC.replace(/\n/g, '\r'), fix)).toBe('PUSH\tA');
+    expect(fixExpected('one line', fix)).toBeNull();
+    expect(fixExpected('a\nb\nc', { ...fix, line: 2, column: 1, endColumn: 9 })).toBeNull();
   });
 });
 

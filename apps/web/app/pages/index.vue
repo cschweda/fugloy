@@ -2,7 +2,7 @@
 // The workbench. With no program open, the first screen (drop zone and the
 // four games); with one, two facing pages: the listing on the left, the
 // companion tabs on the right, and the status line under them.
-import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
+import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { addressKey, summaryNotes, withHintFile, withSelection } from '@fugloy/disasm';
 import { download } from '~/utils/exports';
 import { MODEL3_DEFAULT } from '~/composables/useWorkbench';
@@ -38,8 +38,13 @@ import FacingPages from '~/components/workbench/FacingPages.vue';
 import PageTabs from '~/components/workbench/PageTabs.vue';
 import type { PageTab } from '~/components/workbench/PageTabs.vue';
 
+import { lazyLoad } from '~/utils/lazy';
+
 // Source ✎ brings CodeMirror and asm, so it loads on first open, off the first screen (plan 5B).
-const SourceTab = defineAsyncComponent(() => import('~/components/source/SourceTab.vue'));
+// If its chunk cannot be fetched, the panel says so and offers Retry.
+const SOURCE_LOAD_FAILED = 'The Source editor could not be loaded: the connection may have dropped, or the site was updated since this page opened. Press Retry, or reload the page if that fails.';
+const sourceTab = lazyLoad(async () => markRaw((await import('~/components/source/SourceTab.vue')).default), SOURCE_LOAD_FAILED);
+const { value: SourceTab, error: sourceError } = sourceTab;
 
 usePageSeo({
   title: 'Fugløy',
@@ -86,10 +91,9 @@ const RIGHT_TABS: PageTab<RightTab>[] = [
   { id: 'run', label: 'Run ▶', later: true },
 ];
 const leftTab = ref<LeftTab>('listing');
-/** Whether Source ✎ has been opened: it then stays mounted (hidden), keeping the editor's undo history. */
-const sourceOpened = ref(false);
+// Source ✎ loads the first time it is opened, then stays mounted (hidden), keeping the editor's undo history.
 watch(leftTab, (t) => {
-  if (t === 'source') sourceOpened.value = true;
+  if (t === 'source') void sourceTab.load();
 });
 const rightTab = ref<RightTab>('program');
 const persistence = usePersistence();
@@ -520,8 +524,13 @@ onBeforeUnmount(() => {
           <div id="left-panel-hints" v-show="leftTab === 'hints'" role="tabpanel" aria-labelledby="left-tab-hints" class="fg-panel">
             <HintsTab />
           </div>
-          <div id="left-panel-source" v-show="leftTab === 'source'" role="tabpanel" aria-labelledby="left-tab-source" class="flex min-h-0 flex-1 flex-col" data-testid="source-panel">
-            <SourceTab v-if="sourceOpened" />
+          <div id="left-panel-source" v-show="leftTab === 'source'" role="tabpanel" aria-labelledby="left-tab-source" class="flex min-h-0 flex-1 flex-col" data-testid="source-panel" data-own-keys>
+            <component :is="SourceTab" v-if="SourceTab !== null" />
+            <div v-else-if="sourceError !== null" class="fg-panel" data-testid="source-load-error">
+              <p role="alert">{{ sourceError }}</p>
+              <p><button type="button" class="fg-button" data-testid="source-load-retry" @click="sourceTab.load()">Retry</button></p>
+            </div>
+            <p v-else class="fg-panel fg-muted" role="status" data-testid="source-loading">Loading the editor…</p>
           </div>
         </template>
         <template #right>
