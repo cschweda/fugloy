@@ -25,9 +25,10 @@ const lessonDirs = readdirSync(join(dirname(fileURLToPath(import.meta.url)), '..
 const lessonTitle = (dir: string): string =>
   /^title: (.+)$/m.exec(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'content', 'learn', dir, 'lesson.md'), 'utf8'))![1]!;
 const LESSON_PAGES = lessonDirs.map((d) => ({ path: `/learn/${d}/`, file: `learn/${d}/index.html`, title: `${lessonTitle(d)} — Learn Z80 assembly · Fugløy` }));
+// /learn/ opens lesson 1 for people (the header links to it); its canonical URL, og:url and sitemap entry are lesson 1's.
+const LEARN_ALIAS = { path: '/learn/', file: 'learn/index.html', canonical: LESSON_PAGES[0]!.path, title: LESSON_PAGES[0]!.title };
 const PAGES = [
   { path: '/', file: 'index.html', title: 'Fugløy — TRS-80 disassembler workbench' },
-  { path: '/learn/', file: 'learn/index.html', title: `${lessonTitle(lessonDirs[0]!)} — Learn Z80 assembly · Fugløy` },
   ...LESSON_PAGES,
   { path: '/technical-details/', file: 'technical-details/index.html', title: 'Technical details · Fugløy' },
   { path: '/manuals/', file: 'manuals/index.html', title: 'Manuals · Fugløy' },
@@ -56,8 +57,14 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
 
   it('gives every page its own title', () => {
     expect(titles).toEqual(PAGES.map((p) => p.title));
-    // /learn/ opens lesson 1, so the two share a title; every other page has its own.
-    expect(new Set(titles).size).toBe(PAGES.length - 1);
+    expect(new Set(titles).size).toBe(PAGES.length);
+  });
+
+  it('serves /learn/ as lesson 1 with lesson 1 as its canonical page, og:url and title', () => {
+    const html = read(LEARN_ALIAS.file);
+    expect(/<title>([^<]*)<\/title>/.exec(html)?.[1]).toBe(LEARN_ALIAS.title);
+    expect(html).toContain(`<link rel="canonical" href="${ORIGIN}${LEARN_ALIAS.canonical}"`);
+    expect(meta(html, 'property', 'og:url')).toBe(ORIGIN + LEARN_ALIAS.canonical);
   });
 
   for (const p of PAGES) {
@@ -153,7 +160,7 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
   });
 
   it('links between pages with the trailing slash, so a crawler or a new tab takes no redirect', () => {
-    for (const p of PAGES) {
+    for (const p of [...PAGES, LEARN_ALIAS]) {
       const hrefs = [...read(p.file).matchAll(/<a\b[^>]*\bhref="(\/[^"#?]*)/g)].map((m) => m[1]!).filter((h) => !h.startsWith('/pdfjs/'));
       expect(hrefs.length, p.path).toBeGreaterThan(0);
       expect(hrefs.filter((h) => !h.endsWith('/')), p.path).toEqual([]);
@@ -161,13 +168,13 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
   });
 
   it('links the Learn page first in the header\'s Site nav on every page', () => {
-    for (const p of PAGES) {
+    for (const p of [...PAGES, LEARN_ALIAS]) {
       const nav = /<nav[^>]*aria-label="Site"[^>]*>([\s\S]*?)<\/nav>/.exec(read(p.file))?.[1] ?? '';
       expect(/<a\b[^>]*\bhref="([^"]*)"/.exec(nav)?.[1], p.path).toBe('/learn/');
     }
   });
 
-  it('lists every page in sitemap.xml, and robots.txt allows all and names it', () => {
+  it('lists every canonical page in sitemap.xml (not the /learn/ alias), and robots.txt allows all and names it', () => {
     const sitemap = read('sitemap.xml');
     const locs = [...sitemap.matchAll(/<loc>([^<]*)<\/loc>/g)].map((m) => m[1]);
     expect(locs).toEqual(PAGES.map((p) => ORIGIN + p.path));

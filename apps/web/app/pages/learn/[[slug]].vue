@@ -37,7 +37,7 @@ const { prev, next } = lessonNeighbours(LESSONS, lesson.slug);
 usePageSeo({
   title: `${lesson.title} — Learn Z80 assembly`,
   description: `Lesson ${lesson.number} of Learn Z80 assembly with Fugløy: ${lesson.idea}. Read it, run the program on a TRS-80 in your browser, and change it.`,
-  path: asked === '' ? '/learn' : `/learn/${lesson.slug}`, // /learn/ is the landing page: it opens lesson 1 and is its own canonical URL
+  path: `/learn/${lesson.slug}`, // /learn/ opens lesson 1 and names lesson 1's URL as its canonical one
 });
 
 /** One sentence when a lazy column cannot be fetched after a second try (utils/lazy's words, with reloading next). */

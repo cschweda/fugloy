@@ -41,7 +41,7 @@ creates and pushes the tag.
 
 - Phase 6B, the Learn page and lessons 1-7 (web workbench, merged to main 2026-10-19; plan
   `docs/superpowers/plans/2026-10-19-phase6b-learn-page.md`). A Learn link sits first in the
-  header's Site nav, to `/learn/` (lesson 1) and each lesson's page, listed in `sitemap.xml`. Each
+  header's Site nav, to `/learn/` (which opens lesson 1, canonical to it) and each lesson's page, listed in `sitemap.xml`. Each
   lesson (`apps/web/content/learn/NN-slug/`: `lesson.md` with cited hardware claims, `program.z`,
   `check.json`) is self-contained, builds on the last, and runs on the Model III (the Model I where
   its front matter allows): white out the screen, the registers, etch-a-sketch, rock-paper-scissors,

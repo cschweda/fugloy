@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://app.fugloy.dev/</loc></url>
-  <url><loc>https://app.fugloy.dev/learn/</loc></url>
   <url><loc>https://app.fugloy.dev/learn/01-white-out/</loc></url>
   <url><loc>https://app.fugloy.dev/learn/02-registers/</loc></url>
   <url><loc>https://app.fugloy.dev/learn/03-etch-a-sketch/</loc></url>
