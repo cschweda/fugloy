@@ -2,7 +2,7 @@
 // The workbench. With no program open, the first screen (drop zone and the
 // four games); with one, two facing pages: the listing on the left, the
 // companion tabs on the right, and the status line under them.
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { addressKey, summaryNotes, withHintFile, withSelection } from '@fugloy/disasm';
 import { download } from '~/utils/exports';
 import { MODEL3_DEFAULT } from '~/composables/useWorkbench';
@@ -38,6 +38,9 @@ import FacingPages from '~/components/workbench/FacingPages.vue';
 import PageTabs from '~/components/workbench/PageTabs.vue';
 import type { PageTab } from '~/components/workbench/PageTabs.vue';
 
+// Source ✎ brings CodeMirror and asm, so it loads on first open, off the first screen (plan 5B).
+const SourceTab = defineAsyncComponent(() => import('~/components/source/SourceTab.vue'));
+
 usePageSeo({
   title: 'Fugløy',
   description: 'Open a TRS-80 .CMD or .BAS program and read it as Z80 assembly with named ROM and DOS routines, in your browser. Free, and your files never leave your machine.',
@@ -72,7 +75,7 @@ type RightTab = 'explain' | 'symbol' | 'index' | 'program' | 'manual' | 'run';
 const LEFT_TABS: PageTab<LeftTab>[] = [
   { id: 'listing', label: 'Listing' },
   { id: 'hints', label: 'Hints' },
-  { id: 'source', label: 'Source ✎', later: true },
+  { id: 'source', label: 'Source ✎' },
 ];
 const RIGHT_TABS: PageTab<RightTab>[] = [
   { id: 'explain', label: 'Explain' },
@@ -83,6 +86,11 @@ const RIGHT_TABS: PageTab<RightTab>[] = [
   { id: 'run', label: 'Run ▶', later: true },
 ];
 const leftTab = ref<LeftTab>('listing');
+/** Whether Source ✎ has been opened: it then stays mounted (hidden), keeping the editor's undo history. */
+const sourceOpened = ref(false);
+watch(leftTab, (t) => {
+  if (t === 'source') sourceOpened.value = true;
+});
 const rightTab = ref<RightTab>('program');
 const persistence = usePersistence();
 const nav = useNavigation(scrollTo);
@@ -511,6 +519,9 @@ onBeforeUnmount(() => {
           </div>
           <div id="left-panel-hints" v-show="leftTab === 'hints'" role="tabpanel" aria-labelledby="left-tab-hints" class="fg-panel">
             <HintsTab />
+          </div>
+          <div id="left-panel-source" v-show="leftTab === 'source'" role="tabpanel" aria-labelledby="left-tab-source" class="flex min-h-0 flex-1 flex-col" data-testid="source-panel">
+            <SourceTab v-if="sourceOpened" />
           </div>
         </template>
         <template #right>

@@ -18,6 +18,18 @@ export default defineNuxtConfig({
   // The crawler must not follow the About page's link to /pdfjs/LICENSE: the file is copied in after prerendering.
   nitro: { preset: 'static', publicAssets: pdfjsAssets, prerender: { ignore: ['/pdfjs/'] } },
   hooks: {
+    // Source ✎'s lazy chunk (CodeMirror and asm, plan 5B) is fetched when the tab
+    // first opens, never prefetched with the first screen.
+    'build:manifest'(manifest) {
+      const lazy = Object.entries(manifest).filter(([key]) => key.includes('components/source/'));
+      const css = new Set(lazy.flatMap(([, entry]) => entry.css ?? []));
+      for (const [key, entry] of Object.entries(manifest)) {
+        if (lazy.some(([k]) => k === key) || css.has(key) || css.has(entry.file)) {
+          entry.prefetch = false;
+          entry.preload = false;
+        }
+      }
+    },
     // After the public assets are copied: pdf.js's licence beside its files
     // (Apache-2.0 §4(a); the minified chunk loses its header), and no QuickJS
     // sandbox, since PDF scripting is never enabled.

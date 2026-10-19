@@ -34,14 +34,14 @@ const byline = (s: Source): string => (s.author === s.publisher ? s.author : `${
 
     <h2 id="storage">What is saved, and where</h2>
     <p>
-      Your hints (the names, comments, and declarations you add) and each program's machine and DOS settings are saved in this browser, in its own storage, as you work.
+      Your hints (the names, comments, and declarations you add), each program's machine and DOS settings, and the Z80 sources you write in <strong class="fg-strong">Source ✎</strong> are saved in this browser, in its own storage, as you work.
       Storage belongs to one browser on one computer: another browser, another profile, or a private window starts empty, and clearing the site's data erases it.
       Manuals you add stay there too. Programs and ROMs are never stored; you open them again each visit.
     </p>
     <p>
       To carry your work somewhere else, use <strong class="fg-strong">Your work</strong> in the top bar.
-      <strong class="fg-strong">Back up</strong> downloads one JSON file with your hints and settings, and nothing else: no manuals, ROMs, or programs.
-      <strong class="fg-strong">Restore…</strong> reads such a file on another browser or computer. It adds what is missing, and when a program already has different hints here, it asks before replacing them.
+      <strong class="fg-strong">Back up</strong> downloads one JSON file with your hints, settings, and sources, and nothing else: no manuals, ROMs, or programs.
+      <strong class="fg-strong">Restore…</strong> reads such a file on another browser or computer. It adds what is missing, and when a program already has different hints here, it asks before replacing them. A source is never replaced: one whose name is taken here is added under a new name.
       A program's hints can also be exported as a plain text hint file from the Export menu, a format made to be kept in git.
     </p>
 

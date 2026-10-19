@@ -267,6 +267,23 @@ Workbench, phase 5B (Source and Run), in progress on branch `phase5b` (plan
   whose header does not say so, into `glyphs.generated.ts`, which records
   each font's pinned URL and SHA-256. `attachKeyboard` passes keys from the
   screen element only.
+- **Source ✎**, the editor, is live in the workbench (the left page, beside
+  Listing and Hints; Run ▶ stays dimmed until it lands). It is CodeMirror 6
+  with no language package: comments and labels are styled by a
+  `MatchDecorator` that reads each line as asm does. The source is
+  re-assembled 250 ms after typing stops; each problem is marked on its
+  characters, and listed under the editor as severity, line and message. A
+  click on a problem puts the cursor on its line. Where asm gives an exact
+  rewrite, a Fix button (and a Fix action in the mark's tooltip) applies it
+  as one undo step, and only if the line still holds the text asm saw. The
+  toolbar picks, makes, renames, deletes (after a confirm) and downloads
+  sources as `.z`. Ctrl+Enter / ⌘+Enter in the editor emits Run; Tab types a
+  tab, and Esc then Tab leaves the editor. Sources are flushed on leave with
+  the hints. The tab, CodeMirror and asm load in one lazy chunk when the tab
+  first opens (120.2 KB gzip, 372 KB raw, plus 0.6 KB of CSS); the build
+  does not prefetch it. The first screen's JavaScript grew by 1.3 KB gzip
+  (250,399 to 251,670 bytes: the module script, its modulepreloads and
+  their static imports).
 
 ### Testing
 
