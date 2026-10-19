@@ -76,6 +76,16 @@ describe('useRoms', () => {
     expect(r.info(4)).toEqual({ name: 'mine.rom', sha256: 'unknown', recognized: null });
   });
 
+  it("a dropped file takes the Run tab's model as a fallback only when unrecognised and of a size that model takes", async () => {
+    const r = createRoms({ open, hash });
+    expect(await r.add(file('mine.rom', 'unknown', 0x3000), undefined, 1)).toEqual({ ok: true, model: 1 });
+    // The wrong size for the fallback: it still asks.
+    const ask = await r.add(file('other.rom', 'unknown', 0x3800), undefined, 1);
+    expect(!ask.ok && ask.reason).toMatch(/Which model/);
+    // A recognised ROM goes to its own model whatever the fallback.
+    expect(await r.add(file('model3.rom', M3, 0x3800), undefined, 1)).toEqual({ ok: true, model: 3 });
+  });
+
   it('says why a ROM cannot be kept without storage', async () => {
     const r = createRoms({ open: async () => null, hash });
     const res = await r.add(file('a.rom', M3, 0x3800));

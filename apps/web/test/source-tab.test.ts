@@ -207,4 +207,22 @@ describe('the Source toolbar', () => {
     await w.get('[data-testid="source-download"]').trigger('click');
     expect(downloads[1]?.filename).toBe('game.z');
   });
+
+  it("lists a Run's ROM notes as warnings while the text is the one Run assembled, and reveals a line without taking the focus", async () => {
+    const { w, view } = await open();
+    const note = { line: 2, column: 1, endColumn: 5, severity: 'warning' as const, message: 'Line 2 points HL at $0000, inside the ROM space.' };
+    await w.setProps({ report: { text: STARTER, diagnostics: [], notes: [note] } });
+    await flushPromises();
+    expect(w.findAll('[data-testid="source-diag"]').map((d) => d.text())).toEqual([expect.stringMatching(/^Warning\s*Line 2\s*Line 2 points HL/)]);
+    expect(w.get('[data-testid="source-diag-count"]').text()).toBe('1 warning');
+    (document.activeElement as HTMLElement | null)?.blur();
+    (w.vm as unknown as { showLine(n: number): void }).showLine(3);
+    expect(view().state.doc.lineAt(view().state.selection.main.head).number).toBe(3);
+    expect(view().hasFocus).toBe(false);
+    // Typing makes the notes stale: the next check drops them.
+    vi.useFakeTimers();
+    view().dispatch({ changes: { from: view().state.doc.length, insert: '\n' }, userEvent: 'input.type' });
+    await vi.advanceTimersByTimeAsync(250);
+    expect(w.findAll('[data-testid="source-diag"]')).toHaveLength(0);
+  });
 });

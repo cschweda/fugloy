@@ -275,6 +275,8 @@ a.fg-tok-label { text-decoration: underline dotted; text-underline-offset: 3px; 
 }
 @media (max-width: 767px) { .fg-first { grid-template-columns: minmax(0, 1fr); padding: 16px; } }
 .fg-first-drop, .fg-first-games { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.fg-first-write { display: flex; flex-direction: column; gap: 6px; padding-top: 12px; border-top: 1px solid var(--fg-border); }
+.fg-first-write p { margin: 0; }
 .fg-dropzone {
   display: flex;
   flex-direction: column;

@@ -228,8 +228,8 @@ Workbench, phase 5B (Source and Run), in progress on branch `phase5b` (plan
   never replaces one) and never a ROM. The site now depends on `@fugloy/asm`,
   `@fugloy/emu`, and CodeMirror 6 (`@codemirror/state`, `view`, `commands`,
   `lint`; MIT), none of them yet on the first screen.
-- **The emulator runtime** (`apps/web/app/utils/emulator/`, no DOM; not yet
-  in the page). With no ROM, a program runs on Fugløy's own stub ROM
+- **The emulator runtime** (`apps/web/app/utils/emulator/`, no DOM; used by
+  Run ▶). With no ROM, a program runs on Fugløy's own stub ROM
   (`stub-rom.z`: DI, a stack, a blank screen, a return address of its own,
   HALT; assembled by asm at run time and padded with HALT to the model's ROM
   size, so it holds no Tandy code). Code assembled into the ROM's space is
@@ -268,7 +268,7 @@ Workbench, phase 5B (Source and Run), in progress on branch `phase5b` (plan
   each font's pinned URL and SHA-256. `attachKeyboard` passes keys from the
   screen element only.
 - **Source ✎**, the editor, is live in the workbench (the left page, beside
-  Listing and Hints; Run ▶ stays dimmed until it lands). It is CodeMirror 6
+  Listing and Hints). It is CodeMirror 6
   with no language package: comments and labels are styled by a
   `MatchDecorator` that reads each line as asm does. The source is
   re-assembled 250 ms after typing stops; each problem is marked on its
@@ -289,6 +289,40 @@ Workbench, phase 5B (Source and Run), in progress on branch `phase5b` (plan
   generated page for it. The first screen's JavaScript grew by 1.5 KB gzip
   (250,399 to 251,976 bytes: the module script, its modulepreloads and
   their static imports).
+- **Run ▶** is live: one press (the Run button, or Ctrl+Enter / ⌘+Enter
+  anywhere in the workbench, the editor and the TRS-80 screen included)
+  assembles the current source and runs it on a fresh `@fugloy/emu`
+  Machine. Errors go to Source ✎, the first revealed, and nothing runs. A
+  clean program refreshes its own listing quietly (no tab switch, the cursor
+  kept where its address still exists, no saved-work or carry-over dialog,
+  nothing saved), and never replaces a program opened from a file unless
+  **Show in Listing** is pressed. Code assembled into the ROM's space is
+  refused on any ROM; with no ROM stored, a program that needs one is
+  refused with a sentence naming its line, and every other program runs on
+  Fugløy's stub ROM ("Running on Fugløy's stub ROM (no ROM needed for this
+  program)"). The ROM-copy notes join Source's list as warnings. A ROM is
+  added from a file or dropped on the tab (an unrecognised one of the right
+  size goes to the tab's model) and kept in this browser only, never in a
+  backup, never uploaded; the About page says so. The screen is a canvas
+  (768x576, or 640x480 for 80x24, pixelated), the only element whose keys
+  reach the TRS-80; Tab leaves it, blur releases every key, and while a
+  program runs unfocused it says "Click the screen to type to the TRS-80".
+  The tab's model select sets the source's model. The first screen gains
+  **Write a program** and **Continue <name>**, and the workbench opens on
+  Source ✎ and Run ▶ with no program; the listing-bound tabs then say "Run
+  the source to see its listing here." Sizes (gzip): the Run tab 4.6 KB
+  plus 0.6 KB of CSS and a 1.7 KB screen chunk, emu 36.5 KB, all fetched
+  when the tab first opens; the first Run adds the kit (5.5 KB) and asm
+  (16.2 KB, now its own chunk shared with Source ✎, whose chunk is 104.5
+  KB). The first screen's JavaScript is 254,075 bytes, +3,676 over the
+  250,399-byte baseline before 5B (+2,099 in this step), within the 5 KB
+  budget. The Run tab is handed its Run and sources by the page so its chunk
+  imports none of the first screen's modules, which otherwise split the
+  shared chunks into smaller pieces that compress worse. The prefetch rule
+  (`lazy-chunks.ts`) now covers `components/run/` and `utils/emulator/`, and
+  never walks into a page or layout: the Run tab imports the page's chunk,
+  and the page's own preload must stay (`check:prefetch` checks it). CI runs
+  `check:prefetch` beside `test:seo`.
 
 ### Testing
 

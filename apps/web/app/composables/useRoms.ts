@@ -24,8 +24,11 @@ export interface Roms {
   have(model: ModelId): boolean;
   info(model: ModelId): RomInfo | null;
   bytes(model: ModelId): Promise<Uint8Array | null>;
-  /** Adds a ROM: to its own model when recognised (refused for another), else to `model` at a size it takes. */
-  add(file: File, model?: ModelId): Promise<AddRomResult>;
+  /**
+   * Adds a ROM: to its own model when recognised (refused for another), else to `model` at a size it takes.
+   * With no `model`, an unrecognised file goes to `fallback` (the Run tab's model) when its size suits it.
+   */
+  add(file: File, model?: ModelId, fallback?: ModelId): Promise<AddRomResult>;
   remove(model: ModelId): Promise<void>;
   /** Opens the store and reads what is in it; safe to call again. */
   start(): Promise<Store | null>;
@@ -96,7 +99,7 @@ export function createRoms(deps: RomsDeps = {}): Roms {
     return starting;
   }
 
-  async function add(file: File, model?: ModelId): Promise<AddRomResult> {
+  async function add(file: File, wanted?: ModelId, fallback?: ModelId): Promise<AddRomResult> {
     const { ROM_SIZES, MODEL_NAMES, recognise } = await ids();
     // A size no TRS-80 ROM has is refused before the file is read (it may be huge).
     if (!([1, 3, 4] as const).some((m) => ROM_SIZES[m].includes(file.size))) return { ok: false, reason: wrongSize(file.name, file.size, ROM_SIZES) };
@@ -108,6 +111,7 @@ export function createRoms(deps: RomsDeps = {}): Roms {
     }
     const sha = await hash(bytes);
     const known = recognise(sha);
+    const model = wanted ?? (known === null && fallback !== undefined && ROM_SIZES[fallback].includes(bytes.length) ? fallback : undefined);
     let target: ModelId;
     if (known !== null) {
       if (model !== undefined && model !== known.model) {

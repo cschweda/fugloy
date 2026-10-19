@@ -13,6 +13,10 @@ export interface Lazy<T> {
   load(): Promise<void>;
 }
 
+/** The sentence for a part of the site whose chunk could not be fetched: `what` (capitalised) and the next step. */
+export const loadFailed = (what: string, next = 'Press Retry'): string =>
+  `${what} could not be loaded: the connection may have dropped, or the site was updated since this page opened. ${next}, or reload the page if that fails.`;
+
 export function lazyLoad<T>(loader: () => Promise<T>, failure: string): Lazy<T> {
   const value = shallowRef<T | null>(null);
   const loading = ref(false);

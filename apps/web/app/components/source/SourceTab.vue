@@ -15,7 +15,10 @@ import { download } from '~/utils/exports';
 import { RECHECK_DELAY_MS, severityWord } from '~/utils/source/diagnostics';
 import { fixExpected } from '~/utils/source/fix';
 import type { AsmFix } from '~/utils/source/diagnostics';
+import type { RunReport } from '~/composables/useRun';
 
+// `report`: the last Run's findings. Its ROM notes join the list, as warnings, while the text is the one Run assembled.
+const props = defineProps<{ report?: RunReport | null }>();
 const emit = defineEmits<{ run: []; fix: [fix: AsmFix] }>();
 
 const sources = useSources();
@@ -63,7 +66,9 @@ function check(): void {
   show(diags, src.text);
 }
 
-function show(diags: readonly Diagnostic[], text: string): void {
+function show(asmDiags: readonly Diagnostic[], text: string): void {
+  const r = props.report;
+  const diags = r != null && r.text === text && r.notes.length > 0 ? [...asmDiags, ...r.notes].sort((a, b) => a.line - b.line) : asmDiags;
   diagnostics.value = diags;
   assembledText = text;
   editor.value?.setDiagnostics(diags, text);
@@ -86,13 +91,30 @@ function onFix(fix: AsmFix): void {
   emit('fix', fix);
 }
 
-// A source switched to (or the first one, once the editor is there): check it at once.
+/** A line Run asked to reveal before the editor was there. */
+let pendingReveal: number | null = null;
+
+// A source switched to (or the first one, once the editor is there), or its model changed: check it at once.
 watch(
-  [() => current.value?.id, () => editor.value !== null],
-  ([id, mounted]) => {
-    if (id !== undefined && mounted) check();
+  [() => current.value?.id, () => current.value?.model, () => editor.value !== null],
+  ([id, , mounted]) => {
+    if (id === undefined || !mounted) return;
+    check();
+    if (pendingReveal !== null) editor.value?.revealLine(pendingReveal);
+    pendingReveal = null;
   },
   { flush: 'post' },
+);
+
+// A Run's findings for the text on screen show at once.
+watch(
+  () => props.report,
+  (r) => {
+    if (r != null && r.text === current.value?.text) {
+      cancelCheck();
+      show(r.diagnostics, r.text);
+    }
+  },
 );
 
 const counts = computed(() => {
@@ -197,6 +219,11 @@ defineExpose({
     show(diags, text ?? current.value?.text ?? '');
   },
   revealLine: reveal,
+  /** Scrolls to a line and puts the cursor there without taking the focus (Run never moves it), once the editor is there. */
+  showLine(line: number): void {
+    if (editor.value === null) pendingReveal = line;
+    else editor.value.revealLine(line);
+  },
   /** Reveals the first error (else the first problem), if there is one. */
   revealFirst(): void {
     const d = diagnostics.value.find((x) => x.severity === 'error') ?? diagnostics.value[0];

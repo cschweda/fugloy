@@ -34,6 +34,17 @@ describe('lazy chunks', () => {
     expect(Object.keys(m).filter((k) => m[k]!.preload === true).sort()).toEqual(['_disasm.js', '_vue.js', 'entry.js', 'index.css', 'pages/index.vue']);
   });
 
+  it('never reach a page, even when a lazy part imports a composable Rollup put in the page chunk (Run ▶ imports pages/index.vue)', () => {
+    const m = manifest();
+    m['pages/index.vue']!.dynamicImports!.push('components/run/RunTab.vue');
+    m['components/run/RunTab.vue'] = { file: 'run.js', isDynamicEntry: true, imports: ['entry.js', 'pages/index.vue', '_disasm.js'] };
+    for (const e of Object.values(m)) e.prefetch = e.preload = true;
+    unflagLazy(m, ['components/source/', 'components/run/']);
+    expect(m['pages/index.vue']!.preload).toBe(true);
+    expect(m['index.css']!.preload).toBe(true);
+    expect(m['components/run/RunTab.vue']!.preload).toBe(false);
+  });
+
   it('refuse a root that matches nothing, so a moved folder cannot bring the prefetch back silently', () => {
     expect(() => unflagLazy(manifest(), ['components/gone/'])).toThrow('no client-manifest entry starts with components/gone/');
   });

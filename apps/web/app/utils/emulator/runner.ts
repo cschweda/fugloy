@@ -51,6 +51,8 @@ export interface RunnerOptions {
   now?: () => number;
   /** After each frame's slice (and each step); 5C maps PC to a line here. */
   onFrame?: (r: Runner) => void;
+  /** Once the run stops, for whatever reason (the trap, an error, or `stop`). */
+  onStop?: (r: Runner) => void;
 }
 
 /** The longest gap a frame makes up, in seconds. */
@@ -220,10 +222,12 @@ export function createRunner(opts: RunnerOptions): Runner {
       opts.onFrame?.(runner);
     },
     stop(reason?: string, line: number | null = null) {
+      if (state === 'stopped') return;
       state = 'stopped';
       stopReason = reason ?? null;
       stopLine = line;
       unschedule();
+      opts.onStop?.(runner);
     },
   };
   return runner;

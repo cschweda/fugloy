@@ -6,8 +6,8 @@
 // what the static entry closure needs anyway. `scripts/check-prefetch.ts`
 // checks the generated pages with the same walk.
 
-/** Manifest keys (source paths relative to app/) of the lazily loaded parts. Task 4 adds `components/run/`. */
-export const LAZY_ROOTS: readonly string[] = ['components/source/'];
+/** Manifest keys (source paths relative to app/) of the lazily loaded parts: Source ✎, Run ▶, and the emulator runtime (the Run kit, and rom-ids for an added ROM). */
+export const LAZY_ROOTS: readonly string[] = ['components/source/', 'components/run/', 'utils/emulator/'];
 
 /** The fields of a Nuxt client-manifest entry this needs. */
 export interface ManifestEntry {
@@ -45,8 +45,14 @@ function walk(manifest: Manifest, from: Iterable<string>, follow: (e: ManifestEn
 export function lazyClosure(manifest: Manifest, roots: readonly string[] = LAZY_ROOTS): { keys: Set<string>; files: Set<string> } {
   const starts = Object.keys(manifest).filter((k) => roots.some((r) => k.startsWith(r)));
   // The walk does not go through the entry's own static closure: every chunk imports the entry, whose dynamic imports are all the pages.
-  const entry = walk(manifest, Object.keys(manifest).filter((k) => manifest[k]!.isEntry === true), (e) => e.imports ?? []);
-  const reached = walk(manifest, starts, (e) => [...(e.imports ?? []), ...(e.dynamicImports ?? [])].filter((k) => !entry.has(k)));
+  const entries = Object.keys(manifest).filter((k) => manifest[k]!.isEntry === true);
+  const entry = walk(manifest, entries, (e) => e.imports ?? []);
+  // Nor through a page or layout (Nuxt's route components, or the entry's dynamic imports): a lazy part
+  // may import one, when Rollup puts a composable both share in the page's chunk, and the page's own
+  // preload must stay.
+  const route = (k: string): boolean => /^(?:pages|layouts)\//.test(k);
+  const pages = new Set([...Object.keys(manifest).filter(route), ...entries.flatMap((k) => manifest[k]!.dynamicImports ?? [])].filter((k) => !roots.some((r) => k.startsWith(r))));
+  const reached = walk(manifest, starts, (e) => [...(e.imports ?? []), ...(e.dynamicImports ?? [])].filter((k) => !entry.has(k) && !pages.has(k)));
   const others = Object.keys(manifest).filter((k) => manifest[k]!.isEntry === true || (manifest[k]!.isDynamicEntry === true && !reached.has(k)));
   const statics = walk(manifest, others, (e) => e.imports ?? []);
   const staticFiles = new Set([...statics].flatMap((k) => (manifest[k] === undefined ? [] : [manifest[k]!.file, ...(manifest[k]!.css ?? [])])));

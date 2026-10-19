@@ -22,7 +22,8 @@ export const SAVE_DELAY_MS = 500;
 
 /** 'no changes yet': the hints are as the program opened (an example's committed ones), so nothing needs saving. */
 /** 'not saved (saved hints kept)': the program's saved hints no longer apply, so nothing saves over them until the user says so. */
-export type SaveState = 'saved' | 'unsaved' | 'no hints yet' | 'no changes yet' | 'not saved (storage unavailable)' | 'not saved (saved hints kept)';
+/** 'not saved (assembled from your source)': a Source ✎ program's listing, which Run rebuilds; its hints are not kept. */
+export type SaveState = 'saved' | 'unsaved' | 'no hints yet' | 'no changes yet' | 'not saved (storage unavailable)' | 'not saved (saved hints kept)' | 'not saved (assembled from your source)';
 
 export interface Persistence {
   /** The status line's save state. */
@@ -254,7 +255,8 @@ export function createPersistence(wb: Workbench, deps: PersistenceDeps = {}): Pe
     restored.value = false;
     const s = wb.session.value;
     baseline.value = s === null ? null : hintText(s);
-    if (s === null) return;
+    // A Source ✎ program's listing (Ruling 10) has nothing to restore or carry over, and saves nothing.
+    if (s === null || wb.origin.value !== null) return;
     lastSel = selKey(s.selection);
     void restore(s, generation);
   }
@@ -287,6 +289,7 @@ export function createPersistence(wb: Workbench, deps: PersistenceDeps = {}): Pe
     const s = wb.session.value;
     if (store.value === null || failed.value) return 'not saved (storage unavailable)';
     if (s === null) return 'no hints yet';
+    if (wb.origin.value !== null) return 'not saved (assembled from your source)';
     if (blocked.value !== null) return 'not saved (saved hints kept)';
     if (savedText.value === null && hintText(s) === baseline.value) return s.hintFile.hints.length === 0 ? 'no hints yet' : 'no changes yet';
     if (conflict.value !== null || waiting.value || savedText.value !== hintText(s)) return 'unsaved';

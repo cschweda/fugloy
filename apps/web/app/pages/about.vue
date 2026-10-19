@@ -36,7 +36,7 @@ const byline = (s: Source): string => (s.author === s.publisher ? s.author : `${
     <p>
       Your hints (the names, comments, and declarations you add), each program's machine and DOS settings, and the Z80 sources you write in <strong class="fg-strong">Source ✎</strong> are saved in this browser, in its own storage, as you work.
       Storage belongs to one browser on one computer: another browser, another profile, or a private window starts empty, and clearing the site's data erases it.
-      Manuals you add stay there too. Programs and ROMs are never stored; you open them again each visit.
+      Manuals you add stay there too, and so does a ROM you add in <strong class="fg-strong">Run ▶</strong>: it is stored in this browser only, never put in a backup, and never uploaded. Programs are never stored; you open them again each visit.
     </p>
     <p>
       To carry your work somewhere else, use <strong class="fg-strong">Your work</strong> in the top bar.

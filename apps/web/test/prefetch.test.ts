@@ -1,5 +1,6 @@
 // No page of the generated site prefetches or preloads a lazily loaded part
-// (lazy-chunks.ts: Source ✎ now, Run ▶ later). Reads .output/public and the
+// (lazy-chunks.ts: Source ✎, Run ▶, and the emulator runtime), and the
+// first screen still preloads its own page's chunk. Reads .output/public and the
 // client manifest of the same build, so it runs after
 // `pnpm --filter @fugloy/web generate`; `pnpm --filter @fugloy/web check:prefetch`
 // does both. Without a build (or with one older than the manifest) it is
@@ -35,5 +36,12 @@ describe.skipIf(!usable)('the generated site', () => {
     const bad: string[] = [];
     for (const page of pages(out)) for (const f of hintedFiles(readFileSync(join(out, page), 'utf8'))) if (lazy!.files.has(f)) bad.push(`${page}: ${f}`);
     expect(bad).toEqual([]);
+  });
+
+  it("still preloads the workbench page's own chunk on the first screen (a lazy part importing it must not unflag it)", () => {
+    const page = manifest!['pages/index.vue'];
+    expect(page).toBeDefined();
+    expect(lazy!.files.has(page!.file)).toBe(false);
+    expect(hintedFiles(readFileSync(join(out, 'index.html'), 'utf8'))).toContain(page!.file);
   });
 });
