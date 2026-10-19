@@ -20,11 +20,16 @@ function same(source: string): void {
   expect(bytesOf(source)).toEqual(z.bytes);
 }
 
-/** zmac rejects `source` (an error or a warning), and the assembler gives an error. */
-function bothReject(source: string): void {
+/**
+ * zmac rejects `source` (an error or a warning), and the assembler gives an
+ * error of the expected kind on the expected line (never a "not handled yet").
+ */
+function bothReject(source: string, kind: RegExp, line = 2): void {
   const z = runZmac(source);
   expect(z.clean, `zmac accepted:\n${source}`).toBe(false);
-  expect(errorsOf(assemble(source)).length, `asm accepted:\n${source}`).toBeGreaterThan(0);
+  const errors = errorsOf(assemble(source));
+  const onLine = errors.filter((e) => e.startsWith(`${line}: `)).map((e) => e.slice(`${line}: `.length));
+  expect(onLine.some((m) => kind.test(m) && !/not handled yet/.test(m)), `asm errors for:\n${source}\n${errors.join('\n')}`).toBe(true);
 }
 
 describe('zmac probe: label case', () => {
@@ -41,26 +46,26 @@ describe('zmac probe: labels without a colon', () => {
     same(program('nop', 'ret', 'ei'));
   });
   zit('a mnemonic with operands in column 1 is rejected', () => {
-    bothReject(program('ld a,1'));
-    bothReject(program('jp 0'));
+    bothReject(program('ld a,1'), /starts in column 1/);
+    bothReject(program('jp 0'), /starts in column 1/);
   });
   zit('outside column 1, a word before an instruction is rejected', () => {
-    bothReject(program('  foo\tNOP'));
+    bothReject(program('  foo\tNOP'), /^Unknown instruction FOO\. If FOO is a label/);
   });
   zit('outside column 1, a word alone draws a zmac warning, so an error here', () => {
-    bothReject(program('  foo'));
+    bothReject(program('  foo'), /^Unknown instruction FOO\. If FOO is a label/);
   });
   zit('outside column 1, a colon makes a label, and EQU needs no colon', () => {
     same(program('  bar: NOP', '\tJP bar', '  K EQU 5', '\tDB K'));
   });
   zit('A, B, and SP cannot be labels', () => {
-    bothReject(program('a: nop'));
-    bothReject(program('b: nop'));
-    bothReject(program('sp: nop'));
+    bothReject(program('a: nop'), /register name/);
+    bothReject(program('b: nop'), /register name/);
+    bothReject(program('sp: nop'), /register name/);
   });
   zit('HIGH and MOD cannot be labels', () => {
-    bothReject(program('high: nop'));
-    bothReject(program('mod: nop'));
+    bothReject(program('high: nop'), /operator in expressions/);
+    bothReject(program('mod: nop'), /operator in expressions/);
   });
 });
 
@@ -75,25 +80,25 @@ describe('zmac probe: (expr) memory versus immediate (Review Focus 1)', () => {
     same(program('\tSUB (5)', '\tCP (5)', '\tOR (5)', '\tXOR (5)', '\tAND (5)', '\tADD A,(5)', '\tADC A,(5)', '\tSBC A,(5)', '\tCALL (5)', '\tCALL NZ,(5)', '\tJP NZ,(5)', '\tJR (6000H)', '\tDJNZ (6000H)', '\tIM (1)', '\tRST (8)', '\tBIT (1),A'));
   });
   zit('LD never falls back to the immediate', () => {
-    bothReject(program('\tLD B,(5)'));
-    bothReject(program('\tLD (HL),(5)'));
-    bothReject(program('\tLD IXH,(5)'));
-    bothReject(program('\tLD (IX+5),(3)'));
+    bothReject(program('\tLD B,(5)'), /^Only A can be loaded from an address/);
+    bothReject(program('\tLD (HL),(5)'), /^Only A can be loaded from an address/);
+    bothReject(program('\tLD IXH,(5)'), /^Only A can be loaded from an address/);
+    bothReject(program('\tLD (IX+5),(3)'), /^Only A can be loaded from an address/);
   });
   zit('JP (nn) draws a zmac warning, so an error here', () => {
-    bothReject(program('\tJP (1234H)'));
+    bothReject(program('\tJP (1234H)'), /^JP \(1234H\) jumps to 1234H/);
   });
   zit('no form at all is rejected', () => {
-    bothReject(program('\tLD (5),(6)'));
-    bothReject(program('\tLD (5),5'));
-    bothReject(program('\tPUSH (5)'));
-    bothReject(program('\tINC (5)'));
-    bothReject(program('\tRES 0,(5)'));
-    bothReject(program('\tOUT (5),(6)'));
-    bothReject(program('\tLD A,(C)'));
-    bothReject(program('\tLD A,(IX+2)+1'));
-    bothReject(program('\tLD A,(5+IX)'));
-    bothReject(program('\tEX AF,AF'));
+    bothReject(program('\tLD (5),(6)'), /^LD has no form \(5\),\(6\)/);
+    bothReject(program('\tLD (5),5'), /^LD has no form \(5\),5/);
+    bothReject(program('\tPUSH (5)'), /^PUSH has no form \(5\)/);
+    bothReject(program('\tINC (5)'), /^INC has no form \(5\)/);
+    bothReject(program('\tRES 0,(5)'), /^RES has no form 0,\(5\)/);
+    bothReject(program('\tOUT (5),(6)'), /^OUT has no form \(5\),\(6\)/);
+    bothReject(program('\tLD A,(C)'), /^LD has no form A,\(C\)/);
+    bothReject(program('\tLD A,(IX+2)+1'), /IX is a register/);
+    bothReject(program('\tLD A,(5+IX)'), /IX is a register/);
+    bothReject(program('\tEX AF,AF'), /^EX has no form AF,AF\./);
   });
   zit('register indirection and index forms', () => {
     same(program('\tLD A,(HL)', '\tLD A,( hl )', '\tLD A,(IX+5)', '\tLD A,(ix + 5)', '\tLD A,(IX+ -5)', '\tLD A,(IX-3)', '\tLD A,(IX)', '\tLD A,(IX+(2))', '\tJP (IX)', '\tJP (HL)', '\tEX (SP),IX', "\tEX AF,AF'"));
@@ -114,7 +119,7 @@ describe("zmac probe: operator precedence", () => {
     same(program(...EXPRESSIONS.map((e) => `\tDW ${e}`)));
   });
   zit('division by zero is rejected', () => {
-    bothReject(program('\tLD A,1/0'));
+    bothReject(program('\tLD A,1/0'), /divides by zero/);
   });
 });
 
@@ -123,10 +128,45 @@ describe('zmac probe: number forms', () => {
     same(program(...['255', '255D', '5d', '0FFH', '0ffh', '0abcdh', '0B101H', '$FF', '$f', '0xFF', '0X1f', '1010B', '1010b', '0b', '1b', '17O', '17q', '65535', '-32768', '$ff+0ffh'].map((n) => `\tDW ${n}`)));
   });
   zit('%1010, 0b101, FFH, and 1_000 are rejected', () => {
-    bothReject(program('\tDW %1010'));
-    bothReject(program('\tDW 0b101'));
-    bothReject(program('\tDW FFH'));
-    bothReject(program('\tDW 1_000'));
+    bothReject(program('\tDW %1010'), /% as MOD/);
+    bothReject(program('\tDW 0b101'), /0b101 is not a number/);
+    bothReject(program('\tDW FFH'), /FFH is not defined/);
+    bothReject(program('\tDW 1_000'), /1_000 is not a number/);
+  });
+});
+
+describe('zmac probe: 32-bit numbers', () => {
+  zit('a number wraps to 32-bit two\'s complement: 0FFFFFFFFH is -1', () => {
+    same(program('\tDW 0FFFFFFFFH', '\tLD A,0FFFFFFFFH', '\tDW -0FFFFFFFFH', '\tDW 0FFFF0000H>>16', '\tDW 4294967295', '\tDW 11111111111111111111111111111111B'));
+  });
+  zit('a hex, octal, or binary number past 32 bits is a zmac Digit error', () => {
+    const TOO_LARGE = /is too large: numbers have 32 bits/;
+    bothReject(program('\tDW 100000000H'), TOO_LARGE);
+    bothReject(program('\tDW 100000000H+1'), TOO_LARGE);
+    bothReject(program('\tDW 0x100000000'), TOO_LARGE);
+    bothReject(program('\tDW $100000000'), TOO_LARGE);
+    bothReject(program('\tDW 377777777770'), TOO_LARGE);
+    bothReject(program('\tDW 111111111111111111111111111111111B'), TOO_LARGE);
+    bothReject(program('\tDW 99999999999'), TOO_LARGE);
+  });
+});
+
+describe('zmac probe: the optional A of the 8-bit arithmetic', () => {
+  zit('SUB, AND, OR, XOR, and CP may write A first', () => {
+    same(program('\tSUB A,5', '\tAND A,5', '\tOR A,5', '\tXOR A,5', '\tCP A,5', '\tCP A,(HL)', '\tSUB A,B', '\tAND A,(IX+1)', '\tOR A,IXH', '\tXOR A,A', '\tCP A,(IY-2)', '\tSUB A,IXL', '\tCP A,(IX)'));
+  });
+  zit('ADD, ADC, and SBC may leave A out', () => {
+    same(program('\tADD 5', '\tADC 5', '\tSBC 5', '\tADD B', '\tADC B', '\tSBC (HL)', '\tADD (IX+1)', '\tSBC IXH', '\tADC (IY)', '\tADD A', '\tAND A'));
+  });
+  zit('the fallback to the immediate works with the A too', () => {
+    same(program('\tSUB A,(5)', '\tCP A,(5)', '\tADD (5)'));
+  });
+  zit('any other register in front, or on other instructions, is rejected', () => {
+    bothReject(program('\tSUB B,5'), /^SUB has no form B,5\./);
+    bothReject(program('\tSUB HL,DE'), /^SUB has no form HL,DE\./);
+    bothReject(program('\tADD HL'), /^ADD has no form HL\./);
+    bothReject(program('\tNEG A'), /^NEG has no form A\. NEG takes no operands/);
+    bothReject(program('\tINC A,B'), /^INC has no form A,B\./);
   });
 });
 
@@ -135,7 +175,7 @@ describe('zmac probe: character literals', () => {
     same(program("\tLD A,'A'", "\tLD A,'a'", "\tLD A,''''", '\tLD A,""', "\tLD HL,'AB'", "\tDW 'A'*2", "\tDB 'it''s',0", '\tDB "dq",0', '\tDB "a""b"', "\tDB ''", "\tDB 'A'+1,'BC'", "\tDB ';',0", '\tDEFM "hi"', '\tDEFB 1', '\tDEFW 1'));
   });
   zit("a two-character value that does not fit a byte is rejected", () => {
-    bothReject(program("\tLD A,'ab'"));
+    bothReject(program("\tLD A,'ab'"), /takes a byte/);
   });
 });
 
@@ -143,16 +183,24 @@ describe('zmac probe: out-of-range values', () => {
   zit('the limits themselves are accepted', () => {
     same(program('\tLD A,-128', '\tLD A,255', '\tOUT (255),A', '\tLD HL,-32768', '\tLD HL,65535', '\tLD A,(IX-128)', '\tLD A,(IX+127)', '\tRST 38H', '\tDB -128', '\tDW -32768', '\tJR $+129', '\tJR $-126'));
   });
+  const BYTE = /takes a byte, -128 to 255; .* is out of range/;
+  const PORT = /takes a port, 0 to 255; .* is out of range/;
+  const WORD = /takes (a word|an address), -32768 to 65535; .* is out of range/;
+  const DISP = /displacement in \(I[XY]\+d\) runs from -128 to 127/;
+  const REACH = /reaches 128 bytes either way/;
   zit.each([
-    'LD A,256', 'LD A,-129', 'OUT (256),A', 'OUT (-1),A', 'IN A,(300)', 'LD HL,65536', 'LD HL,-32769', 'LD HL,(65536)', 'LD A,(65536)',
-    'RST 64', 'LD A,(IX+128)', 'LD A,(IX-129)', 'IM 3', 'BIT 8,A', 'BIT -1,A', 'JR $+130', 'JR $-127', 'DJNZ $+200',
-    'DB 256', 'DB -129', 'DW 65536', 'DW -32769', 'LD (IX+5),256', 'SET 3,(IX+200)', 'JP NOWHERE',
-  ])('%s is rejected', (line) => {
-    bothReject(program(`\t${line}`));
+    ['LD A,256', BYTE], ['LD A,-129', BYTE], ['OUT (256),A', PORT], ['OUT (-1),A', PORT], ['IN A,(300)', PORT],
+    ['LD HL,65536', WORD], ['LD HL,-32769', WORD], ['LD HL,(65536)', WORD], ['LD A,(65536)', WORD],
+    ['RST 64', /^RST takes 0, 8/], ['LD A,(IX+128)', DISP], ['LD A,(IX-129)', DISP], ['IM 3', /^IM takes 0, 1, or 2/],
+    ['BIT 8,A', /bit number from 0 to 7/], ['BIT -1,A', /bit number from 0 to 7/], ['JR $+130', REACH], ['JR $-127', REACH], ['DJNZ $+200', REACH],
+    ['DB 256', /^DB takes bytes/], ['DB -129', /^DB takes bytes/], ['DW 65536', /^DW takes words/], ['DW -32769', /^DW takes words/],
+    ['LD (IX+5),256', BYTE], ['SET 3,(IX+200)', DISP], ['JP NOWHERE', /^NOWHERE is not defined/],
+  ] as const)('%s is rejected', (line, kind) => {
+    bothReject(program(`\t${line}`), kind);
   });
   zit('a JR across $FFFF is rejected', () => {
-    bothReject(['\tORG 0FFF0H', '\tJR 0005H'].join('\n') + '\n');
-    bothReject(['\tORG 0010H', '\tJR 0FFF8H'].join('\n') + '\n');
+    bothReject(['\tORG 0FFF0H', '\tJR 0005H'].join('\n') + '\n', /cannot wrap around the top of memory/);
+    bothReject(['\tORG 0010H', '\tJR 0FFF8H'].join('\n') + '\n', /cannot wrap around the top of memory/);
   });
 });
 
@@ -177,6 +225,21 @@ describe('deliberately stricter than zmac', () => {
   });
   // zmac reads DB 'AB'+1 as two bytes 42H 42H; a string of more than one
   // character inside an expression is refused here instead of guessed at.
+  // zmac resolves X EQU Y / Y EQU X without a message; a definition
+  // that depends on itself has no value, so the assembler names the loop.
+  zit('a circular EQU', () => {
+    const src = program('X\tEQU Y', 'Y\tEQU X', '\tDB X');
+    expect(runZmac(src).clean).toBe(true);
+    expect(errorsOf(assemble(src))).toEqual(['2: X is defined in terms of itself: X → Y → X.']);
+  });
+  // zmac wraps a decimal number from 2^32 up to some larger bound silently
+  // (4294967296 is 0, 4294967297 is 1) but calls 99999999999 a Digit error, as
+  // it does every hex, octal, or binary number past 32 bits; the assembler
+  // treats every number past 32 bits alike.
+  zit('a decimal number just past 32 bits', () => {
+    expect(runZmac(program('\tDW 4294967297')).bytes).toEqual([0x01, 0x00]);
+    expect(errorsOf(assemble(program('\tDW 4294967297')))).toEqual(['2: 4294967297 is too large: numbers have 32 bits, at most 0FFFFFFFFH (4294967295).']);
+  });
   zit("DB 'AB'+1", () => {
     expect(runZmac(program("\tDB 'AB'+1")).bytes).toEqual([0x42, 0x42]);
     expect(errorsOf(assemble(program("\tDB 'AB'+1"))).length).toBe(1);

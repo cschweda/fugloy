@@ -104,7 +104,8 @@ interface Item {
   /** Its size from pass 1. */
   length: number;
   emit: 'none' | 'instr' | 'data';
-  /** For an instruction, the operand shapes pass 1 chose. */
+  /** For an instruction, the operands it is encoded with (the optional A of SUB A,n dropped, the A of ADD n supplied) and their shapes. */
+  operands: OperandNode[];
   shapes: Shape[];
   failed: boolean;
   bytes: number[];
@@ -130,6 +131,50 @@ function shapeOf(o: OperandNode): Shape {
     case 'str':
       return 'nn';
   }
+}
+
+/** `B is a register`, `NZ is a condition`, `(HL) is a register in parentheses`, for an operand that should have been a value. */
+function registerWords(o: OperandNode): string {
+  if (o.kind === 'reg') return `${o.reg} is a ${CONDITIONS.has(o.reg) ? 'condition' : 'register'}`;
+  return `${o.text} is a register`;
+}
+
+/** SUB, AND, OR, XOR, and CP may write A first; ADD, ADC, and SBC may leave A out (zmac accepts both). */
+const A_OPTIONAL: ReadonlySet<string> = new Set(['SUB', 'AND', 'OR', 'XOR', 'CP']);
+const A_IMPLIED: ReadonlySet<string> = new Set(['ADD', 'ADC', 'SBC']);
+
+/**
+ * The operands to encode: `SUB A,n` as `SUB n`, `ADD n` as `ADD A,n`. A
+ * supplied A takes the operation's span; the rewrite is kept only when it
+ * names a form (ADD HL is still an error about ADD HL).
+ */
+function withOptionalA(mn: string, ops: readonly OperandNode[], op: { col: number; end: number }): OperandNode[] {
+  const fits = (list: readonly OperandNode[]): boolean => {
+    const shapes = list.map(shapeOf);
+    return lengthOf(mn, shapes) !== null || lengthOf(mn, list.map((o) => (o.kind === 'mem' ? 'nn' : shapeOf(o)))) !== null;
+  };
+  if (A_OPTIONAL.has(mn) && ops.length === 2 && ops[0]!.kind === 'reg' && ops[0]!.reg === 'A') {
+    const rest = ops.slice(1);
+    if (fits(rest)) return rest;
+  }
+  if (A_IMPLIED.has(mn) && ops.length === 1) {
+    const withA: OperandNode[] = [{ kind: 'reg', reg: 'A', text: 'A', col: op.col, end: op.end }, ops[0]!];
+    if (fits(withA)) return withA;
+  }
+  return [...ops];
+}
+
+const SINGLE: ReadonlySet<string> = new Set(['B', 'C', 'D', 'E', 'H', 'L', 'I', 'R', 'IXH', 'IXL', 'IYH', 'IYL']);
+/** A byte-sized place other than A: a single register, (HL), or (IX+d). */
+const byteplace = (o: OperandNode): boolean => (o.kind === 'reg' && SINGLE.has(o.reg)) || (o.kind === 'ind' && o.reg === 'HL') || o.kind === 'index';
+
+/** LD between memory and a byte-sized place other than A, the commonest slip, said plainly with the two-step fix. */
+function loadThroughA(mn: string, ops: readonly OperandNode[]): string | undefined {
+  if (mn !== 'LD' || ops.length !== 2) return undefined;
+  const [dst, src] = ops as [OperandNode, OperandNode];
+  if (byteplace(dst) && src.kind === 'mem') return `Only A can be loaded from an address; use LD A,${src.text} then LD ${dst.text},A.`;
+  if (dst.kind === 'mem' && byteplace(src)) return `Only A can be stored at an address from a single register; use LD A,${src.text} then LD ${dst.text},A.`;
+  return undefined;
 }
 
 class Assembly {
@@ -158,16 +203,18 @@ class Assembly {
   // ---- pass 1 -------------------------------------------------------------
 
   pass1(stmt: Statement): Item {
-    const item: Item = { stmt, address: null, length: 0, emit: 'none', shapes: [], failed: false, bytes: [] };
+    const item: Item = { stmt, address: null, length: 0, emit: 'none', operands: stmt.operands, shapes: [], failed: false, bytes: [] };
     this.items.push(item);
     const { line } = stmt;
+    const op = stmt.op;
+    const name = op?.name;
     if (stmt.error !== undefined) {
       this.error(line, stmt.error.col, stmt.error.end, stmt.error.message);
       item.failed = true;
+      // The label still counts (an EQU's as failed), so its uses raise nothing more.
+      if (stmt.label !== undefined) this.define(stmt, name === 'EQU' ? 'equ' : 'label', true);
       return item;
     }
-    const op = stmt.op;
-    const name = op?.name;
     if (op !== undefined && NOT_YET.has(op.name)) {
       this.error(line, op.col, op.end, `${op.name} is not handled yet.`);
       item.failed = true;
@@ -218,7 +265,8 @@ class Assembly {
     this.pc = (this.pc + item.length) & 0xffff;
   }
 
-  define(stmt: Statement, kind: SymbolKind): void {
+  /** Defines the statement's label; `broken` defines an EQU as failed without a further message. */
+  define(stmt: Statement, kind: SymbolKind, broken = false): void {
     const label = stmt.label!;
     const up = label.name.toUpperCase();
     const line = stmt.line;
@@ -232,11 +280,14 @@ class Assembly {
     if (!this.sawOrg) this.usedDefault = true;
     const sym: Sym = { name: label.name, line, kind, col: label.col, end: label.end, here: this.pc, state: 'done' };
     if (kind === 'label') sym.value = this.pc;
+    else if (broken) sym.state = 'failed';
     else {
       const operand = stmt.operands[0];
       if (stmt.operands.length !== 1 || operand === undefined || operand.kind === 'reg' || operand.kind === 'ind' || operand.kind === 'index') {
         const op = stmt.op!;
-        this.error(line, op.col, operand?.end ?? op.end, stmt.operands.length === 0 ? 'EQU needs a value after it.' : 'EQU takes one value.');
+        const message =
+          stmt.operands.length === 0 ? 'EQU needs a value after it.' : stmt.operands.length > 1 ? 'EQU takes one value.' : `EQU needs a value; ${registerWords(operand!)}.`;
+        this.error(line, op.col, operand?.end ?? op.end, message);
         sym.state = 'failed';
       } else {
         sym.expr = operand.expr;
@@ -252,7 +303,7 @@ class Assembly {
     item.failed = true;
     if (operand === undefined) return this.error(stmt.line, op.col, op.end, 'ORG needs an address after it.');
     if (rest.length > 0) return this.error(stmt.line, op.col, stmt.operands[stmt.operands.length - 1]!.end, 'ORG takes one address.');
-    if (operand.kind === 'reg' || operand.kind === 'ind' || operand.kind === 'index') return this.error(stmt.line, operand.col, operand.end, `ORG needs an address; ${operand.text} is a register.`);
+    if (operand.kind === 'reg' || operand.kind === 'ind' || operand.kind === 'index') return this.error(stmt.line, operand.col, operand.end, `ORG needs an address; ${registerWords(operand)}.`);
     let value: number;
     try {
       value = evaluate(operand.expr, { here: this.pc, lookup: (n) => this.lookupBefore(n, stmt.line, 'ORG', new Set()) });
@@ -310,7 +361,8 @@ class Assembly {
   sizeInstruction(stmt: Statement, item: Item): void {
     const op = stmt.op!;
     const mn = op.name;
-    const ops = stmt.operands;
+    const ops = withOptionalA(mn, stmt.operands, op);
+    item.operands = ops;
     let shapes = ops.map(shapeOf);
     let length = lengthOf(mn, shapes);
     // zmac: where the instruction has no memory form, a parenthesised number
@@ -325,9 +377,16 @@ class Assembly {
           this.error(stmt.line, mem.col, mem.end, `JP ${mem.text} jumps to ${mem.inner}; it does not read an address from memory there. Write JP ${mem.inner}.`);
           item.failed = true;
         } else {
-          const written = `${mn} ${ops.map((o) => o.text).join(',')}`;
-          const meant = `${mn} ${ops.map((o) => (o.kind === 'mem' ? o.inner : o.text)).join(',')}`;
-          this.report('warning', stmt.line, mem.col, mem.end, `${written} reads as ${meant}: ${mn} has no form that reads memory there, so the parentheses only group. Write ${meant} to say so.`);
+          const written = `${mn} ${stmt.operands.map((o) => o.text).join(',')}`;
+          const meant = `${mn} ${stmt.operands.map((o) => (o.kind === 'mem' ? o.inner : o.text)).join(',')}`;
+          let message = `${written} reads as ${meant}: ${mn} has no form that reads memory there, so the parentheses only group. Write ${meant} to say so.`;
+          // The arithmetic reads memory only through (HL) or an index register; say how, in case the byte was meant.
+          const viaHl = lengthOf(mn, alt.map((sh) => (sh === 'nn' ? '(HL)' : sh)));
+          if (viaHl !== null) {
+            const form = ops.map((o) => (o.kind === 'mem' ? '(HL)' : o.text)).join(',');
+            message += ` To use the byte at address ${mem.inner}, point HL at it: LD HL,${mem.inner} then ${mn} ${form}.`;
+          }
+          this.report('warning', stmt.line, mem.col, mem.end, message);
         }
         shapes = alt;
         length = altLength;
@@ -416,15 +475,25 @@ class Assembly {
   encodeInstruction(item: Item, ctx: EvalContext): number[] {
     const { stmt } = item;
     const op = stmt.op!;
-    const operands: Operand[] = stmt.operands.map((o, i) => {
+    const nodes = item.operands;
+    const operands: Operand[] = nodes.map((o, i) => {
       const shape = item.shapes[i]!;
       return o.kind === 'reg' || o.kind === 'ind' ? { shape } : { shape, value: evaluate(o.expr, ctx) };
     });
-    const options: EncodeOptions = {};
+    const first = stmt.operands[0];
     const last = stmt.operands[stmt.operands.length - 1];
-    if (RELATIVE.has(op.name) && last !== undefined && 'expr' in last) {
-      const target = loneSymbol(last.expr);
-      if (target !== undefined) options.target = target;
+    const fail = (message: string, at?: OperandNode): number[] => {
+      this.error(stmt.line, at?.col ?? first?.col ?? op.col, at?.end ?? last?.end ?? op.end, message);
+      item.failed = true;
+      return [];
+    };
+    const ld = loadThroughA(op.name, nodes);
+    if (ld !== undefined) return fail(ld);
+    const options: EncodeOptions = { written: stmt.operands.map((o) => o.text) };
+    const target = nodes[nodes.length - 1];
+    if (RELATIVE.has(op.name) && target !== undefined && 'expr' in target) {
+      const name = loneSymbol(target.expr);
+      if (name !== undefined) options.target = name;
     }
     const out = encode(op.name, operands, item.address!, options);
     if ('bytes' in out) return out.bytes;
@@ -433,10 +502,8 @@ class Assembly {
     if (op.name === 'RST' && v !== undefined && v >= 1 && v <= 7) {
       message += ` zmac reads RST ${v} as RST ${asSource(v * 8)}; write RST ${asSource(v * 8)} if that is what you mean.`;
     }
-    const first = stmt.operands[0];
-    this.error(stmt.line, first?.col ?? op.col, last?.end ?? op.end, message);
-    item.failed = true;
-    return [];
+    const culprit = out.operand === undefined ? undefined : nodes[out.operand];
+    return fail(message, culprit);
   }
 
   encodeData(item: Item, ctx: EvalContext): number[] {
@@ -446,7 +513,7 @@ class Assembly {
     const out: number[] = [];
     for (const o of stmt.operands) {
       if (o.kind === 'reg' || o.kind === 'ind' || o.kind === 'index') {
-        this.error(stmt.line, o.col, o.end, `${name} takes values; ${o.text} is a register.`);
+        this.error(stmt.line, o.col, o.end, `${name} takes values; ${registerWords(o)}.`);
         item.failed = true;
         return [];
       }
@@ -484,7 +551,8 @@ export function assemble(source: string, _options: AsmOptions = {}): AsmResult {
   for (const item of asm.items) asm.pass2(item);
 
   if (!asm.sawOrg && asm.usedDefault) {
-    asm.report('info', 1, 1, 1, `There is no ORG, so the program starts at ${address(DEFAULT_ORIGIN)}.`);
+    // The note covers line 1 (at least one column), so an editor has something to mark.
+    asm.report('info', 1, 1, Math.max(2, (statements[0]?.text.length ?? 0) + 1), `There is no ORG, so the program starts at ${address(DEFAULT_ORIGIN)}.`);
   }
   const diagnostics = asm.diagnostics.map((d, i) => ({ d, i })).sort((a, b) => a.d.line - b.d.line || a.i - b.i).map(({ d }) => d);
   const ok = !diagnostics.some((d) => d.severity === 'error');

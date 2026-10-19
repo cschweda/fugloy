@@ -63,11 +63,32 @@ function closing(tokens: readonly Token[], open: number, to: number): number {
   return -1;
 }
 
+const BINARY_WORDS: ReadonlySet<string> = new Set(['MOD', 'SHL', 'SHR']);
+const BINARY_OPS: ReadonlySet<string> = new Set(['+', '-', '*', '/', '%', '&', '|', '^', '<<', '>>']);
+
+/**
+ * `LD A B` or `LD (HL) 5`: an operand that starts with a register or a group
+ * in parentheses, followed by something that is not an operator, lacks a comma.
+ */
+function missingComma(line: string, tokens: readonly Token[], from: number, to: number): void {
+  const first = tokens[from]!;
+  let last = -1;
+  if (first.kind === 'ident' && (REGISTERS.has(first.text.toUpperCase()) || CONDITIONS.has(first.text.toUpperCase()))) last = from;
+  else if (isOp(first, '(')) last = closing(tokens, from, to);
+  if (last < 0 || last + 1 >= to) return;
+  const next = tokens[last + 1]!;
+  const isBinary = (next.kind === 'op' && BINARY_OPS.has(next.text)) || (next.kind === 'ident' && BINARY_WORDS.has(next.text.toUpperCase()));
+  if (isBinary || isOp(next, ')')) return;
+  const before = line.slice(first.col - 1, tokens[last]!.end - 1);
+  throw new ExprError(`A comma is missing between ${before} and ${next.text}.`, first.col, next.end);
+}
+
 function operand(line: string, tokens: readonly Token[], from: number, to: number): OperandNode {
   const first = tokens[from]!;
   const last = tokens[to - 1]!;
   const span = { col: first.col, end: last.end, text: line.slice(first.col - 1, last.end - 1) };
   const count = to - from;
+  missingComma(line, tokens, from, to);
   if (count === 1 && first.kind === 'ident' && REGISTERS.has(first.text.toUpperCase())) return { ...span, kind: 'reg', reg: first.text.toUpperCase() };
   if (count === 1 && first.kind === 'ident' && isConditionName(first.text)) return { ...span, kind: 'reg', reg: first.text.toUpperCase() };
   if (count === 1 && first.kind === 'string') return { ...span, kind: 'str', chars: first.chars!, expr: parseExpr(tokens, from, to) };
@@ -90,14 +111,20 @@ function operand(line: string, tokens: readonly Token[], from: number, to: numbe
 
 const isConditionName = (text: string): boolean => CONDITIONS.has(text.toUpperCase());
 
+/**
+ * Parses one line. A line the lexer stopped on still keeps the label (and
+ * operation) read before the bad token, so its uses elsewhere raise nothing
+ * more; the lexer's sentence is the line's error.
+ */
 export function parseLine(text: string, line: number): Statement {
-  const stmt: Statement = { line, text, operands: [] };
   const lexed = lex(text);
-  if (lexed.error !== undefined) {
-    stmt.error = lexed.error;
-    return stmt;
-  }
-  const t = lexed.tokens;
+  const stmt = structure(text, line, lexed.tokens, lexed.error !== undefined);
+  if (lexed.error !== undefined && stmt.error === undefined) stmt.error = lexed.error;
+  return stmt;
+}
+
+function structure(text: string, line: number, t: readonly Token[], partial: boolean): Statement {
+  const stmt: Statement = { line, text, operands: [] };
   if (t.length === 0) return stmt;
   const fail = (message: string, col: number, end: number): Statement => {
     stmt.error = { message, col, end };
@@ -122,10 +149,12 @@ export function parseLine(text: string, line: number): Statement {
     return fail(`A line starts with a label or an instruction; ${first.text} is neither.`, first.col, first.end);
   }
   if (i >= t.length) return stmt;
+  if (partial && t[i]!.kind !== 'ident') return stmt;
 
   const opTok = t[i]!;
   if (opTok.kind !== 'ident' && !isOp(opTok, '=')) return fail(`${opTok.text} is not an instruction; an instruction or directive name should come here.`, opTok.col, opTok.end);
   stmt.op = { name: opTok.text.toUpperCase(), written: opTok.text, col: opTok.col, end: opTok.end };
+  if (partial) return stmt;
 
   // Operands: split on commas outside parentheses.
   const start = i + 1;

@@ -41,14 +41,24 @@ const OPS1 = '(),:+-*/%&|^~=$';
 
 const NUMBER_FORMS = 'Write decimal 255, hex 0FFH, $FF, or 0xFF, binary 1010B, or octal 17O.';
 
+/**
+ * A number's digits as a 32-bit value, wrapped to two's complement as zmac
+ * does (0FFFFFFFFH is -1); past 32 bits it is the sentence saying so.
+ */
+function bounded(text: string, digits: string, radix: number): number | string {
+  const value = parseInt(digits, radix);
+  if (value > 0xffffffff) return `${text} is too large: numbers have 32 bits, at most 0FFFFFFFFH (4294967295).`;
+  return value | 0;
+}
+
 /** The value of a number written starting with a digit, or the sentence for why it is not one. */
 function readNumber(text: string): number | string {
   let m: RegExpMatchArray | null;
-  if ((m = /^0[xX]([0-9A-Fa-f]+)$/.exec(text))) return parseInt(m[1]!, 16);
-  if ((m = /^([0-9][0-9A-Fa-f]*)[hH]$/.exec(text))) return parseInt(m[1]!, 16);
-  if ((m = /^([01]+)[bB]$/.exec(text))) return parseInt(m[1]!, 2);
-  if ((m = /^([0-7]+)[oOqQ]$/.exec(text))) return parseInt(m[1]!, 8);
-  if ((m = /^([0-9]+)[dD]?$/.exec(text))) return parseInt(m[1]!, 10);
+  if ((m = /^0[xX]([0-9A-Fa-f]+)$/.exec(text))) return bounded(text, m[1]!, 16);
+  if ((m = /^([0-9][0-9A-Fa-f]*)[hH]$/.exec(text))) return bounded(text, m[1]!, 16);
+  if ((m = /^([01]+)[bB]$/.exec(text))) return bounded(text, m[1]!, 2);
+  if ((m = /^([0-7]+)[oOqQ]$/.exec(text))) return bounded(text, m[1]!, 8);
+  if ((m = /^([0-9]+)[dD]?$/.exec(text))) return bounded(text, m[1]!, 10);
   if ((m = /^0[bB]([01]+)$/.exec(text))) return `${text} is not a number; write binary as ${m[1]}B.`;
   return `${text} is not a number. ${NUMBER_FORMS}`;
 }
@@ -85,7 +95,9 @@ export function lex(line: string): Lexed {
       while (i < line.length && WORD_PART.test(line[i]!)) i++;
       const text = line.slice(start, i);
       if (!/^\$[0-9A-Fa-f]+$/.test(text)) return fail(`${text} is not a number. ${NUMBER_FORMS}`, start, i);
-      tokens.push({ kind: 'number', text, col: start + 1, end: i + 1, value: parseInt(text.slice(1), 16) });
+      const value = bounded(text, text.slice(1), 16);
+      if (typeof value === 'string') return fail(value, start, i);
+      tokens.push({ kind: 'number', text, col: start + 1, end: i + 1, value });
       continue;
     }
     if (c === "'" || c === '"') {

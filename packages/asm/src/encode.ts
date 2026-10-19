@@ -135,7 +135,7 @@ const formsOf = (entries: readonly Entry[]): string[] => [...new Set(entries.map
  * An operand as a message names it: a number is `n` or `nn`, a relative
  * target `displacement`, a port `(port)`; registers and the rest as written.
  */
-const WORDS: Readonly<Record<string, string>> = { num: 'n', e: 'displacement', '(n)': '(port)' };
+const WORDS: Readonly<Record<string, string>> = { num: 'n', e: 'label', '(n)': '(port)', '(nn)': '(address)', b: 'bit' };
 const word = (shape: string): string => WORDS[shape] ?? shape;
 
 /**
@@ -151,19 +151,27 @@ function undocumentedEd(mnemonic: string, operands: readonly Operand[]): string 
   return undefined;
 }
 
-/** The sentence for a form the mnemonic lacks, with the forms worth trying instead. */
-function noForm(mnemonic: string, shapes: readonly Shape[], entries: readonly Entry[]): string {
+/** Up to six forms in full; past that, the first five and how many more. */
+function capped(forms: readonly string[]): { text: string; all: boolean } {
+  if (forms.length <= 6) return { text: list(forms, 'and'), all: true };
+  return { text: list([...forms.slice(0, 5), `${forms.length - 5} more`], 'and'), all: false };
+}
+
+/**
+ * The sentence for a form the mnemonic lacks, with the forms worth trying
+ * instead. `written` is the operands as the source wrote them, for the head.
+ */
+function noForm(mnemonic: string, shapes: readonly Shape[], entries: readonly Entry[], written?: readonly string[]): string {
   const said = shapes.map(word);
-  const head = `${mnemonic} has no form ${said.join(',')}.`;
+  const head = `${mnemonic} has no form ${(written ?? said).join(',')}.`;
   const all = formsOf(entries).map((f) => (f === '' ? f : f.split(',').map(word).join(',')));
   if (all.length === 1 && all[0] === '') return `${head} ${mnemonic} takes no operands.`;
   const first = said[0];
   const sharing = first === undefined ? [] : all.filter((f) => f.split(',')[0] === first);
   if (sharing.length === 1) return `${head} The form that starts with ${first} is ${sharing[0]}.`;
-  if (sharing.length > 1) return `${head} The forms that start with ${first} are ${list(sharing, 'and')}.`;
-  const shown = all.map((f) => (f === '' ? `${mnemonic} alone` : f));
-  if (shown.length <= 12) return `${head} Its forms are ${list(shown, 'and')}.`;
-  return `${head} It has ${shown.length} forms, among them ${list([...shown.slice(0, 8), 'more'], 'and')}.`;
+  if (sharing.length > 1) return `${head} The forms that start with ${first} are ${capped(sharing).text}.`;
+  const shown = capped(all.map((f) => (f === '' ? `${mnemonic} alone` : f)));
+  return `${head} Its forms ${shown.all ? 'are' : 'include'} ${shown.text}.`;
 }
 
 /** The sentence for a fixed number (bit, vector, mode) that no entry has. */
@@ -177,12 +185,19 @@ function badFixed(mnemonic: string, slot: TemplateOperand, value: number, allowe
 /** What a relative jump that cannot reach should become instead. */
 const RELATIVE_FIX: Readonly<Record<string, string>> = { JR: 'Use JP.', DJNZ: 'Use DEC B and JP NZ.' };
 
-export type EncodeResult = { bytes: number[] } | { error: string };
+/** An error names, when it can, the index of the operand at fault. */
+export type EncodeResult = { bytes: number[] } | { error: string; operand?: number };
 
-/** What the caller knows beyond the values: the name a relative jump's target was written as, for the message. */
+/**
+ * What the caller knows beyond the values: the name a relative jump's target
+ * was written as, and the operands as written, for the messages.
+ */
 export interface EncodeOptions {
   target?: string;
+  written?: readonly string[];
 }
+
+const at = (error: string, operand: number): EncodeResult => ({ error, operand });
 
 /**
  * The bytes of one instruction. `pc` is its runtime address, from which a
@@ -196,18 +211,18 @@ export function encode(mnemonic: string, operands: readonly Operand[], pc: numbe
   if (entries === undefined) return { error: `Unknown instruction ${mn}.` };
   const shapes = operands.map((o) => o.shape);
   let found = candidates(mn, shapes);
-  if (found.length === 0) return { error: undocumentedEd(mn, operands) ?? noForm(mn, shapes, entries) };
+  if (found.length === 0) return { error: undocumentedEd(mn, operands) ?? noForm(mn, shapes, entries, options.written) };
 
   // A fixed number (bit, RST vector, IM mode) picks the entry by its value.
   const fixedAt = found[0]!.tpl.operands.findIndex((o) => fixedNumber(o) !== undefined);
   if (fixedAt >= 0) {
     const slot = found[0]!.tpl.operands[fixedAt]!;
     const value = operands[fixedAt]!.value;
-    if (value === undefined) return { error: `${formName(mn, found[0]!)} needs a value for ${slotText(slot)}.` };
+    if (value === undefined) return at(`${formName(mn, found[0]!)} needs a value for ${slotText(slot)}.`, fixedAt);
     const exact = found.filter((e) => fixedNumber(e.tpl.operands[fixedAt]!) === value);
     if (exact.length === 0) {
       const allowed = [...new Set(found.map((e) => fixedNumber(e.tpl.operands[fixedAt]!)!))].sort((a, b) => a - b);
-      return { error: badFixed(mn, slot, value, allowed) };
+      return at(badFixed(mn, slot, value, allowed), fixedAt);
     }
     found = exact;
   }
@@ -223,43 +238,43 @@ export function encode(mnemonic: string, operands: readonly Operand[], pc: numbe
     const given = operands[i]!;
     // (IX) read as (IX+0) carries no value.
     const value = slot.t === '(ix+d)' && given.shape === `(${slot.reg})` ? 0 : given.value;
-    if (value === undefined) return { error: `${name} needs a value for ${slotText(slot)}.` };
-    if (!Number.isInteger(value)) return { error: `${name} needs a whole number for ${slotText(slot)}; ${value} is not one.` };
+    if (value === undefined) return at(`${name} needs a value for ${slotText(slot)}.`, i);
+    if (!Number.isInteger(value)) return at(`${name} needs a whole number for ${slotText(slot)}; ${value} is not one.`, i);
     switch (slot.t) {
       case 'n':
       case 'd': {
-        if (value < -128 || value > 255) return { error: `${name} takes a byte, -128 to 255; ${show(value)} is out of range.` };
+        if (value < -128 || value > 255) return at(`${name} takes a byte, -128 to 255; ${show(value)} is out of range.`, i);
         tail.push(value & 0xff);
         break;
       }
       case '(n)': {
         // zmac refuses a negative port.
-        if (value < 0 || value > 255) return { error: `${name} takes a port, 0 to 255; ${show(value)} is out of range.` };
+        if (value < 0 || value > 255) return at(`${name} takes a port, 0 to 255; ${show(value)} is out of range.`, i);
         tail.push(value);
         break;
       }
       case 'nn':
       case '(nn)': {
-        if (value < -32768 || value > 0xffff) return { error: `${name} takes ${slot.t === 'nn' ? 'a word' : 'an address'}, -32768 to 65535; ${show(value)} is out of range.` };
+        if (value < -32768 || value > 0xffff) return at(`${name} takes ${slot.t === 'nn' ? 'a word' : 'an address'}, -32768 to 65535; ${show(value)} is out of range.`, i);
         tail.push(value & 0xff, (value >> 8) & 0xff);
         break;
       }
       case 'e': {
-        if (value < -32768 || value > 0xffff) return { error: `${name} takes an address, -32768 to 65535; ${show(value)} is out of range.` };
+        if (value < -32768 || value > 0xffff) return at(`${name} takes an address, -32768 to 65535; ${show(value)} is out of range.`, i);
         const fix = RELATIVE_FIX[mn] ?? 'Use JP.';
         const target = value & 0xffff;
         const disp = target - (pc + tpl.length);
         if (disp < -128 || disp > 127) {
           const wrapped = (((disp % 0x10000) + 0x18000) % 0x10000) - 0x8000;
-          if (wrapped >= -128 && wrapped <= 127) return { error: `${mn} cannot wrap around the top of memory from ${address(pc)} to ${address(target)}. ${fix}` };
+          if (wrapped >= -128 && wrapped <= 127) return at(`${mn} cannot wrap around the top of memory from ${address(pc)} to ${address(target)}. ${fix}`, i);
           const where = disp > 0 ? `${disp} bytes ahead` : `${-disp} bytes back`;
-          return { error: `${mn} reaches 128 bytes either way; ${options.target ?? `the target ${address(value)}`} is ${where}. ${fix}` };
+          return at(`${mn} reaches 128 bytes either way; ${options.target ?? `the target ${address(value)}`} is ${where}. ${fix}`, i);
         }
         tail.push(disp & 0xff);
         break;
       }
       case '(ix+d)': {
-        if (value < -128 || value > 127) return { error: `The displacement in (${slot.reg}+d) runs from -128 to 127; ${show(value)} is out of range.` };
+        if (value < -128 || value > 127) return at(`The displacement in (${slot.reg}+d) runs from -128 to 127; ${show(value)} is out of range.`, i);
         d = value;
         // In DDCB and FDCB the displacement sits before the opcode, in the lead.
         if (entry.table !== 'ddcb' && entry.table !== 'fdcb') tail.push(value & 0xff);

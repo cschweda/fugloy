@@ -61,6 +61,19 @@ describe('typos get one error with a suggestion (Review Focus 5)', () => {
   });
 });
 
+describe('a bad line keeps its label', () => {
+  it('a label on a line with an error is still defined, so its uses raise nothing more', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', 'LOOP:\tLD A,(5', '\tJP LOOP', '\tJP LOOP')))).toEqual(['2: This ( has no matching ).']);
+    expect(errorsOf(assemble(lines('\tORG 6000H', 'LOOP\tLD A,0b101', '\tJP LOOP')))).toEqual(['2: 0b101 is not a number; write binary as 101B.']);
+    expect(errorsOf(assemble(lines('\tORG 6000H', "LOOP:\tDB 'é'", '\tJP LOOP')))).toEqual(['2: This string holds é, which is not plain ASCII; write its code as a number instead.']);
+    expect(errorsOf(assemble(lines('\tORG 6000H', 'LOOP:\tFROB 1', '\tJP LOOP')))).toEqual(['2: Unknown instruction FROB.']);
+  });
+
+  it('an EQU whose value has an error is defined but failed, so its uses raise nothing more', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', 'X\tEQU 0b101', '\tDB X')))).toEqual(['2: 0b101 is not a number; write binary as 101B.']);
+  });
+});
+
 describe('symbols', () => {
   it('an undefined symbol names itself, at its column, with the nearest name', () => {
     expect(diagnosticsOf(assemble(lines('\tORG 6000H', 'LOOP:\tNOP', '\tJP LOOP2')))).toEqual(['3:5-10 error: LOOP2 is not defined. Did you mean LOOP?']);
@@ -106,6 +119,21 @@ describe('every out-of-range value is an error naming the value and the limit (R
     expect(errorsOf(assemble(lines('\tORG 0FFF0H', '\tJR 0005H')))).toEqual(['2: JR cannot wrap around the top of memory from $FFF0 to $0005. Use JP.']);
   });
 
+  it('a range error marks the operand at fault', () => {
+    expect(diagnosticsOf(assemble(lines('\tORG 6000H', '\tLD A, 256')))).toEqual(['2:8-11 error: LD A,n takes a byte, -128 to 255; 256 ($0100) is out of range.']);
+    expect(diagnosticsOf(assemble(lines('\tORG 6000H', '\tLD (IX+200),5')))).toEqual(['2:5-13 error: The displacement in (IX+d) runs from -128 to 127; 200 ($C8) is out of range.']);
+    expect(diagnosticsOf(assemble(lines('\tORG 6000H', '\tBIT 8,A')))).toEqual(['2:6-7 error: BIT takes a bit number from 0 to 7; 8 is out of range.']);
+    expect(diagnosticsOf(assemble(lines('\tORG 6000H', '\tSUB A,300')))).toEqual(['2:8-11 error: SUB n takes a byte, -128 to 255; 300 ($012C) is out of range.']);
+    expect(diagnosticsOf(assemble(lines('\tORG 6000H', '\tADD 300')))).toEqual(['2:6-9 error: ADD A,n takes a byte, -128 to 255; 300 ($012C) is out of range.']);
+  });
+
+  it('a condition is called a condition, not a register', () => {
+    expect(errorsOf(assemble(lines('\tORG Z')))).toEqual(['1: ORG needs an address; Z is a condition.']);
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tDB NZ')))).toEqual(['2: DB takes values; NZ is a condition.']);
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tDB B')))).toEqual(['2: DB takes values; B is a register.']);
+    expect(errorsOf(assemble(lines('\tORG 6000H', 'X\tEQU PE')))).toEqual(['2: EQU needs a value; PE is a condition.']);
+  });
+
   it.each([
     ['LD A,256', 'LD A,n takes a byte, -128 to 255; 256 ($0100) is out of range.'],
     ['LD A,-129', 'LD A,n takes a byte, -128 to 255; -129 is out of range.'],
@@ -132,7 +160,19 @@ describe('forms and parentheses', () => {
   });
 
   it('LD with a parenthesised number is always memory, as in zmac', () => {
-    expect(errorsOf(assemble(lines('\tORG 6000H', '\tLD B,(5)')))).toEqual(['2: LD has no form B,(nn). The forms that start with B are B,(HL), B,(IX+d), B,(IY+d), B,A, B,B, B,C, B,D, B,E, B,H, B,IXH, B,IXL, B,IYH, B,IYL, B,L, and B,n.']);
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tLD B,(5)')))).toEqual(['2: Only A can be loaded from an address; use LD A,(5) then LD B,A.']);
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tLD (HL),(SCREEN)', 'SCREEN\tEQU 3C00H')))).toEqual(['2: Only A can be loaded from an address; use LD A,(SCREEN) then LD (HL),A.']);
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tLD (5),B')))).toEqual(['2: Only A can be stored at an address from a single register; use LD A,B then LD (5),A.']);
+  });
+
+  it('a form that does not exist is named as written, with at most five forms listed', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tPUSH (5)')))).toEqual(['2: PUSH has no form (5). Its forms are AF, BC, DE, HL, IX, and IY.']);
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tINC (5)')))).toEqual(['2: INC has no form (5). Its forms include (HL), (IX+d), (IY+d), A, B, and 15 more.']);
+  });
+
+  it('a missing comma is named', () => {
+    expect(diagnosticsOf(assemble(lines('\tORG 6000H', '\tLD A B')))).toEqual(['2:5-8 error: A comma is missing between A and B.']);
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tLD (HL) 5')))).toEqual(['2: A comma is missing between (HL) and 5.']);
   });
 
   it('an index register inside a larger expression is an error', () => {

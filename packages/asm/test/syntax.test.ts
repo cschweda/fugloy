@@ -45,6 +45,31 @@ describe('labels', () => {
   });
 });
 
+describe('the optional A of the 8-bit arithmetic (zmac)', () => {
+  it('SUB, AND, OR, XOR, and CP may write A, first', () => {
+    expect(at6000('SUB A,5', 'AND A,5', 'OR A,5', 'XOR A,5', 'CP A,5', 'CP A,(HL)', 'SUB A,B', 'AND A,(IX+1)', 'OR A,IXH', 'XOR A,A', 'CP A,(IY-2)', 'CP A,(IX)')).toEqual([
+      0xd6, 0x05, 0xe6, 0x05, 0xf6, 0x05, 0xee, 0x05, 0xfe, 0x05, 0xbe, 0x90, 0xdd, 0xa6, 0x01, 0xdd, 0xb4, 0xaf, 0xfd, 0xbe, 0xfe, 0xdd, 0xbe, 0x00,
+    ]);
+  });
+
+  it('ADD, ADC, and SBC may leave A, out', () => {
+    expect(at6000('ADD 5', 'ADC 5', 'SBC 5', 'ADD B', 'ADC B', 'SBC (HL)', 'ADD (IX+1)', 'SBC IXH', 'ADC (IY)', 'ADD A')).toEqual([
+      0xc6, 0x05, 0xce, 0x05, 0xde, 0x05, 0x80, 0x88, 0x9e, 0xdd, 0x86, 0x01, 0xdd, 0x9c, 0xfd, 0x8e, 0x00, 0x87,
+    ]);
+  });
+
+  it('the parenthesised number falls back with the A, too', () => {
+    const result = assemble(['\tORG 6000H', '\tSUB A,(5)', '\tADD (5)'].join('\n'));
+    expect([...result.image!.bytes.slice(0x6000, 0x6004)]).toEqual([0xd6, 0x05, 0xc6, 0x05]);
+    expect(diagnosticsOf(result)[1]).toBe('3:6-9 warning: ADD (5) reads as ADD 5: ADD has no form that reads memory there, so the parentheses only group. Write ADD 5 to say so. To use the byte at address 5, point HL at it: LD HL,5 then ADD A,(HL).');
+  });
+
+  it('other registers before the operand are still errors', () => {
+    expect(errorsOf(assemble('\tSUB B,5'))[0]).toMatch(/^1: SUB has no form B,5\./);
+    expect(errorsOf(assemble('\tADD HL'))[0]).toMatch(/^1: ADD has no form HL\./);
+  });
+});
+
 describe('case and spacing', () => {
   it('mnemonics, registers, and directives are case-insensitive', () => {
     expect(at6000('Ld A,( 3C00H )', 'ld a , ( 5 ) ', 'nop', 'NOP', 'defb 9')).toEqual([0x3a, 0x00, 0x3c, 0x3a, 0x05, 0x00, 0x00, 0x00, 0x09]);
@@ -95,7 +120,8 @@ describe('operands', () => {
     const result = assemble(['\tORG 6000H', '\tSUB (5)', '\tCALL (5)', '\tJR (6000H)', '\tIM (1)', '\tBIT (1),A', '\tJP NZ,(5)'].join('\n'));
     expect(errorsOf(result)).toEqual([]);
     expect([...result.image!.bytes.slice(0x6000, 0x600f)]).toEqual([0xd6, 0x05, 0xcd, 0x05, 0x00, 0x18, 0xf9, 0xed, 0x56, 0xcb, 0x4f, 0xc2, 0x05, 0x00, 0x00]);
-    expect(diagnosticsOf(result)[0]).toBe('2:6-9 warning: SUB (5) reads as SUB 5: SUB has no form that reads memory there, so the parentheses only group. Write SUB 5 to say so.');
+    expect(diagnosticsOf(result)[0]).toBe('2:6-9 warning: SUB (5) reads as SUB 5: SUB has no form that reads memory there, so the parentheses only group. Write SUB 5 to say so. To use the byte at address 5, point HL at it: LD HL,5 then SUB (HL).');
+    expect(diagnosticsOf(result)[1]).toBe('3:7-10 warning: CALL (5) reads as CALL 5: CALL has no form that reads memory there, so the parentheses only group. Write CALL 5 to say so.');
     expect(result.diagnostics.filter((d) => d.severity === 'warning')).toHaveLength(6);
   });
 
@@ -122,7 +148,7 @@ describe('ORG and the default origin', () => {
     const result = assemble('\tNOP');
     expect(result.ok).toBe(true);
     expect(result.image!.isLoaded(0x5200)).toBe(true);
-    expect(diagnosticsOf(result)).toEqual(['1:1-1 info: There is no ORG, so the program starts at $5200.']);
+    expect(diagnosticsOf(result)).toEqual(['1:1-5 info: There is no ORG, so the program starts at $5200.']);
   });
 });
 

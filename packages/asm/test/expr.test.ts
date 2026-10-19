@@ -31,6 +31,19 @@ describe('numbers', () => {
     expect(wordOf(text)).toBe(value);
   });
 
+  it('numbers are 32-bit, and wrap to two\'s complement (zmac): 0FFFFFFFFH is -1', () => {
+    expect(wordOf('0FFFFFFFFH')).toBe(0xffff);
+    expect(wordOf('-0FFFFFFFFH')).toBe(1);
+    expect(wordOf('0FFFF0000H>>16')).toBe(0xffff);
+    expect(wordOf('11111111111111111111111111111111B')).toBe(0xffff);
+  });
+
+  it('a number past 32 bits is an error', () => {
+    expect(errorsOf(assemble('\tDW 100000000H'))).toEqual(['1: 100000000H is too large: numbers have 32 bits, at most 0FFFFFFFFH (4294967295).']);
+    expect(errorsOf(assemble('\tDW 4294967296'))).toEqual(['1: 4294967296 is too large: numbers have 32 bits, at most 0FFFFFFFFH (4294967295).']);
+    expect(errorsOf(assemble('\tDW $100000000'))).toHaveLength(1);
+  });
+
   it('a hex number must start with a digit; FFH is a symbol', () => {
     expect(errorsOf(assemble('\tDW FFH'))).toEqual(['1: FFH is not defined. A hex number must start with a digit: write 0FFH.']);
   });

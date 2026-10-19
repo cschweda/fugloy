@@ -228,15 +228,32 @@ describe('forms that do not exist', () => {
   const err = (out: ReturnType<typeof encode>): string => ('error' in out ? out.error : `no error: ${hex(out.bytes)}`);
 
   it('names the mnemonic and the form it lacks, with the forms that share the first operand', () => {
-    expect(err(encode('LD', [{ shape: 'HL' }, { shape: '(BC)' }], 0))).toBe('LD has no form HL,(BC). The forms that start with HL are HL,(nn) and HL,nn.');
+    expect(err(encode('LD', [{ shape: 'HL' }, { shape: '(BC)' }], 0))).toBe('LD has no form HL,(BC). The forms that start with HL are HL,(address) and HL,nn.');
     expect(err(encode('NOP', [{ shape: 'A' }], 0))).toBe('NOP has no form A. NOP takes no operands.');
     expect(err(encode('EX', [{ shape: 'BC' }, { shape: 'DE' }], 0))).toBe("EX has no form BC,DE. Its forms are (SP),HL, (SP),IX, (SP),IY, AF,AF', and DE,HL.");
   });
 
   it('names operands in words, not shape names', () => {
-    expect(err(encode('OUT', [{ shape: '(C)' }, { shape: 'num', value: 5 }], 0))).toBe('OUT has no form (C),n. The forms that start with (C) are (C),A, (C),B, (C),C, (C),D, (C),E, (C),H, and (C),L.');
+    expect(err(encode('OUT', [{ shape: '(C)' }, { shape: 'num', value: 5 }], 0))).toBe('OUT has no form (C),n. The forms that start with (C) are (C),A, (C),B, (C),C, (C),D, (C),E, and 2 more.');
     expect(err(encode('LD', [{ shape: 'B' }, { shape: '(n)', value: 1 }], 0))).toMatch(/^LD has no form B,\(port\)\. /);
-    expect(err(encode('JP', [{ shape: 'BC' }, { shape: 'e', value: 1 }], 0))).toMatch(/^JP has no form BC,displacement\. /);
+    expect(err(encode('JP', [{ shape: 'BC' }, { shape: 'e', value: 1 }], 0))).toMatch(/^JP has no form BC,label\. /);
+  });
+
+  it('lists at most five forms, then how many more', () => {
+    expect(err(encode('INC', [{ shape: '(nn)', value: 5 }], 0))).toBe('INC has no form (address). Its forms include (HL), (IX+d), (IY+d), A, B, and 15 more.');
+  });
+
+  it('uses the operands as written when the caller gives them', () => {
+    expect(err(encode('PUSH', [{ shape: '(nn)', value: 5 }], 0, { written: ['(5)'] }))).toBe('PUSH has no form (5). Its forms are AF, BC, DE, HL, IX, and IY.');
+  });
+
+  it('says which operand is at fault', () => {
+    const at = (out: ReturnType<typeof encode>): number | undefined => ('error' in out ? out.operand : -1);
+    expect(at(encode('LD', [{ shape: 'A' }, { shape: 'nn', value: 256 }], 0))).toBe(1);
+    expect(at(encode('LD', [{ shape: '(IX+d)', value: 200 }, { shape: 'nn', value: 5 }], 0))).toBe(0);
+    expect(at(encode('BIT', [{ shape: 'nn', value: 8 }, { shape: 'A' }], 0))).toBe(0);
+    expect(at(encode('JR', [{ shape: 'nn', value: 0x7000 }], 0x6000))).toBe(0);
+    expect(at(encode('LD', [{ shape: 'B' }, { shape: '(BC)' }], 0))).toBeUndefined();
   });
 
   it('says how to write the undocumented IN F,(C), IN (C), and OUT (C),0, which the tables hold as DB', () => {
