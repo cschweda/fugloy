@@ -115,19 +115,33 @@ Core, `@fugloy/asm` (new package; runtime dependencies `@fugloy/z80` and
     the screen)?`).
   - An unknown model, or a model and DOS with no tables, throws a
     `RangeError` sentence.
-- **The Model I/III warning.** A CALL or JP target, an address in
-  parentheses, or a predefined name at one of the four addresses the tables'
-  comparison classes as different (`$0050`, `$01D9`, `$0212`, `$03C2`) draws
-  a warning naming both ROMs' meanings, the chosen model's first. It has
-  `code: 'rom-difference'`. `Diagnostic` gains the optional `code` for it.
+- **The Model I/III note.** A number at one of the four addresses the
+  tables' comparison classes as different (`$0050`, `$01D9`, `$0212`,
+  `$03C2`), used as a CALL or JP target or as a memory address in
+  parentheses, draws a note naming both ROMs' meanings, the chosen model's
+  first.
+  - With no `model` given it is a warning, since the address may have been
+    copied from the other machine's listing. With a model given it is an
+    info note with the same meanings, so a program correct for its machine
+    assembles with no warning.
+  - A predefined ROM name is never noted: it came from the chosen model's
+    table. An IN or OUT port is not an address, and is never noted.
+  - It has `code: 'rom-difference'`; `Diagnostic` gains the optional `code`
+    for it.
+- **A phased first byte.** With no END entry and the first assembled line
+  under `.PHASE`, an info note says the `.CMD` starts where that code loads,
+  not where it is assembled to run, and suggests `END START`.
+- **`JP M`, `CALL NZ`, `JR C`** (a condition with no address) say the address
+  is missing (`write JP M,label`); M is never rewritten to `(HL)` after JP,
+  CALL, JR, or RET.
 - **`toCmd(result, { name, entry })`** writes the `.CMD` through `writeCmd`,
   with phased code where it loads. The transfer record carries END's entry
   or, with none, the address of the first byte the source assembles, so
   every exported file runs: DOS and `@fugloy/emu`'s `parseCmd` refuse a
   `.CMD` without an `02` record. `entry: 'source'` writes zmac's shape (`03
   00` with no entry). Errors, no bytes, and a bad name throw sentences.
-- `romNames`, `romDifference`, `differentAddresses`, `DEFAULT_MODEL`, and
-  `DEFAULT_ORIGIN` are exported.
+- `romNames`, `romDifference`, `differentAddresses`, `selectionProblem`,
+  `DEFAULT_MODEL`, and `DEFAULT_ORIGIN` are exported.
 - **The starter program**, `packages/asm/examples/clear-screen.z`, fills
   `$3C00`–`$3FFF` with spaces and loops forever, with a plain comment on
   every line. Its test checks zmac's bytes and runs it on `@fugloy/emu` (a
@@ -144,7 +158,13 @@ Core, `@fugloy/cli`:
   - `--listing` prints line, run and load address, bytes, and source;
   - the exit code is 0 when it assembled, 1 on an error in the source or a
     file that cannot be read, is not UTF-8, or has no bytes, and 2 for a
-    usage error or an output that would overwrite the source.
+    usage error or an output that would overwrite the source (paths
+    compared resolved, symbolic links followed);
+  - the model goes to the assembler only when `--model` is given, so without
+    it the Model I/III note is a warning; a model and DOS with no tables get
+    `selectionProblem`'s sentence;
+  - a file named `asm` is disassembled as `fugloy ./asm`, which the usage
+    text says.
   - `Io` gains an optional `writeBytes`.
 
 Core, `@fugloy/disasm`: `ROM_COMPARISON` (each ROM address's class across the
@@ -157,14 +177,15 @@ two machines) is exported.
   named for, and the symbols round trip, the real-program symbol tests, and
   the CLI's `--machine`/`--dos` round trips pass them. So every table name,
   under every selection, is checked defined again by the emitter's EQU
-  (Ruling 5). The harness allows the `rom-difference` warning, which changes
-  no byte.
+  (Ruling 5). The harness names the model (the Model III unless a test says
+  otherwise), so the Model I/III note is info, and it still refuses every
+  warning.
 - `pnpm asm:corpus` names every program twice: with the Model III and TRSDOS
   tables, then with the Model I and LDOS tables. asm assembles each for that
   machine and DOS. An exception while checking a row is now that row's
   mismatch, not an abort. Locally: 85 programs and 3 hinted runs, 88 rows,
   all the same as zmac under both selections, with 1,146 EQUs redefining a
-  table name and 2 lines drawing the Model I/III warning.
+  table name and 2 lines drawing the Model I/III note (info).
 - `real/rom.test.ts` also round-trips the Model III and Model 4 ROMs named
   in `fugloy.mcp.json` through zmac and asm, when present.
 - The 32 whole-program negative tests check that asm's error is on the line

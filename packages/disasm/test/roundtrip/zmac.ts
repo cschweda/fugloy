@@ -65,14 +65,10 @@ export interface Assembled {
 const describe = (r: AsmResult): string =>
   r.diagnostics.map((d) => `${d.line}:${d.column}: ${d.severity}: ${d.message}`).join('\n');
 
-/**
- * asm's result for an emitted source: ok, with no warning or error. An info note is fine, and so
- * is the Model I/III warning (`rom-difference`): a program that calls $RSRCV is right for the
- * Model III only, and saying so changes no byte.
- */
+/** asm's result for an emitted source: ok, with no warning or error (an info note is fine). */
 function cleanAsm(source: string, options: AsmOptions): AsmResult & { image: MemoryImage } {
   const result = asmAssemble(source, options);
-  const loud = result.diagnostics.filter((d) => d.severity !== 'info' && d.code !== 'rom-difference');
+  const loud = result.diagnostics.filter((d) => d.severity !== 'info');
   if (!result.ok || result.image === null || loud.length > 0) {
     const lines = source.split('\n');
     const at = loud.map((d) => `line ${d.line}: ${lines[d.line - 1] ?? ''}`).slice(0, 10).join('\n');
@@ -98,10 +94,12 @@ function expectAsmAgrees(asm: AsmResult & { image: MemoryImage }, zmac: CmdModul
 
 /**
  * Assembles zmac source into a .cmd and loads it with our own loader, checking @fugloy/asm
- * against it (assembled for `options`' machine and DOS). Without zmac, asm's own .cmd is loaded
- * instead (by: 'asm').
+ * against it (assembled for `options`' machine and DOS; the Model III unless told, named
+ * explicitly, so the Model I/III note is info, not a warning). Without zmac, asm's own .cmd is
+ * loaded instead (by: 'asm').
  */
-export function assemble(source: string, options: AsmOptions = {}): Assembled {
+export function assemble(source: string, given: AsmOptions = {}): Assembled {
+  const options: AsmOptions = { model: 3, ...given };
   const zmac = findZmac();
   if (zmac === null) {
     const asm = cleanAsm(source, options);

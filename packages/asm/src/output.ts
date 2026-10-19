@@ -8,7 +8,10 @@ export interface CmdOptions {
   /**
    * `run` (the default): the `02` record carries END's entry, or, with none,
    * the address of the first byte the source assembles, so every file runs
-   * (DOS and the emulator refuse a .CMD with no `02` record). `source`: the
+   * (DOS and the emulator refuse a .CMD with no `02` record). That is the
+   * first byte's load address: if it is under `.PHASE`, the code there is
+   * assembled to run elsewhere, and `assemble` notes it (info) on that line.
+   * `source`: the
    * `02` record only when END names an entry, else `03 00`, the file zmac's
    * own output reads as.
    */

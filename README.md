@@ -155,9 +155,10 @@ rewrite (`JP HL` → `write JP (HL)`).
 ROM routines are callable by name without defining them, from the cited
 tables of the chosen model: `CALL $VDCLS` on either machine, and `CALL
 KBDRIVER` at each ROM's own address. A source's own definition of a name
-always wins. An instruction that uses one of the four addresses whose code
-differs between the Model I and Model III ROMs draws a warning naming both
-meanings. A new program can start from
+always wins. An instruction that uses, as a number, one of the four
+addresses whose code differs between the Model I and Model III ROMs draws a
+note naming both meanings: a warning when no model is named, info when one
+is. A new program can start from
 [`clear-screen.z`](packages/asm/examples/clear-screen.z), which blanks the
 screen and waits, with a plain comment on every line. Its test runs it on
 the emulator and checks that the screen is blank.
@@ -398,7 +399,7 @@ on `main`, the emulator's `emu-vX.Y.Z`, and the MCP server's `mcp-vX.Y.Z`.
 | --- | --- |
 | `packages/z80` | Z80 opcode tables generated from the x/y/z/p/q decomposition (unprefixed, `CB`, `ED`, `DD`/`FD`, `DDCB`/`FDCB`) with length, operands, cycle counts, and control-flow effect; a decoder; an exhaustion test against an independently typed reference. No I/O. |
 | `packages/disasm` | 64K memory image with a load bitmap and block log, `.CMD` and `.BAS` loaders, content-based format detection, raw loader, a Level II BASIC parser and entry-point miner, pass 1 recursive descent, labels, the hint file, string and proposal heuristics, rebasing, relocation, the cited symbol tables (`data/symbols`, compiled by `pnpm symbols`), zmac emitter, JSON IR, linear sweep, plain-text listings. No Node or DOM APIs, so it runs in a browser. |
-| `packages/asm` | The Z80 assembler (`@fugloy/asm`): an encoder inverted from the z80 tables, two passes with errors as sentences on the right line, the directives zmac has, ROM, hardware, and DOS names per model, the Model I/III warning, a source map by run address, and `.CMD` output. No Node or DOM APIs. Usage in its [README](packages/asm/README.md). |
+| `packages/asm` | The Z80 assembler (`@fugloy/asm`): an encoder inverted from the z80 tables, two passes with errors as sentences on the right line, the directives zmac has, ROM, hardware, and DOS names per model, the Model I/III note, a source map by run address, and `.CMD` output. No Node or DOM APIs. Usage in its [README](packages/asm/README.md). |
 | `packages/cli` | `fugloy <file> [--base <hex> \| --rebase <hex>] [--entry <hex>]... [--hints <path> \| --write-hints <path>] [--labels <path>] [--machine 1\|3\|4] [--dos trsdos\|ldos\|none] [--format listing\|zmac\|ir] [--sweep] [--color] [-o <path>]` and `fugloy asm <source> [-o <out.cmd>] [--model 1\|3\|4] [--dos trsdos\|ldos\|none] [--listing]`, the only package that touches the file system. |
 | `packages/emu` | The headless, deterministic TRS-80 Model I, Model III, and Model 4 emulator, built on the core of trs80-emulator: a Z80 CPU that passes ZEXALL, the `Machine` facade (`step`, `run`, registers, memory, video text, sound events, keyboard), `.CMD`, `.BAS`, and `.CAS` loaders with manifests, and the debugger `m.debug`, which writes the label and coverage file. No DOM, no Node APIs. Design in [docs/fugloy-emu-spec.md](docs/fugloy-emu-spec.md); usage in its [README](packages/emu/README.md). |
 | `packages/mcp` | The stdio MCP server that lets an AI assistant drive the emulator (`bin/fugloy-mcp.js`, plain JavaScript): MCP phases A–F, 29 tools for loading, running, typing, inspecting, breakpoints and watches, callers and callees, a disassembly with coverage marks, snapshots and diffs, search, labels, coverage, and `suggest`, with the `<program>.fugloy.json` sidecar, plus resources and prompts. Design in [docs/fugloy-mcp-spec.md](docs/fugloy-mcp-spec.md); setup in its [README](packages/mcp/README.md). |

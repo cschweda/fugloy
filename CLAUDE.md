@@ -126,8 +126,9 @@ The Model I waits for a Model I reference (MAME or xtrs, ask the user first).
 - `packages/asm` — the Z80 assembler (`@fugloy/asm`, plan phase 5A): an
   encoder inverted from z80's tables (no opcode named in asm), two passes,
   zmac's syntax and directives, ROM/hardware/DOS names predefined per
-  `model`/`dos` at the lowest priority (Ruling 5), the Model I/III warning
-  (`code: 'rom-difference'`), a source map by run address, and `toCmd` (whose
+  `model`/`dos` at the lowest priority (Ruling 5), the Model I/III note
+  (`code: 'rom-difference'`; a warning with no model named, info with one;
+  never for a predefined name or a port), a source map by run address, and `toCmd` (whose
   transfer address is END's entry or the first assembled byte). No DOM, no
   Node APIs; runtime dependencies z80 and disasm only (emu is a
   devDependency, for the starter test). Released with core. zmac is its

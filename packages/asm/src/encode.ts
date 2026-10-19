@@ -159,6 +159,8 @@ const dbByte = (v: number): string => {
 
 const EIGHTY_PAIRS: Readonly<Record<string, string>> = { A: 'AF', B: 'BC', D: 'DE', H: 'HL', "AF'": 'AF' };
 const BYTE_REGISTERS: ReadonlySet<string> = new Set(['A', 'B', 'C', 'D', 'E', 'H', 'L']);
+const BRANCHES: ReadonlySet<string> = new Set(['JP', 'CALL', 'JR', 'RET']);
+const CONDITION_SHAPES: ReadonlySet<string> = new Set(['NZ', 'Z', 'NC', 'C', 'PO', 'PE', 'P', 'M']);
 const ROTATES: ReadonlySet<string> = new Set(['RLC', 'RRC', 'RL', 'RR', 'SLA', 'SRA', 'SLL', 'SRL', 'RES', 'SET']);
 
 /**
@@ -166,7 +168,8 @@ const ROTATES: ReadonlySet<string> = new Set(['RLC', 'RRC', 'RL', 'RR', 'SLA', '
  * (each is pinned with zmac's bytes in zmac-probes.test.ts): the port alone
  * after IN or OUT, JP HL without parentheses, the 8080's PUSH B and M, PUSH
  * AF', and the undocumented DD CB / FD CB copies to a register, which the
- * tables keep as DB.
+ * tables keep as DB. Also a jump or call with a condition and no address
+ * (JP M), which zmac rejects too.
  */
 function spelling(mnemonic: string, operands: readonly Operand[], written: readonly string[] | undefined): string | undefined {
   const shapes = operands.map((o) => o.shape);
@@ -187,7 +190,11 @@ function spelling(mnemonic: string, operands: readonly Operand[], written: reado
     const why = shapes[0] === "AF'" ? `${mnemonic} works on AF, not the shadow AF'` : `${mnemonic} works on register pairs, and ${shapes[0]} is the 8080's short name for ${pair}`;
     return `${why}: write ${mnemonic} ${pair}.`;
   }
-  if (shapes.includes('M')) {
+  // After JP, CALL, JR, and RET, M is the condition "sign minus", not the 8080's (HL).
+  if (BRANCHES.has(mnemonic) && one && CONDITION_SHAPES.has(shapes[0]!) && candidates(mnemonic, [shapes[0]!, 'nn']).length > 0) {
+    return `${mnemonic} ${text(0)} names a condition but no address to go to: write ${mnemonic} ${text(0)},label.`;
+  }
+  if (shapes.includes('M') && !BRANCHES.has(mnemonic)) {
     const swapped = shapes.map((sh) => (sh === 'M' ? '(HL)' : sh));
     const withA = candidates(mnemonic, swapped).length === 0 && candidates(mnemonic, ['A', ...swapped]).length > 0;
     if (candidates(mnemonic, swapped).length > 0 || withA) {

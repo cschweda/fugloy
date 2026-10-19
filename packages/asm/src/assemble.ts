@@ -18,9 +18,10 @@
  * The chosen model's ROM and hardware names (and, with `dos`, that DOS's) are
  * predefined at the lowest priority (Ruling 5, symbols.ts): a definition in
  * the source wins with no message, and a name the source never defines that a
- * table has resolves to the table's value. An instruction that uses an
- * address whose code differs between the Model I and Model III ROMs draws a
- * warning naming both.
+ * table has resolves to the table's value. An instruction that uses, as a
+ * number, an address whose code differs between the Model I and Model III
+ * ROMs draws a note naming both: a warning when no model is given, info when
+ * one is (romWarning).
  */
 import { MemoryImage } from '@fugloy/disasm';
 import type { Dos, TableEntry } from '@fugloy/disasm';
@@ -50,7 +51,8 @@ export interface Diagnostic {
   message: string;
   /**
    * A stable name for a diagnostic a caller may want to tell apart from the
-   * rest; only `rom-difference` (the Model I/III warning) has one so far.
+   * rest; only `rom-difference` (the Model I/III note: a warning when no
+   * model is given, info when one is) has one so far.
    */
   code?: 'rom-difference';
 }
@@ -101,7 +103,11 @@ export interface SourceMap {
 }
 
 export interface AsmOptions {
-  /** The machine whose ROM names are predefined: 1, 3 (the default), or 4 (its LS-DOS 6 service calls and the Model III ROM). */
+  /**
+   * The machine whose ROM names are predefined: 1, 3 (the default), or 4 (its
+   * LS-DOS 6 service calls and the Model III ROM). Naming it also makes the
+   * Model I/III note info rather than a warning.
+   */
   model?: Model;
   /** The DOS whose names are predefined too: `trsdos` (Model III only), `ldos`, or `none` (the default). */
   dos?: Dos;
@@ -234,6 +240,8 @@ export class Assembly {
   readonly model: Model;
   readonly rom: ReadonlyMap<string, RomName>;
   readonly dos: Dos;
+  /** Whether the caller named the model (the Model I/III note is then info, not a warning). */
+  readonly modelGiven: boolean;
   /** The predefined names the source used without defining them. */
   readonly romUsed = new Map<string, RomName>();
   readonly diagnostics: Diagnostic[] = [];
@@ -257,7 +265,9 @@ export class Assembly {
   endItem: Item | null = null;
   entry: number | null = null;
 
-  constructor(model: Model = DEFAULT_MODEL, dos: Dos = 'none') {
+  constructor(model: Model | undefined, dos: Dos = 'none') {
+    this.modelGiven = model !== undefined;
+    model ??= DEFAULT_MODEL;
     this.model = model;
     this.dos = dos;
     this.rom = romNames(model, dos);
@@ -617,32 +627,41 @@ export class Assembly {
   }
 
   /**
-   * Warns once for a line whose instruction uses an address the Model I and
-   * Model III ROM tables give different meanings: a CALL or JP target, an
-   * address in parentheses, or a predefined ROM name.
+   * Notes once for a line whose instruction uses an address the Model I and
+   * Model III ROM tables give different meanings: a CALL or JP target, or a
+   * memory address in parentheses (not an IN or OUT port). A predefined ROM
+   * name is never noted, since it comes from the chosen model's table and
+   * so already says which machine it means. With no model given the note is
+   * a warning (the address may have been copied from the other machine's
+   * listing); with a model given it is an info note with the same code.
    */
   romWarning(item: Item, operands: readonly Operand[]): void {
     const { stmt } = item;
     const mn = stmt.op!.name;
+    if (mn === 'IN' || mn === 'OUT') return;
     for (let i = 0; i < operands.length; i++) {
       const { shape, value } = operands[i]!;
       const node = item.operands[i]!;
       if (value === undefined || !('expr' in node)) continue;
       const name = loneSymbol(node.expr);
-      const viaRom = name !== undefined && !this.syms.has(name.toUpperCase()) && this.rom.has(name.toUpperCase());
-      if (!(viaRom || shape === '(nn)' || (shape === 'nn' && (mn === 'CALL' || mn === 'JP')))) continue;
+      if (name !== undefined && !this.syms.has(name.toUpperCase()) && this.rom.has(name.toUpperCase())) continue;
+      if (!(shape === '(nn)' || (shape === 'nn' && (mn === 'CALL' || mn === 'JP')))) continue;
       const diff = romDifference(value & 0xffff);
       if (diff === undefined) continue;
       // The Model 4 runs Model III code with the Model III ROM.
       const [mine, theirs, machine, other] = this.model === 1 ? [diff.model1, diff.model3, 'Model I', 'Model III'] : [diff.model3, diff.model1, 'Model III', 'Model I'];
-      this.report(
-        'warning',
-        stmt.line,
-        node.col,
-        node.end,
-        `${address(value)} means different things in the two ROMs: on the ${machine} it is ${mine.name} (${mine.purpose}), on the ${other} ${theirs.name} (${theirs.purpose}). This line is right for the ${machine} only.`,
-        'rom-difference',
-      );
+      const head = `${address(value)} means different things in the two ROMs: on the ${machine} it is ${mine.name} (${mine.purpose}), on the ${other} ${theirs.name} (${theirs.purpose}).`;
+      if (this.modelGiven) this.report('info', stmt.line, node.col, node.end, `${head} This line is right for the ${machine} only.`, 'rom-difference');
+      else {
+        this.report(
+          'warning',
+          stmt.line,
+          node.col,
+          node.end,
+          `${head} No model was chosen, so the program is assembled for the ${machine}, and this line is right for it only; choose the model the program is for.`,
+          'rom-difference',
+        );
+      }
       return;
     }
   }
@@ -841,6 +860,18 @@ export function assemble(source: string, options: AsmOptions = {}): AsmResult {
   }
   asm.checkOverlaps();
 
+  // toCmd's default transfer address is the first assembled byte's load address; under .PHASE that code is linked to run elsewhere.
+  const firstPlaced = asm.items.find((i) => i.bytes.length > 0);
+  if (asm.entry === null && asm.endItem === null && firstPlaced !== undefined && firstPlaced.address !== firstPlaced.load) {
+    const { col, end } = spanOf(firstPlaced.stmt);
+    asm.report(
+      'info',
+      firstPlaced.stmt.line,
+      col,
+      end,
+      `There is no END entry, so a .CMD of this program starts at its first byte, ${address(firstPlaced.load!)}, where this line loads; but it is assembled to run at ${address(firstPlaced.address!)}. Name the start with END, as in END START.`,
+    );
+  }
   if (!asm.orgLater && asm.usedDefault) {
     // The note covers line 1 (at least one column), so an editor has something to mark.
     asm.report('info', 1, 1, Math.max(2, (lines[0]?.length ?? 0) + 1), `There is no ORG, so the program starts at ${address(DEFAULT_ORIGIN)}.`);

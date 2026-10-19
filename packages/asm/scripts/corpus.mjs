@@ -15,7 +15,7 @@
  * program.
  *
  * A row passes when asm assembles with no warning or error (the Model I/III
- * warning, `rom-difference`, aside: it changes no byte), zmac with no warning
+ * note is info, since the model is named), zmac with no warning
  * or error, and asm's 64K image (bitmap and bytes), runs, and entry match
  * zmac's and the program that went in, under both selections. An exception
  * thrown while checking a row is that row's mismatch. It prints a table and
@@ -133,7 +133,7 @@ function check(row, zmac, selection) {
   const t0 = performance.now();
   const asm = assemble(source, { model: selection.machine, dos: selection.dos });
   const asmMs = performance.now() - t0;
-  const loud = asm.diagnostics.filter((d) => d.severity !== 'info' && d.code !== 'rom-difference');
+  const loud = asm.diagnostics.filter((d) => d.severity !== 'info');
   const result = { lines, bytes: mod.image.runs().reduce((n, r) => n + r.length, 0), asmMs };
   // A service call has no EQU; every other table entry the source names is defined again by one.
   tally.redefined += a.tablesUsed.filter((e) => e.kind !== 'svc').length;
@@ -206,6 +206,6 @@ const hinted = rows.length - programCount;
 console.log('');
 console.log(`${programCount} programs (${out.filter((p) => p.format === 'cmd').length} .CMD, ${out.filter((p) => p.format === 'bas').length} BASIC) and ${hinted} of them again with hints: ${rows.length} rows (${[...byRoot].map(([k, v]) => `${k} ${v}`).join(', ')}), ${rows.length - failed} match, ${failed} mismatch${failed === 1 ? '' : 'es'}.`);
 console.log(`${skipped.length} other files are neither .CMD nor BASIC and were skipped: ${skipped.map((s) => basename(s)).join(', ')}.${duplicates > 0 ? ` ${duplicates} file${duplicates === 1 ? ' was a copy' : 's were copies'} of another and counted once.` : ''}`);
-console.log(`Ruling 5: ${tally.redefined} EQUs across both selections defined a table name again with the predefined value; ${tally.differences} lines drew the Model I/III warning.`);
+console.log(`Ruling 5: ${tally.redefined} EQUs across both selections defined a table name again with the predefined value; ${tally.differences} lines drew the Model I/III note (info, as the model is named).`);
 if (zmac === null) console.log('zmac is not installed (pnpm zmac:install), so asm was checked against the original programs only.');
 process.exit(failed === 0 ? 0 : 1);

@@ -200,13 +200,17 @@ describe('forms and parentheses', () => {
 describe("zmac's other spellings get the exact rewrite", () => {
   const CASES: { written: string; message: string; zmac: number[] }[] = [
     { written: 'IN 38H', message: 'IN needs A and the port in parentheses: write IN A,(38H).', zmac: [0xdb, 0x38] },
+    { written: 'IN (38H)', message: 'IN needs A and the port in parentheses: write IN A,(38H).', zmac: [0xdb, 0x38] },
+    { written: 'OUT 12H', message: 'OUT needs the port in parentheses and then A: write OUT (12H),A.', zmac: [0xd3, 0x12] },
     { written: 'OUT (12H)', message: 'OUT needs the port in parentheses and then A: write OUT (12H),A.', zmac: [0xd3, 0x12] },
     { written: 'JP HL', message: 'JP HL jumps to the address in HL, which Z80 assembly writes in parentheses: write JP (HL).', zmac: [0xe9] },
     { written: 'JP IX', message: 'JP IX jumps to the address in IX, which Z80 assembly writes in parentheses: write JP (IX).', zmac: [0xdd, 0xe9] },
     { written: 'POP A', message: "POP works on register pairs, and A is the 8080's short name for AF: write POP AF.", zmac: [0xf1] },
     { written: 'PUSH B', message: "PUSH works on register pairs, and B is the 8080's short name for BC: write PUSH BC.", zmac: [0xc5] },
     { written: 'PUSH H', message: "PUSH works on register pairs, and H is the 8080's short name for HL: write PUSH HL.", zmac: [0xe5] },
+    { written: 'PUSH D', message: "PUSH works on register pairs, and D is the 8080's short name for DE: write PUSH DE.", zmac: [0xd5] },
     { written: "PUSH AF'", message: "PUSH works on AF, not the shadow AF': write PUSH AF.", zmac: [0xf5] },
+    { written: "POP AF'", message: "POP works on AF, not the shadow AF': write POP AF.", zmac: [0xf1] },
     { written: 'ADD M', message: "M is the 8080's name for the byte HL points at: write ADD A,(HL).", zmac: [0x86] },
     { written: 'SUB M', message: "M is the 8080's name for the byte HL points at: write SUB (HL).", zmac: [0x96] },
     { written: 'CP M', message: "M is the 8080's name for the byte HL points at: write CP (HL).", zmac: [0xbe] },
@@ -229,6 +233,15 @@ describe("zmac's other spellings get the exact rewrite", () => {
       expect(bytesOf(['\tORG 6000H', `\t${rewrite}`].join('\n')), rewrite).toEqual(zmac);
     });
   }
+  it('after JP, CALL, JR, and RET, M is the condition: a missing address is said so, never rewritten to (HL)', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tJP M', '\tCALL NZ', '\tJR C', '\tJR M')))).toEqual([
+      '2: JP M names a condition but no address to go to: write JP M,label.',
+      '3: CALL NZ names a condition but no address to go to: write CALL NZ,label.',
+      '4: JR C names a condition but no address to go to: write JR C,label.',
+      '5: JR has no form M. Its forms are C,label, NC,label, NZ,label, Z,label, and label.',
+    ]);
+    expect(bytesOf(lines('\tORG 6000H', '\tRET M', '\tJP M,6000H'))).toEqual([0xf8, 0xfa, 0x00, 0x60]);
+  });
   it('RES and SET copies to a register are rewritten the same way', () => {
     expect(errorsOf(assemble(lines('\tORG 6000H', '\tRES 3,(IX-2),C')))).toEqual([
       '2: RES 3,(IX-2),C is undocumented: it works on the byte at IX-2 and also copies the result into C. Fugløy writes it as data, so write DB 0DDH,0CBH,0FEH,99H.',

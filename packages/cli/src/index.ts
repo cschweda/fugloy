@@ -90,7 +90,8 @@ listing instead, with each code line disassembled at its true address.
   --help           show this help
   --version        show the version
 
-fugloy asm assembles Z80 source into a .CMD; see fugloy asm --help.
+fugloy asm assembles Z80 source into a .CMD; see fugloy asm --help. To
+disassemble a file named asm, write ./asm.
 `;
 
 const FORMATS = ['listing', 'zmac', 'ir'] as const;

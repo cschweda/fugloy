@@ -34,6 +34,11 @@ fugloy asm game.z --dos trsdos         # TRSDOS 1.3 names as well
 fugloy asm game.z --listing            # print the listing too
 ```
 
+`fugloy asm` takes the place of disassembling a file named `asm`; to
+disassemble one, write `fugloy ./asm`. Naming `--model` also tells the
+assembler which machine the program is for, which quiets the Model I/III
+warning to a note (see [ROM names](#rom-hardware-and-dos-names)).
+
 Every diagnostic goes to stderr as `file:line:col: severity: message`, the
 form editors and terminals link to:
 
@@ -196,19 +201,34 @@ symbol table lists the table names a source used, with kind `rom` and line 0.
         CALL    KBDRIVER        ; $3024 on the Model III, $03E3 with model: 1
 ```
 
-**The Model I/III warning.** Four addresses have different code in the two
+**The Model I/III note.** Four addresses have different code in the two
 ROMs, as the tables' comparison classes them (`$0050`, `$01D9`, `$0212`,
 `$03C2`; see `packages/disasm/data/symbols/COMPARISON.md`). An instruction
-that uses one draws a warning naming both meanings, with the chosen model's
-first. That covers a CALL or JP target, an address in parentheses, and a
-predefined ROM name in any instruction:
+that uses one as a number draws a note naming both meanings, with the chosen
+model's first. That covers a CALL or JP target and a memory address in
+parentheses. An IN or OUT port is not an address, and is never noted. A
+predefined ROM name is never noted either: `CALL $RSRCV` took its meaning
+from the chosen model's table, and on the Model I `$RSRCV` is not defined
+at all.
 
-```text
-warning: $0050 means different things in the two ROMs: on the Model III it is $RSRCV (receive a character from the RS-232-C port; zero means none arrived), on the Model I CTRLCHARTAB (table of the control codes for ENTER, CLEAR, BREAK, the arrow keys, and space: eight two-byte entries). This line is right for the Model III only.
-```
+The note's severity depends on whether a model was named:
 
-The warning has `code: 'rom-difference'`, so a caller can tell it apart.
-The disassembler's round-trip harness allows it, since it changes no byte.
+- With no `model` (and no `--model` on the command line), it is a
+  **warning**, since the address may have been copied from the other
+  machine's listing:
+
+  ```text
+  warning: $0050 means different things in the two ROMs: on the Model III it is $RSRCV (receive a character from the RS-232-C port; zero means none arrived), on the Model I CTRLCHARTAB (table of the control codes for ENTER, CLEAR, BREAK, the arrow keys, and space: eight two-byte entries). No model was chosen, so the program is assembled for the Model III, and this line is right for it only; choose the model the program is for.
+  ```
+
+- With a model named, it is an **info** note with the same meanings, ending
+  `This line is right for the Model III only.`, so the program assembles
+  with no warning, and the fact is still there, on hover in an editor for
+  example.
+
+Either way it has `code: 'rom-difference'`, so a caller can tell it apart.
+The disassembler's round-trip harness names the model, so it sees only the
+info note, and it still refuses every warning.
 
 ## Messages
 
@@ -289,9 +309,13 @@ depend on the value:
 - `ADD A,(5) reads as ADD A,5: ADD has no form that reads memory there, so the parentheses only group. Write ADD A,5 to say so. To use the byte at address 5, point HL at it: LD HL,5 then ADD A,(HL).`
 - `Line 4 writes over $6000, which line 2 already filled; the later bytes win, as in zmac.`
 - `LA is $6000, the address before this ORG, as in zmac. To name $7000, put LA on the line after the ORG.`
-- the Model I/III warning above.
+- the Model I/III note above, when no model is named.
 
-**Info:** `There is no ORG, so the program starts at $5200.`
+**Info:**
+
+- `There is no ORG, so the program starts at $5200.`
+- `There is no END entry, so a .CMD of this program starts at its first byte, $6000, where this line loads; but it is assembled to run at $4000. Name the start with END, as in END START.` (the first assembled line is under `.PHASE`; see `toCmd`)
+- the Model I/III note, when a model is named.
 
 ## Stricter than zmac
 
@@ -299,7 +323,8 @@ asm refuses some sources that zmac accepts. In each case zmac's reading is
 a likely slip, or a spelling outside the Z80 tables. asm never gives
 different bytes from zmac: it gives the same image, or an error. The
 disassembler never writes any of these, so the round trip is unaffected.
-Each is pinned in `test/zmac-probes.test.ts` with zmac's own bytes.
+Each is pinned in `test/zmac-probes.test.ts` against the pinned zmac, with
+zmac's own bytes wherever zmac assembles the source.
 
 | zmac accepts | zmac does | asm, and why |
 | --- | --- | --- |
@@ -385,7 +410,10 @@ The program as a `.CMD`, through `@fugloy/disasm`'s `writeCmd`: an optional
 transfer address is END's entry or, with no entry, the address of the first
 byte the source assembles (in source order, not the lowest address). DOS and
 the emulator refuse a `.CMD` with no `02` record, so every file this writes
-runs. `entry: 'source'` writes `03 00` instead when there is no END entry,
+runs. If that first byte is under `.PHASE`, the file starts where the code
+loads, though the code is assembled to run elsewhere; `assemble` gives an
+info note on that line, and `END <label>` fixes it. `entry: 'source'` writes
+`03 00` instead when there is no END entry,
 the shape zmac's own output reads as; the round-trip harness uses it. A
 result with errors, or with no bytes, throws a sentence.
 
@@ -393,7 +421,8 @@ result with errors, or with no bytes, throws a sentence.
 
 `encode`, `lengthOf`, `forms`, and `mnemonics` (the table-driven encoder);
 `romNames(model, dos)`, `romDifference(address)`, and `differentAddresses()`
-(the predefined names and the Model I/III comparison); `DEFAULT_ORIGIN`
+(the predefined names and the Model I/III comparison); `selectionProblem(model,
+dos)` (the sentence for a model and DOS with no tables, or undefined); `DEFAULT_ORIGIN`
 (`$5200`) and `DEFAULT_MODEL` (3); and the types.
 
 ## How it is built and checked
@@ -407,7 +436,8 @@ result with errors, or with no bytes, throws a sentence.
   1,786-encoding table, the fixtures, the hint and symbol round trips, the
   real programs, and the ROMs. asm must give zmac's 64K image, runs, and
   entry, with no warning, when it is given the machine and DOS the source
-  was named for. Without zmac, asm alone is checked against the program that
+  was named for (the Model III unless the test says otherwise; naming it
+  makes the Model I/III note info). Without zmac, asm alone is checked against the program that
   went in.
 - **`pnpm asm:corpus`** runs every real program on the machine (in
   `examples/`, `fixtures/real/`, and `sample/`) through the disassembler and

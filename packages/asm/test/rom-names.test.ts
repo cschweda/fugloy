@@ -111,43 +111,56 @@ describe('a definition in the source wins, with no message (Ruling 5)', () => {
   });
 });
 
-describe('the Model I/III warning', () => {
-  const RSRCV_M3 =
-    '$0050 means different things in the two ROMs: on the Model III it is $RSRCV (receive a character from the RS-232-C port; zero means none arrived), on the Model I CTRLCHARTAB (table of the control codes for ENTER, CLEAR, BREAK, the arrow keys, and space: eight two-byte entries). This line is right for the Model III only.';
-  it('CALL of an address the two ROM tables class as different names both meanings', () => {
-    const r = assemble(program('\tCALL 0050H'), { model: 3 });
+describe('the Model I/III note', () => {
+  const RSRCV =
+    '$0050 means different things in the two ROMs: on the Model III it is $RSRCV (receive a character from the RS-232-C port; zero means none arrived), on the Model I CTRLCHARTAB (table of the control codes for ENTER, CLEAR, BREAK, the arrow keys, and space: eight two-byte entries).';
+  /** The notes on each line, as `line severity: message`. */
+  const notes = (source: string, options: AsmOptions = {}): string[] =>
+    assemble(source, options)
+      .diagnostics.filter((d) => d.code === 'rom-difference')
+      .map((d) => `${d.line} ${d.severity}: ${d.message}`);
+  it('with no model given, CALL of an address the tables class as different is a warning naming both meanings', () => {
+    const r = assemble(program('\tCALL 0050H'));
     expect(r.ok).toBe(true);
-    expect(diagnosticsOf(r)).toEqual([`2:7-12 warning: ${RSRCV_M3}`]);
+    expect(diagnosticsOf(r)).toEqual([
+      `2:7-12 warning: ${RSRCV} No model was chosen, so the program is assembled for the Model III, and this line is right for it only; choose the model the program is for.`,
+    ]);
     expect(r.diagnostics[0]!.code).toBe('rom-difference');
   });
+  it('with a model given it is an info note with the same code, so the program assembles with no warning', () => {
+    expect(notes(program('\tCALL 0050H'), { model: 3 })).toEqual([`2 info: ${RSRCV} This line is right for the Model III only.`]);
+  });
   it('on the Model I it puts the Model I meaning first', () => {
-    expect(assembled(program('\tCALL 0050H'), { model: 1 }).warnings).toEqual([
-      '2: $0050 means different things in the two ROMs: on the Model I it is CTRLCHARTAB (table of the control codes for ENTER, CLEAR, BREAK, the arrow keys, and space: eight two-byte entries), on the Model III $RSRCV (receive a character from the RS-232-C port; zero means none arrived). This line is right for the Model I only.',
+    expect(notes(program('\tCALL 0050H'), { model: 1 })).toEqual([
+      '2 info: $0050 means different things in the two ROMs: on the Model I it is CTRLCHARTAB (table of the control codes for ENTER, CLEAR, BREAK, the arrow keys, and space: eight two-byte entries), on the Model III $RSRCV (receive a character from the RS-232-C port; zero means none arrived). This line is right for the Model I only.',
     ]);
   });
-  it('the Model 4 is warned as the Model III, whose ROM it runs Model III code with', () => {
-    expect(assembled(program('\tCALL 0050H'), { model: 4 }).warnings).toEqual([`2: ${RSRCV_M3}`]);
+  it('the Model 4 is noted as the Model III, whose ROM it runs Model III code with', () => {
+    expect(notes(program('\tCALL 0050H'), { model: 4 })).toEqual([`2 info: ${RSRCV} This line is right for the Model III only.`]);
   });
-  it('a ROM name at such an address warns too, and so does a JP or an address in parentheses', () => {
-    expect(assembled(program('\tCALL $RSRCV', '\tJP NZ,01D9H', '\tLD A,(0212H)', '\tLD HL,PRDRIVER'), { model: 3 }).warnings.map((w) => w.slice(0, 9))).toEqual([
-      '2: $0050 ',
-      '3: $01D9 ',
-      '4: $0212 ',
-      '5: $03C2 ',
-    ]);
+  it('a JP target and a memory address in parentheses are noted too', () => {
+    expect(notes(program('\tJP NZ,01D9H', '\tLD A,(0212H)', '\tLD (03C2H),HL')).map((n) => n.slice(0, 16))).toEqual(['2 warning: $01D9', '3 warning: $0212', '4 warning: $03C2']);
   });
-  it('a plain number elsewhere, a shared address, or a name the source defines does not warn', () => {
-    expect(assembled(program('\tLD HL,0050H', '\tLD A,50H', '\tCALL 0060H', '\tDW 0050H'), { model: 3 }).warnings).toEqual([]);
-    expect(assembled(program('MINE\tEQU\t0050H', '\tLD HL,MINE'), { model: 3 }).warnings).toEqual([]);
+  it('a predefined ROM name is never noted: it comes from the chosen model\'s table', () => {
+    expect(notes(program('\tCALL $RSRCV', '\tLD HL,PRDRIVER', '\tCALL PRDRIVER'))).toEqual([]);
+    expect(notes(program('\tCALL CTRLCHARTAB'), { model: 1 })).toEqual([]);
   });
-  it('a line with an error gets no warning as well', () => {
-    expect(diagnosticsOf(assemble(program('\tCALL Z,0050H,1'), { model: 3 })).every((d) => !d.includes('warning'))).toBe(true);
+  it('an IN or OUT port is not an address', () => {
+    expect(notes(program('\tIN A,(50H)', '\tOUT (50H),A', '\tIN A,(0D9H)'))).toEqual([]);
+  });
+  it('a plain number elsewhere or a shared address is not noted; a name the source defines is noted as a number', () => {
+    expect(notes(program('\tLD HL,0050H', '\tLD A,50H', '\tCALL 0060H', '\tDW 0050H'))).toEqual([]);
+    expect(notes(program('MINE\tEQU\t0050H', '\tCALL MINE')).length).toBe(1);
+  });
+  it('a line with an error gets no note as well', () => {
+    expect(notes(program('\tCALL Z,0050H,1'))).toEqual([]);
   });
   it('covers every address the comparison classes as different', () => {
     expect(differentAddresses()).toEqual([0x0050, 0x01d9, 0x0212, 0x03c2]);
     for (const a of differentAddresses()) {
       const hex = `0${a.toString(16).toUpperCase().padStart(4, '0')}H`;
       expect(assembled(program(`\tCALL ${hex}`)).warnings.length, hex).toBe(1);
+      expect(assembled(program(`\tCALL ${hex}`), { model: 1 }).warnings, hex).toEqual([]);
     }
   });
 });

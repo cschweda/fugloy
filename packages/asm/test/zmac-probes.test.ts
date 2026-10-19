@@ -447,6 +447,15 @@ describe('deliberately stricter than zmac', () => {
       '3: OUT (C),0 is undocumented, and Fugløy writes it as DB 0EDH,71H; use that instead.',
     ]);
   });
+  zit('IN F,(C)', () => {
+    expect(runZmac(program('\tIN F,(C)')).bytes).toEqual([0xed, 0x70]);
+    expect(errorsOf(assemble(program('\tIN F,(C)')))).toEqual(['2: IN F,(C) is undocumented, and Fugløy writes it as DB 0EDH,70H; use that instead.']);
+  });
+  // zmac stores a string's UTF-8 bytes; the assembler asks for the code as a number.
+  zit('characters outside ASCII in a string', () => {
+    expect(runZmac(program("\tDB 'é'")).bytes).toEqual([0xc3, 0xa9]);
+    expect(errorsOf(assemble(program("\tDB 'é'")))).toEqual(['2: This string holds é, which is not plain ASCII; write its code as a number instead.']);
+  });
   zit('IN and OUT with the port alone', () => {
     expect(runZmac(program('\tIN 38H', '\tOUT (12H)')).bytes).toEqual([0xdb, 0x38, 0xd3, 0x12]);
     expect(errorsOf(assemble(program('\tIN 38H', '\tOUT (12H)')))).toEqual(['2: IN needs A and the port in parentheses: write IN A,(38H).', '3: OUT needs the port in parentheses and then A: write OUT (12H),A.']);

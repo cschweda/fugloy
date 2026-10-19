@@ -1,13 +1,13 @@
 /** `fugloy asm`: diagnostics as file:line:col: severity: message, the .CMD it writes, the listing, and the exit codes. */
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadCmd } from '@fugloy/disasm';
-import { defaultOutput, formatListing } from '../src/asm.js';
+import { defaultOutput, formatListing, samePath } from '../src/asm.js';
 import { run } from '../src/index.js';
 import type { Io } from '../src/index.js';
 import { assemble } from '@fugloy/asm';
@@ -88,7 +88,8 @@ describe('fugloy asm', () => {
     const one = capture({ 'k.z': '\tORG 6000H\n\tCALL KBDRIVER\n\tCALL 0050H\n' });
     expect(await run(['asm', 'k.z', '--model', '1'], one.io)).toBe(0);
     expect(Array.from(one.written.get('k.cmd')!.subarray(4, 7))).toEqual([0xcd, 0xe3, 0x03]);
-    expect(one.err.join('')).toContain('warning: $0050 means different things in the two ROMs: on the Model I it is CTRLCHARTAB');
+    // With --model named, the Model I/III note is info, not a warning.
+    expect(one.err.join('')).toContain('k.z:3:7: info: $0050 means different things in the two ROMs: on the Model I it is CTRLCHARTAB');
     const dos = capture({ 'd.z': '\tORG 6000H\n\tJP $JP2DOS\n' });
     expect(await run(['asm', 'd.z'], dos.io)).toBe(1);
     expect(dos.err.join('')).toContain('d.z:2:5: error: $JP2DOS is not defined. $JP2DOS is a TRSDOS 1.3 name; choose TRSDOS 1.3 as the DOS to use it.');
@@ -124,9 +125,10 @@ describe('fugloy asm', () => {
       [['asm', 'a.z', 'b.z'], 'fugloy asm: expected exactly one source file\n'],
       [['asm', 'a.z', '--model', '2'], 'fugloy asm: --model must be 1, 3, or 4\n'],
       [['asm', 'a.z', '--dos', 'cpm'], 'fugloy asm: --dos must be trsdos, ldos, or none\n'],
-      [['asm', 'a.z', '--model', '1', '--dos', 'trsdos'], 'fugloy asm: --dos trsdos is the Model III DOS; use --model 3 or --dos ldos\n'],
-      [['asm', 'a.z', '--model', '4', '--dos', 'ldos'], 'fugloy asm: --model 4 predefines the LS-DOS 6 service calls and the Model III ROM; leave out --dos\n'],
+      [['asm', 'a.z', '--model', '1', '--dos', 'trsdos'], 'fugloy asm: TRSDOS 1.3 is the Model III DOS; for the Model I choose ldos or none.\n'],
+      [['asm', 'a.z', '--model', '4', '--dos', 'ldos'], 'fugloy asm: The Model 4 has no DOS names to choose: its names are the LS-DOS 6 service calls and the Model III ROM. Leave the DOS out.\n'],
       [['asm', 'a.cmd'], 'fugloy asm: the output would overwrite the source a.cmd; choose another name with -o\n'],
+      [['asm', 'x.z', '-o', './x.z'], 'fugloy asm: the output would overwrite the source x.z; choose another name with -o\n'],
     ];
     for (const [argv, message] of cases) {
       const { io, err } = capture();
@@ -163,6 +165,21 @@ describe('fugloy asm', () => {
     const b = capture();
     expect(await run(['--help'], b.io)).toBe(0);
     expect(b.out.join('')).toContain('fugloy asm <source> [-o <out.cmd>]');
+    expect(b.out.join('')).toContain('To\ndisassemble a file named asm, write ./asm.');
+  });
+
+  it('the overwrite guard compares resolved paths, symbolic links followed', async () => {
+    expect(samePath('x.z', './x.z')).toBe(true);
+    expect(samePath('dir/../x.z', 'x.z')).toBe(true);
+    expect(samePath('x.z', 'y.z')).toBe(false);
+    const dir = await mkdtemp(join(tmpdir(), 'fugloy-asm-'));
+    try {
+      await writeFile(join(dir, 'real.z'), '\tNOP\n');
+      await symlink(join(dir, 'real.z'), join(dir, 'link.cmd'));
+      expect(samePath(join(dir, 'link.cmd'), join(dir, 'real.z'))).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('defaultOutput changes or adds the extension', () => {

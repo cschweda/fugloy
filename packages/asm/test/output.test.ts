@@ -34,6 +34,17 @@ describe('toCmd', () => {
     const gap = assemble(['\tORG 7000H', '\tDS 4', '\tNOP'].join('\n'));
     expect(Array.from(toCmd(gap)).slice(-4)).toEqual([0x02, 0x02, 0x04, 0x70]);
   });
+  it('with no END entry and the first byte under .PHASE, an info note says the file starts where the code loads, not where it runs', () => {
+    const r = assemble(['\tORG 6000H', '\t.PHASE 4000H', 'X:\tJP X', '\t.DEPHASE'].join('\n'));
+    expect(r.ok).toBe(true);
+    expect(r.diagnostics.map((d) => `${d.line} ${d.severity}: ${d.message}`)).toEqual([
+      '3 info: There is no END entry, so a .CMD of this program starts at its first byte, $6000, where this line loads; but it is assembled to run at $4000. Name the start with END, as in END START.',
+    ]);
+    expect(Array.from(toCmd(r)).slice(-4)).toEqual([0x02, 0x02, 0x00, 0x60]);
+    // With an END entry, or with the first byte outside .PHASE, there is no note.
+    expect(assemble(['\tORG 6000H', '\t.PHASE 4000H', 'X:\tJP X', '\t.DEPHASE', '\tEND X'].join('\n')).diagnostics).toEqual([]);
+    expect(assemble(['\tORG 6000H', '\tNOP', '\t.PHASE 4000H', 'X:\tJP X', '\t.DEPHASE'].join('\n')).diagnostics).toEqual([]);
+  });
   it("with entry 'source' and no END entry it ends with 03 00, as zmac's file reads, and loadCmd gives no entry", () => {
     const r = assemble('\tORG 6000H\n\tNOP\n');
     expect(Array.from(toCmd(r, { entry: 'source' }))).toEqual([0x01, 0x03, 0x00, 0x60, 0x00, 0x03, 0x00]);

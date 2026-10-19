@@ -8,10 +8,11 @@
  * error in the source or a file that cannot be read or written, 2 on a usage
  * error.
  */
-import { basename, dirname, extname, join } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { basename, dirname, extname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { assemble, toCmd } from '@fugloy/asm';
-import type { AsmResult, ListingLine, Model } from '@fugloy/asm';
+import { assemble, selectionProblem, toCmd } from '@fugloy/asm';
+import type { AsmOptions, AsmResult, ListingLine, Model } from '@fugloy/asm';
 import type { Dos } from '@fugloy/disasm';
 import type { Io } from './index.js';
 
@@ -24,7 +25,8 @@ defining them ($VDCLS, $KBWAIT, ...), from the tables of the chosen model.
 
   -o <path>        write the .CMD here (default: the source's name with .cmd)
   --model <n>      the machine whose ROM names are predefined: 1, 3 (the
-                   default), or 4 (LS-DOS 6 service calls and the Model III ROM)
+                   default), or 4 (LS-DOS 6 service calls and the Model III ROM);
+                   naming it also turns the Model I/III warning into a note
   --dos <name>     also predefine that DOS's names: trsdos (Model III), ldos,
                    or none (the default)
   --listing        print the listing (address, bytes, source) to stdout
@@ -70,6 +72,18 @@ function summary(path: string, result: AsmResult): string {
   return `${path}: ${runs.length} block${runs.length === 1 ? '' : 's'}, ${bytes} byte${bytes === 1 ? '' : 's'}, ${spans}, ${entry}\n`;
 }
 
+/** A path as the file system resolves it (symbolic links followed where the file exists). */
+function realPath(p: string): string {
+  try {
+    return realpathSync(p);
+  } catch {
+    return resolve(p);
+  }
+}
+
+/** Whether two paths name the same file: `x.z` and `./x.z` do. */
+export const samePath = (a: string, b: string): boolean => realPath(a) === realPath(b);
+
 /** The default output path: the source's, with its extension (if any) changed to .cmd. */
 export function defaultOutput(source: string): string {
   const ext = extname(source);
@@ -102,26 +116,25 @@ export async function runAsm(argv: string[], io: Io): Promise<number> {
     io.stderr(`fugloy asm: expected exactly one source file\n${ASM_USAGE}`);
     return 2;
   }
-  const model = values.model === undefined ? 3 : MODELS.find((m) => String(m) === values.model);
-  if (model === undefined) {
+  const model = values.model === undefined ? undefined : MODELS.find((m) => String(m) === values.model);
+  if (values.model !== undefined && model === undefined) {
     io.stderr('fugloy asm: --model must be 1, 3, or 4\n');
     return 2;
   }
-  const dos = values.dos === undefined ? 'none' : DOSES.find((d) => d === values.dos);
-  if (dos === undefined) {
+  const dos = values.dos === undefined ? undefined : DOSES.find((d) => d === values.dos);
+  if (values.dos !== undefined && dos === undefined) {
     io.stderr('fugloy asm: --dos must be trsdos, ldos, or none\n');
     return 2;
   }
-  if (model === 1 && dos === 'trsdos') {
-    io.stderr('fugloy asm: --dos trsdos is the Model III DOS; use --model 3 or --dos ldos\n');
-    return 2;
-  }
-  if (model === 4 && dos !== 'none') {
-    io.stderr('fugloy asm: --model 4 predefines the LS-DOS 6 service calls and the Model III ROM; leave out --dos\n');
+  // The model goes to the assembler only when --model names it, so the Model I/III warning stays a warning without it.
+  const asmOptions: AsmOptions = { ...(model === undefined ? {} : { model }), ...(dos === undefined ? {} : { dos }) };
+  const problem = selectionProblem(model ?? 3, dos);
+  if (problem !== undefined) {
+    io.stderr(`fugloy asm: ${problem}\n`);
     return 2;
   }
   const out = values.output ?? defaultOutput(path);
-  if (out === path) {
+  if (samePath(out, path)) {
     io.stderr(`fugloy asm: the output would overwrite the source ${path}; choose another name with -o\n`);
     return 2;
   }
@@ -135,7 +148,7 @@ export async function runAsm(argv: string[], io: Io): Promise<number> {
     io.stderr(`fugloy asm: cannot read ${path}: ${why}\n`);
     return 1;
   }
-  const result = assemble(text, { model, dos });
+  const result = assemble(text, asmOptions);
   for (const d of result.diagnostics) io.stderr(`${path}:${d.line}:${d.column}: ${d.severity}: ${d.message}\n`);
   if (values.listing === true) io.stdout(formatListing(result.listing));
   if (!result.ok) {
