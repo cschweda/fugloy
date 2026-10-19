@@ -6,8 +6,8 @@ All notable changes to Fugløy are recorded here. The format follows
 
 The repository holds parts that are versioned and released separately:
 
-- **Core**: `@fugloy/z80`, `@fugloy/disasm`, and `@fugloy/cli`, released
-  together at one version. Phases 1 and 2 of the plan landed as minor
+- **Core**: `@fugloy/z80`, `@fugloy/disasm`, and `@fugloy/cli` (and, from
+  the next release, `@fugloy/asm`), released together at one version. Phases 1 and 2 of the plan landed as minor
   versions (0.1.0, 0.2.0); 1.0.0 is v1, phases 1–4 of the plan, and a
   release that adds features raises the minor version. Core releases have the plain `## [X.Y.Z]` headings below and are tagged `vX.Y.Z` on
   `main`. 1.1.0 is the first on npm; 0.1.0, 0.2.0, and 1.0.0 were tagged and
@@ -36,6 +36,146 @@ creates and pushes the tag.
 
 
 ## [Unreleased]
+
+Plan phase 5A, the assembler, built on branch `phase5a` (2026-10-18; design
+`docs/superpowers/specs/2026-10-18-phase5-assembler-ide-design.md`, plan
+`docs/superpowers/plans/2026-10-18-phase5a-assembler.md`). It goes out with
+the next core release: `@fugloy/asm` joins `@fugloy/z80`, `@fugloy/disasm`,
+and `@fugloy/cli` at their shared version, and `publish.sh`'s `core` set now
+packs and smoke-tests it (`fugloy asm` on the starter program).
+
+### Added
+
+Core, `@fugloy/asm` (new package; runtime dependencies `@fugloy/z80` and
+`@fugloy/disasm` only; no DOM, no Node APIs):
+
+- **The encoder** is `@fugloy/z80`'s generated tables inverted at load time
+  (800 real encodings; `LD (nn),HL` and `LD HL,(nn)` take the base `22`/`2A`
+  form, as zmac does), so instruction lengths come from the templates and
+  pass 1 is exact. Load fails if two entries could not be told apart.
+  `encode`, `lengthOf`, `forms`, and `mnemonics` are exported. A test checks
+  that `decodeAt(encode(x))` gives back every form.
+- **`assemble(source, { model, dos })`** returns `{ ok, image, entry,
+  symbols, sourceMap, listing, diagnostics }`. It runs two passes: forward
+  references resolve, but a forward name in `DS`, `ORG`, or `.PHASE` is an
+  error, never a silent zero. A line with an error emits no bytes but keeps
+  its size, every error in the program is reported at once, and only an
+  error-free result has an image.
+  - **The syntax** is zmac's for everything the disassembler emits, settled
+    by zmac probes that are tests. Labels take a colon anywhere, or none in
+    column 1. Names are case-insensitive. Numbers come as `0FFH`, `$FF`,
+    `0xFF`, `1010B`, `17O`, decimal, and `'A'`, at 32 bits. `$` follows
+    zmac's rules (`$KBWAIT` is a name). The expression precedence is zmac's
+    (C's), with `HIGH`, `LOW`, `MOD`, and `%`. A whole-parenthesised operand
+    is memory only where the instruction has a memory form; elsewhere it is
+    the number, with a warning. `SUB A,n` and `ADD n` are accepted.
+  - **The directives** are `ORG` (several, going down, gaps), `EQU` (repeated
+    only with the same value), `DEFL`/`=`, `DB`/`DEFB`/`DEFM`, `DW`/`DEFW`,
+    `DS`/`DEFS` (a gap without a fill, a fill of 0 to 127), and
+    `.PHASE`/`.DEPHASE` (labels and `$` at the run address, bytes at the load
+    address, zeros for a DS). `END [entry]` stops the reading; lines after it
+    are listed but not read. zmac's quirks are matched: `$` in DB and DW is
+    each value's own address, and a label on an ORG line takes the address
+    before the ORG, with a warning.
+  - **Defaults.** With no ORG the program starts at `$5200`, with an info
+    note. Code before a later first ORG is an error. With no END entry,
+    `entry` is null.
+  - **The source map**, keyed by run address: `lineOf`, `linesOf` (every line
+    that emitted code there, with its bytes, for code a loader moves over its
+    own), and `addressesOf`.
+- **Messages** are sentences on the line, with `column` and `endColumn`:
+  - unknown instructions get the nearest mnemonic, or the split for `INCA`;
+  - forms the instruction lacks list the forms it has;
+  - values out of range give the value and the limit (`JR reaches 128 bytes
+    either way; LOOP is 303 bytes back. Use JP.`);
+  - undefined names get the nearest name, the source's own first;
+  - duplicates name both lines, and circular EQUs name the loop.
+  - The spellings zmac reads but the tables do not give each get the exact
+    rewrite, which assembles to the bytes zmac gives the original: `IN 38H`
+    (`write IN A,(38H)`), `OUT (12H)`, `JP HL`, `PUSH A`/`POP B`/`PUSH H`/
+    `PUSH AF'`, the 8080 `M` (`write ADD A,(HL)`), and the undocumented DD CB
+    / FD CB copies to a register (`write DB 0DDH,0CBH,05H,10H`); `IN (C)`
+    keeps its DB sentence.
+  - `$FFH` says to choose `$` or `H`, and `$?`/`$A?` are refused, since zmac
+    reads `?` as the hex digit F.
+- **ROM, hardware, and DOS names** (plan Ruling 5), from the disassembler's
+  cited tables:
+  - `model: 1 | 3 | 4` (default 3) predefines that ROM's and hardware's
+    names. The Model 4 gets the LS-DOS 6 service calls by number and the
+    Model III ROM. `dos: 'trsdos' | 'ldos'` adds that DOS's names.
+  - A port's name is its number and anything else its address, the values
+    the emitter's EQUs give.
+  - They have the lowest priority: a source's own label, EQU, or DEFL of the
+    name wins with no message, so an emitted source's EQUs for them assemble
+    clean. Names the source used appear in `symbols` with kind `rom`.
+  - A name only another machine or DOS has says whose it is (`$RSINIT is a
+    Model III ROM name, and this program is assembled for the Model I.`).
+    A near miss gets the nearest table name and what it is (`CLSS is not
+    defined. Did you mean $VDCLS, the Model III ROM routine at $01C9 (clear
+    the screen)?`).
+  - An unknown model, or a model and DOS with no tables, throws a
+    `RangeError` sentence.
+- **The Model I/III warning.** A CALL or JP target, an address in
+  parentheses, or a predefined name at one of the four addresses the tables'
+  comparison classes as different (`$0050`, `$01D9`, `$0212`, `$03C2`) draws
+  a warning naming both ROMs' meanings, the chosen model's first. It has
+  `code: 'rom-difference'`. `Diagnostic` gains the optional `code` for it.
+- **`toCmd(result, { name, entry })`** writes the `.CMD` through `writeCmd`,
+  with phased code where it loads. The transfer record carries END's entry
+  or, with none, the address of the first byte the source assembles, so
+  every exported file runs: DOS and `@fugloy/emu`'s `parseCmd` refuse a
+  `.CMD` without an `02` record. `entry: 'source'` writes zmac's shape (`03
+  00` with no entry). Errors, no bytes, and a bad name throw sentences.
+- `romNames`, `romDifference`, `differentAddresses`, `DEFAULT_MODEL`, and
+  `DEFAULT_ORIGIN` are exported.
+- **The starter program**, `packages/asm/examples/clear-screen.z`, fills
+  `$3C00`–`$3FFF` with spaces and loops forever, with a plain comment on
+  every line. Its test checks zmac's bytes and runs it on `@fugloy/emu` (a
+  devDependency): on a synthetic ROM in CI, and on the Model III and Model I
+  ROMs `fugloy.mcp.json` names when present. The screen must end blank.
+
+Core, `@fugloy/cli`:
+
+- **`fugloy asm <source> [-o <out.cmd>] [--model 1|3|4] [--dos
+  trsdos|ldos|none] [--listing]`** assembles with `@fugloy/asm`:
+  - every diagnostic goes to stderr as `file:line:col: severity: message`;
+  - the `.CMD` goes to `-o` or beside the source, followed by a one-line
+    summary (blocks, bytes, ranges, entry);
+  - `--listing` prints line, run and load address, bytes, and source;
+  - the exit code is 0 when it assembled, 1 on an error in the source or a
+    file that cannot be read, is not UTF-8, or has no bytes, and 2 for a
+    usage error or an output that would overwrite the source.
+  - `Io` gains an optional `writeBytes`.
+
+Core, `@fugloy/disasm`: `ROM_COMPARISON` (each ROM address's class across the
+two machines) is exported.
+
+### Testing
+
+- zmac referees asm everywhere the round-trip harness assembles. Its
+  `assemble(source, options)` now passes the machine and DOS a source was
+  named for, and the symbols round trip, the real-program symbol tests, and
+  the CLI's `--machine`/`--dos` round trips pass them. So every table name,
+  under every selection, is checked defined again by the emitter's EQU
+  (Ruling 5). The harness allows the `rom-difference` warning, which changes
+  no byte.
+- `pnpm asm:corpus` names every program twice: with the Model III and TRSDOS
+  tables, then with the Model I and LDOS tables. asm assembles each for that
+  machine and DOS. An exception while checking a row is now that row's
+  mismatch, not an abort. Locally: 85 programs and 3 hinted runs, 88 rows,
+  all the same as zmac under both selections, with 1,146 EQUs redefining a
+  table name and 2 lines drawing the Model I/III warning.
+- `real/rom.test.ts` also round-trips the Model III and Model 4 ROMs named
+  in `fugloy.mcp.json` through zmac and asm, when present.
+- The 32 whole-program negative tests check that asm's error is on the line
+  zmac flags.
+- New zmac probes cover `$.X`, `$@`, `$?X`, and `$G?` (names, as in zmac),
+  `$FFH` (undefined in both), and `$?`/`$A?` (a zmac warning when defined,
+  an error here; as numbers, pinned as stricter). A guard test checks that
+  no table name is `$` followed by hex digits only, and that every table name
+  assembles as one name.
+- `packages/emu/test/rom.d.ts` types the ROM config helper for the
+  TypeScript tests.
 
 ## [mcp 0.1.2] - 2026-10-18
 
