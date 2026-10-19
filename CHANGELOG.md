@@ -15,12 +15,12 @@ The repository holds parts that are versioned and released separately:
 - **The emulator**, `@fugloy/emu`, is versioned 0.x on its own. Its
   releases have `## [emu X.Y.Z]` headings and are tagged `emu-vX.Y.Z`; 0.2.0,
   emu phases 0–4, is its first npm release (published 2026-10-18); 0.3.0,
-  emu phases 5–7, followed the same day; 0.4.0, emu phase 6b (the Model 4), is
-  being released and is not on npm until published.
+  emu phases 5–7, followed the same day; 0.4.0, emu phase 6b (the Model 4), too
+  (published 2026-10-18).
 - **The MCP server**, `@fugloy/mcp`, is versioned 0.x on its own. Its
   releases have `## [mcp X.Y.Z]` headings and are tagged `mcp-vX.Y.Z`; 0.1.0,
   MCP phases A–F, is its first npm release (published 2026-10-18, after emu's); 0.1.1
-  (disk images and the Model I) followed the same day; 0.1.2 (the Model 4) is being released and is not on npm until published. It depends on `@fugloy/emu`, so emu
+  (disk images and the Model I) followed the same day; 0.1.2 (the Model 4) too (published 2026-10-18). It depends on `@fugloy/emu`, so emu
   was published first.
 - **The web workbench**, `apps/web`, is not on npm and has no version of its
   own: Netlify builds it from `main` and serves it at app.fugloy.dev

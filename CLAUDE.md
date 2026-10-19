@@ -11,7 +11,7 @@ later phases follow, in the Roadmap's order. The recompiler and
 bundler stay in Part 2 until the plan's kill criteria have been reviewed. If a
 task seems to need machinery from a later step, stop and say so.
 
-Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.2.0, `@fugloy/emu` 0.3.0, and `@fugloy/mcp` 0.1.1 on npm (2026-10-18); emu phases 5–7 merged and released in emu 0.3.0; the Model 4 (emu phase 6b) done for Model III mode and the native hardware, merged to main (2026-10-18); emu 0.4.0 and mcp 0.1.2 prepared 2026-10-18 (versions bumped, CHANGELOG sections written; not on npm until `publish.sh` runs); a version 6 DOS boot still needs an LS-DOS 6 / TRSDOS 6 disk; next: publish them.**
+Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.2.0, `@fugloy/emu` 0.4.0, and `@fugloy/mcp` 0.1.2 on npm (2026-10-18); emu phases 5–7 released in emu 0.3.0; the Model 4 (emu phase 6b) done for Model III mode and the native hardware, merged to main (2026-10-18); emu 0.4.0 and mcp 0.1.2 published 2026-10-18; a version 6 DOS boot still needs an LS-DOS 6 / TRSDOS 6 disk.**
 v1 is disassembler phases 1–4: the core decoder and loaders (v0.1.0), Pass 1
 and Pass 2 (v0.2.0), the cited symbol tables (phase 3: eight JSON tables, 634
 entries, in `packages/disasm/data/symbols/`, compiled by `pnpm symbols`), and
@@ -83,7 +83,7 @@ and the four local disks boot (`model1-disk.test.js`); MCP `load` takes
 spec §5, §11; MCP spec §5). The Model 4 was split off (phase 6 plan, Ruling
 1) into emu phase 6b (plan `docs/superpowers/plans/2026-10-18-emu-phase6b-model4.md`),
 done for Model III mode and the native hardware, merged to main (2026-10-18),
-being released (emu 0.4.0, first released then, not on npm until published):
+published (emu 0.4.0, 2026-10-18):
 `new Machine({ model: 4, ram: 64 | 128 })` on the Model 4 ROM
 (`fixtures/real/model4.rom`, from the cpmarchives TRS32 ROM set, recognised as
 `model4-trs32`; its `MODEL4P.ROM` is an emulator's stand-in, not Tandy's 4P
@@ -102,7 +102,7 @@ on `roms.model4`. Open: a version 6 DOS boot (no LS-DOS 6 / TRSDOS 6 disk
 is local) and the checks spec §5 lists for it (the 60 Hz timer at 4 MHz).
 `pnpm --filter @fugloy/emu test` runs the emu suite alone. The emu 0.3.0
 release carried the Model I, which mcp 0.1.1 needed; mcp 0.1.2's
-`load { model: 4 }` needs emu 0.4.0, which is published first. The Sea Dragon
+`load { model: 4 }` needs emu 0.4.0; both are published. The Sea Dragon
 speed test runs only with `FUGLOY_BENCH=1` (it flaked beside the parallel
 suite); `./publish.sh check` runs it alone after the suite. Emu phase 7 is
 done for the Model III and merged (plan
@@ -178,11 +178,11 @@ The Model I waits for a Model I reference (MAME or xtrs, ask the user first).
    3: debugger API, coverage, the label file. 4: `@fugloy/mcp` v0.1. 5: FDC
    and disk images. 6: Model I, then Model 4. 7: differential harness. Phases 0,
    1, 2, and 3 are done and merged; phase 4, `@fugloy/mcp` v0.1, is done and
-   merged; emu 0.3.0 and mcp 0.1.1 are on npm (2026-10-18); phase 5 is done
+   merged; emu 0.4.0 and mcp 0.1.2 are on npm (2026-10-18); phase 5 is done
    and merged; phase 6 is done for the Model I and merged. The
    Model 4 half of phase 6, split off (2026-10-18) into emu phase 6b, is done
    for Model III mode and the native hardware, merged to main (2026-10-18),
-   being released (emu 0.4.0, mcp 0.1.2) (the
+   published (emu 0.4.0, mcp 0.1.2) (the
    Model 4 ROM `fixtures/real/model4.rom`; the TRS32 set's `MODEL4P.ROM` is a
    stand-in, not Tandy's 4P ROM); a version 6 DOS boot still needs an LS-DOS 6
    or TRSDOS 6 disk. Phase 7 is done for the Model
