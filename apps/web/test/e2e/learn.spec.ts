@@ -415,3 +415,16 @@ test('axe finds nothing on /learn/invaders/, marked and running', async ({ page 
   await runIt(page);
   expect(await axe()).toEqual([]);
 });
+
+test("a lesson that cannot be fetched says so in a sentence, not a blank page", async ({ page }) => {
+  await open(page);
+  // From here on, nothing new can be fetched: the next lesson's payload and its text's chunk both fail.
+  await page.route('**/learn/02-registers/_payload.json*', (r) => r.abort());
+  await page.route('**/_nuxt/**', (r) => r.abort());
+  await page.getByTestId('lesson-next').click();
+  await expect(page).toHaveURL(/\/learn\/02-registers\/$/);
+  await expect(page.getByTestId('learn-load-failed')).toHaveText(
+    'The lesson could not be loaded: the connection may have dropped, or the site was updated since this page opened. Reload the page.',
+  );
+  await expect(page.getByTestId('learn-load-failed')).toHaveAttribute('role', 'alert');
+});

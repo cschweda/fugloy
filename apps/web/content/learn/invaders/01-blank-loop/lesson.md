@@ -71,6 +71,8 @@ The passes take 133,115 T-states, 5 fewer than 5,120 times 26 because the last `
 
 `WAIT` keeps BC with `PUSH` and `POP`, so that whatever later chapters keep in B and C survives the wait. Nothing does yet.
 
+In the program, `WAIT` comes first, above `START`. A routine can sit anywhere the processor never falls into it from the line before: `END START` makes `START` the program's entry, the address its .CMD file tells the TRS-80 to start at, so the processor begins below `WAIT` and reaches it only by `CALL WAIT`. This program keeps its routines above `START` and the game itself below it.
+
 ## On the Model I
 
 The Model I's screen is the same memory at `3C00H`, the same 16 rows of 64, so the program runs on it unchanged. Fugløy runs its Z80 at 1.77 MHz, so a turn lasts about 75 ms there and the loop goes round about 13 times a second.

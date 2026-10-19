@@ -6,6 +6,18 @@
 
         ORG     7000H           ; the program lives at 7000H, in free memory
 
+; WAIT: a counted delay, 5,120 passes of 26 T-states, about 66 ms a turn at
+; 2.03 MHz. The routines come first, and the game itself after them, from
+; START, where END START says the program begins.
+WAIT:   PUSH    BC              ; save BC, which the loop uses
+        LD      BC,1400H        ; 1400H is 5,120 passes of 26 T-states
+DELAY:  DEC     BC
+        LD      A,B
+        OR      C
+        JR      NZ,DELAY
+        POP     BC              ; BC as the caller left it
+        RET
+
 START:  LD      HL,3C00H        ; HL points at the top-left cell
         LD      BC,400H         ; BC counts the cells: 400H is 1024
 CLEAR:  LD      (HL),20H        ; a space: the cell is blank
@@ -19,15 +31,5 @@ CLEAR:  LD      (HL),20H        ; a space: the cell is blank
 ; reads the keys, moves things and draws them; this one only waits.
 LOOP:   CALL    WAIT            ; the turn's pause, so the game runs at a steady speed
         JR      LOOP            ; and round again, for ever
-
-; WAIT: a counted delay, 133,120 T-states, about 66 ms at 2.03 MHz.
-WAIT:   PUSH    BC              ; save BC, which the loop uses
-        LD      BC,1400H        ; 1400H is 5,120 passes of 26 T-states
-DELAY:  DEC     BC
-        LD      A,B
-        OR      C
-        JR      NZ,DELAY
-        POP     BC              ; BC as the caller left it
-        RET
 
         END     START           ; the program starts at START

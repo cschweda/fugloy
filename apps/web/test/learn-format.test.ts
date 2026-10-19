@@ -1,6 +1,8 @@
 // The lesson format (phase 6B Task 1): a lesson's front matter and its Markdown subset, parsed to a
 // Lesson, and each rule's error a sentence naming the lesson and the line. The lessons under
-// content/learn/ load through LESSONS, in order, each numbered by its folder.
+// content/learn/ and the chapters under content/learn/invaders/ are listed in the generated index
+// (LESSON_INDEX, CHAPTER_INDEX) and load one at a time through loadItem (all of them here, through
+// test/learn-items), in order, each numbered by its folder.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';

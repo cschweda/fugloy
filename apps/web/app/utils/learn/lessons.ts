@@ -5,8 +5,9 @@
 // Fix round 1 of 6C Task 1: the Learn pages no longer bundle every item's text. What the lists, ◀ ▶,
 // the kicker and the SEO need is the small generated index (learn-index.generated.ts, from
 // scripts/build-learn-index.ts); an item's lesson.md and program.z are loaded on their own, one chunk
-// each (Vite's import.meta.glob, not eager, as text), by `loadItem`, which the pages await through
-// useAsyncData, so a prerendered page's payload carries its item and hydration fetches nothing else.
+// each (Vite's import.meta.glob, not eager, as text), by `loadItem` and `loadPageItem`, which the page
+// (pages/learn/[...path].vue) calls through useAsyncData, not awaited: the server waits for it before it
+// renders, so a prerendered page's payload carries its item and hydration fetches nothing else.
 import { parseLesson } from './lesson-format';
 import type { Lesson, LessonEntry } from './lesson-format';
 import { CHAPTER_INDEX, LESSON_INDEX } from './learn-index.generated';

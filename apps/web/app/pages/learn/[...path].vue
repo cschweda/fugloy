@@ -8,6 +8,7 @@
 // blank page for chapter 1), are loaded on their own (utils/learn/lessons' loadPageItem) through
 // useAsyncData: the prerendered page's payload carries them, and no other item's text is on the page.
 import CoursePage from '~/components/learn/CoursePage.vue';
+import { loadFailed } from '~/utils/lazy';
 import { entryOf, indexOf, loadPageItem } from '~/utils/learn/lessons';
 import type { Course } from '~/utils/learn/page';
 
@@ -24,12 +25,23 @@ const entry = asked === '' ? (indexOf(course)[0] ?? null) : entryOf(course, aske
 if (entry === null) throw notFound(asked);
 // Not awaited: the server waits for it before it renders (Nuxt's useAsyncData), hydration reads it
 // from the payload, and a move from another page draws the page once it is there. A top-level await
-// would add Vue's async-setup helper to the runtime chunk the workbench's first screen shares.
-const { data: page } = useAsyncData(`learn:${course}:${entry.slug}`, () => loadPageItem(course, entry.slug));
+// would add Vue's async-setup helper to the runtime chunk the workbench's first screen shares. When
+// the item cannot be fetched (its payload and its chunk both fail: offline, or the site was updated),
+// the page says so in a sentence, as the lazy columns do, rather than staying blank.
+const { data: page, error } = useAsyncData(`learn:${course}:${entry.slug}`, () => loadPageItem(course, entry.slug));
 const items = indexOf(course);
 const basePath = course === 'invaders' ? '/learn/invaders' : '/learn';
+const failed = loadFailed(course === 'invaders' ? 'The chapter' : 'The lesson', 'Reload the page');
 </script>
 
 <template>
   <CoursePage v-if="page" :items="items" :item="page.item" :base-path="basePath" :course="course" :marks-against="page.marksAgainst" />
+  <div v-else-if="error" class="fg-learn-failed">
+    <p role="alert" data-testid="learn-load-failed">{{ failed }}</p>
+  </div>
 </template>
+
+<style scoped>
+.fg-learn-failed { width: 100%; max-width: 1800px; margin: 0 auto; padding: 16px; color: var(--fg-error); }
+.fg-learn-failed p { margin: 0; }
+</style>
