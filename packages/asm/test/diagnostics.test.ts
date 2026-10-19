@@ -1,0 +1,153 @@
+/**
+ * Errors go on the right line, as sentences that name the problem and the
+ * fix, and every error in a program is reported at once. An error-free
+ * result is the only one with an image.
+ */
+import { describe, expect, it } from 'vitest';
+import { assemble } from '../src/index.js';
+import { diagnosticsOf, errorsOf } from './helpers.js';
+
+const lines = (...l: string[]): string => l.join('\n');
+
+describe('typos get one error with a suggestion (Review Focus 5)', () => {
+  it('LDA 5 suggests LD A,…', () => {
+    expect(diagnosticsOf(assemble(lines('\tORG 6000H', '\tLDA 5')))).toEqual(['2:2-5 error: Unknown instruction LDA. Did you mean LD A,…?']);
+  });
+
+  it('JMP X suggests JP, by edit distance over the mnemonics', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', 'X:\tJMP X')))).toEqual(['2: Unknown instruction JMP. Did you mean JP?']);
+  });
+
+  it('a register glued to a mnemonic is split', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tINCA', '\tPUSHHL')))).toEqual(['2: Unknown instruction INCA. Did you mean INC A?', '3: Unknown instruction PUSHHL. Did you mean PUSH HL?']);
+  });
+
+  it('a transposition is one edit', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tLDRI')))).toEqual(['2: Unknown instruction LDRI. Did you mean LDIR?']);
+  });
+
+  it('nothing close gives no guess', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tFROBNICATE 1')))).toEqual(['2: Unknown instruction FROBNICATE.']);
+  });
+
+  it('an indented word alone, which zmac would take as a label with a warning, is an error', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '  START')))).toEqual(['2: Unknown instruction START. If START is a label, start it in column 1 or end it with a colon.']);
+  });
+
+  it('an indented label before an instruction (a zmac syntax error)', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '  foo\tNOP')))).toEqual(['2: Unknown instruction FOO. If FOO is a label, start it in column 1 or end it with a colon.']);
+  });
+
+  it('an instruction with operands in column 1 (a zmac syntax error)', () => {
+    expect(diagnosticsOf(assemble(lines('\tORG 6000H', 'ld a,1')))).toEqual(['2:1-3 error: LD starts in column 1, where a word is a label. Put a space or tab before it.']);
+  });
+
+  it('the rest of the program still assembles, so every error shows at once', () => {
+    const result = assemble(lines('\tORG 6000H', '\tLDA 5', '\tNOP', 'X:\tJMP X', '\tLD A,300', '\tCALL NOWHERE'));
+    expect(errorsOf(result)).toEqual([
+      '2: Unknown instruction LDA. Did you mean LD A,…?',
+      '4: Unknown instruction JMP. Did you mean JP?',
+      '5: LD A,n takes a byte, -128 to 255; 300 ($012C) is out of range.',
+      '6: NOWHERE is not defined.',
+    ]);
+    expect(result.ok).toBe(false);
+    expect(result.image).toBeNull();
+  });
+
+  it('a line with an error has no bytes, and later addresses do not move', () => {
+    const result = assemble(lines('\tORG 6000H', '\tLD A,300', 'AFTER:\tNOP'));
+    expect(result.listing[1]).toEqual({ line: 2, address: 0x6000, bytes: [], text: '\tLD A,300' });
+    expect(result.symbols.get('AFTER')?.value).toBe(0x6002);
+  });
+});
+
+describe('symbols', () => {
+  it('an undefined symbol names itself, at its column, with the nearest name', () => {
+    expect(diagnosticsOf(assemble(lines('\tORG 6000H', 'LOOP:\tNOP', '\tJP LOOP2')))).toEqual(['3:5-10 error: LOOP2 is not defined. Did you mean LOOP?']);
+  });
+
+  it('a duplicate label names both lines', () => {
+    expect(diagnosticsOf(assemble(lines('\tORG 6000H', 'LOOP:\tNOP', '\tNOP', 'loop:\tNOP')))).toEqual(['4:1-5 error: LOOP is defined twice, on lines 2 and 4. Rename one of them.']);
+  });
+
+  it('an EQU and a label with the same name are a duplicate too', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', 'X\tEQU 5', 'X:\tNOP')))).toEqual(['3: X is defined twice, on lines 2 and 3. Rename one of them.']);
+  });
+
+  it('a register or condition name cannot be a label', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', 'A:\tNOP', 'HL:\tNOP', 'NZ:\tNOP')))).toEqual([
+      '2: A is a register name, so it cannot be a label.',
+      '3: HL is a register name, so it cannot be a label.',
+      '4: NZ is a condition name, so it cannot be a label.',
+    ]);
+  });
+
+  it('an operator word cannot be a label', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', 'HIGH:\tNOP')))).toEqual(['2: HIGH is an operator in expressions, so it cannot be a label.']);
+  });
+
+  it('ORG cannot use a name defined further down (Review Focus 2)', () => {
+    expect(errorsOf(assemble(lines('\tORG BASE', 'BASE\tEQU 6000H', '\tNOP')))).toEqual([
+      '1: ORG cannot use BASE before BASE is defined, because the addresses after this line depend on it. Define BASE above the ORG.',
+    ]);
+  });
+});
+
+describe('every out-of-range value is an error naming the value and the limit (Review Focus 3)', () => {
+  it('JR names the target label', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', 'LOOP:\tNOP', '\tORG 612AH', '\tJR LOOP')))).toEqual(['4: JR reaches 128 bytes either way; LOOP is 300 bytes back. Use JP.']);
+  });
+
+  it('DJNZ names the target label', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tDJNZ FAR', '\tORG 6100H', 'FAR:\tNOP')))).toEqual(['2: DJNZ reaches 128 bytes either way; FAR is 254 bytes ahead. Use DEC B and JP NZ.']);
+  });
+
+  it('a JR across $FFFF is refused, as zmac does', () => {
+    expect(errorsOf(assemble(lines('\tORG 0FFF0H', '\tJR 0005H')))).toEqual(['2: JR cannot wrap around the top of memory from $FFF0 to $0005. Use JP.']);
+  });
+
+  it.each([
+    ['LD A,256', 'LD A,n takes a byte, -128 to 255; 256 ($0100) is out of range.'],
+    ['LD A,-129', 'LD A,n takes a byte, -128 to 255; -129 is out of range.'],
+    ["LD A,'ab'", 'LD A,n takes a byte, -128 to 255; 25185 ($6261) is out of range.'],
+    ['LD HL,65536', 'LD HL,nn takes a word, -32768 to 65535; 65536 ($10000) is out of range.'],
+    ['OUT (256),A', 'OUT (n),A takes a port, 0 to 255; 256 ($0100) is out of range.'],
+    ['OUT (-1),A', 'OUT (n),A takes a port, 0 to 255; -1 is out of range.'],
+    ['LD A,(IX+128)', 'The displacement in (IX+d) runs from -128 to 127; 128 ($80) is out of range.'],
+    ['SET 3,(IX+200)', 'The displacement in (IX+d) runs from -128 to 127; 200 ($C8) is out of range.'],
+    ['IM 3', 'IM takes 0, 1, or 2; 3 is not one of them.'],
+    ['BIT 8,A', 'BIT takes a bit number from 0 to 7; 8 is out of range.'],
+    ['RST 9', 'RST takes 0, 8, 10H, 18H, 20H, 28H, 30H, or 38H; 9 is not one of them.'],
+    ['RST 1', 'RST takes 0, 8, 10H, 18H, 20H, 28H, 30H, or 38H; 1 is not one of them. zmac reads RST 1 as RST 8; write RST 8 if that is what you mean.'],
+    ['DB 256', 'DB takes bytes, -128 to 255; 256 ($0100) is out of range.'],
+    ['DW 65536', 'DW takes words, -32768 to 65535; 65536 ($10000) is out of range.'],
+  ])('%s', (line, message) => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', `\t${line}`)))).toEqual([`2: ${message}`]);
+  });
+});
+
+describe('forms and parentheses', () => {
+  it('JP (nn) is refused, since zmac only warns that it means JP nn', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tJP (1234H)')))).toEqual(['2: JP (1234H) jumps to 1234H; it does not read an address from memory there. Write JP 1234H.']);
+  });
+
+  it('LD with a parenthesised number is always memory, as in zmac', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tLD B,(5)')))).toEqual(['2: LD has no form B,(nn). The forms that start with B are B,(HL), B,(IX+d), B,(IY+d), B,A, B,B, B,C, B,D, B,E, B,H, B,IXH, B,IXL, B,IYH, B,IYL, B,L, and B,n.']);
+  });
+
+  it('an index register inside a larger expression is an error', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tLD A,(IX+2)+1')))).toEqual(['2: IX is a register; it cannot be part of an expression.']);
+  });
+
+  it('undocumented ED forms keep their sentence', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tIN F,(C)')))).toEqual(['2: IN F,(C) is undocumented, and Fugløy writes it as DB 0EDH,70H; use that instead.']);
+  });
+
+  it('a trailing comma or an empty operand is an error', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tLD A,', '\tDB 1,,2')))).toEqual(['2: An operand is missing after the comma.', '3: An operand is missing after the comma.']);
+  });
+
+  it('DB with nothing after it says what it needs', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tDB')))).toEqual(['2: DB needs at least one value.']);
+  });
+});

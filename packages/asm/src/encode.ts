@@ -107,7 +107,7 @@ function lead(entry: Entry, d: number): number[] {
 }
 
 /** `9`, `128 ($80)`, `4660 ($1234)`: a value as written, with its hex beside it once that helps. */
-function show(value: number): string {
+export function show(value: number): string {
   if (value <= 9) return String(value);
   const digits = value > 0xff ? Math.max(4, value.toString(16).length) : 2;
   return `${value} ($${value.toString(16).toUpperCase().padStart(digits, '0')})`;
@@ -117,7 +117,7 @@ function show(value: number): string {
 const address = (value: number): string => `$${(value & 0xffff).toString(16).toUpperCase().padStart(4, '0')}`;
 
 /** A number as zmac source writes it: `8`, `10H`, `38H`. */
-const asSource = (value: number): string => (value <= 9 ? String(value) : `${value.toString(16).toUpperCase()}H`);
+export const asSource = (value: number): string => (value <= 9 ? String(value) : `${value.toString(16).toUpperCase()}H`);
 
 /** `a`, `a or b`, `a, b, or c`; with `and` for a list of facts. */
 function list(items: readonly string[], word: 'or' | 'and'): string {
@@ -174,19 +174,23 @@ function badFixed(mnemonic: string, slot: TemplateOperand, value: number, allowe
   return `${mnemonic} takes ${list(allowed.map(asSource), 'or')}; ${show(value)} is not one of them.`;
 }
 
-const signed16 = (v: number): number => (v & 0x8000 ? (v & 0xffff) - 0x10000 : v & 0xffff);
-
 /** What a relative jump that cannot reach should become instead. */
 const RELATIVE_FIX: Readonly<Record<string, string>> = { JR: 'Use JP.', DJNZ: 'Use DEC B and JP NZ.' };
 
 export type EncodeResult = { bytes: number[] } | { error: string };
 
+/** What the caller knows beyond the values: the name a relative jump's target was written as, for the message. */
+export interface EncodeOptions {
+  target?: string;
+}
+
 /**
  * The bytes of one instruction. `pc` is its runtime address, from which a
- * relative jump's `e` (given as the target address) is measured. An error is a
- * sentence naming the problem and the limit; no bytes come with it.
+ * relative jump's `e` (given as the target address) is measured; like zmac, a
+ * relative jump never wraps around $FFFF. An error is a sentence naming the
+ * problem and the limit; no bytes come with it.
  */
-export function encode(mnemonic: string, operands: readonly Operand[], pc: number): EncodeResult {
+export function encode(mnemonic: string, operands: readonly Operand[], pc: number, options: EncodeOptions = {}): EncodeResult {
   const mn = mnemonic.toUpperCase();
   const entries = INDEX.get(mn);
   if (entries === undefined) return { error: `Unknown instruction ${mn}.` };
@@ -223,10 +227,15 @@ export function encode(mnemonic: string, operands: readonly Operand[], pc: numbe
     if (!Number.isInteger(value)) return { error: `${name} needs a whole number for ${slotText(slot)}; ${value} is not one.` };
     switch (slot.t) {
       case 'n':
-      case 'd':
-      case '(n)': {
-        if (value < -128 || value > 255) return { error: `${name} takes ${slot.t === '(n)' ? 'a port' : 'a byte'}, -128 to 255; ${show(value)} is out of range.` };
+      case 'd': {
+        if (value < -128 || value > 255) return { error: `${name} takes a byte, -128 to 255; ${show(value)} is out of range.` };
         tail.push(value & 0xff);
+        break;
+      }
+      case '(n)': {
+        // zmac refuses a negative port.
+        if (value < 0 || value > 255) return { error: `${name} takes a port, 0 to 255; ${show(value)} is out of range.` };
+        tail.push(value);
         break;
       }
       case 'nn':
@@ -237,10 +246,14 @@ export function encode(mnemonic: string, operands: readonly Operand[], pc: numbe
       }
       case 'e': {
         if (value < -32768 || value > 0xffff) return { error: `${name} takes an address, -32768 to 65535; ${show(value)} is out of range.` };
-        const disp = signed16(value - (pc + tpl.length));
+        const fix = RELATIVE_FIX[mn] ?? 'Use JP.';
+        const target = value & 0xffff;
+        const disp = target - (pc + tpl.length);
         if (disp < -128 || disp > 127) {
+          const wrapped = (((disp % 0x10000) + 0x18000) % 0x10000) - 0x8000;
+          if (wrapped >= -128 && wrapped <= 127) return { error: `${mn} cannot wrap around the top of memory from ${address(pc)} to ${address(target)}. ${fix}` };
           const where = disp > 0 ? `${disp} bytes ahead` : `${-disp} bytes back`;
-          return { error: `${mn} reaches 128 bytes either way; the target ${address(value)} is ${where}. ${RELATIVE_FIX[mn] ?? 'Use JP.'}` };
+          return { error: `${mn} reaches 128 bytes either way; ${options.target ?? `the target ${address(value)}`} is ${where}. ${fix}` };
         }
         tail.push(disp & 0xff);
         break;

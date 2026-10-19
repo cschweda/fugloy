@@ -170,8 +170,15 @@ describe('range errors name the value and the limit', () => {
     expect(err(encode('DJNZ', [{ shape: 'e', value: 0x6000 + 2 + 300 }], 0x6000))).toBe('DJNZ reaches 128 bytes either way; the target $612E is 300 bytes ahead. Use DEC B and JP NZ.');
   });
 
-  it('wraps a relative jump around the top of memory', () => {
-    expect(encode('JR', [{ shape: 'e', value: 0x0001 }], 0xfffe)).toEqual({ bytes: [0x18, 0x01] });
+  // zmac gives a Value error for a relative jump across $FFFF (zmac probe in zmac-probes.test.ts).
+  it('refuses a relative jump that wraps around the top of memory, as zmac does', () => {
+    expect(err(encode('JR', [{ shape: 'e', value: 0x0001 }], 0xfffe))).toBe('JR cannot wrap around the top of memory from $FFFE to $0001. Use JP.');
+    expect(err(encode('JR', [{ shape: 'e', value: 0xfff8 }], 0x0010))).toBe('JR cannot wrap around the top of memory from $0010 to $FFF8. Use JP.');
+  });
+
+  it('names the target when the caller gives its name', () => {
+    expect(err(encode('JR', [{ shape: 'e', value: 0x6000 + 2 - 300 }], 0x6000, { target: 'LOOP' }))).toBe('JR reaches 128 bytes either way; LOOP is 300 bytes back. Use JP.');
+    expect(err(encode('DJNZ', [{ shape: 'e', value: 0x6000 + 2 + 200 }], 0x6000, { target: 'NEXT' }))).toBe('DJNZ reaches 128 bytes either way; NEXT is 200 bytes ahead. Use DEC B and JP NZ.');
   });
 
   it('n beyond -128..255', () => {
@@ -180,8 +187,11 @@ describe('range errors name the value and the limit', () => {
     expect(err(encode('LD', [{ shape: '(IX+d)', value: 0 }, { shape: 'n', value: 0x1234 }], 0))).toBe('LD (IX+d),n takes a byte, -128 to 255; 4660 ($1234) is out of range.');
   });
 
-  it('a port beyond -128..255', () => {
-    expect(err(encode('OUT', [{ shape: '(n)', value: 0x100 }, { shape: 'A' }], 0))).toBe('OUT (n),A takes a port, -128 to 255; 256 ($0100) is out of range.');
+  // zmac gives a Value error for a negative port (zmac probe in zmac-probes.test.ts).
+  it('a port beyond 0..255', () => {
+    expect(err(encode('OUT', [{ shape: '(n)', value: 0x100 }, { shape: 'A' }], 0))).toBe('OUT (n),A takes a port, 0 to 255; 256 ($0100) is out of range.');
+    expect(err(encode('IN', [{ shape: 'A' }, { shape: '(n)', value: -1 }], 0))).toBe('IN A,(n) takes a port, 0 to 255; -1 is out of range.');
+    expect(encode('IN', [{ shape: 'A' }, { shape: '(n)', value: 255 }], 0)).toEqual({ bytes: [0xdb, 0xff] });
   });
 
   it('nn beyond -32768..65535', () => {
