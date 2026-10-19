@@ -64,7 +64,7 @@
 
 **Interfaces (produces):** `toCmd(result: AsmResult, options?: { name?: string }): Uint8Array` (via `writeCmd`; throws a sentence if `!result.ok`). Source map keys are runtime addresses (under `.PHASE`, the phase address), and the listing shows both.
 
-- [ ] Steps: failing tests — `ORG` (several, gaps, overlap is an error naming both lines — check zmac's behaviour with a probe and match it), `EQU`, `DEFL`/`=` redefinition, `DB`/`DEFB`/`DEFM` (strings and expressions mixed), `DW`/`DEFW`, `DS`/`DEFS` (with fill), `.PHASE`/`.DEPHASE` (Review Focus 4 against zmac), `END` with and without an entry, text after `END` ignored as zmac does; Ruling 4 defaults; Review Focus 2; `toCmd` output reloads through `loadCmd` to the same image and entry; the source map round-trips for every emitted byte. Run, implement, run, commit `p5: assemble directives, phased code, and .CMD output with a source map`.
+- [ ] Steps: failing tests — `ORG` (several, gaps, overlap is a warning naming both lines, with the image zmac gives (later bytes win)), `EQU`, `DEFL`/`=` redefinition, `DB`/`DEFB`/`DEFM` (strings and expressions mixed), `DW`/`DEFW`, `DS`/`DEFS` (with fill), `.PHASE`/`.DEPHASE` (Review Focus 4 against zmac), `END` with and without an entry, text after `END` ignored as zmac does; Ruling 4 defaults; Review Focus 2; `toCmd` output reloads through `loadCmd` to the same image and entry; the source map round-trips for every emitted byte. Run, implement, run, commit `p5: assemble directives, phased code, and .CMD output with a source map`.
 
 ### Task 4: zmac as referee across the corpus
 
