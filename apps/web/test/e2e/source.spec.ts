@@ -25,9 +25,6 @@ test('Source ✎ loads the editor on first open, marks a typed error, and fixes 
   // Type a program with an 8080 spelling over the starter; the listing's keys (g, n, ;) must not fire.
   await content.click();
   await page.keyboard.press('ControlOrMeta+a');
-  // Clear first and let the editor settle: keys typed into its first edit's reactions can land out of place on a slow runner.
-  await page.keyboard.press('Backspace');
-  await expect(content).toHaveText('');
   await page.keyboard.type('\tORG\t7000H\n');
   await page.keyboard.press('Home');
   await page.keyboard.type('\tPUSH\tA ; g n');

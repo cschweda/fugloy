@@ -124,10 +124,24 @@ function makeState(text: string): EditorState {
   });
 }
 
+// CodeMirror (6.43) applies typing still in the DOM when a scroll event comes, without reading the
+// cursor: a keystroke that lands with a late scroll (a long text cleared, say) leaves the cursor
+// before it, and the next keys go in front. Read the DOM first, cursor and all, in the capture
+// phase, so CodeMirror's own read finds nothing pending. `observer` is internal; without it, nothing.
+interface Observed {
+  observer?: { flush?: () => unknown };
+}
+function readTyping(): void {
+  const observer = (view as unknown as Observed | null)?.observer;
+  if (typeof observer?.flush === 'function') observer.flush();
+}
+
 onMounted(() => {
   view = new EditorView({ state: makeState(props.text), parent: host.value! });
+  window.addEventListener('scroll', readTyping, { capture: true, passive: true });
 });
 onBeforeUnmount(() => {
+  window.removeEventListener('scroll', readTyping, { capture: true });
   view?.destroy();
   view = null;
 });

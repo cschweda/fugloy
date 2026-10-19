@@ -59,9 +59,6 @@ test('the whole loop: Write, Run, type an error, Run marks it, Fix, Run again, a
   // An 8080 spelling: Run refuses it, marks its line, lists it with its Fix, and runs nothing.
   await content.click();
   await page.keyboard.press('ControlOrMeta+a');
-  // Clear first and let the editor settle: keys typed into its first edit's reactions can land out of place on a slow runner.
-  await page.keyboard.press('Backspace');
-  await expect(content).toHaveText('');
   await page.keyboard.type('\tORG\t7000H\nSTART:\tPUSH\tA\n\tPOP\tAF\n\tLD\tHL,3C00H\n\tLD\tDE,3C01H\n\tLD\tBC,03FFH\n\tLD\t(HL),20H\n\tLDIR\nWAIT:\tJR\tWAIT\n\tEND\tSTART\n');
   await page.getByTestId('run-run').click();
   await expect(page.getByTestId('run-message')).toContainText('The program has 1 error, so it did not run. The first is on line 2');
@@ -95,9 +92,6 @@ test('Ctrl/⌘+Enter in the editor runs; an error goes to Source ✎ and runs no
   expect(await page.locator('.cm-line').count()).toBe(lines);
 
   await page.keyboard.press('ControlOrMeta+a');
-  // Clear first and let the editor settle: keys typed into its first edit's reactions can land out of place on a slow runner.
-  await page.keyboard.press('Backspace');
-  await expect(content).toHaveText('');
   await page.keyboard.type('\tORG\t7000H\nSTART:\tLDA\n\tEND\tSTART\n');
   await page.keyboard.press('ControlOrMeta+Enter');
   await expect(page.getByTestId('run-message')).toContainText('The program has 1 error, so it did not run. The first is on line 2');
@@ -106,9 +100,6 @@ test('Ctrl/⌘+Enter in the editor runs; an error goes to Source ✎ and runs no
   expect(await page.evaluate(() => window.__fugloyTest!.runnerState())).toBe('idle');
 
   await page.keyboard.press('ControlOrMeta+a');
-  // Clear first and let the editor settle: keys typed into its first edit's reactions can land out of place on a slow runner.
-  await page.keyboard.press('Backspace');
-  await expect(content).toHaveText('');
   await page.keyboard.type('\tORG\t7000H\nSTART:\tCALL\t$VDCLS\nWAIT:\tJR\tWAIT\n\tEND\tSTART\n');
   await page.keyboard.press('ControlOrMeta+Enter');
   await expect(page.getByTestId('run-message')).toContainText("Line 2 calls $VDCLS, the ROM's routine at $01C9");
@@ -218,9 +209,6 @@ test('debugging from the keyboard (5C): F9 sets a breakpoint, Run stops there, F
   await expect(content).toContainText('ORG');
   await content.click();
   await page.keyboard.press('ControlOrMeta+a');
-  // Clear first and let the editor settle: keys typed into its first edit's reactions can land out of place on a slow runner.
-  await page.keyboard.press('Backspace');
-  await expect(content).toHaveText('');
   // Line 2 LD A,1; 3 INC A; 4 DEC A; 5 JR LOOP.
   await page.keyboard.type('\tORG\t7000H\nSTART:\tLD\tA,1\nLOOP:\tINC\tA\n\tDEC\tA\n\tJR\tLOOP\n\tEND\tSTART\n');
   // The cursor to line 4, then F9 (the editor's line, from the keyboard alone).
