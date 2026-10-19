@@ -37,9 +37,30 @@ creates and pushes the tag.
 
 ## [Unreleased]
 
-Plan phase 5D: `@fugloy/emu` gains `m.video.altCharset`, true when the Model III or
-Model 4 mode register's ENALTSET bit (port `$EC` bit 3) is set; always false on
-the Model I.
+## [emu 0.5.0] - 2026-10-19
+
+The readouts the workbench's Run ▶ uses (plan phases 5B–5D, merged to main 2026-10-19). Nothing
+the Model III, Model I or Model 4 runs changes: their fixtures, goldens, save states and speed
+are as in 0.4.0. `@fugloy/mcp` 0.1.2 is not re-released; it keeps `^0.4.0`.
+
+### Added
+
+- `m.video.wide`: true on a Model 4 in the 80-column layout (port `$84` bit 2), rows of 80
+  bytes; false on the Model III and Model I.
+- `m.video.inverse`: true on a Model 4 with inverse video on (port `$84` bit 3); false on the
+  Model III and Model I.
+- `m.video.altCharset`: true when the Model III or Model 4 mode register's ENALTSET bit (port
+  `$EC` bit 3) selects the alternate character set; always false on the Model I.
+- `m.cpu.halted`: true while the CPU sits in a HALT (PC is then just past it), until an
+  interrupt or a reset.
+- `MODE_ALTSET_BIT` (`0x08`) exported beside `MODE_32COL_BIT`.
+
+## [1.3.0] - 2026-10-19
+
+The first release of the assembler, `@fugloy/asm` and the `fugloy asm` command (plan phase
+5A), published with `@fugloy/z80`, `@fugloy/disasm` and `@fugloy/cli` at one version. The
+entries below also record the web workbench's phases 5B, 5C and 5D (Source ✎, Run ▶, the
+running line, and the TRS-80 on screen), which ship on the site, not on npm.
 
 Plan phase 5D, the TRS-80 on screen, on the web workbench (design
 `docs/superpowers/specs/2026-10-19-phase5d-real-machine-design.md`, plan

@@ -30,7 +30,7 @@ import type { Dos, Hint, Machine, Session, SymbolSelection } from '@fugloy/disas
 import { runAsm } from './asm.js';
 import { colorListing } from './color.js';
 
-export const VERSION = '1.2.0';
+export const VERSION = '1.3.0';
 
 export interface Io {
   stdout(text: string): void;

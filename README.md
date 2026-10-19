@@ -32,11 +32,11 @@ for writing new programs.
 
 | Part | What it does | Status | Where |
 | --- | --- | --- | --- |
-| **Disassembler** | Loads `.CMD`, `.BAS`, and raw files by content; recursive descent; labels; cited ROM, hardware, and DOS names; hint files; hidden code in BASIC; rebasing and relocation; zmac source that reassembles byte for byte; JSON IR; reads the emulator's label files | Released, 1.2.0 on npm | `@fugloy/disasm`, the `fugloy` command in `@fugloy/cli`, opcode tables in `@fugloy/z80` |
+| **Disassembler** | Loads `.CMD`, `.BAS`, and raw files by content; recursive descent; labels; cited ROM, hardware, and DOS names; hint files; hidden code in BASIC; rebasing and relocation; zmac source that reassembles byte for byte; JSON IR; reads the emulator's label files | Released, 1.3.0 on npm | `@fugloy/disasm`, the `fugloy` command in `@fugloy/cli`, opcode tables in `@fugloy/z80` |
 | **Web workbench** | The disassembler in the browser: facing pages, the four public-domain games one click away, editing by keyboard, the **Explain** tab, block comments, exports; and **Source ✎** and **Run ▶**, where Z80 source you type (or a disassembly opened as source) runs on an emulated TRS-80 with one press, and the running line: the line a program is on lit live with its trail, in the source and in its listing, with breakpoints, stepping, the registers, and a screen-text mirror | Live; Source ✎ and Run ▶ merged to main and live (plan phase 5B); the running line (5C) merged and live | [app.fugloy.dev](https://app.fugloy.dev/), source in `apps/web` |
-| **Emulator** | A headless, deterministic Model III and Model I that passes ZEXDOC and ZEXALL, runs `.CMD`, `.BAS`, and `.CAS` programs and disk images, and has a debugger that writes label and coverage files | 0.4.0 on npm (2026-10-18; the Model 4, emu phase 6b), after 0.3.0 (disks and the Model I, phases 5–7) | `packages/emu` (`@fugloy/emu`) |
+| **Emulator** | A headless, deterministic Model III and Model I that passes ZEXDOC and ZEXALL, runs `.CMD`, `.BAS`, and `.CAS` programs and disk images, and has a debugger that writes label and coverage files | 0.5.0 on npm (2026-10-19; the video and CPU readouts the workbench uses), after 0.4.0 (the Model 4, emu phase 6b) | `packages/emu` (`@fugloy/emu`) |
 | **MCP server** | Lets an AI assistant such as Claude Code load a program, run it, set breakpoints and watches, read the screen, and name what it finds in the same label file | 0.1.1 on npm (2026-10-18), MCP phases A–F; disk images and the Model I; 0.1.2 (the Model 4) also published 2026-10-18 | `packages/mcp` (`@fugloy/mcp`) |
-| **Assembler** | Z80 source to a `.CMD`, with errors as sentences on the right line, ROM routines by name per model, a note where the Model I and Model III ROMs differ, and zmac's bytes on every source the disassembler writes | Merged to main (plan phase 5A), unreleased; releases with core | `packages/asm` (`@fugloy/asm`), the `fugloy asm` command |
+| **Assembler** | Z80 source to a `.CMD`, with errors as sentences on the right line, ROM routines by name per model, a note where the Model I and Model III ROMs differ, and zmac's bytes on every source the disassembler writes | Released with core, 1.3.0 on npm | `packages/asm` (`@fugloy/asm`), the `fugloy asm` command |
 | **Ahead** | The running line lit as a program runs, with stepping and breakpoints (5C), a course in assembly for non-programmers, and, later, recompiling games to TypeScript | Planned | [Roadmap](#whats-ahead) |
 
 Its core libraries have no runtime dependencies and use no Node or browser
@@ -381,9 +381,12 @@ Planned, per the roadmap:
 
 ## Status
 
-**Current release: [1.2.0](https://github.com/cschweda/fugloy/releases/tag/v1.2.0)**
-(2026-10-18), published to npm as `@fugloy/z80`, `@fugloy/disasm`,
-and `@fugloy/cli`, which share one version. It follows 1.1.0 (the first on npm, which added `--labels`, reading
+**Current release: [1.3.0](https://github.com/cschweda/fugloy/releases/tag/v1.3.0)**
+(2026-10-19), published to npm as `@fugloy/z80`, `@fugloy/disasm`,
+`@fugloy/asm`, and `@fugloy/cli`, which share one version. 1.3.0 is the first
+release of the assembler, `@fugloy/asm` and `fugloy asm` (plan phase 5A). It
+follows [1.2.0](https://github.com/cschweda/fugloy/releases/tag/v1.2.0)
+(2026-10-18) and 1.1.0 (the first on npm, which added `--labels`, reading
 the emulator's label and coverage file) and
 [v1.0.0](https://github.com/cschweda/fugloy/releases/tag/v1.0.0), v1: phases
 1–4 of the plan. Phase 3 names ROM, hardware, and DOS addresses from cited
@@ -397,7 +400,7 @@ releases: phase 2, Pass 1 and Pass 2, as
 core decoder and loaders, as
 [v0.1.0](https://github.com/cschweda/fugloy/releases/tag/v0.1.0).
 
-The emulator, `@fugloy/emu` 0.4.0 (on npm since 2026-10-18, with the Model 4), has all eight
+The emulator, `@fugloy/emu` 0.5.0 (on npm since 2026-10-19; 0.4.0 brought the Model 4), has all eight
 of its phases built, the Model 4 and the Model I's differential run aside:
 the core of [trs80-emulator](https://github.com/cschweda/trs80-emulator)
 booting the Model III ROM to `READY` in Node (0); a Z80 core that passes
