@@ -26,7 +26,7 @@ const lessonTitle = (dir: string): string =>
   /^title: (.+)$/m.exec(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'content', 'learn', dir, 'lesson.md'), 'utf8'))![1]!;
 const LESSON_PAGES = lessonDirs.map((d) => ({ path: `/learn/${d}/`, file: `learn/${d}/index.html`, title: `${lessonTitle(d)} — Learn Z80 assembly · Fugløy` }));
 // /learn/ opens lesson 1 for people (the header links to it); its canonical URL, og:url and sitemap entry are lesson 1's.
-const LEARN_ALIAS = { path: '/learn/', file: 'learn/index.html', canonical: LESSON_PAGES[0]!.path, title: LESSON_PAGES[0]!.title };
+const LEARN_ALIAS: { path: string; file: string; canonical: string; title: string } = { path: '/learn/', file: 'learn/index.html', canonical: LESSON_PAGES[0]!.path, title: LESSON_PAGES[0]!.title };
 const PAGES = [
   { path: '/', file: 'index.html', title: 'Fugløy — TRS-80 disassembler workbench' },
   ...LESSON_PAGES,
@@ -67,7 +67,7 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
     expect(meta(html, 'property', 'og:url')).toBe(ORIGIN + LEARN_ALIAS.canonical);
   });
 
-  for (const p of PAGES) {
+  for (const p of [...PAGES, LEARN_ALIAS]) {
     describe(p.path, () => {
       const html = (): string => read(p.file);
 
@@ -80,7 +80,7 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
       });
 
       it('has a canonical link and og:url on app.fugloy.dev', () => {
-        const url = ORIGIN + p.path;
+        const url = ORIGIN + ('canonical' in p ? p.canonical : p.path);
         expect(html()).toContain(`<link rel="canonical" href="${url}"`);
         expect(meta(html(), 'property', 'og:url')).toBe(url);
         expect(meta(html(), 'property', 'og:type')).toBe('website');
@@ -117,7 +117,7 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
     expect(ld.url).toBe(`${ORIGIN}/`);
     expect(ld.offers).toMatchObject({ '@type': 'Offer', price: '0', priceCurrency: 'USD' });
     expect(String(ld.license)).toMatch(/MIT/);
-    for (const p of PAGES.slice(1)) expect(read(p.file)).not.toContain('application/ld+json');
+    for (const p of [...PAGES, LEARN_ALIAS].slice(1)) expect(read(p.file)).not.toContain('application/ld+json');
   });
 
   it('self-hosts JetBrains Mono (400 and 700, Latin) with no font CDN on the workbench, and credits its licence', () => {
@@ -132,7 +132,7 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
       expect(src).not.toMatch(/^(https?:)?\/\//);
       expect(existsSync(src!.startsWith('/') ? join(out, src!) : join(out, dirname(f), src!))).toBe(true);
     }
-    for (const p of PAGES.filter((x) => x.path !== '/technical-details/')) expect(read(p.file)).not.toMatch(/fonts\.(googleapis|gstatic)\.com/);
+    for (const p of [...PAGES, LEARN_ALIAS].filter((x) => x.path !== '/technical-details/')) expect(read(p.file)).not.toMatch(/fonts\.(googleapis|gstatic)\.com/);
     expect(read('about/index.html')).toMatch(/JetBrains Mono[\s\S]*SIL Open Font License 1\.1/);
   });
 
