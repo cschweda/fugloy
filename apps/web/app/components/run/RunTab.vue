@@ -9,12 +9,15 @@
 // registers beside the screen; the source's breakpoints under it. The run message stays quiet for
 // a sentence the announcer already says (one voice, and steps debounced). The checkboxes use
 // :checked and @change, not v-model: vModelCheckbox would join Vue's shared chunk on the first screen.
+// The listing follows the run through utils/running/listing-style (one <style>, keyed on data-addr),
+// installed here; `scrollListing` is the page's scrollTo, which moves neither the cursor nor focus.
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import TrsScreen from './TrsScreen.vue';
 import RegistersPanel from './RegistersPanel.vue';
 import BreakpointList from './BreakpointList.vue';
 import type { DebugKeyOptions } from '~/utils/running/debug-keys';
 import { announcing, speakAnnouncements } from '~/utils/running/announce';
+import { installListingFollow } from '~/utils/running/listing-style';
 import { useRoms } from '~/composables/useRoms';
 import type { Run } from '~/composables/useRun';
 import type { Sources } from '~/composables/useSources';
@@ -22,7 +25,7 @@ import { MODEL_NAMES } from '~/utils/emulator/rom-ids';
 import type { ModelId } from '~/utils/store';
 
 // The page hands over its Run and sources, so this lazy chunk imports none of the first screen's modules.
-const props = defineProps<{ run: Run; sources: Sources }>();
+const props = defineProps<{ run: Run; sources: Sources; /** Brings a listing row into view (the page's scrollTo). */ scrollListing?: (addr: number) => void }>();
 const run = props.run;
 const sources = props.sources;
 const debug = run.debug;
@@ -118,6 +121,7 @@ let keys: typeof import('~/utils/running/debug-keys') | null = null;
 let keysState: 'loading' | 'ready' | 'failed' = 'loading';
 let uninstallKeys: (() => void) | null = null;
 let unspeak: (() => void) | null = null;
+let unfollow: (() => void) | null = null;
 let gone = false;
 const keyOptions: DebugKeyOptions = { runNow: () => void run.run(), stop: () => run.stop(), focusTarget: () => null, say: sayProblem };
 function runToHere(): void {
@@ -131,6 +135,7 @@ onMounted(() => {
   unsubscribe = run.onFrame(() => screen.value?.draw());
   // The announcer is in this chunk: pauses are spoken even if the keys' chunk never arrives.
   unspeak = speakAnnouncements(debug);
+  unfollow = installListingFollow(debug, (addr) => props.scrollListing?.(addr));
   import('~/utils/running/debug-keys').then(
     (m) => {
       if (gone) return;
@@ -150,6 +155,7 @@ onBeforeUnmount(() => {
   unsubscribe?.();
   uninstallKeys?.();
   unspeak?.();
+  unfollow?.();
 });
 
 defineExpose({

@@ -123,6 +123,7 @@ function buildRun(deps: RunDeps): Run {
       if (runner.value !== null) state.value = s;
     },
     now: deps.runner?.now,
+    wb,
   });
   const frame = (r: Runner): void => {
     debug.frame(r);

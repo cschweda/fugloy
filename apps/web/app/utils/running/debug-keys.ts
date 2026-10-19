@@ -6,7 +6,7 @@
 // | F5           | Continue; Run when idle or stopped   | always (swallowed while running)     |
 // | F6           | Pause                                | running                              |
 // | Shift+F5     | Stop                                 | running or paused                    |
-// | F9           | Toggle the cursor line's breakpoint  | focus in the editor (or the listing) |
+// | F9           | Toggle the cursor line's breakpoint  | focus in the editor or the listing   |
 // | F10          | Step Over                            | running or paused                    |
 // | F11, F7      | Step                                 | running or paused                    |
 // | Ctrl/⌘+F10   | Run to Here                          | running or paused                    |
@@ -19,6 +19,10 @@
 // everywhere, fields and dialogs included, so no reload ever ends it (outside fields Shift+F5
 // stops it). Shift+F10 (the listing's context menu) and Alt+any are the browser's. The
 // announcements are announce.ts's speakAnnouncements, installed apart from this chunk.
+//
+// In the listing (Ruling 6), F9 and Run to Here use the listing cursor's line (`debug.listingLine`)
+// while the listing shows the program that is running; F9 in any other listing says so. Where focus
+// was last, the editor or the listing, is tracked here too (a focusin listener beside the keydown).
 import type { Debug } from '../../composables/useDebug';
 
 export type FocusTarget = 'source' | 'listing';
@@ -35,6 +39,13 @@ export interface DebugKeyOptions {
   /** run.message: a sentence when a key cannot act. */
   say(text: string): void;
 }
+
+/** F9 in a listing that is not the running program (Ruling 6). */
+export const LISTING_NOT_RUNNING = 'This listing is not the program that is running. Set breakpoints in Source ✎.';
+/** F9 in the running program's listing after its source was edited: the lines no longer match. */
+export const LISTING_CHANGED = 'The source has changed since this Run, so the listing\'s lines no longer match it. Set breakpoints in Source ✎, or press Run first.';
+/** F9 in the running program's listing with the cursor on no instruction of it. */
+export const LISTING_NO_LINE = 'The listing\'s cursor is not on an instruction of the running program. Move it to one, then press F9 again.';
 
 /** Run to Here with no line to run to. */
 export const NO_RUN_TO_LINE = 'Run to Here runs to the line under the cursor in Source ✎. Put the cursor on a line with an instruction there, then press Run to Here again.';
@@ -79,9 +90,17 @@ function ask<T>(f: (i: Install) => T | null | undefined): T | null {
   return null;
 }
 
-/** The cursor line at `where` (else where focus was last), from whichever tab knows it. */
-function cursorAt(where: FocusTarget | null): number | null {
-  const at = where ?? ask((i) => i.opts.focusTarget());
+/** Where focus was last among the editor and the listing, as this module saw it. */
+let lastPlace: FocusTarget | null = null;
+function onFocusIn(e: FocusEvent): void {
+  const at = placeOf(e.target);
+  if (at !== null) lastPlace = at;
+}
+
+/** The cursor line at `where` (else where focus was last): the listing's from `debug`, the editor's from whichever tab knows it. */
+function cursorAt(debug: Debug, where: FocusTarget | null): number | null {
+  const at = where ?? ask((i) => i.opts.focusTarget()) ?? lastPlace;
+  if (at === 'listing') return debug.listingLine();
   return at === null ? null : ask((i) => i.opts.cursorLine?.(at));
 }
 
@@ -90,7 +109,7 @@ function cursorAt(where: FocusTarget | null): number | null {
  * if focus was last there. Returns the sentence it said when there is no line to run to.
  */
 export function runToHere(debug: Debug, opts: Pick<DebugKeyOptions, 'say'>, where: FocusTarget | null = null): string | null {
-  const line = cursorAt(where);
+  const line = cursorAt(debug, where);
   if (line === null) {
     opts.say(NO_RUN_TO_LINE);
     return NO_RUN_TO_LINE;
@@ -134,7 +153,12 @@ function onKeydown(e: KeyboardEvent): void {
     case 'F9': {
       if (!plain) return;
       const where = placeOf(e.target);
-      const line = where === null ? null : cursorAt(where);
+      if (where === 'listing') {
+        const line = debug.listingLine();
+        if (line !== null) return claim(() => debug.toggleBreakpoint(line));
+        return claim(() => opts.say(!debug.listingFollows.value ? LISTING_NOT_RUNNING : debug.dirty.value ? LISTING_CHANGED : LISTING_NO_LINE));
+      }
+      const line = where === null ? null : cursorAt(debug, where);
       if (line !== null) claim(() => debug.toggleBreakpoint(line));
       return;
     }
@@ -153,12 +177,19 @@ function onKeydown(e: KeyboardEvent): void {
 export function installDebugKeys(debug: Debug, opts: DebugKeyOptions): () => void {
   const entry: Install = { debug, opts };
   installs.push(entry);
-  if (installs.length === 1) document.addEventListener('keydown', onKeydown);
+  if (installs.length === 1) {
+    document.addEventListener('keydown', onKeydown);
+    document.addEventListener('focusin', onFocusIn);
+  }
   let removed = false;
   return () => {
     if (removed) return;
     removed = true;
     installs.splice(installs.indexOf(entry), 1);
-    if (installs.length === 0) document.removeEventListener('keydown', onKeydown);
+    if (installs.length === 0) {
+      document.removeEventListener('keydown', onKeydown);
+      document.removeEventListener('focusin', onFocusIn);
+      lastPlace = null;
+    }
   };
 }

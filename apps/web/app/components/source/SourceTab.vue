@@ -181,7 +181,7 @@ onMounted(async () => {
     runNow: () => emit('run'),
     stop: () => run.stop(),
     focusTarget: () => lastFocus,
-    // The listing's line comes with Task 4 (the listing follows the run).
+    // The listing's line comes from the Run itself (debug.listingLine), which debug-keys asks.
     cursorLine: (where) => (where === 'source' ? (editor.value?.cursorLine() ?? null) : null),
     say: (text) => {
       run.message.value = text;

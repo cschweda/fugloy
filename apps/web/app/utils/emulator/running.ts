@@ -134,3 +134,23 @@ export function marksKey(marks: readonly LineMark[]): string {
   for (const mk of marks) key += `${key === '' ? '' : ','}${mk.line}:${mk.class}`;
   return key;
 }
+
+/** What listingFollows reads of a listing's session: its loaded bytes and their bitmap. */
+export interface ListingImage {
+  module: { image: { bytes: Uint8Array; loaded: Uint8Array } };
+}
+
+/**
+ * Whether a listing shows the program a Run is running (Ruling 6): it is the running source's own
+ * listing (`origin.sourceId`), or its loaded bytes equal the Run's on every byte asm loaded (Open as
+ * source). A 64K compare: the caller runs it once per (session, Run) pair.
+ */
+export function listingFollows(session: ListingImage | null, result: AsmResult, sourceId: string, origin: { kind: 'source'; sourceId: string } | null): boolean {
+  if (session === null) return false;
+  if (origin !== null) return origin.sourceId === sourceId;
+  const want = result.image;
+  if (want === null) return false;
+  const { bytes, loaded } = session.module.image;
+  for (let a = 0; a < 0x10000; a++) if (want.loaded[a] !== 0 && (loaded[a] === 0 || bytes[a] !== want.bytes[a])) return false;
+  return true;
+}

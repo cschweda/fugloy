@@ -533,6 +533,14 @@ declare global {
       /** The running machine's screen as text rows (m.video.text()); empty with no machine. */
       screenText: () => string[];
       runnerState: () => string;
+      /** Pauses the running program (5C). */
+      pause: () => void;
+      /** The debugger's mode: idle, running, paused or stopped. */
+      debugMode: () => string;
+      /** What the listing's <style> lights, by address; null when the listing does not follow. */
+      listingMarks: () => { marks: { addr: number; class: string }[]; breaks: number[] } | null;
+      /** The running-line update's cost per frame over `ms` milliseconds of running. */
+      frameCost: (ms: number) => Promise<{ frames: number; mean: number; max: number }>;
     };
   }
 }
@@ -569,6 +577,29 @@ function installTestHook(): void {
     run: () => runNow(),
     screenText: () => run.value?.runner.value?.machine.video.text() ?? [],
     runnerState: () => run.value?.state.value ?? 'idle',
+    pause: () => run.value?.debug.pause(),
+    debugMode: () => run.value?.debug.mode.value ?? 'idle',
+    listingMarks: () => run.value?.debug.listing.value ?? null,
+    frameCost: async (ms) => {
+      // Times the coordinator's frame (useRun calls debug.frame through the object, so a wrapper sees each one).
+      const d = run.value?.debug as unknown as { frame(r: unknown): void } | undefined;
+      if (d === undefined) return { frames: 0, mean: 0, max: 0 };
+      const orig = d.frame;
+      let total = 0;
+      let max = 0;
+      let frames = 0;
+      d.frame = (r) => {
+        const t = performance.now();
+        orig(r);
+        const dt = performance.now() - t;
+        total += dt;
+        max = Math.max(max, dt);
+        frames++;
+      };
+      await new Promise((done) => setTimeout(done, ms));
+      d.frame = orig;
+      return { frames, mean: frames === 0 ? 0 : total / frames, max };
+    },
   };
 }
 onBeforeUnmount(() => {
@@ -679,7 +710,7 @@ onBeforeUnmount(() => {
             <ManualTab :request="manualRequest" @back="backToListing" />
           </div>
           <div id="right-panel-run" v-show="rightTab === 'run'" role="tabpanel" aria-labelledby="right-tab-run" class="flex min-h-0 flex-1 flex-col" data-testid="run-panel" data-own-keys>
-            <component :is="RunTab" v-if="RunTab !== null && run !== null && sources !== null" :run="run" :sources="sources" />
+            <component :is="RunTab" v-if="RunTab !== null && run !== null && sources !== null" :run="run" :sources="sources" :scroll-listing="scrollTo" />
             <div v-else-if="runError !== null" class="fg-panel" data-testid="run-load-error">
               <p role="alert">{{ runError }}</p>
               <p><button type="button" class="fg-button" @click="runTab.load()">Retry</button></p>

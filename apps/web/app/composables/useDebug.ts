@@ -12,6 +12,10 @@
 // - On each pause and step: the registers, marked where they changed since the last pause
 //   (Ruling 11), `reveal` with the line to bring into view (Ruling 7), and `announce` (Ruling 12).
 //   While running, the registers and `pcAddr` update 4 times a second.
+// - The listing (Rulings 5-7): `listingFollows` when the open listing is the running program (its
+//   source's own, or the same bytes: Open as source), and then `listing`, the marks and the
+//   breakpoints by address, which utils/running/listing-style writes as one <style>. F9 and Run to
+//   Here act on the listing cursor's line (`listingLine`).
 import { computed, ref, shallowRef, watch } from 'vue';
 import type { ComputedRef, Ref, ShallowRef } from 'vue';
 import type { AsmResult } from '@fugloy/asm';
@@ -21,6 +25,7 @@ import type { LineMark, TrailState } from '../utils/emulator/running';
 import type { Stepper } from '../utils/emulator/stepping';
 import type { FlagRow, RegisterRow, RegSnap } from '../utils/emulator/registers';
 import type { Sources } from './useSources';
+import type { Workbench } from './useWorkbench';
 
 export type DebugMode = 'idle' | 'running' | 'paused' | 'stopped';
 
@@ -44,6 +49,12 @@ export const REDUCED_INTERVAL_MS = 250;
 /** How often the registers and PC refresh while running. */
 export const REGISTERS_INTERVAL_MS = 250;
 
+/** The listing's marks, by run address: the running line and its trail, and the breakpoints. */
+export interface ListingMarks {
+  marks: { addr: number; class: string }[];
+  breaks: number[];
+}
+
 export interface Debug {
   mode: Ref<DebugMode>;
   marks: ShallowRef<LineMark[]>;
@@ -65,6 +76,14 @@ export interface Debug {
   announce: Ref<string | null>;
   /** The same, a new object for every sentence (the same words twice are said twice); `step` when a step made it, which the announcer debounces (Ruling 12). */
   announcement: ShallowRef<Announcement | null>;
+  /** The open listing shows the program this Run runs (Ruling 6). */
+  listingFollows: ComputedRef<boolean>;
+  /** What the listing shows while the program runs or is paused; null when it does not follow, or nothing runs. */
+  listing: ComputedRef<ListingMarks | null>;
+  /** The run address of a line of the Run's source, for the listing's rows (null for none). */
+  listingAddr(line: number): number | null;
+  /** The source line at the listing's cursor, while the listing follows and the source is the Run's text; else null. */
+  listingLine(): number | null;
   toggleBreakpoint(line: number): void;
   /** Replaces the breakpoints (the editor carried them through an edit). */
   setBreakpoints(lines: readonly number[]): void;
@@ -108,6 +127,8 @@ export interface DebugDeps {
   now?: (() => number) | undefined;
   /** prefers-reduced-motion's query (null where there is none); followed as it changes. */
   motionQuery?: () => MediaQueryList | null;
+  /** The workbench, for the listing that may follow the run; without it, none does. */
+  wb?: Pick<Workbench, 'session' | 'origin' | 'cursor' | 'rows'> | undefined;
 }
 
 const hex4 = (n: number): string => `$${n.toString(16).toUpperCase().padStart(4, '0')}`;
@@ -194,6 +215,34 @@ export function createDebug(deps: DebugDeps): DebugControl {
   const live = computed(() => sameSource() && sources.current.value!.text === current.value!.text);
   const dirty = computed(() => sameSource() && sources.current.value!.text !== current.value!.text);
 
+  /** The lines whose breakpoints emu has now: set when they are applied (they outlive an edit, Ruling 8). */
+  const applied = ref<number[]>([]);
+  const wb = deps.wb;
+  /** The listing is the Run's program: its 64K compare runs once per (session, Run) pair. */
+  const sameProgram = computed(() => {
+    const a = current.value;
+    if (a === null || wb === undefined) return false;
+    return a.kit.listingFollows(wb.session.value, a.result, a.sourceId, wb.origin.value);
+  });
+  const listingFollows = computed(() => sameSource() && sameProgram.value);
+  const listingAddr = (line: number): number | null => {
+    const a = current.value;
+    return a === null ? null : a.kit.breakAddress(a.result, line);
+  };
+  const listing = computed<ListingMarks | null>(() => {
+    if (!listingFollows.value || (mode.value !== 'running' && mode.value !== 'paused')) return null;
+    const out: ListingMarks = { marks: [], breaks: [] };
+    for (const mk of marks.value) {
+      const addr = listingAddr(mk.line);
+      if (addr !== null) out.marks.push({ addr, class: mk.class });
+    }
+    for (const line of applied.value) {
+      const addr = inactive.value.includes(line) ? null : listingAddr(line);
+      if (addr !== null) out.breaks.push(addr);
+    }
+    return out;
+  });
+
   function publish(set: LineMark[], key: string, at: number): void {
     shownKey = key;
     shownAt = at;
@@ -228,6 +277,7 @@ export function createDebug(deps: DebugDeps): DebugControl {
       return;
     }
     inactive.value = a.stepper.setBreakpoints(breakpoints.value).inactive;
+    applied.value = [...breakpoints.value];
   }
 
   function save(): void {
@@ -308,6 +358,18 @@ export function createDebug(deps: DebugDeps): DebugControl {
     reveal,
     announce,
     announcement,
+    listingFollows,
+    listing,
+    listingAddr,
+    listingLine() {
+      const a = current.value;
+      const at = wb?.cursor.value ?? null;
+      if (a === null || at === null || !listingFollows.value || !live.value) return null;
+      // The cursor row's own bytes pick the line where several share its address (a relocated block).
+      const row = wb!.rows.value.find((r) => (r.kind === 'code' || r.kind === 'data') && r.addr === at);
+      const bytes = row !== undefined && 'bytes' in row ? row.bytes : [];
+      return a.kit.lineAt(a.result, at, (_addr, n) => bytes.slice(0, n));
+    },
     toggleBreakpoint(line) {
       setBreakpoints(breakpoints.value.includes(line) ? breakpoints.value.filter((n) => n !== line) : [...breakpoints.value, line]);
     },
@@ -371,6 +433,7 @@ export function createDebug(deps: DebugDeps): DebugControl {
       announcement.value = null;
       marks.value = [];
       inactive.value = live.value ? run.inactive : [];
+      applied.value = live.value ? [...breakpoints.value] : [];
       setMode(run.runner.state === 'running' ? 'running' : run.runner.state);
     },
     detach() {
@@ -381,6 +444,7 @@ export function createDebug(deps: DebugDeps): DebugControl {
       pcAddr.value = null;
       registers.value = null;
       inactive.value = [];
+      applied.value = [];
       mode.value = 'idle';
     },
     frame(r) {

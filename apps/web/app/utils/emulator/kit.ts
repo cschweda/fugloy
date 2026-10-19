@@ -9,7 +9,7 @@ export { romEnd, stubRom } from './stub-rom';
 export { romNameAt, romNotes, romSpaceCode, romUse } from './rom-use';
 export { MODEL_NAMES } from './rom-ids';
 export { runOnce, STUB_RUNNING } from './run-once';
-export { lineAt, lineMarks, marksKey, trailOf, TRAIL_LINES, TRAIL_WINDOW } from './running';
+export { lineAt, lineMarks, listingFollows, marksKey, trailOf, TRAIL_LINES, TRAIL_WINDOW } from './running';
 export { breakAddress, createStepper, HALTED_INTERRUPTS_OFF, inactiveReason, stepOverTargets } from './stepping';
 export { flagRows, readRegisters, registerRows } from './registers';
 export { changedRows, screenAnnouncement, screenRows } from './screen-text';
