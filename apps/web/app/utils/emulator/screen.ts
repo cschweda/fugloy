@@ -96,8 +96,8 @@ export function tubeFit(rasterHeight: number, aspect: number, availWidth: number
  * III's height for that width (narrower at the same height, as on the same monitor) unless that
  * would draw it narrower than its dots (drawing fewer pixels than dots drops dot columns); then the
  * smallest whole-row height at least `rasterWidth` wide that fits the width; and when none does,
- * the host's width at the aspect. (Full screen needs no such rule: tubeFit's largest whole-row
- * tube is never narrower than any smaller whole-row tube that fits.)
+ * the host's width at the aspect. Full screen does not use this rule: it takes tubeFit's largest
+ * whole-row tube for the window, and a window too small for 384 px across is accepted as it is.
  */
 export function panelFit(rasterHeight: number, rasterWidth: number, aspect: number, availWidth: number): { width: number; height: number } {
   const base = tubeFit(rasterHeight, aspect, availWidth, tubeFit(rasterHeight, MODEL3_ASPECT, availWidth).height);

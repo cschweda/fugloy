@@ -73,10 +73,17 @@ test('Full screen shows the tube at whole rows within the window, keeps the keys
   await expect(button).toHaveAttribute('aria-pressed', 'false');
   await button.click();
   await expect.poll(() => fullscreenId(page)).toBe('trs-screen');
-  await expect(button).toHaveText('Leave full screen');
+  await expect(button).toHaveText('Full screen');
   await expect(button).toHaveAttribute('aria-pressed', 'true');
   const screen = page.getByTestId('trs-screen');
   await expect(screen).toBeFocused();
+  await expect(screen).toHaveAttribute('aria-label', /press Esc to leave/);
+  // Tab in full screen stays on the TRS-80: the controls behind it (Power off next) are hidden.
+  await page.keyboard.press('Tab');
+  await expect(screen).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(screen).toBeFocused();
+  await expect.poll(() => fullscreenId(page)).toBe('trs-screen');
   await expect.poll(async () => (await measure(page)).tube.h).toBeGreaterThan(panel.tube.h - 1);
   const fs = await measure(page);
   expect(fs.tube.h % 192).toBe(0);
@@ -98,7 +105,9 @@ test('Full screen shows the tube at whole rows within the window, keeps the keys
   await button.dispatchEvent('click');
   await expect.poll(() => fullscreenId(page)).toBeNull();
   await expect(button).toHaveText('Full screen');
+  await expect(button).toHaveAttribute('aria-pressed', 'false');
   await expect(screen).toBeFocused();
+  await expect(screen).toHaveAttribute('aria-label', /press Tab to leave/);
   await expect.poll(async () => (await measure(page)).tube).toEqual(panel.tube);
 
   // Leaving another way (Esc's path, document.exitFullscreen) also leaves the focus on the screen.

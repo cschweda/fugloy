@@ -3,18 +3,18 @@
 // one pixel per character generator pixel (384x192 on the Model I, 512x192 on the Model III and 4,
 // 640x240 at the Model 4's 80x24), shown with pixelated scaling on a black tube at the model's
 // picture shape (tubeAspect: 4:3 on the Model III and 4, about 0.952 on the Model I, from the two
-// machines' dot clocks). Its size is panelFit's: the Model III's tube for the host's width (the
-// largest 4:3 tube whose height is a whole multiple of the raster's rows, or the host's whole width
-// when not even one step fits), every model at that height and its own shape, so the Model I is
-// narrower, never taller, unless that would draw it narrower than its 384 dots: then the smallest
-// whole-row height at least that wide, or the host's width at the shape (panelFit); each row is k
-// screen pixels high and across the scale follows the shape. A ResizeObserver on the host keeps it
-// so, and the shape follows the machine from its next frame. toggleFullscreen puts the box itself in full screen (the Fullscreen
-// API; Esc leaves it too): the browser stretches the box over the whole window, black, and the
-// canvas sits centred in it at tubeFit's size for the window. The box takes the focus going in and
-// coming out, however full screen ends. RunTab's machine row holds the button. The box is the
-// focus element: keys reach the machine only while it has focus (attachKeyboard), Tab leaves it,
-// and blur releases every key. While a program runs and the screen does not have focus, it says how
+// machines' dot clocks). Its size in the panel is panelFit's. The Model III's tube is the largest
+// 4:3 tube for the host's width whose height is a whole number of rows (or the host's whole width
+// when not even one row step fits). Every model takes that height at its own shape, so the Model I
+// is narrower. The exception: when that would draw the Model I narrower than its 384 dots, it takes
+// the smallest whole-row height at least that wide, or the host's width at its shape. A
+// ResizeObserver on the host keeps the size, and the shape follows the machine from its next frame.
+// toggleFullscreen puts the box itself in full screen (the Fullscreen API; Esc leaves it too): the
+// browser stretches the box over the whole window, black, and the canvas sits centred in it at
+// tubeFit's size for the window. The box takes the focus going in and coming out, however full
+// screen ends, and in full screen Tab stays on it (the controls are hidden behind it). RunTab's
+// machine row holds the button. The box is the focus element: keys reach the machine only while it
+// has focus (attachKeyboard), Tab leaves it outside full screen, and blur releases every key. While a program runs and the screen does not have focus, it says how
 // to type to it. With no machine and a `notice` (5D: no ROM for the model), the tube shows the
 // notice's lines in the model's own font, and the box carries data-notice="no-rom".
 // The screen as text (ScreenText, 5C) is RunTab's, in its Debugger.
@@ -91,8 +91,18 @@ async function toggleFullscreen(): Promise<void> {
   } catch {
     // Refused (no user gesture, or the browser forbids it): the screen stays where it is.
   }
-  b.focus();
 }
+
+/** In full screen the page's controls are hidden behind the box, so Tab keeps the focus on it. */
+function onKeydown(e: KeyboardEvent): void {
+  if (fullscreen.value && e.key === 'Tab') e.preventDefault();
+}
+
+const label = computed(() =>
+  fullscreen.value
+    ? 'TRS-80 screen, full screen. While it has focus, the keys you type go to the TRS-80; press Esc to leave full screen.'
+    : 'TRS-80 screen. While it has focus, the keys you type go to the TRS-80; press Tab to leave.',
+);
 
 function context(): CanvasRenderingContext2D | null {
   return canvas.value?.getContext('2d') ?? null;
@@ -190,12 +200,13 @@ defineExpose({
       tabindex="0"
       role="application"
       aria-roledescription="TRS-80 screen"
-      aria-label="TRS-80 screen. While it has focus, the keys you type go to the TRS-80; press Tab to leave."
+      :aria-label="label"
       data-testid="trs-screen"
       :data-notice="showingNotice ? 'no-rom' : undefined"
       @focus="focused = true"
       @blur="focused = false"
       @mousedown="box?.focus()"
+      @keydown="onKeydown"
     >
       <canvas ref="canvas" class="fg-trs-canvas" :style="canvasStyle" v-bind="BLANK_SIZE" data-testid="trs-canvas" />
       <p v-if="running && !focused" class="fg-trs-hint" aria-hidden="true">Click the screen to type to the TRS-80.</p>

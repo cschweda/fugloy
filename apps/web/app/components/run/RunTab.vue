@@ -283,7 +283,7 @@ defineExpose({ focusScreen });
       <button type="button" class="fg-button" data-testid="machine-power" @click="togglePower">{{ run.power.value === 'off' ? 'Power on' : 'Power off' }}</button>
       <button type="button" class="fg-button" data-testid="machine-reset" title="Turn the TRS-80 off and on again: a cold start from its ROM" @click="turnOn('reset')">Reset</button>
       <button type="button" class="fg-button" data-testid="run-pause" :disabled="!canPause" :title="pauseTitle" @click="pauseOrContinue">{{ machinePaused ? 'Continue' : 'Pause' }}</button>
-      <button type="button" class="fg-button" data-testid="screen-fullscreen" :aria-pressed="screenFull" :disabled="!(screen?.canFullscreen ?? false)" title="Show the TRS-80's screen on the whole display (Esc leaves it)" @click="screen?.toggleFullscreen()">{{ screenFull ? 'Leave full screen' : 'Full screen' }}</button>
+      <button type="button" class="fg-button" data-testid="screen-fullscreen" :aria-pressed="screenFull" :disabled="!(screen?.canFullscreen ?? false)" title="Show the TRS-80's screen on the whole display (Esc leaves it)" @click="screen?.toggleFullscreen()">Full screen</button>
     </div>
     <ProgramsToTry @run="tryProgram" />
     <details class="fg-run-debugger" data-testid="debugger" ref="debuggerBox">
