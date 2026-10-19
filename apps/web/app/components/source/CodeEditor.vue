@@ -6,7 +6,7 @@
 // stuck. 5C: `setLineDecorations` lights the running line and its trail, and
 // the breakpoint gutter (utils/source/run-marks) carries each breakpoint with
 // its line through edits, reporting the lines it moved (`update:breakpoints`)
-// and a click on a line (`toggle-breakpoint`).
+// and a click on a line (`toggle-breakpoint`). 6B: `wrap` wraps long lines.
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Compartment, EditorState, Prec } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
@@ -27,6 +27,8 @@ const props = defineProps<{
   text: string;
   /** What screen readers call the editor. */
   label: string;
+  /** 6B: wrap long lines (the Learn page's narrow column), so the editor never scrolls sideways. */
+  wrap?: boolean;
 }>();
 const emit = defineEmits<{
   'update:text': [text: string];
@@ -68,6 +70,8 @@ const theme = EditorView.theme(
     '.cm-line.fg-run-paused': { backgroundColor: 'rgba(255, 166, 87, 0.22)', boxShadow: 'inset 3px 0 0 var(--fg-string)' },
     '.cm-line.fg-run-out': { backgroundColor: 'rgba(121, 192, 255, 0.12)', boxShadow: 'inset 3px 0 0 var(--fg-register)' },
     '.cm-line.fg-run-stopped': { backgroundColor: 'rgba(255, 161, 152, 0.16)', boxShadow: 'inset 3px 0 0 var(--fg-error)' },
+    // A comment on a lit line: the usual comment grey is 3.5:1 on the running line's band; this is 4.9:1 or better on every band.
+    '.cm-line[class*="fg-run-"] .fg-src-comment': { color: '#a8b1ba' },
     '.fg-bp-gutter .cm-gutterElement': { cursor: 'pointer', padding: '0 3px', color: 'var(--fg-error)' },
     '.fg-bp-gutter .cm-gutterElement:hover': { backgroundColor: 'var(--fg-hover)' },
     '.fg-bp-off': { color: 'var(--fg-muted)' },
@@ -101,6 +105,7 @@ function extensions(): Extension[] {
     ),
     keymap.of([...defaultKeymap, ...historyKeymap]),
     EditorView.contentAttributes.of({ spellcheck: 'false', autocapitalize: 'off', autocorrect: 'off' }),
+    props.wrap === true ? EditorView.lineWrapping : [],
     EditorView.updateListener.of((u) => {
       if (!u.docChanged) return;
       emit('update:text', u.state.doc.toString());

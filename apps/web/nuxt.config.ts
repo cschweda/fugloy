@@ -1,11 +1,18 @@
+import { readdirSync } from 'node:fs';
 import { copyFile, rm } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { fugloyAliases } from './aliases';
 import { unflagLazy } from './lazy-chunks';
 import { preloadDeps } from './preload-deps';
 
 const preload = preloadDeps();
+
+// Each lesson's page, from its folder name (content/learn/NN-slug), with the slash its directory is served with.
+const lessonRoutes = readdirSync(join(dirname(fileURLToPath(import.meta.url)), 'content', 'learn'), { withFileTypes: true })
+  .filter((d) => d.isDirectory() && /^\d\d-/.test(d.name))
+  .map((d) => `/learn/${d.name}/`);
 
 // pdf.js's decoders (JBIG2 and JPEG 2000 in wasm, which archive.org scans use),
 // standard fonts, CMaps and ICC profiles, served from the site's own assets at
@@ -20,7 +27,8 @@ export default defineNuxtConfig({
   css: ['@fontsource/jetbrains-mono/latin-400.css', '@fontsource/jetbrains-mono/latin-700.css', '~/assets/css/main.css'],
   ssr: true,
   // The crawler must not follow the About page's link to /pdfjs/LICENSE: the file is copied in after prerendering.
-  nitro: { preset: 'static', publicAssets: pdfjsAssets, prerender: { ignore: ['/pdfjs/'] } },
+  // The Learn page is linked from nowhere yet, so its routes are named: /learn/ and each lesson's folder in content/learn.
+  nitro: { preset: 'static', publicAssets: pdfjsAssets, prerender: { ignore: ['/pdfjs/'], routes: ['/learn/', ...lessonRoutes] } },
   hooks: {
     // The lazily loaded parts (Source ✎: CodeMirror and asm, plan 5B) are fetched
     // when first opened, never prefetched with the first screen (lazy-chunks.ts;
