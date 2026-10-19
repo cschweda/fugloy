@@ -56,7 +56,7 @@
    - C0H–FFH draw as the block of `b & 3FH`, as on the Model I.
    - The Model III's special and katakana sets are not drawn, a stated difference: their only source is the ROM's character generator.
    - Model 4 inverse video: bit 7 set shows the character inverted.
-5. **Stub ROM: yes.** Without a ROM, Run uses `stubRom(model)`: `stub-rom.z` (DI, LD SP,0, fill `$3C00–$3FFF` with spaces, HALT), assembled by `@fugloy/asm` and padded with HALT (`76H`) to the model's ROM size.
+5. **Stub ROM: yes.** Without a ROM, Run uses `stubRom(model)`: `stub-rom.z` (DI, LD SP,0, fill `$3C00–$3FFF` with spaces, push the address of its own `RETURNED: HALT`, then `BOOTED: HALT`), assembled by `@fugloy/asm` and padded with HALT (`76H`) to the model's ROM size.
 
    Reasons:
    - The user's own example ("a tiny program that just blanks out the screen") must work on a blank page.
@@ -64,9 +64,20 @@
    - `packages/asm/test/starter.test.ts` already proves the approach.
 
    A program that needs the ROM is caught twice, each time with a sentence naming the line:
-   - **Statically:** a `kind: 'rom'` symbol used, an `RST`, or a `CALL`/`JP` target below the ROM's end.
-   - **At run time:** the HALT trap (PC inside the ROM). The caller is found from the stacked return address through `sourceMap.lineOf`. `EI` under the stub stops at the `$0038` trap with a sentence once an interrupt is delivered: always on the Model I (its clock interrupt has no mask), and on the Model III and 4 only after the program unmasks one at port `E0H` (the ROM normally does; with every source masked a bare `EI` runs on, as on the hardware).
-   - Confirmed by a test: emu leaves PC just past the HALT, so the trap reads the HALT at PC-1.
+   - **Statically, refused** (`romUse`; Task 2 fix round 1). The check reads each line's bytes; the mnemonic only skips DB, DW, and DS.
+     - Code assembled into the ROM's space (an ORG or .PHASE below the ROM's end), naming the ORG line. This is `romSpaceCode`, which applies with a real ROM too, since such code cannot load.
+     - Any name from a `rom-*` table, whatever its value: routines, vectors, and the ROM's RAM variables such as CURADDR. It counts in code and as data in DB or DW. Hardware names (the screen, the keyboard, ports) pass.
+     - An `RST`, and a `CALL`/`JP` to a constant below the ROM's end.
+     - A memory operand `(nn)` that reads below the ROM's end, as a literal or as a symbol's value: `LD A,(nn)`, `LD HL,(nn)`, `LD rr,(nn)`, and `LD IX/IY,(nn)`.
+     - A memory operand `(nn)`, read or written, inside one of the ROM's RAM variables, so `(4020H)` is treated as `(CURADDR)` is.
+   - **Statically, a warning** (`romNotes`): `LD HL,nn` with `nn` below the ROM's end, followed within 8 code lines by LDIR, LDDR, LDI, or LDD, which copies the stand-in's bytes. It is a warning, not a refusal, because `LD HL,0` is common and HL may change before the copy.
+   - **Stated gap:** a read through a pointer the check cannot see, and a DW holding a ROM address as a bare number (`DW 0` and `DW 10H` are too common to refuse). The run-time trap catches such an address when the program jumps to it.
+   - **At run time:** the HALT trap, when PC is inside the ROM after a slice or a step. Confirmed by a test: emu leaves PC just past a HALT, so the trap reads the HALT at PC-1.
+     - Under the stub, the runner keeps emu's instruction trace (the last 65,536 instructions). So the stop always names the last line of the program that ran, found through `sourceMap.lineOf`, and where it went: the first instruction after it. If the trace holds no program line, the stop names the entry line.
+     - A final `RET` comes back to `RETURNED`, and the run stops with "Line N returns (RET) to the ROM… End the program with a loop that waits, such as WAIT: JR WAIT, or with HALT."
+     - A jump to `$0000` reports `$0000`, not the stub's `BOOTED` address, where it halts.
+     - Going first into memory that holds none of the program's code is described as that: on the Model I the empty `$3000–$37FF`, whose `$FF` bytes run as RST 38H. Such a stop never gets the interrupt sentence.
+     - `EI` under the stub stops at the `$0038` trap with the interrupt sentence, naming the EI line, once an interrupt is delivered. That is always on the Model I, whose clock interrupt has no mask. On the Model III and 4 it is only after the program unmasks one at port `E0H`, which the ROM normally does. With every source masked, a bare `EI` runs on, as on the hardware.
 6. **ROMs: per model, by hash.**
    - Stored in the IndexedDB `roms` store keyed by model (`1 | 3 | 4`) as `{ bytes, sha256, recognized, name, addedAt }`.
    - A `ROM_HASHES` name gives the model by its prefix. A file Fugløy doesn't recognise is kept only at a size the model takes, with the model chosen by the user, and marked as not recognised.

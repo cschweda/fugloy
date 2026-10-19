@@ -4,6 +4,7 @@
 // HALT. Each Run restores the snapshot on a new Machine and loads the program's .CMD.
 import { toCmd } from '@fugloy/asm';
 import type { AsmResult } from '@fugloy/asm';
+import { sha256Hex } from '@fugloy/disasm';
 import { Machine } from '@fugloy/emu';
 import type { Model, Snapshot } from '@fugloy/emu';
 import { MODEL_NAMES } from './rom-ids';
@@ -15,6 +16,17 @@ export const BOOT_SECONDS = 8;
 const SLICE = 0.05;
 
 const snapshots = new Map<string, Snapshot>();
+/** Each ROM array's SHA-256, so a Run with the same bytes does not hash them again. */
+const hashes = new WeakMap<Uint8Array, string>();
+
+function hashOf(rom: Uint8Array): string {
+  let h = hashes.get(rom);
+  if (h === undefined) {
+    h = sha256Hex(rom);
+    hashes.set(rom, h);
+  }
+  return h;
+}
 
 const screen = (m: Machine): string => m.video.text().join('\n');
 
@@ -45,10 +57,10 @@ function bootToReady(m: Machine, model: Model): void {
 
 /** The machine just booted from `rom`: at READY for a real ROM, halted with a blank screen for the stub. Cached by model and the ROM's SHA-256. */
 export function bootedSnapshot(model: Model, rom: Uint8Array): Snapshot {
-  const m = new Machine({ model, roms: { level2: rom } });
-  const key = `${model}:${m.rom.sha256}`;
+  const key = `${model}:${hashOf(rom)}`;
   const hit = snapshots.get(key);
   if (hit !== undefined) return hit;
+  const m = new Machine({ model, roms: { level2: rom } });
   if (isStub(model, rom)) {
     const r = m.run({ until: 'halt', cycles: m.clockHz });
     if (r.reason !== 'halt') throw new Error("Fugløy's stand-in ROM did not finish starting. Reload the page and run the program again.");

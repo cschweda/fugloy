@@ -119,6 +119,8 @@ m.video.text()             // 16 lines, string[]: 64 columns, or 32 in 32-column
 m.video.raw                // live Uint8Array view of video RAM: $3C00..$3FFF, or the Model 4's 2K
 m.video.columns            // 64 | 32, and on the Model 4 80 | 40
 m.video.rows               // 16, or 24 on the Model 4 in 80-column mode
+m.video.wide               // true on the Model 4 in the 80-column layout (port $84 bit 2: rows of 80 bytes, 24 rows); read-only
+m.video.inverse            // true on the Model 4 with inverse video (port $84 bit 3: bit 7 set is the character inverted); read-only
 
 m.sound.events(sinceCycle = -1)  // [{ cycle, value }] every port $FF write after that cycle, oldest first
 m.sound.overflowed         // events lost to wrap-around of the 65,536-event ring since the last clear

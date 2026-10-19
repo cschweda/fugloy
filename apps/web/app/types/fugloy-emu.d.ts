@@ -25,8 +25,7 @@ declare module '@fugloy/emu' {
   export class TRS80System {
     constructor(options: { romData: Uint8Array });
     cpu: { strictMode: boolean };
-    /** `inverse` is the Model 4's inverse video (port $84 bit 3); undefined on the other models. */
-    memory: { videoRam: Uint8Array; inverse?: boolean };
+    memory: { videoRam: Uint8Array };
     keyboard: KeyboardMatrix;
     bootToCassetteBasic(): boolean;
     runSeconds(seconds: number): number;
@@ -55,9 +54,31 @@ declare module '@fugloy/emu' {
     readonly system: TRS80System;
     readonly cpu: { readonly regs: { pc: number; sp: number; [reg: string]: number | boolean } };
     readonly mem: { read(addr: number, len: number): Uint8Array; write(addr: number, bytes: Uint8Array): void };
-    readonly video: { readonly raw: Uint8Array; readonly columns: number; readonly rows: number; text(): string[] };
+    readonly video: {
+      readonly raw: Uint8Array;
+      readonly columns: number;
+      readonly rows: number;
+      /** The Model 4's 80-column layout (port $84 bit 2); false on the other models. */
+      readonly wide: boolean;
+      /** The Model 4's inverse video (port $84 bit 3); false on the other models. */
+      readonly inverse: boolean;
+      text(): string[];
+    };
     readonly load: { cmd(bytes: Uint8Array): CmdManifest };
-    readonly debug: { snapshot(): Snapshot; restore(snap: Snapshot): void };
+    readonly io: { in(port: number): number; out(port: number, value: number): void };
+    readonly debug: {
+      snapshot(): Snapshot;
+      restore(snap: Snapshot): void;
+      /** The instruction trace: a ring of the last `depth` instructions run (a halted CPU's idling is not one). */
+      readonly trace: {
+        enable(opts: { depth: number; regs?: boolean }): void;
+        disable(): void;
+        clear(): void;
+        /** The newest `n` entries, oldest first. */
+        last(n: number): { pc: number; bytes: number[]; cycles: number }[];
+        readonly enabled: boolean;
+      };
+    };
     /** Typing through the matrix at `cps` characters a second (default 20). */
     readonly keyboard: { type(text: string, opts?: { cps?: number }): void };
     reset(): void;

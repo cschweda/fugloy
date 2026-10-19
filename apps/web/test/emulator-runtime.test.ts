@@ -10,7 +10,7 @@ import { stubRom, STUB_ROM_SOURCE } from '../app/utils/emulator/stub-rom';
 import { bootedSnapshot, prepareMachine } from '../app/utils/emulator/boot';
 import { createRunner } from '../app/utils/emulator/runner';
 import type { Runner } from '../app/utils/emulator/runner';
-import { romUse } from '../app/utils/emulator/rom-use';
+import { romNotes, romSpaceCode, romUse } from '../app/utils/emulator/rom-use';
 
 const FRAME = 1000 / 60;
 const asm = (text: string, model: 1 | 3 | 4 = 3): AsmResult => {
@@ -144,6 +144,61 @@ describe('a program that needs the ROM', () => {
     expect(romUse(asm(program('START:  CALL    0FFFH')), 1)?.text).toMatch(/Model I ROM/);
   });
 
+  it("the ROM's RAM variables are ROM use, by name or by number, read or written", () => {
+    expect(romUse(asm(program('START:  LD      HL,(CURADDR)', '        LD      (HL),41H')), 3)).toMatchObject({
+      line: 2,
+      text: expect.stringMatching(/^Line 2 uses the ROM variable CURADDR at \$4020 \(address of the cursor/),
+    });
+    expect(romUse(asm(program('START:  LD      HL,(4020H)')), 3)).toMatchObject({ line: 2, text: expect.stringMatching(/^Line 2 reads \$4020, the ROM's variable CURADDR/) });
+    expect(romUse(asm(program('START:  LD      (4021H),HL')), 3)).toMatchObject({ line: 2, text: expect.stringMatching(/^Line 2 writes \$4021, the ROM's variable CURADDR/) });
+    expect(romUse(asm(program('START:  LD      DE,(4020H)')), 3)?.line).toBe(2);
+    expect(romUse(asm(program('START:  LD      IX,(4020H)')), 3)?.line).toBe(2);
+  });
+
+  it('a read from a fixed address inside the ROM is refused', () => {
+    expect(romUse(asm(program('START:  NOP', '        LD      A,(0)')), 3)).toMatchObject({ line: 3, text: expect.stringMatching(/^Line 3 reads the ROM at \$0000 \(\$RESET\), but no ROM is loaded/) });
+    expect(romUse(asm(program('START:  LD      A,(1000H)')), 3)?.text).toMatch(/^Line 2 reads the ROM at \$1000, /);
+    expect(romUse(asm(program('ROMTOP  EQU     37FFH', 'START:  LD      HL,(ROMTOP)')), 3)?.line).toBe(3);
+    expect(romUse(asm(program('START:  LD      BC,(2000H)')), 3)?.line).toBe(2);
+    // The same address on the Model I is past its 12K ROM, in the empty space: not a ROM read.
+    expect(romUse(asm(program('START:  LD      A,(3000H)'), 1), 1)).toBeNull();
+  });
+
+  it('LD HL with a ROM address feeding LDIR is a warning note, not a refusal', () => {
+    const r = asm(program('START:  LD      HL,0', '        LD      DE,3C00H', '        LD      BC,64', '        LDIR', 'WAIT:   JR      WAIT'));
+    expect(romUse(r, 3)).toBeNull();
+    const notes = romNotes(r, 3);
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatchObject({ line: 2, text: expect.stringMatching(/^Line 2 points HL at \$0000, inside the ROM's space, and line 5 copies from where HL points \(LDIR\)/) });
+    // LD HL,0 with no block copy after it is not noted.
+    expect(romNotes(asm(program('START:  LD      HL,0', '        ADD     HL,SP', 'WAIT:   JR      WAIT')), 3)).toEqual([]);
+  });
+
+  it('code assembled inside the ROM space is refused, naming the ORG line, on any machine', () => {
+    const r = asm(['        ORG     1000H', 'START:  LD      A,41H', '        LD      (3C00H),A', 'WAIT:   JR      WAIT', '        END     START', ''].join('\n'));
+    const f = romSpaceCode(r, 3);
+    expect(f).toMatchObject({ line: 1, text: expect.stringMatching(/^Line 1 puts the program at \$1000, inside the ROM's space \(\$0000-\$37FF\), where it cannot be loaded\./) });
+    expect(romUse(r, 3)).toEqual(f);
+    // A second ORG into the ROM's space names that ORG.
+    const two = asm(program('START:  NOP', 'WAIT:   JR      WAIT', '        ORG     0100H', '        DB      1'));
+    expect(romSpaceCode(two, 3)?.line).toBe(4);
+    expect(romSpaceCode(asm(starter), 3)).toBeNull();
+  });
+
+  it('a ROM name stored as data (DW or DB) is refused', () => {
+    expect(romUse(asm(program('START:  LD      HL,(TBL)', 'WAIT:   JR      WAIT', 'TBL:    DW      $VDCLS')), 3)).toMatchObject({
+      line: 4,
+      text: expect.stringMatching(/^Line 4 stores \$VDCLS, the ROM's routine at \$01C9 \(clear the screen\) as data/),
+    });
+    expect(romUse(asm(program('START:  NOP', 'WAIT:   JR      WAIT', '        DB      LOW $VDCLS')), 3)?.line).toBe(4);
+  });
+
+  it('reads the opcode from the bytes, whatever the label or spacing', () => {
+    expect(romUse(asm(['        ORG     7000H', 'START:CALL $VDCLS', '        END     START', ''].join('\n')), 3)?.line).toBe(2);
+    expect(romUse(asm(['        ORG     7000H', 'START   JP      01C9H', '        END     START', ''].join('\n')), 3)?.text).toMatch(/^Line 2 jumps to \$VDCLS/);
+    expect(romUse(asm(['        ORG     7000H', 'START:  call    1000h', '        END     START', ''].join('\n')), 3)?.text).toMatch(/^Line 2 calls \$1000, inside the ROM/);
+  });
+
   it('hardware names, ports, RAM addresses, and text in DB or comments are not ROM use', () => {
     const r = asm(
       program(
@@ -159,16 +214,61 @@ describe('a program that needs the ROM', () => {
     expect(romUse(r, 3)).toBeNull();
   });
 
-  it('a computed JP (HL) into the ROM stops at the trap with the caller line', () => {
-    const { clock, runner } = runStub(program('START:  LD      HL,0033H', '        CALL    GO', 'WAIT:   JR      WAIT', 'GO:     JP      (HL)'));
+  it('a computed JP (HL) into the ROM stops at the trap naming the last line run', () => {
+    // Through a CALL to a trampoline: the JP (HL) is the last line of the program that ran.
+    const viaCall = runStub(program('START:  LD      HL,0033H', '        CALL    GO', 'WAIT:   JR      WAIT', 'GO:     JP      (HL)'));
+    viaCall.runner.start();
+    frames(viaCall.clock, 2);
+    expect(viaCall.runner.state).toBe('stopped');
+    expect(viaCall.runner.stopLine).toBe(5);
+    expect(viaCall.runner.stopReason).toMatch(/^Line 5 jumps to \$VDCHAR, the ROM's routine at \$0033/);
+    expect(viaCall.runner.stopReason).toMatch(/Model III ROM/);
+    expect(viaCall.clock.pending()).toBe(0);
+    // With no CALL behind it at all.
+    const bare = runStub(program('START:  LD      HL,01C9H', '        JP      (HL)'));
+    bare.runner.start();
+    frames(bare.clock, 2);
+    expect(bare.runner.stopLine).toBe(3);
+    expect(bare.runner.stopReason).toMatch(/^Line 3 jumps to \$VDCLS/);
+  });
+
+  it('a PUSH and RET dispatch into the ROM names the RET line', () => {
+    const { clock, runner } = runStub(program('START:  LD      HL,(TBL)', '        PUSH    HL', '        RET', 'TBL:    DW      01C9H'));
+    runner.start();
+    frames(clock, 2);
+    expect(runner.stopLine).toBe(4);
+    expect(runner.stopReason).toMatch(/^Line 4 returns to \$VDCLS/);
+  });
+
+  for (const model of [3, 1] as const) {
+    it(`a final RET says the program returned to the ROM, on the Model ${model === 3 ? 'III' : 'I'}`, () => {
+      const { clock, runner } = runStub(program('START:  LD      A,41H', '        LD      (3C00H),A', '        RET'), { model });
+      runner.start();
+      frames(clock, 2);
+      expect(runner.state).toBe('stopped');
+      expect(runner.stopLine).toBe(4);
+      expect(runner.stopReason).toMatch(/^Line 4 returns \(RET\) to the ROM, but no ROM is loaded/);
+      expect(runner.stopReason).toMatch(/JR WAIT|HALT/);
+      expect(runner.stopReason).not.toMatch(/interrupt|EI/);
+    });
+  }
+
+  it('a jump into the Model I empty space says the memory is not there, not the interrupt sentence', () => {
+    const { clock, runner } = runStub(program('START:  LD      HL,3400H', '        JP      (HL)'), { model: 1 });
     runner.start();
     frames(clock, 2);
     expect(runner.state).toBe('stopped');
     expect(runner.stopLine).toBe(3);
-    expect(runner.stopReason).toMatch(/\$0033/);
-    expect(runner.stopReason).toMatch(/line 3/);
-    expect(runner.stopReason).toMatch(/ROM/);
-    expect(clock.pending()).toBe(0);
+    expect(runner.stopReason).toMatch(/^Line 3 jumps to \$3400, where the Model I has no memory at all/);
+    expect(runner.stopReason).not.toMatch(/EI|interrupts on/);
+  });
+
+  it('a computed jump to 0 reports $0000, not the stub address it halts at', () => {
+    const { clock, runner } = runStub(program('START:  LD      HL,0', '        JP      (HL)'));
+    runner.start();
+    frames(clock, 2);
+    expect(runner.stopLine).toBe(3);
+    expect(runner.stopReason).toMatch(/^Line 3 jumps to \$RESET, the ROM's routine at \$0000/);
   });
 
   it('EI under the stub stops at $0038 with the interrupt sentence', () => {
@@ -196,6 +296,21 @@ describe('a program that needs the ROM', () => {
     runner.start();
     frames(clock, 6);
     expect(runner.state).toBe('running');
+  });
+
+  it('IM 2 with its own handler, unmasked at E0H, runs with no stop and no refusal', () => {
+    const src = program(
+      'START:  DI', '        LD      A,70H', '        LD      I,A', '        IM      2', '        LD      A,4', '        OUT     (0E0H),A', '        EI',
+      'WAIT:   LD      A,(CNT)', '        LD      (3C00H),A', '        JR      WAIT',
+      'HND:    PUSH    AF', '        IN      A,(0ECH)        ; acknowledge the clock', '        LD      A,(CNT)', '        INC     A', '        LD      (CNT),A', '        POP     AF', '        EI', '        RETI',
+      'CNT:    DB      0', '        ORG     70FEH', '        DW      HND', '        DW      HND',
+    );
+    const { clock, runner, machine, result } = runStub(src);
+    expect(romUse(result, 3)).toBeNull();
+    runner.start();
+    frames(clock, 30);
+    expect(runner.state).toBe('running');
+    expect(machine.mem.read(0x3c00, 1)[0]).toBeGreaterThan(5); // the handler ran
   });
 
   it('an exception thrown by the emulator stops the run with a sentence', () => {
@@ -240,6 +355,19 @@ describe('the frame loop', () => {
     const start = machine.cycles;
     frames(clock, 60);
     expect(Math.abs(machine.cycles - start - hz)).toBeLessThan(64);
+  });
+
+  it('follows the machine clock when it changes between frames (the Model 4 switches)', () => {
+    const { clock, machine, runner, asked } = spied();
+    const hz = machine.clockHz;
+    runner.start();
+    clock.frame(FRAME);
+    Object.defineProperty(machine, 'clockHz', { get: () => hz * 2, configurable: true });
+    clock.frame(FRAME);
+    expect(Math.abs(asked[0]! - hz / 60)).toBeLessThanOrEqual(1);
+    // The second frame pays for its own 60th at the new clock, less the first frame's overshoot.
+    expect(Math.abs(asked[1]! - (2 * hz) / 60)).toBeLessThanOrEqual(30);
+    expect(asked[1]!).toBeGreaterThan(hz / 60 + 1000);
   });
 
   it('calls onFrame after each slice', () => {

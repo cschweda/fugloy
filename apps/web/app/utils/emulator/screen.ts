@@ -40,9 +40,8 @@ export function screenSize(view: ScreenView): { width: number; height: number } 
 
 /** The view a machine's screen is in now. */
 export function screenView(m: Machine): ScreenView {
-  const rows = m.video.rows;
-  // Inverse video has no stable API yet; emu's Video reads the same flag (video.js).
-  return { columns: m.video.columns, rows, wide: rows === 24, inverse: m.system.memory.inverse === true };
+  const v = m.video;
+  return { columns: v.columns, rows: v.rows, wide: v.wide, inverse: v.inverse };
 }
 
 /** The rows (from the top) where each band of a 2x3 block starts, for a cell `h` high; then `h`. */

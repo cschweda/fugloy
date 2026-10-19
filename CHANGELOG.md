@@ -206,6 +206,13 @@ Core, `@fugloy/cli`:
 Core, `@fugloy/disasm`: `ROM_COMPARISON` (each ROM address's class across the
 two machines) is exported.
 
+Emu, `@fugloy/emu` (unreleased; for the workbench's Run tab): `m.video.wide`
+and `m.video.inverse`, read-only. They are true on a Model 4 in the
+80-column layout (port `$84` bit 2) and with inverse video (port `$84` bit 3),
+and always false on the Model III and Model I. `Video` already computed both
+privately. The site now reads them instead of reaching into the system's
+memory.
+
 Workbench, phase 5B (Source and Run), in progress on branch `phase5b` (plan
 `docs/superpowers/plans/2026-10-18-phase5b-source-run.md`):
 
@@ -223,25 +230,43 @@ Workbench, phase 5B (Source and Run), in progress on branch `phase5b` (plan
   `lint`; MIT), none of them yet on the first screen.
 - **The emulator runtime** (`apps/web/app/utils/emulator/`, no DOM; not yet
   in the page). With no ROM, a program runs on Fugløy's own stub ROM
-  (`stub-rom.z`: DI, a stack, a blank screen, HALT; assembled by asm at run
-  time and padded with HALT to the model's ROM size, so it holds no Tandy
-  code). A program that needs the ROM is caught twice, each time with a
-  sentence naming the line: before running (a ROM routine's name, an RST,
-  or a CALL or JP into the ROM), and at run time, when PC lands in the
-  stub's HALTs (emu leaves PC just past a HALT, which a test checks), naming
-  the calling line, or the EI line for an interrupt at `$0038`. On the
-  Model III every interrupt stays masked until a program unmasks one at port
-  `E0H`, so a bare EI runs on there, as on the hardware; the Model I's clock
-  interrupt cannot be masked. A user ROM boots to READY once per ROM per page
-  session, answering Cass? and Memory Size? (SIZE? on the Model I), and its
-  snapshot is kept. The runner paces frames by elapsed time at the machine's
-  clock, capped at a 30th of a second, carrying overshoot. `renderScreen`
-  draws video RAM into an RGBA buffer: 2x3 graphics blocks, 32-column
-  doubling, and the Model 4's 80x24 and inverse video. Its glyphs are X.Org
-  font-misc-misc's `6x12.bdf` and `6x10.bdf` (public domain), converted by
-  `apps/web/scripts/build-glyphs.ts`, which refuses a font whose header does
-  not say so, into `glyphs.generated.ts`, which records each font's pinned
-  URL and SHA-256. `attachKeyboard` passes keys from the screen element only.
+  (`stub-rom.z`: DI, a stack, a blank screen, a return address of its own,
+  HALT; assembled by asm at run time and padded with HALT to the model's ROM
+  size, so it holds no Tandy code). Code assembled into the ROM's space is
+  refused on any machine, naming the ORG line. A program that needs the ROM
+  is caught twice, each time with a sentence naming the line:
+  - **Before running:**
+    - refused: any ROM-table name (routines and the ROM's RAM variables,
+      in code or in DB and DW), an RST, a CALL or JP into the ROM, a fixed
+      read inside the ROM, and a fixed access to a ROM variable;
+    - a warning, not a refusal: `LD HL` with a ROM address feeding a block
+      copy.
+  - **At run time:** when PC lands in the stub's HALTs (emu leaves PC just
+    past a HALT, which a test checks). The runner keeps emu's instruction
+    trace under the stub, so the stop always names the last program line
+    run. It says when a final RET returned to the ROM, when the program ran
+    into memory that is not its own (on the Model I the empty
+    `$3000-$37FF`, whose `$FF` bytes are RST 38H), and when an EI let an
+    interrupt reach `$0038`.
+
+  On the Model III every interrupt stays masked until a program unmasks one
+  at port `E0H`, so a bare EI runs on there, as on the hardware; the Model
+  I's clock interrupt cannot be masked.
+
+  A user ROM boots to READY once per ROM per page session, answering Cass?
+  and Memory Size? (SIZE? on the Model I). Its snapshot is kept, keyed by
+  the ROM's SHA-256 with no Machine built for the hash. The runner paces
+  frames by elapsed time at the machine's clock, read each frame, capped at
+  a 30th of a second, carrying overshoot.
+
+  `renderScreen` draws video RAM into an RGBA buffer: 2x3 graphics blocks,
+  32-column doubling, and the Model 4's 80x24 and inverse video, read
+  through emu's new `m.video.wide` and `m.video.inverse`. Its glyphs are
+  X.Org font-misc-misc's `6x12.bdf` and `6x10.bdf` (public domain),
+  converted by `apps/web/scripts/build-glyphs.ts`, which refuses a font
+  whose header does not say so, into `glyphs.generated.ts`, which records
+  each font's pinned URL and SHA-256. `attachKeyboard` passes keys from the
+  screen element only.
 
 ### Testing
 

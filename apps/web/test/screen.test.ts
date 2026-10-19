@@ -3,7 +3,9 @@
 // doubling, and the Model 4's 80x24 with inverse video.
 import { describe, expect, it } from 'vitest';
 import { GLYPHS_6X10, GLYPHS_6X12 } from '../app/utils/emulator/glyphs.generated';
-import { SCREEN_BG, SCREEN_FG, renderScreen, screenSize } from '../app/utils/emulator/screen';
+import { Machine } from '@fugloy/emu';
+import { SCREEN_BG, SCREEN_FG, renderScreen, screenSize, screenView } from '../app/utils/emulator/screen';
+import { stubRom } from '../app/utils/emulator/stub-rom';
 
 const NARROW = { columns: 64, rows: 16, wide: false, inverse: false };
 
@@ -23,6 +25,19 @@ function render(raw: Uint8Array, view = NARROW): { out: Uint8ClampedArray; width
 
 const spaces = (n: number): Uint8Array => new Uint8Array(n).fill(0x20);
 const glyphBit = (rows: Uint8Array, h: number, code: number, x: number, y: number): boolean => ((rows[(code - 0x20) * h + y]! << x) & 0x80) !== 0;
+
+describe('screenView', () => {
+  it("reads the machine's layout and inverse video through emu's video API", () => {
+    const m = new Machine({ model: 4, roms: { level2: stubRom(4) } });
+    expect(screenView(m)).toEqual({ columns: 64, rows: 16, wide: false, inverse: false });
+    m.io.out(0x84, 0x0c); // 80x24, inverse video
+    expect(screenView(m)).toEqual({ columns: 80, rows: 24, wide: true, inverse: true });
+    m.io.out(0xec, 0x04); // half width
+    expect(screenView(m)).toEqual({ columns: 40, rows: 24, wide: true, inverse: true });
+    const m3 = new Machine({ roms: { level2: stubRom(3) } });
+    expect(screenView(m3)).toEqual({ columns: 64, rows: 16, wide: false, inverse: false });
+  });
+});
 
 describe('renderScreen', () => {
   it('sizes the screen: 384x192 for 64x16, 480x240 for 80x24', () => {

@@ -35,20 +35,31 @@ export class Video {
     return this.#system.memory.videoRam;
   }
 
-  /** True on a Model 4 in 80-column mode (port $84 bit 2). */
-  get #wide() {
+  /**
+   * @returns {boolean} True on a Model 4 in the 80-column layout (port $84 bit 2): rows of 80 bytes,
+   * 24 of them, whether 80 or 40 columns show; false otherwise, and always on the Model III and I.
+   */
+  get wide() {
     return /** @type {any} */ (this.#system.memory).wide === true;
+  }
+
+  /**
+   * @returns {boolean} True on a Model 4 with inverse video on (port $84 bit 3): a byte with bit 7 set
+   * is its character, bits 0-6, drawn inverted, not a graphics block; always false on the Model III and I.
+   */
+  get inverse() {
+    return /** @type {any} */ (this.#system.memory).inverse === true;
   }
 
   /** @returns {80 | 64 | 40 | 32} The columns on screen: 64 or 32, and on the Model 4 also 80 or 40. */
   get columns() {
-    const full = this.#wide ? 80 : 64;
+    const full = this.wide ? 80 : 64;
     return /** @type {80 | 64 | 40 | 32} */ (this.#system.columns32 ? full / 2 : full);
   }
 
   /** @returns {24 | 16} The lines on screen: 16, or 24 on a Model 4 in 80-column mode. */
   get rows() {
-    return this.#wide ? 24 : 16;
+    return this.wide ? 24 : 16;
   }
 
   /**
@@ -59,10 +70,10 @@ export class Video {
    */
   text() {
     const ram = this.raw;
-    const width = this.#wide ? 80 : 64;
+    const width = this.wide ? 80 : 64;
     const step = this.#system.columns32 ? 2 : 1;
     const cols = width / step;
-    const inverse = /** @type {any} */ (this.#system.memory).inverse === true;
+    const inverse = this.inverse;
     const rows = [];
     for (let row = 0, height = this.rows; row < height; row++) {
       let line = '';
@@ -90,7 +101,7 @@ export class Video {
     if (typeof text !== 'string') throw new Error('video.diff needs a snapshot from m.debug.snapshot()');
     const was = fromBase64(text);
     const now = this.raw;
-    const width = this.#wide ? 80 : 64;
+    const width = this.wide ? 80 : 64;
     const out = [];
     for (let i = 0; i < now.length; i++) {
       if (was[i] !== now[i]) out.push({ row: Math.floor(i / width), col: i % width, was: was[i], now: now[i] });
