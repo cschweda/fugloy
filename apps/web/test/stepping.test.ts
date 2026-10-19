@@ -1,0 +1,244 @@
+// 5C Task 1, Rulings 8 and 9: breakpoints, Step, Step Over, Run to Here, and Continue over emu's
+// breakpoints, on the stub ROM through runOnce (as a Run does), or on a patched stub for RST 08H.
+import { describe, expect, it, vi } from 'vitest';
+import * as kit from '../app/utils/emulator/kit';
+import { breakAddress, createStepper, HALTED_INTERRUPTS_OFF, stepOverTargets } from '../app/utils/emulator/stepping';
+import type { Runner } from '../app/utils/emulator/runner';
+import { asm, fakeClock, frames, lineWith, program, runPatched } from './emulator-support';
+
+/** One Run of `src` on the stub ROM with `breakpoints` (source lines), not started. */
+function run(src: string, breakpoints: number[] = []) {
+  const clock = fakeClock();
+  const onPause = vi.fn<(r: Runner) => void>();
+  const out = kit.runOnce(kit, { text: src, model: 3, rom: null, breakpoints, runner: { schedule: clock.schedule, cancel: clock.cancel, now: clock.now, onPause } });
+  expect(out.problem).toBe(false);
+  const runner = out.runner!;
+  const stepper = out.stepper!;
+  const m = runner.machine;
+  const at = (label: string): number => out.result.symbol(label)!.value;
+  /** The breakpoints left in emu that are not the user's. */
+  const temps = (): number => m.debug.breaks.filter((b) => b.once).length;
+  return { clock, out, runner, stepper, m, at, onPause, temps };
+}
+
+const SUB = program(
+  'START:  LD      A,0',
+  '        CALL    SUB',
+  'NEXT:   LD      (3C00H),A',
+  'WAIT:   JR      WAIT',
+  'SUB:    LD      A,41H',
+  'INSUB:  INC     A',
+  '        RET',
+);
+
+describe('breakAddress and stepOverTargets', () => {
+  it("a line's breakpoint is its first address; a line with no code has none", () => {
+    const r = asm(SUB);
+    expect(breakAddress(r, lineWith(SUB, 'CALL'))).toBe(r.symbol('START')!.value + 2);
+    expect(breakAddress(r, 1)).toBeNull(); // ORG
+    expect(breakAddress(r, 999)).toBeNull();
+  });
+
+  it('decodes CALL, CALL cc, RST, and the block repeats; anything else is a plain step', () => {
+    // RST 08H needs the ROM, so this is not a stub Run.
+    const p = runPatched(program('START:  CALL    NZ,S', '        RST     08H', '        LDIR', '        NOP', 'S:      RET'), {});
+    const m = p.machine;
+    const at = (label: string): number => p.result.symbol(label)!.value;
+    expect(stepOverTargets(m)).toEqual([at('START') + 3]);
+    // Move PC by hand through the other lines.
+    const set = (pc: number) => {
+      (m.system.cpu as unknown as { registers: { PC: number } }).registers.PC = pc;
+    };
+    set(at('START') + 3);
+    expect(stepOverTargets(m)).toEqual([at('START') + 4, at('START') + 5]); // RST 08H and its inline byte
+    set(at('START') + 4);
+    expect(stepOverTargets(m)).toEqual([at('START') + 6]); // LDIR
+    set(at('START') + 6);
+    expect(stepOverTargets(m)).toBeNull(); // NOP
+  });
+});
+
+describe('the stepper', () => {
+  it("Step Over on CALL SUB stops at the next line with SUB's effects done", () => {
+    const { clock, runner, stepper, m, at, onPause, temps } = run(SUB);
+    stepper.step();
+    expect(runner.pc).toBe(at('START') + 2);
+    expect(stepper.stepOver()).toBeNull();
+    expect(runner.state).toBe('running');
+    frames(clock, 2);
+    expect(runner.state).toBe('paused');
+    expect(runner.pc).toBe(at('NEXT'));
+    expect(m.cpu.regs.a).toBe(0x42);
+    expect(runner.pausedBy?.kind).toBe('break');
+    expect(onPause).toHaveBeenCalled();
+    expect(temps()).toBe(0);
+    expect(m.debug.breaks).toEqual([]);
+  });
+
+  it('on recursion, Step Over stops only when SP is back', () => {
+    const src = program(
+      'START:  LD      A,0',
+      '        LD      B,3',
+      '        CALL    REC',
+      'WAIT:   JR      WAIT',
+      'REC:    DEC     B',
+      'AGAIN:  CALL    NZ,REC',
+      'BACK:   INC     A',
+      '        RET',
+    );
+    const { clock, runner, stepper, m, at, temps } = run(src);
+    while (runner.pc !== at('AGAIN')) stepper.step();
+    const sp0 = m.cpu.regs.sp;
+    stepper.stepOver();
+    frames(clock, 2);
+    expect(runner.state).toBe('paused');
+    expect(runner.pc).toBe(at('BACK'));
+    expect(m.cpu.regs.sp).toBe(sp0);
+    expect(m.cpu.regs.a).toBe(2); // the two inner levels returned; this one has not
+    expect(temps()).toBe(0);
+  });
+
+  it('on RST 08H with its inline byte, Step Over stops past the byte', () => {
+    // A synthetic RST 08H handler at $0008 that skips the inline byte: EX (SP),HL; INC HL; EX (SP),HL; RET.
+    // It overwrites part of the stub's start-up code, so the program sets its own stack.
+    const src = program('START:  LD      SP,0', 'CALLER: RST     08H', '        DB      55H', 'NEXT:   LD      A,1', 'WAIT:   JR      WAIT');
+    let stepper: ReturnType<typeof createStepper>;
+    const p = runPatched(src, { 0x0008: [0xe3, 0x23, 0xe3, 0xc9] }, { onPause: () => stepper.clearTemps(), onStop: () => stepper.clearTemps() });
+    stepper = createStepper(p.runner);
+    stepper.step();
+    expect(p.runner.pc).toBe(p.result.symbol('CALLER')!.value);
+    stepper.stepOver();
+    frames(p.clock, 2);
+    expect(p.runner.state).toBe('paused');
+    expect(p.runner.pc).toBe(p.result.symbol('NEXT')!.value);
+    expect(p.runner.pausedBy?.kind).toBe('break');
+    expect(p.machine.debug.breaks).toEqual([]); // the pc+1 breakpoint went too
+  });
+
+  it('on LDIR, Step Over stops after the whole block', () => {
+    const src = program('START:  LD      HL,SRC', '        LD      DE,3C00H', '        LD      BC,5', '        LDIR', 'NEXT:   NOP', 'WAIT:   JR      WAIT', 'SRC:    DB      "HELLO"');
+    const { clock, runner, stepper, m, at, temps } = run(src);
+    for (let k = 0; k < 3; k++) stepper.step();
+    stepper.stepOver();
+    frames(clock, 1);
+    expect(runner.pc).toBe(at('NEXT'));
+    expect(m.cpu.regs.b * 256 + m.cpu.regs.c).toBe(0);
+    expect(m.video.text()[0]!.slice(0, 5)).toBe('HELLO');
+    expect(temps()).toBe(0);
+  });
+
+  it('a user breakpoint inside SUB wins over Step Over', () => {
+    const { clock, runner, stepper, m, at, temps } = run(SUB, [lineWith(SUB, 'INSUB')]);
+    stepper.step();
+    stepper.stepOver();
+    frames(clock, 1);
+    expect(runner.state).toBe('paused');
+    expect(runner.pc).toBe(at('INSUB'));
+    expect(temps()).toBe(0);
+    expect(m.debug.breaks).toHaveLength(1);
+    // Continue from there runs on to the end, not stopping at INSUB again.
+    stepper.continue();
+    frames(clock, 1);
+    expect(runner.state).toBe('running');
+    expect(runner.pc).toBe(at('WAIT'));
+  });
+
+  it('Run to Here stops at the line, and leaves no breakpoint behind', () => {
+    const { clock, runner, stepper, out, temps } = run(SUB);
+    const addr = breakAddress(out.result, lineWith(SUB, 'WAIT:'))!;
+    stepper.runTo([addr]);
+    frames(clock, 1);
+    expect(runner.state).toBe('paused');
+    expect(runner.pc).toBe(addr);
+    expect(temps()).toBe(0);
+  });
+
+  it('Step and Step Over while running pause first; the next press steps', () => {
+    const { clock, runner, stepper } = run(SUB);
+    runner.start();
+    frames(clock, 1);
+    const pc = runner.pc;
+    stepper.step();
+    expect(runner.state).toBe('paused');
+    expect(runner.pc).toBe(pc);
+    runner.resume();
+    stepper.stepOver();
+    expect(runner.state).toBe('paused');
+  });
+
+  it('a stop removes the temporary breakpoints', () => {
+    const { runner, stepper, m, at } = run(SUB);
+    stepper.runTo([at('WAIT')]);
+    expect(m.debug.breaks).toHaveLength(1);
+    runner.stop('Stopped.');
+    expect(m.debug.breaks).toEqual([]);
+  });
+
+  it('setBreakpoints adds and removes emu breakpoints, and reports lines with no code', () => {
+    const { stepper, m, at } = run(SUB);
+    expect(stepper.setBreakpoints([lineWith(SUB, 'INSUB'), 1])).toEqual({ inactive: [1] });
+    expect(m.debug.breaks.map((b) => b.addr)).toEqual([at('INSUB')]);
+    stepper.setBreakpoints([lineWith(SUB, 'NEXT:'), lineWith(SUB, 'INSUB')]);
+    expect(m.debug.breaks.map((b) => b.addr).sort()).toEqual([at('NEXT'), at('INSUB')].sort());
+    stepper.setBreakpoints([]);
+    expect(m.debug.breaks).toEqual([]);
+  });
+
+  it('a breakpoint at a shared address stops only on the line whose bytes are there', () => {
+    const src = program(
+      'START:  JP      MOVE',
+      'MOVE:   LD      HL,BLK',
+      '        LD      DE,7000H',
+      '        LD      BC,BLKEND-BLK',
+      '        LDIR',
+      'GO:     JP      7000H',
+      'BLK:',
+      '        .PHASE  7000H',
+      'NEW:    INC     A',
+      '        JR      NEW',
+      '        .DEPHASE',
+      'BLKEND:',
+    );
+    const { clock, runner, m } = run(src, [lineWith(src, 'NEW:')]);
+    // START is at $7000 too, and runs first: the breakpoint must not stop there.
+    runner.start();
+    frames(clock, 1);
+    expect(runner.state).toBe('paused');
+    expect(runner.pc).toBe(0x7000);
+    expect(m.mem.read(0x7000, 1)[0]).toBe(0x3c); // INC A, copied in
+  });
+
+  it('a HALT with interrupts off gives the sentence, and nothing moves', () => {
+    const { runner, stepper, at } = run(program('START:  DI', '        HALT', 'NEXT:   NOP'));
+    stepper.step();
+    stepper.step();
+    const pc = runner.pc;
+    expect(stepper.step()).toBe(HALTED_INTERRUPTS_OFF);
+    expect(stepper.stepOver()).toBe(HALTED_INTERRUPTS_OFF);
+    expect(stepper.continue()).toBe(HALTED_INTERRUPTS_OFF);
+    expect(HALTED_INTERRUPTS_OFF).toBe('The CPU is halted (HALT) with interrupts off, so it will not move on. Press Stop, then Run.');
+    expect(runner.pc).toBe(pc);
+    expect(runner.state).toBe('paused');
+    expect(at('NEXT')).toBe(pc);
+  });
+});
+
+describe('runOnce with breakpoints', () => {
+  it('applies the initial breakpoints before the first frame and reports the inactive lines', () => {
+    const { clock, runner, out, at, onPause } = run(SUB, [lineWith(SUB, 'NEXT:'), 1]);
+    expect(out.inactive).toEqual([1]);
+    runner.start();
+    frames(clock, 1);
+    expect(runner.state).toBe('paused');
+    expect(runner.pc).toBe(at('NEXT'));
+    expect(onPause).toHaveBeenCalledTimes(1);
+  });
+
+  it('a breakpoint on the entry line stops before it runs', () => {
+    const { clock, runner, at } = run(SUB, [lineWith(SUB, 'START:')]);
+    runner.start();
+    frames(clock, 1);
+    expect(runner.state).toBe('paused');
+    expect(runner.pc).toBe(at('START'));
+  });
+});

@@ -5,14 +5,21 @@
 //
 // On the stub ROM, every byte of the ROM's space but its start-up code is HALT, and emu leaves PC
 // just past a HALT it executes (checked in test/emulator-runtime.test.ts). So a PC inside the ROM
-// after a slice means the program went there, and the run stops. Under the stub the runner keeps
-// emu's instruction trace (the last TRACE_DEPTH instructions), so the stop always names the last
-// line of the program that ran, and where it went:
+// after a slice means the program went there, and the run stops. The runner keeps emu's
+// instruction trace (the last TRACE_DEPTH instructions) on for every run, stub or real ROM (5C
+// Ruling 1: the running line's trail reads it), so the stop always names the last line of the
+// program that ran, and where it went:
 // - a RET to the address the stub left on the stack: the program returned from its entry;
 // - $0038 from a program instruction that is not RST 38H: an interrupt, naming the EI line;
 // - memory that holds none of the program's code first (on the Model I, the empty $3000-$37FF,
 //   whose $FF bytes are RST 38H): the program ran into memory that is not its own;
 // - anywhere else: the routine there (a jump to $0000 says $0000, though it halts further on).
+//
+// Breakpoints (5C Ruling 8) are emu's own: a slice that ends with `{ reason: 'break' }` pauses the
+// run before that instruction, sets `pausedBy`, and calls `onPause`; Pause and each step call
+// `onPause` too. `continue()` resumes past a breakpoint at PC: emu skips the
+// check at a run's first boundary only at the PC its last run stopped at for a break, so after any
+// other pause (a manual one, or a step) Continue first steps once.
 import type { AsmResult } from '@fugloy/asm';
 import type { Machine } from '@fugloy/emu';
 import { MODEL_NAMES } from './rom-ids';
@@ -20,6 +27,9 @@ import { describeRom, romAdvice, romNameAt } from './rom-use';
 import { romEnd, stubHalts } from './stub-rom';
 
 export type RunnerState = 'running' | 'paused' | 'stopped';
+
+/** Why a paused runner paused: Pause, a step, or a breakpoint (with emu's id for it). */
+export type PausedBy = { kind: 'pause' | 'step' | 'break'; id?: number };
 
 export interface Runner {
   readonly state: RunnerState;
@@ -31,10 +41,15 @@ export interface Runner {
   readonly stopReason: string | null;
   /** The source line the stop is about (1-based), when there is one. */
   readonly stopLine: number | null;
-  /** Starts the frame loop (from paused, the state a new runner is in). */
+  /** Why the runner is paused; null while running, stopped, or not yet started. */
+  readonly pausedBy: PausedBy | null;
+  /** Starts the frame loop (from paused, the state a new runner is in); a breakpoint at PC stops it at once. */
   start(): void;
   pause(): void;
+  /** The same as `continue()`. */
   resume(): void;
+  /** Resumes from paused, past a breakpoint at PC (stepping over it first when the pause was not that breakpoint's). */
+  continue(): void;
   /** Runs one instruction (pausing first if running), for 5C's stepping. */
   step(): void;
   stop(reason?: string): void;
@@ -53,6 +68,8 @@ export interface RunnerOptions {
   onFrame?: (r: Runner) => void;
   /** Once the run stops, for whatever reason (the trap, an error, or `stop`). */
   onStop?: (r: Runner) => void;
+  /** Each time the run pauses: at a breakpoint, by `pause`, or after a step (see `pausedBy`). */
+  onPause?: (r: Runner) => void;
 }
 
 /** The longest gap a frame makes up, in seconds. */
@@ -66,7 +83,7 @@ function eiLine(result: AsmResult): number | null {
   return null;
 }
 
-/** How many instructions the trace keeps under the stub. */
+/** How many instructions the trace keeps (every run, 5C Ruling 1). */
 export const TRACE_DEPTH = 65_536;
 
 type TraceEntry = { pc: number; bytes: number[] };
@@ -132,11 +149,12 @@ export function createRunner(opts: RunnerOptions): Runner {
   const cancel = opts.cancel ?? ((id: number) => cancelAnimationFrame(id));
   const now = opts.now ?? (() => performance.now());
   const end = romEnd(m.model);
-  if (stub && !m.debug.trace.enabled) m.debug.trace.enable({ depth: TRACE_DEPTH });
+  if (!m.debug.trace.enabled) m.debug.trace.enable({ depth: TRACE_DEPTH });
 
   let state: RunnerState = 'paused';
   let stopReason: string | null = null;
   let stopLine: number | null = null;
+  let pausedBy: PausedBy | null = null;
   let handle: number | null = null;
   let last = 0;
   /** The machine's T-state count the frames have paid for so far. */
@@ -163,11 +181,21 @@ export function createRunner(opts: RunnerOptions): Runner {
     last = t;
     target += Math.round(m.clockHz * dt);
     const budget = target - m.cycles;
+    let hit: number | null = null;
     try {
-      if (budget > 0) m.run({ cycles: budget });
+      if (budget > 0) {
+        const r = m.run({ cycles: budget });
+        if (r.reason === 'break') hit = r.id;
+      }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      runner.stop(`The emulator stopped at ${hex4(m.cpu.regs.pc)} with an error: ${msg.replace(/\.?$/, '.')} Press Run to start again.`);
+      fail(e);
+      return;
+    }
+    if (hit !== null) {
+      // Stopped before the breakpoint's instruction: the frame ends here, paused.
+      halt({ kind: 'break', id: hit });
+      opts.onFrame?.(runner);
+      opts.onPause?.(runner);
       return;
     }
     if (checkTrap()) return;
@@ -175,8 +203,33 @@ export function createRunner(opts: RunnerOptions): Runner {
     if (state === 'running') handle = schedule(tick);
   };
 
+  const fail = (e: unknown): void => {
+    runner.stop(`The emulator stopped at ${hex4(m.cpu.regs.pc)} with an error: ${(e instanceof Error ? e.message : String(e)).replace(/\.?$/, '.')} Press Run to start again.`);
+  };
+
+  /** Pauses with no callback. */
+  const halt = (why: PausedBy): void => {
+    state = 'paused';
+    pausedBy = why;
+    unschedule();
+  };
+
+  /** One instruction, then the trap. False when the run stopped. */
+  const stepOnce = (): boolean => {
+    try {
+      m.step();
+    } catch (e) {
+      fail(e);
+      return false;
+    }
+    return !checkTrap();
+  };
+
+  const hasBreakAt = (pc: number): boolean => m.debug.breaks.some((b) => b.addr === pc);
+
   const go = (): void => {
     state = 'running';
+    pausedBy = null;
     last = now();
     target = m.cycles;
     unschedule();
@@ -198,32 +251,37 @@ export function createRunner(opts: RunnerOptions): Runner {
     get stopLine() {
       return stopLine;
     },
+    get pausedBy() {
+      return pausedBy;
+    },
     start() {
       if (state === 'paused') go();
     },
     pause() {
       if (state !== 'running') return;
-      state = 'paused';
-      unschedule();
+      halt({ kind: 'pause' });
+      opts.onPause?.(runner);
     },
     resume() {
-      if (state === 'paused') go();
+      runner.continue();
+    },
+    continue() {
+      if (state !== 'paused') return;
+      // emu resumes past a breakpoint only at the PC its last run stopped at for one.
+      if (pausedBy?.kind !== 'break' && hasBreakAt(m.cpu.regs.pc) && !stepOnce()) return;
+      go();
     },
     step() {
       if (state === 'stopped') return;
-      runner.pause();
-      try {
-        m.step();
-      } catch (e) {
-        runner.stop(`The emulator stopped at ${hex4(m.cpu.regs.pc)} with an error: ${(e instanceof Error ? e.message : String(e)).replace(/\.?$/, '.')} Press Run to start again.`);
-        return;
-      }
-      if (checkTrap()) return;
+      halt({ kind: 'step' });
+      if (!stepOnce()) return;
       opts.onFrame?.(runner);
+      opts.onPause?.(runner);
     },
     stop(reason?: string, line: number | null = null) {
       if (state === 'stopped') return;
       state = 'stopped';
+      pausedBy = null;
       stopReason = reason ?? null;
       stopLine = line;
       unschedule();

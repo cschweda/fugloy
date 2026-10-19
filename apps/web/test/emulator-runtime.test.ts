@@ -11,6 +11,7 @@ import { bootedSnapshot, prepareMachine } from '../app/utils/emulator/boot';
 import { createRunner } from '../app/utils/emulator/runner';
 import type { Runner } from '../app/utils/emulator/runner';
 import { romNotes, romSpaceCode, romUse } from '../app/utils/emulator/rom-use';
+import { runPatched, runStub as runWith } from './emulator-support';
 
 const FRAME = 1000 / 60;
 const asm = (text: string, model: 1 | 3 | 4 = 3): AsmResult => {
@@ -405,5 +406,77 @@ describe('the frame loop', () => {
     runner.resume();
     runner.step();
     expect(runner.state).toBe('stopped');
+  });
+});
+
+describe('pausing at breakpoints (5C)', () => {
+  const ONCE = program('START:  NOP', 'HERE:   INC     A', 'WAIT:   JR      WAIT');
+
+  it('keeps the trace on for every run, off the stub too', () => {
+    expect(runWith(ONCE).machine.debug.trace.enabled).toBe(true);
+    expect(runPatched(ONCE, {}).machine.debug.trace.enabled).toBe(true);
+  });
+
+  it('a breakpoint stops the frame before its instruction, sets pausedBy, and calls onPause', () => {
+    const src = program('START:  LD      A,41H', 'SHOW:   LD      (3C00H),A', 'WAIT:   JR      WAIT');
+    const paused: Runner[] = [];
+    const { clock, machine, result, runner } = runWith(src, { onPause: (r) => paused.push(r) });
+    const show = result.symbol('SHOW')!.value;
+    machine.debug.break(show);
+    expect(runner.pausedBy).toBeNull();
+    runner.start();
+    clock.frame();
+    expect(runner.state).toBe('paused');
+    expect(runner.pc).toBe(show);
+    expect(runner.pausedBy).toEqual({ kind: 'break', id: machine.debug.breaks[0]!.id });
+    expect(paused).toEqual([runner]);
+    expect(machine.mem.read(0x3c00, 1)[0]).toBe(0x20); // the LD has not run
+    expect(clock.pending()).toBe(0);
+  });
+
+  it('continue() from the breakpoint it stopped at does not stop there again', () => {
+    const { clock, machine, result, runner } = runWith(ONCE);
+    machine.debug.break(result.symbol('HERE')!.value);
+    runner.start();
+    clock.frame();
+    expect(runner.pausedBy?.kind).toBe('break');
+    const a = machine.cpu.regs.a;
+    runner.continue();
+    expect(runner.pausedBy).toBeNull();
+    frames(clock, 2);
+    expect(runner.state).toBe('running');
+    expect(runner.pc).toBe(result.symbol('WAIT')!.value);
+    expect(machine.cpu.regs.a).toBe((a + 1) & 0xff);
+  });
+
+  it('after a manual pause at a breakpoint address, continue() runs past it', () => {
+    const paused: Runner[] = [];
+    const { clock, machine, result, runner } = runWith(ONCE, { onPause: (r) => paused.push(r) });
+    machine.debug.break(result.symbol('START')!.value);
+    runner.start();
+    runner.pause(); // before the first frame: PC is still at START, on the breakpoint
+    expect(runner.pausedBy).toEqual({ kind: 'pause' });
+    expect(paused).toHaveLength(1);
+    runner.continue();
+    frames(clock, 2);
+    expect(runner.state).toBe('running');
+    expect(runner.pc).toBe(result.symbol('WAIT')!.value);
+  });
+
+  it('start() honours a breakpoint on the entry line', () => {
+    const { clock, machine, result, runner } = runWith(ONCE);
+    machine.debug.break(result.symbol('START')!.value);
+    runner.start();
+    clock.frame();
+    expect(runner.state).toBe('paused');
+    expect(runner.pc).toBe(result.symbol('START')!.value);
+  });
+
+  it('a step sets pausedBy to step and calls onPause', () => {
+    const paused: Runner[] = [];
+    const { runner } = runWith(ONCE, { onPause: (r) => paused.push(r) });
+    runner.step();
+    expect(runner.pausedBy).toEqual({ kind: 'step' });
+    expect(paused).toHaveLength(1);
   });
 });
