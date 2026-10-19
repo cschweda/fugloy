@@ -51,6 +51,9 @@ function stubRom(model: LessonModel): Uint8Array {
   return rom;
 }
 
+/** A lesson's scripted run is tens of millions of T-states: about 6 s on a CI runner for lesson 7, past Vitest's 5 s default. */
+const RUN_TIMEOUT_MS = 60_000;
+
 const hex = (n: number, width: number): string => n.toString(16).toUpperCase().padStart(width, '0');
 
 /** The check file, its shape checked so a typo fails with a sentence rather than a silent pass. */
@@ -151,9 +154,13 @@ for (const slug of folders) {
         expect(r.entry).toBe(z.entry);
       });
 
-      it(`runs on the stub ROM on ${name} to the screen its lesson describes`, () => {
-        runSteps(slug, model, assemble(program, { model }), check);
-      });
+      it(
+        `runs on the stub ROM on ${name} to the screen its lesson describes`,
+        () => {
+          runSteps(slug, model, assemble(program, { model }), check);
+        },
+        RUN_TIMEOUT_MS,
+      );
     }
   });
 }
