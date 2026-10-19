@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { CG_MODEL1, CG_MODEL1_LOWERCASE, CG_MODEL3, CG_MODEL4 } from '../app/utils/emulator/glyphs.generated';
 import type { GlyphSet } from '../app/utils/emulator/glyphs.generated';
 import { Machine } from '@fugloy/emu';
-import { SCREEN_BG, SCREEN_FG, renderNotice, renderScreen, screenSize, screenView, tubeWidth } from '../app/utils/emulator/screen';
+import { SCREEN_BG, SCREEN_FG, renderNotice, renderScreen, screenSize, screenView, tubeAspect, tubeFit, MODEL1_ASPECT, MODEL3_ASPECT } from '../app/utils/emulator/screen';
 import type { ScreenView } from '../app/utils/emulator/screen';
 import { stubRom } from '../app/utils/emulator/stub-rom';
 
@@ -222,19 +222,42 @@ describe('renderNotice', () => {
   });
 });
 
-describe('tubeWidth', () => {
-  it('picks the widest 4:3 tube that fits whose height is a whole multiple of the raster rows, on every model', () => {
-    // Model I (384x192): k=3 is 768 wide, 576 high, three screen pixels per row.
-    expect(tubeWidth(screenSize(M1).height, 800)).toBe(768);
-    expect((768 * 3) / 4 / screenSize(M1).height).toBe(3);
-    // Model III/4 (512x192): the same steps of 256.
-    expect(tubeWidth(screenSize(M3).height, 800)).toBe(768);
-    expect(tubeWidth(screenSize(M3).height, 767)).toBe(512);
-    expect(tubeWidth(screenSize(M3).height, 256)).toBe(256);
-    // Model 4 80x24 (640x240): steps of 320.
-    expect(tubeWidth(screenSize(M4WIDE).height, 1000)).toBe(960);
-    // Narrower than one step: the host's whole width (null).
-    expect(tubeWidth(192, 255)).toBeNull();
-    expect(tubeWidth(240, 0)).toBeNull();
+describe('tubeAspect', () => {
+  it('is 4:3 on the Model III and 4, and on the Model I narrower by its dot clock: (4/3) x (384 / 10.6445 MHz) / (512 / 10.1376 MHz)', () => {
+    expect(MODEL1_ASPECT).toBe((4 / 3) * (384 / 10.6445e6) / (512 / 10.1376e6));
+    expect(MODEL1_ASPECT).toBeGreaterThan(0.95);
+    expect(MODEL1_ASPECT).toBeLessThan(0.955);
+    expect(MODEL3_ASPECT).toBe(4 / 3);
+    expect(tubeAspect('model1')).toBe(MODEL1_ASPECT);
+    expect(tubeAspect('model1-lowercase')).toBe(MODEL1_ASPECT);
+    expect(tubeAspect('model3')).toBe(4 / 3);
+    expect(tubeAspect('model4')).toBe(4 / 3);
+  });
+});
+
+describe('tubeFit', () => {
+  it('picks the largest tube at the aspect whose height is a whole multiple of the raster rows', () => {
+    // Model III/4 (512x192) in 800 across: k=3, 768x576, three screen pixels per row.
+    expect(tubeFit(screenSize(M3).height, 4 / 3, 800)).toEqual({ width: 768, height: 576 });
+    // Model I (384x192) in 800x600: k=3 by height, narrower across.
+    const m1 = tubeFit(screenSize(M1).height, MODEL1_ASPECT, 800, 600);
+    expect(m1.height).toBe(576);
+    expect(m1.width).toBe(576 * MODEL1_ASPECT);
+    // Model 4 80x24 (640x240): steps of 320 across.
+    expect(tubeFit(screenSize(M4WIDE).height, 4 / 3, 1000)).toEqual({ width: 960, height: 720 });
+  });
+
+  it('is bound by the height when the space is wider than the aspect (a full screen shorter than wide)', () => {
+    const fit = tubeFit(192, 4 / 3, 2000, 500);
+    expect(fit.height).toBe(384);
+    expect(fit.width).toBe(512);
+  });
+
+  it('shows the tube at the space and the aspect when not even one whole row step fits (a phone-width panel)', () => {
+    expect(tubeFit(192, 4 / 3, 200)).toEqual({ width: 200, height: 150 });
+    const fit = tubeFit(192, MODEL1_ASPECT, 150, 100);
+    expect(fit.height).toBeCloseTo(100, 10);
+    expect(fit.width).toBeCloseTo(100 * MODEL1_ASPECT, 10);
+    expect(fit.width).toBeLessThanOrEqual(150);
   });
 });

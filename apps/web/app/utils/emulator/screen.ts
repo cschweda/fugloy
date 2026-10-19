@@ -1,7 +1,7 @@
 // The TRS-80 screen drawn into an RGBA buffer (a canvas's ImageData), with no DOM (phase 5D). One
 // pixel per character generator pixel, each model in its own generator's cell: 6x12 on the Model I
 // (64x16 is 384x192), 8x12 on the Model III and 4 (512x192), and 8x10 at the Model 4's 80x24
-// (640x240); the canvas scales it to 4:3.
+// (640x240); the canvas scales it to the model's picture shape (tubeAspect).
 //
 // - The glyphs are the TRS-80's own character generators, from xtrs's trs_chars.c
 //   (glyphs.generated.ts): the Model I's stock generator, or the one sold with the lowercase kit
@@ -56,16 +56,38 @@ export function screenSize(view: ScreenView): { width: number; height: number } 
   return { width: across * SETS[view.font].width, height: view.rows * cellHeight(view) };
 }
 
+// The picture's shape (phase 6A). Both machines draw a line in the same 63.13 us, but the Model I's
+// 384 active dots take 384 / 10.6445 MHz (48k.ca "Beamhacking: Video Timing",
+// https://48k.ca/beamhack4.html; MAME src/mame/trs/trs80.cpp, set_raw(10.6445_MHz_XTAL, 672, 0, 384,
+// 264, 0, 192)) and the Model III's 512 take 512 / 10.1376 MHz (emu models.js: clockHz 2027520, the
+// 10.1376 MHz crystal / 5). At equal height the Model I's picture is narrower by that ratio. The
+// Model III (and the Model 4, both sizes) is shown at 4:3, as xtrs and trsjs show it.
+const MODEL1_DOT_HZ = 10.6445e6;
+const MODEL3_DOT_HZ = 10.1376e6;
+/** The Model III's and 4's picture, width / height. */
+export const MODEL3_ASPECT = 4 / 3;
+/** The Model I's picture, width / height: about 0.952. */
+export const MODEL1_ASPECT = MODEL3_ASPECT * (384 / MODEL1_DOT_HZ) / (512 / MODEL3_DOT_HZ);
+
+/** The picture's width / height for a character generator's machine. */
+export function tubeAspect(font: ScreenFont): number {
+  return font === 'model1' || font === 'model1-lowercase' ? MODEL1_ASPECT : MODEL3_ASPECT;
+}
+
 /**
- * The tube's width in CSS pixels for a raster `rasterHeight` rows high in a host `available`
- * pixels wide: the widest 4:3 tube that fits whose height is a whole multiple of the rows (so
- * every model scales by a whole number down the screen), in steps of rasterHeight x 4/3 (256 for
- * 192 rows, 320 for 240). Null when not even one step fits: then the tube takes the host's width.
+ * The tube's size in CSS pixels for a raster `rasterHeight` rows high, at `aspect` (width / height),
+ * in a space `availWidth` x `availHeight`: the largest whose height is a whole multiple k of the
+ * rows (each row k screen pixels high on every model; across, the scale follows the aspect). When
+ * not even k = 1 fits, the largest tube at the aspect within the space.
  */
-export function tubeWidth(rasterHeight: number, available: number): number | null {
-  const unit = (rasterHeight * 4) / 3;
-  const k = Math.floor(available / unit);
-  return k >= 1 ? k * unit : null;
+export function tubeFit(rasterHeight: number, aspect: number, availWidth: number, availHeight: number = Infinity): { width: number; height: number } {
+  const k = Math.floor(Math.min(availHeight / rasterHeight, availWidth / (rasterHeight * aspect)));
+  if (k >= 1) {
+    const height = k * rasterHeight;
+    return { width: height * aspect, height };
+  }
+  const width = Math.max(0, Math.min(availWidth, availHeight * aspect));
+  return { width, height: width / aspect };
 }
 
 /** The view a machine's screen is in now. */

@@ -13,7 +13,7 @@
 // installed here; `scrollListing` is the page's scrollTo, which moves neither the cursor nor focus.
 //
 // 5D: the TRS-80 first. Top to bottom: the bar (Model, Run ▶, Stop, Show in Listing), the message,
-// the screen, the machine row (Power, Reset, Pause/Continue), Programs to try, the Debugger
+// the screen, the machine row (Power, Reset, Pause/Continue, and 6A's Full screen), Programs to try, the Debugger
 // disclosure (the step controls, Follow, the registers, the breakpoints, Screen text), the ROM.
 // The Debugger opens by itself when a source Run attaches the debugger and when a run pauses; the
 // user's toggle otherwise stands, and the debug keys work with it closed. The first time the tab
@@ -54,6 +54,8 @@ const debug = run.debug;
 const roms = useRoms();
 const screen = ref<InstanceType<typeof TrsScreen> | null>(null);
 const screenText = ref<InstanceType<typeof ScreenText> | null>(null);
+/** Whether the TRS-80's screen is in full screen (6A). */
+const screenFull = computed(() => screen.value?.fullscreen ?? false);
 const picker = ref<HTMLInputElement | null>(null);
 const romMessage = ref<string | null>(null);
 const romProblem = ref(false);
@@ -281,6 +283,7 @@ defineExpose({ focusScreen });
       <button type="button" class="fg-button" data-testid="machine-power" @click="togglePower">{{ run.power.value === 'off' ? 'Power on' : 'Power off' }}</button>
       <button type="button" class="fg-button" data-testid="machine-reset" title="Turn the TRS-80 off and on again: a cold start from its ROM" @click="turnOn('reset')">Reset</button>
       <button type="button" class="fg-button" data-testid="run-pause" :disabled="!canPause" :title="pauseTitle" @click="pauseOrContinue">{{ machinePaused ? 'Continue' : 'Pause' }}</button>
+      <button type="button" class="fg-button" data-testid="screen-fullscreen" :aria-pressed="screenFull" :disabled="!(screen?.canFullscreen ?? false)" title="Show the TRS-80's screen on the whole display (Esc leaves it)" @click="screen?.toggleFullscreen()">{{ screenFull ? 'Leave full screen' : 'Full screen' }}</button>
     </div>
     <ProgramsToTry @run="tryProgram" />
     <details class="fg-run-debugger" data-testid="debugger" ref="debuggerBox">
