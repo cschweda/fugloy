@@ -16,7 +16,7 @@
     { "row": 15, "text": "                        ..." },
     { "release": "LEFT" },
     { "release": "SPACE" },
-    { "run": 3000000 },
+    { "run": 3060000 },
     { "row": 0, "text": "" },
     { "row": 8, "text": "" },
     { "row": 14, "text": "" },

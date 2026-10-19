@@ -2,10 +2,12 @@
 title: Invaders march
 idea: A table of data, IX with an offset, and DJNZ
 models: 3, 1
-cite: m3-trm 14 the Model III's screen is video memory at 3C00H, 1,024 bytes
-cite: m1-trh 12 the Model I's screen is video memory at 3C00H, 16 lines of 64 characters
+cite: m3-trm 14 the Model III's keyboard is memory at 3800H-3BFFH, and its screen at 3C00H
+cite: m1-trh 12 the Model I's keyboard is memory from 3800H, and its screen at 3C00H
+cite: decker 64 the keyboard's rows are read at 3801H to 3840H, one address a row
+cite: paay 26 the keyboard's rows are read at 3801H to 3840H, one address a row
 ---
-A row of six invaders steps right a cell at a time, and at the screen's edge turns and steps back. Everything the program knows about the row is three bytes in a table, and IX points at it:
+Lesson 6's ship is still on the bottom row, moving with the arrows and firing with the space bar. Above it, a row of six invaders steps right a cell at a time, and at the screen's edge turns and steps back. Everything the program knows about the row is three bytes in a table, and IX points at it:
 
 ```z80
 ROW:    DB      8               ; IX+0: the row's left column
@@ -13,7 +15,7 @@ ROW:    DB      8               ; IX+0: the row's left column
         DB      6               ; IX+2: how many invaders
 ```
 
-Carried over: the game loop of `CALL`s and state kept in memory, and a column turned into an address with `ADD A` and a fixed high byte, `ADD A,80H` and `3CH` here (lesson 6); `WAIT` unchanged, a routine that keeps registers with `PUSH` and `POP`, and erasing and redrawing from a pair of `DB` tables, `SHAPE` and `BLANK` as `SHIP` and `BLANK` were (lesson 5); `CP` with `JR Z` and `JR NZ`, and `SUB` (lesson 4); a negative number, -1 as the byte `0FFH` as -64 was a word in `LD DE,-64`, and `DEC HL` (lesson 3); `LD (DE),A`, `INC HL`, `INC DE` and `ADD A` (lesson 2). The ship and the shot are left out, to keep the program short; the next part puts them all together. New: IX and `(IX+n)`, `DJNZ`, and `NEG`.
+Carried over: the ship and the shot, unchanged: `MOVESHIP`, `MOVESHOT`, `FIRE`, `SHOW`, `WAIT`, `SHIP`, `BLANK`, `SHIPX` and `SHOT`, line for line, and the game loop's turn, `CALL WAIT`, `CALL MOVESHIP`, `CALL MOVESHOT` and `CALL FIRE` (lesson 6); state kept in memory, and a column turned into an address with `ADD A` and a fixed high byte, `ADD A,0C0H` and `3FH` there, `ADD A,80H` and `3CH` here (lesson 6); a routine that keeps registers with `PUSH` and `POP`, and erasing and redrawing from `DB` tables, `SHAPE` drawn as `SHIP` was and erased with `BLANK` (lesson 5); `CP` with `JR Z` and `JR NZ`, and `SUB` (lesson 4); a negative number, -1 as the byte `0FFH` as -64 was a word in `LD DE,-64`, and `DEC HL` (lesson 3); `LD (DE),A`, `INC HL`, `INC DE` and `ADD A` (lesson 2). New: the `ROW` table read through IX with `(IX+n)`, `DJNZ`, `NEG`, and `MARCH` and `DRAWROW`, which use them.
 
 ## IX, a pointer with an offset
 
@@ -58,18 +60,37 @@ NEXT:   LD      A,(HL)          ; the shape's left cell
         DJNZ    NEXT            ; the next invader, until B is 0
 ```
 
-The game loop uses it too, to call `WAIT` four times for each march step. That works only because `WAIT` pushes and pops BC: lesson 5 said nothing called it with anything in B yet, and now something does.
+The game loop uses it too: lesson 6's turn runs four times, then the invaders step once.
+
+```z80
+LOOP:   LD      B,4             ; four turns to each march step
+PLAY:   CALL    WAIT            ; lesson 6's turn: no routine in it changes B
+        CALL    MOVESHIP        ; the ship moves if an arrow is down
+        CALL    MOVESHOT        ; the shot, if there is one, rises a row
+        CALL    FIRE            ; the space bar starts a shot, if there is none
+        DJNZ    PLAY            ; B minus 1, and another turn until it is 0
+        CALL    MARCH           ; then the invaders step
+        JR      LOOP
+```
+
+That works only because nothing in the turn changes B. `WAIT` and `SHOW` push and pop BC (lesson 5 said nothing called `WAIT` with anything in B yet, and now something does), `MOVESHIP` changes only C, and `MOVESHOT` and `FIRE` never touch BC. `DRAWROW` does use B, but `MARCH` runs after the `DJNZ`, and `LOOP` loads B again.
 
 ## Two cells of invader
 
-`SHAPE` is `9EH` and `0ADH`. With lesson 5's bits, `9EH` lights the top right, the middle two and the bottom left of its cell, and `0ADH` the top left, the middle two and the bottom right: side by side, a head, arms, and two legs apart. `BLANK` is two spaces, so erasing is the same routine with HL at `BLANK`.
+`SHAPE` is `9EH` and `0ADH`. With lesson 5's bits, `9EH` lights the top right, the middle two and the bottom left of its cell, and `0ADH` the top left, the middle two and the bottom right: side by side, a head, arms, and two legs apart. Erasing is the same routine with HL at `BLANK`, lesson 5's three spaces, of which `DRAWROW` copies two.
+
+The shot does not hit anything yet: it passes through the row, leaving a gap in an invader it crossed until the row's next step redraws it. Hitting invaders comes in the next part.
+
+## Keys go to the screen, not the editor
+
+Click the TRS-80's screen before you press the arrows or the space bar, so that it has the keyboard.
 
 ## On the Model I
 
-The Model I's screen is the same memory with the same graphics, so the program runs unchanged; at 1.77 MHz a step takes about 300 ms instead of about 265 ms.
+The Model I has the same keyboard row, and its screen is the same memory with the same graphics, so the program runs unchanged; at 1.77 MHz a march step takes about 300 ms instead of about 265 ms.
 
 ## Try it
 
 Change the third byte of `ROW` from `6` to `8` and press Run. Eight invaders march now, and they turn at column 34 instead of 42 without any other change, because `MARCH` reads the count from `(IX+2)` each time.
 
-Then make them hurry: change `LD B,4` to `LD B,1`, one `WAIT` a step. The invaders march at the ship's speed from lesson 5. The next part builds a whole game, piece by piece: the ship, the shot and this row, together, with the shot hitting invaders and the row inching down.
+Then make them hurry: change `LD B,4` to `LD B,1`, one `WAIT` a step. The invaders march at the ship's speed from lesson 5. The next part builds a whole game, piece by piece: the shot hitting invaders, the row inching down, and a score.
