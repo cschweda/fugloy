@@ -20,7 +20,7 @@ export interface Backup {
   fugloyBackup: 1;
   exportedAt: string;
   programs: BackupProgram[];
-  /** The Source tab's sources (phase 5B); absent when there are none, and in older backups. */
+  /** The Source tab's sources (phase 5B), each with its breakpoints when it has any (5C); absent when there are none, and in older backups. */
   sources?: StoredSource[];
 }
 
@@ -34,10 +34,13 @@ export async function makeBackup(store: Store): Promise<string> {
   }
   // Settings for programs with no saved hints go too.
   for (const [hash, p] of prefs) programs.push({ hash, name: hash.slice(0, 12), prefs: p });
-  const sources = (await store.allSources()).map((x): StoredSource => ({ id: x.id, name: x.name, text: x.text, model: x.model, savedAt: x.savedAt }));
+  const sources = (await store.allSources()).map((x): StoredSource => ({ id: x.id, name: x.name, text: x.text, model: x.model, savedAt: x.savedAt, ...withBreakpoints(x) }));
   const backup: Backup = { fugloyBackup: 1, exportedAt: new Date().toISOString(), programs, ...(sources.length === 0 ? {} : { sources }) };
   return `${JSON.stringify(backup, null, 2)}\n`;
 }
+
+/** A source's breakpoints, when it has any (an older source, or one with none, carries no key). */
+const withBreakpoints = (x: StoredSource): Pick<StoredSource, 'breakpoints'> => (x.breakpoints === undefined ? {} : { breakpoints: [...x.breakpoints] });
 
 export class BackupError extends Error {
   override name = 'BackupError';
@@ -70,7 +73,7 @@ export function parseBackup(json: string): Backup {
 
 const isSource = (v: unknown): v is StoredSource => {
   const x = v as Partial<StoredSource> | null;
-  return typeof x === 'object' && x !== null && typeof x.id === 'string' && typeof x.name === 'string' && x.name !== '' && typeof x.text === 'string' && (x.model === 1 || x.model === 3 || x.model === 4) && typeof x.savedAt === 'number';
+  return typeof x === 'object' && x !== null && typeof x.id === 'string' && typeof x.name === 'string' && x.name !== '' && typeof x.text === 'string' && (x.model === 1 || x.model === 3 || x.model === 4) && typeof x.savedAt === 'number' && (x.breakpoints === undefined || (Array.isArray(x.breakpoints) && x.breakpoints.every((n) => Number.isInteger(n) && n > 0)));
 };
 
 export interface RestoreResult {
@@ -94,7 +97,7 @@ async function restoreSources(store: Store, sources: readonly StoredSource[]): P
     }
     const ids = new Set(have.map((h) => h.id));
     const id = ids.has(src.id) || src.id.startsWith(':') ? newSourceId() : src.id;
-    const next: StoredSource = { id, name: freeName(src.name, new Set(have.map((h) => h.name))), text: src.text, model: src.model, savedAt: src.savedAt };
+    const next: StoredSource = { id, name: freeName(src.name, new Set(have.map((h) => h.name))), text: src.text, model: src.model, savedAt: src.savedAt, ...withBreakpoints(src) };
     await store.putSource(next);
     have.push(next);
     out.added++;

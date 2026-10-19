@@ -5,8 +5,8 @@
 export { assemble, toCmd } from '@fugloy/asm';
 export { prepareMachine, SentenceError } from './boot';
 export { createRunner } from './runner';
-export { stubRom } from './stub-rom';
-export { romNotes, romSpaceCode, romUse } from './rom-use';
+export { romEnd, stubRom } from './stub-rom';
+export { romNameAt, romNotes, romSpaceCode, romUse } from './rom-use';
 export { MODEL_NAMES } from './rom-ids';
 export { runOnce, STUB_RUNNING } from './run-once';
 export { lineAt, lineMarks, marksKey, trailOf, TRAIL_LINES, TRAIL_WINDOW } from './running';

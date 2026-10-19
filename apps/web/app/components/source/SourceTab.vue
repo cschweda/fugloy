@@ -5,6 +5,12 @@
 // exact rewrite, a Fix button. The toolbar picks, makes, renames, deletes and
 // downloads sources (useSources, Ruling 11). The page loads this component
 // lazily, so CodeMirror and asm stay off the first screen.
+//
+// 5C: the running line and its trail come from the page's Run (`useRun().debug`), shown only while
+// the text is the one the Run assembled (otherwise one sentence says why). A set reaches the editor
+// only when it changes, and never while this panel is hidden: the latest is sent once it shows. A
+// pause brings its line into view without moving the selection; while running, Follow does so at
+// most 4 times a second, once the line has left view. The gutter's breakpoints are the source's.
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { assemble } from '@fugloy/asm';
 import type { Diagnostic } from '@fugloy/asm';
@@ -12,6 +18,8 @@ import CodeEditor from './CodeEditor.vue';
 import ConfirmDialog from '~/components/ConfirmDialog.vue';
 import { useSources } from '~/composables/useSources';
 import { useOpenAsSource } from '~/composables/useOpenAsSource';
+import { useRun } from '~/composables/useRun';
+import { SOURCE_CHANGED } from '~/composables/useDebug';
 import { download } from '~/utils/exports';
 import { RECHECK_DELAY_MS, severityWord } from '~/utils/source/diagnostics';
 import { fixExpected } from '~/utils/source/fix';
@@ -24,6 +32,8 @@ const emit = defineEmits<{ run: []; fix: [fix: AsmFix] }>();
 
 const sources = useSources();
 const current = sources.current;
+const debug = useRun().debug;
+const root = ref<HTMLElement | null>(null);
 const editor = ref<InstanceType<typeof CodeEditor> | null>(null);
 const diagnostics = shallowRef<readonly Diagnostic[]>([]);
 /** The text asm read for `diagnostics`, so a fix from a list older than the latest typing is refused. */
@@ -51,6 +61,68 @@ function cancelCheck(): void {
   timer = null;
 }
 onBeforeUnmount(cancelCheck);
+
+// The running line (5C).
+/** The marks the editor should show: none once the text is not what the Run assembled. */
+const shownMarks = computed(() => (debug.live.value ? debug.marks.value : []));
+/** The running line is hidden because the source changed since the Run. */
+const runChanged = computed(() => debug.dirty.value && debug.marks.value.length > 0);
+const keyOf = (set: readonly { line: number; class: string }[]): string => set.map((m) => `${m.line}:${m.class}`).join();
+/** The key of the set the editor has, and a line a pause asked to bring into view while hidden. */
+let sentKey = '';
+let pendingShow: number | null = null;
+let followAt = -Infinity;
+const FOLLOW_INTERVAL_MS = 250;
+const shown = (): boolean => root.value !== null && (typeof root.value.checkVisibility !== 'function' || root.value.checkVisibility());
+
+function deliver(): void {
+  const ed = editor.value;
+  if (ed === null || !shown()) return;
+  if (pendingShow !== null) {
+    ed.showLine(pendingShow);
+    pendingShow = null;
+  }
+  const set = shownMarks.value;
+  const key = keyOf(set);
+  if (key === sentKey) return;
+  sentKey = key;
+  ed.setLineDecorations(set);
+  // Follow: while running, bring the line back into view once it leaves, at most 4 times a second.
+  const line = set.find((m) => m.class === 'fg-run-now')?.line;
+  if (!debug.follow.value || debug.mode.value !== 'running' || line === undefined) return;
+  const at = performance.now();
+  if (at - followAt < FOLLOW_INTERVAL_MS || ed.lineVisible(line)) return;
+  followAt = at;
+  ed.showLine(line);
+}
+watch(shownMarks, deliver);
+
+function showBreakpoints(): void {
+  editor.value?.setBreakpoints(debug.breakpoints.value, debug.inactive.value, debug.inactiveWhy);
+}
+watch([debug.breakpoints, debug.inactive], showBreakpoints);
+
+// A pause or step: its line into view, now or once the panel shows.
+watch(debug.reveal, (r) => {
+  if (r === null || r.line === null || !debug.live.value) return;
+  pendingShow = r.line;
+  deliver();
+});
+
+// Hidden (v-show) and shown again: send what changed meanwhile.
+let observer: IntersectionObserver | null = null;
+onMounted(() => {
+  if (typeof IntersectionObserver !== 'function' || root.value === null) return;
+  observer = new IntersectionObserver((entries) => {
+    if (entries.some((e) => e.isIntersecting)) deliver();
+  });
+  observer.observe(root.value);
+});
+onBeforeUnmount(() => observer?.disconnect());
+
+function onBreakpoints(lines: number[]): void {
+  debug.setBreakpoints(lines);
+}
 
 /** Assembles the current source now and shows what asm says. */
 function check(): void {
@@ -105,6 +177,10 @@ watch(
   [() => current.value?.id, () => current.value?.model, () => editor.value !== null],
   ([id, , mounted]) => {
     if (id === undefined || !mounted) return;
+    // A new document (or editor) has no marks yet.
+    sentKey = '';
+    showBreakpoints();
+    deliver();
     check();
     if (pendingReveal !== null) editor.value?.revealLine(pendingReveal);
     pendingReveal = null;
@@ -242,7 +318,7 @@ defineExpose({
 </script>
 
 <template>
-  <section class="fg-source" aria-label="Source" data-testid="source-tab">
+  <section ref="root" class="fg-source" aria-label="Source" data-testid="source-tab">
     <div class="fg-source-bar" role="group" aria-label="Sources">
       <label for="source-pick" class="sr-only">Source</label>
       <select id="source-pick" class="fg-input fg-mono" data-testid="source-pick" :value="current?.id ?? ''" :disabled="current === null" @change="pick">
@@ -275,6 +351,7 @@ defineExpose({
       {{ problem ?? sources.saveError.value ?? sources.unavailable.value }}
     </p>
     <p v-if="openNote !== null" class="fg-source-note" role="note" data-testid="source-open-note">{{ openNote }}</p>
+    <p v-if="runChanged" class="fg-source-note" role="note" data-testid="source-run-changed">{{ SOURCE_CHANGED }}</p>
     <CodeEditor
       v-if="ready && current !== null"
       ref="editor"
@@ -283,6 +360,8 @@ defineExpose({
       :text="current.text"
       :label="`Source of ${current.name}, Z80 assembly. Tab types a tab; press Escape, then Tab, to leave the editor.`"
       @update:text="onText"
+      @update:breakpoints="onBreakpoints"
+      @toggle-breakpoint="debug.toggleBreakpoint"
       @run="emit('run')"
       @fix="onFix"
       @stale-fix="check"

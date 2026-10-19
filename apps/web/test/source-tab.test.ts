@@ -8,14 +8,24 @@ import type { VueWrapper } from '@vue/test-utils';
 import { EditorView } from '@codemirror/view';
 import { createSources } from '../app/composables/useSources';
 import type { Sources } from '../app/composables/useSources';
+import { createRun } from '../app/composables/useRun';
+import { createWorkbench } from '../app/composables/useWorkbench';
+import { breakpointLines } from '../app/utils/source/run-marks';
+import { noRoms } from './source-run-support';
 
 const STARTER = '\tORG\t7000H\nSTART:\tLD\tHL,3C00H\nWAIT:\tJR\tWAIT\n\tEND\tSTART\n';
 const BROKEN = '\tORG\t7000H\n\tLDA\n\tPUSH\tA\n\tEND\n';
 
 let sources: Sources;
+let run: ReturnType<typeof createRun>;
 vi.mock('../app/composables/useSources', async (orig) => ({
   ...(await orig<typeof import('../app/composables/useSources')>()),
   useSources: () => sources,
+}));
+// Source ✎ reads the running line and the breakpoints from the page's Run: a fresh one per test.
+vi.mock('../app/composables/useRun', async (orig) => ({
+  ...(await orig<typeof import('../app/composables/useRun')>()),
+  useRun: () => run,
 }));
 const downloads: { filename: string; text: string }[] = [];
 vi.mock('../app/utils/exports', () => ({
@@ -48,6 +58,7 @@ window.addEventListener('selectionchange', stopSelectionChange, true);
 
 beforeEach(() => {
   sources = createSources({ open: async () => null, starter: async () => STARTER });
+  run = createRun({ sources, roms: noRoms, wb: createWorkbench({ readExample: async () => null }), kit: () => import('../app/utils/emulator/kit') });
   downloads.length = 0;
 });
 afterEach(() => {
@@ -219,6 +230,21 @@ describe('the Source toolbar', () => {
     await flushPromises();
     expect(w.find('[data-testid="source-open-note"]').exists()).toBe(false);
     expect(useOpenAsSource().note.value).toBeNull();
+  });
+
+  it('shows each source with its own breakpoints, and no running-line sentence before any Run', async () => {
+    const { w, view } = await open();
+    const first = sources.current.value!;
+    sources.update(first.id, { breakpoints: [2] });
+    await flushPromises();
+    expect(breakpointLines(view().state)).toEqual([2]);
+    await sources.create({ name: 'other.z', text: STARTER });
+    await flushPromises();
+    expect(breakpointLines(view().state)).toEqual([]);
+    await w.get<HTMLSelectElement>('[data-testid="source-pick"]').setValue(first.id);
+    await flushPromises();
+    expect(breakpointLines(view().state)).toEqual([2]);
+    expect(w.find('[data-testid="source-run-changed"]').exists()).toBe(false);
   });
 
   it('downloads the source as a .z file', async () => {

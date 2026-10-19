@@ -46,6 +46,8 @@ export interface StoredSource {
   /** The model it is written for: it assembles and runs for this one (Ruling 7). */
   model: ModelId;
   savedAt: number;
+  /** Its breakpoints, as source lines (phase 5C Ruling 8); absent until one is set. */
+  breakpoints?: number[] | undefined;
 }
 
 /** A ROM the user added, keyed by model (Ruling 6). Never leaves the browser, never in a backup. */
@@ -195,7 +197,7 @@ function make(db: IDBDatabase): Store {
       const [keys, values] = await Promise.all([wrap(os.getAllKeys()), wrap<StoredSource[]>(os.getAll())]);
       return values.filter((_, i) => keys[i] !== CURRENT);
     },
-    putSource: (source) => put('sources', { id: source.id, name: source.name, text: source.text, model: source.model, savedAt: source.savedAt } satisfies StoredSource, source.id),
+    putSource: (source) => put('sources', { id: source.id, name: source.name, text: source.text, model: source.model, savedAt: source.savedAt, breakpoints: source.breakpoints?.slice() } satisfies StoredSource, source.id),
     deleteSource: (id) => del('sources', id),
     async getCurrentSource() {
       const v = await wrap<{ id: string } | undefined>(t('sources').objectStore('sources').get(CURRENT));

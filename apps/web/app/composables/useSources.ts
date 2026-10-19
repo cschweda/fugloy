@@ -35,8 +35,8 @@ export interface Sources {
    */
   fromSession(s: Session, text?: string): Promise<Source>;
   select(id: string): Promise<void>;
-  /** Changes the text or model at once; the save follows 500 ms after the last change. */
-  update(id: string, patch: Partial<Pick<Source, 'text' | 'model'>>): void;
+  /** Changes the text, model or breakpoints at once; the save follows 500 ms after the last change. */
+  update(id: string, patch: Partial<Pick<Source, 'text' | 'model' | 'breakpoints'>>): void;
   /** Renames; null when done, else a sentence saying why not. */
   rename(id: string, name: string): Promise<string | null>;
   remove(id: string): Promise<void>;
@@ -188,7 +188,7 @@ export function createSources(deps: SourcesDeps = {}): Sources {
     await writeCurrent();
   }
 
-  function update(id: string, patch: Partial<Pick<Source, 'text' | 'model'>>): void {
+  function update(id: string, patch: Partial<Pick<Source, 'text' | 'model' | 'breakpoints'>>): void {
     const src = byId.value[id];
     if (src === undefined) return;
     byId.value = { ...byId.value, [id]: { ...src, ...patch, savedAt: Date.now() } };

@@ -14,6 +14,7 @@ import { createSources } from '../app/composables/useSources';
 import type { Sources } from '../app/composables/useSources';
 import type { Roms } from '../app/composables/useRoms';
 import type { Run } from '../app/composables/useRun';
+import { createDebug } from '../app/composables/useDebug';
 import { prepareMachine } from '../app/utils/emulator/boot';
 import { stubRom } from '../app/utils/emulator/stub-rom';
 import TrsScreen from '../app/components/run/TrsScreen.vue';
@@ -51,7 +52,10 @@ const fakeRun: Run = {
   listable: computed(() => false),
   onFrame: () => () => {},
   busy: ref(false),
+  debug: createDebug({ sources: { current: computed(() => null) } as unknown as Sources, say: () => {}, state: () => {} }),
 };
+// Source ✎ reads the running line from the page's Run.
+vi.mock('../app/composables/useRun', async (orig) => ({ ...(await orig<typeof import('../app/composables/useRun')>()), useRun: () => fakeRun }));
 const { default: SourceTab } = await import('../app/components/source/SourceTab.vue');
 const { default: RunTab } = await import('../app/components/run/RunTab.vue');
 

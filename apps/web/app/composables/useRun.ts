@@ -10,6 +10,9 @@
 // page cancel a Run still waiting: it never starts afterwards. After the wait it reads the current
 // source again and runs that, so what runs, and the line an error reveals, is the text on screen
 // when it starts, not when Run was pressed. Switching source or model stops a running program.
+//
+// 5C: `debug` (composables/useDebug) is the running line's coordinator. Each Run hands it the
+// runner and its Stepper, after applying the source's saved breakpoints before the first frame.
 import { computed, ref, shallowRef, watch } from 'vue';
 import type { ComputedRef, Ref, ShallowRef } from 'vue';
 import type { AsmResult, Diagnostic } from '@fugloy/asm';
@@ -18,6 +21,8 @@ import type { SymbolSelection } from '@fugloy/disasm';
 import type { RunKit } from '../utils/emulator/kit';
 import type { Runner, RunnerOptions, RunnerState } from '../utils/emulator/runner';
 import type { Roms } from './useRoms';
+import { createDebug } from './useDebug';
+import type { Debug } from './useDebug';
 import { useSources } from './useSources';
 import type { Source, Sources } from './useSources';
 import { useWorkbench } from './useWorkbench';
@@ -62,6 +67,8 @@ export interface Run {
   /** Called after each frame the runner runs, and when a run starts; returns the unsubscribe. */
   onFrame(cb: (r: Runner) => void): () => void;
   busy: Ref<boolean>;
+  /** The running line, breakpoints and stepping (5C). */
+  debug: Debug;
 }
 
 export interface RunDeps {
@@ -101,7 +108,16 @@ export function createRun(deps: RunDeps = {}): Run {
   const reveal = shallowRef<{ line: number } | null>(null);
   const busy = ref(false);
   const frameListeners = new Set<(r: Runner) => void>();
+  const debug = createDebug({
+    sources,
+    say: (text, isProblem = false) => say(text, isProblem),
+    state: (s) => {
+      if (runner.value !== null) state.value = s;
+    },
+    now: deps.runner?.now,
+  });
   const frame = (r: Runner): void => {
+    debug.frame(r);
     for (const cb of frameListeners) cb(r);
   };
   /** The source and its program from the last clean Run, for Show in Listing. */
@@ -119,6 +135,7 @@ export function createRun(deps: RunDeps = {}): Run {
   }
 
   function onStop(r: Runner): void {
+    debug.stopped(r);
     if (runner.value !== r) return;
     state.value = 'stopped';
     if (r.stopReason !== null) say(r.stopReason, true);
@@ -157,10 +174,11 @@ export function createRun(deps: RunDeps = {}): Run {
     }
     runner.value?.stop();
     runner.value = null;
+    debug.detach();
     clean.value = null;
     state.value = 'idle';
     const { model, text } = source;
-    const out = kit.runOnce(kit, { text, model, rom, runner: { ...deps.runner, onFrame: frame, onStop } });
+    const out = kit.runOnce(kit, { text, model, rom, breakpoints: source.breakpoints ?? [], runner: { ...deps.runner, onFrame: frame, onStop, onPause: (r) => debug.paused(r) } });
     lastResult.value = out.result;
     report.value = { text, diagnostics: out.diagnostics, notes: out.notes };
     if (out.errorLine !== null) reveal.value = { line: out.errorLine };
@@ -173,6 +191,7 @@ export function createRun(deps: RunDeps = {}): Run {
     runner.value = out.runner;
     out.runner.start();
     state.value = out.runner.state;
+    if (out.stepper !== null) debug.attach({ kit, runner: out.runner, stepper: out.stepper, result: out.result, inactive: out.inactive, sourceId: source.id, text });
     frame(out.runner);
   }
 
@@ -216,6 +235,7 @@ export function createRun(deps: RunDeps = {}): Run {
     report,
     reveal,
     busy,
+    debug,
     listable: computed(() => clean.value !== null),
     async showInListing() {
       showListing(true);

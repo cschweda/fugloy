@@ -58,6 +58,19 @@ describe('useSources', () => {
     expect((await opened[0]!.allSources())[0]!.text).toBe('two');
   });
 
+  it('keeps the breakpoints with the source: saved 500 ms after the change, and read back next time', async () => {
+    const s = createSources({ open });
+    const src = await s.create();
+    expect(src.breakpoints).toBeUndefined();
+    s.update(src.id, { breakpoints: [3, 7] });
+    expect(s.current.value?.breakpoints).toEqual([3, 7]);
+    await sleep(SOURCE_SAVE_DELAY_MS + 100);
+    expect((await opened[0]!.allSources())[0]!.breakpoints).toEqual([3, 7]);
+    const again = createSources({ open });
+    await again.start();
+    expect(again.current.value?.breakpoints).toEqual([3, 7]);
+  });
+
   it('flush writes a waiting edit at once', async () => {
     const s = createSources({ open });
     const src = await s.create();
