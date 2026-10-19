@@ -148,7 +148,7 @@ A screen-reader text mirror of the TRS-80 screen comes with it. 5C completes pha
 
 1. **Frame cost:** no per-instruction JS beyond emu's trace; dispatches and style writes only on change (the counting tests in Tasks 2 and 4); `frameCost()` under 1 ms mean with `FUGLOY_PERF=1` (Task 5).
 2. **First-screen budget:** at or under 252,775 B by the committed script; `check:prefetch` clean with `utils/running/`; `index.vue` gains only the prop.
-3. **Exact stops:** breakpoints stop before the instruction, on the right line at a shared address; Step Over returns past CALL, recursion, and RST 08H's byte; Continue never stops again at PC; no temporary breakpoint outlives a pause (Task 1 tests).
+3. **Exact stops:** breakpoints stop before the instruction, on the right line at a shared address; Step Over returns past CALL, recursion, and RST 08H's byte; Continue never stops again at PC (a block instruction such as LDIR stops once per start, not per iteration: final review finding 1); no temporary breakpoint outlives a pause (Task 1 tests).
 4. **Keys:** no clash with `KEYS`, Shift+F10, or Ctrl/⌘+Enter; nothing fires in inputs or dialogs; F5 and Shift+F5 are claimed only as Ruling 10 says; keys pressed on the TRS-80 screen do not also type on it (Task 3 tests).
 5. **Accessibility:** paused-line and step announcements are debounced; the mirror is throttled and opt-in to speak; every control is reachable by keyboard (F9 and the breakpoint list cover the gutter); ▶ is a non-colour cue; reduced motion is honoured; axe is clean both paused and running (e2e in Tasks 3 and 5).
 

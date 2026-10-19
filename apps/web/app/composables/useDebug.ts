@@ -96,7 +96,6 @@ export interface Debug {
   step(): void;
   stepOver(): void;
   runToLine(line: number): void;
-  runToAddr(addr: number): void;
 }
 
 /** What createRun hands over for each Run that made a runner. */
@@ -210,8 +209,6 @@ export function createDebug(deps: DebugDeps): DebugControl {
   let regsAt = -Infinity;
   /** The registers at the last pause, for what a step changed. */
   let pauseSnap: RegSnap | null = null;
-  /** A runner Continue must start rather than continue (Task 1, finding 8). */
-  let started = false;
 
   const sameSource = (): boolean => current.value !== null && sources.current.value?.id === current.value.sourceId;
   const live = computed(() => sameSource() && sources.current.value!.text === current.value!.text);
@@ -388,12 +385,6 @@ export function createDebug(deps: DebugDeps): DebugControl {
     continue() {
       const a = current.value;
       if (a === null) return;
-      if (!started && a.runner.state === 'paused') {
-        // A runner that never ran: start() honours a breakpoint on the entry line.
-        started = true;
-        a.runner.start();
-        return after(null);
-      }
       after(a.stepper.continue());
     },
     step() {
@@ -418,11 +409,6 @@ export function createDebug(deps: DebugDeps): DebugControl {
       }
       after(a.stepper.runTo([addr], line));
     },
-    runToAddr(addr) {
-      const a = current.value;
-      if (a === null) return;
-      after(a.stepper.runTo([addr & 0xffff]));
-    },
     attach(run) {
       current.value = run;
       prev = undefined;
@@ -430,7 +416,6 @@ export function createDebug(deps: DebugDeps): DebugControl {
       shownAt = -Infinity;
       regsAt = -Infinity;
       pauseSnap = null;
-      started = run.runner.state !== 'paused' || run.runner.pausedBy !== null;
       registers.value = null;
       reveal.value = null;
       announce.value = null;
@@ -483,7 +468,9 @@ export function createDebug(deps: DebugDeps): DebugControl {
       pauseSnap = snap;
       const line = t.now;
       reveal.value = { line: line ?? t.out };
-      const text = sentence(r, a, line, stepped && before !== null ? changedNames(snap, before) : stepped ? [] : null);
+      let text = sentence(r, a, line, stepped && before !== null ? changedNames(snap, before) : stepped ? [] : null);
+      // A step on a HALT with interrupts on idles until one comes: say so, or each press repeats the line.
+      if (stepped && r.machine.cpu.halted && r.machine.cpu.regs.iff1) text = `${text} ${a.kit.HALTED_WAITING}`;
       say(text);
       speak(text, stepped);
     },

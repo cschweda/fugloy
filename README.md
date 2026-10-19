@@ -114,12 +114,14 @@ program, relocated code included. Click the gutter (or press F9) to set a
 breakpoint; it is saved with the source. Paused, the line holds a solid band
 and ▶, the registers and flags show beside the screen with changed values
 marked, and Continue (F5), Step (F11 or F7), Step Over (F10), and Run to
-Here (Ctrl/⌘+F10) move it on; F6 pauses and Shift+F5 stops. A screen reader
+Here (Ctrl/⌘+F10) move it on; F6 pauses and Shift+F5 stops. Once Source ✎
+or Run ▶ has been opened, F5 runs the source from anywhere in the workbench,
+the Listing included, so F5 no longer reloads the page. A screen reader
 hears each pause and step, and a **Screen text** disclosure under the screen
 reads the TRS-80's screen as rows. On your Model III ROM, a breakpoint on
 Sea Dragon's print routine stops on its line. The editor, the assembler, the
 emulator, and the debugger load only when Source ✎ or Run ▶ is first opened,
-so the first screen's JavaScript is 252,314 bytes gzip, 4,659 over the
+so the first screen's JavaScript is 252,315 bytes gzip, 4,660 over the
 247,655 before phase 5B (the generated page's module script and
 modulepreloads with their static imports, each gzipped at level 9;
 `pnpm --filter @fugloy/web size:first-screen` measures it).

@@ -22,7 +22,9 @@
 // other pause (a manual one, or a step) Continue first steps past PC: until the trace's newest entry
 // is the instruction at PC, since emu's step counts an interrupt response with the instruction
 // after it, so a pending interrupt runs its handler first (bounded by STEP_PAST_LIMIT). A halted
-// CPU is not stepped: emu checks no breakpoint while halted. (The ROM keyboard hook's stand-in RET
+// CPU is not stepped: emu checks no breakpoint while halted. A block instruction (LDIR and its kin)
+// repeats at the same PC; the stepper's breakpoints do not stop between its iterations
+// (stepping.ts), so after stepping past one iteration the run goes on to the block's end. (The ROM keyboard hook's stand-in RET
 // at $002B and $0049 leaves no trace entry, but a breakpoint is only ever on a program line.)
 import type { AsmResult } from '@fugloy/asm';
 import type { Machine } from '@fugloy/emu';

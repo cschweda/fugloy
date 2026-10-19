@@ -2,7 +2,8 @@
 // its line; the disassembled listing of the same program lights the paused row through its <style>
 // (a band, a bar, and ▶), the registers show, F10 moves one line and F5 continues; F9 in the
 // listing sets a breakpoint on the cursor row's line; the screen-text list matches the screen; and
-// axe is clean, paused and running.
+// axe is clean over the whole workbench (Source ✎ with its gutter, Run ▶, the listing), paused and
+// running, with Screen text open, a data line's hollow breakpoint, and the changed-source note.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
@@ -14,7 +15,7 @@ const ready = async (page: Page): Promise<void> => {
 
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'];
 const axe = async (page: Page): Promise<string[]> => {
-  const r = await new AxeBuilder({ page }).include('#right-panel-run').include('#left-panel-listing').withTags(TAGS).analyze();
+  const r = await new AxeBuilder({ page }).include('[data-testid="workbench"]').withTags(TAGS).analyze();
   return r.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`);
 };
 
@@ -177,5 +178,39 @@ test('a tight loop running for 3 s costs the running line under 1 ms a frame', a
     expect(cost.p95).toBeLessThan(2);
     expect(longTasks.filter((d) => d > 50)).toEqual([]);
   }
+  await page.getByTestId('run-stop').click();
+});
+
+test('axe is clean over Source ✎ while paused: the gutter ▶, a data line\'s hollow breakpoint, Screen text open, and the changed-source note', async ({ page }) => {
+  await ready(page);
+  await page.getByTestId('write-program').click();
+  const content = page.locator('.cm-content');
+  await expect(content).toContainText('ORG');
+  await content.click();
+  await page.keyboard.press('ControlOrMeta+a');
+  // Line 4 DEC A takes a breakpoint; line 6 is data, so its breakpoint is hollow.
+  await page.keyboard.type('\tORG\t7000H\nSTART:\tLD\tA,1\nLOOP:\tINC\tA\n\tDEC\tA\n\tJR\tLOOP\n\tDB\t0\n\tEND\tSTART\n');
+  await page.locator('.cm-line').nth(3).click();
+  await page.keyboard.press('F9');
+  await page.locator('.cm-line').nth(5).click();
+  await page.keyboard.press('F9');
+  await expect(page.getByTestId('breakpoint-text')).toHaveCount(2);
+
+  await page.getByTestId('run-run').click();
+  await expect.poll(() => page.evaluate(() => window.__fugloyTest!.debugMode())).toBe('paused');
+  await expect(page.getByTestId('run-message')).toHaveText('Paused at line 4, DEC A, at a breakpoint.');
+  await expect(page.locator('#left-panel-source')).toBeVisible();
+  await expect(page.locator('.cm-line.fg-run-paused')).toContainText('DEC');
+  await expect(page.locator('.fg-bp-off')).toHaveCount(1);
+  await page.getByTestId('screen-text-summary').click();
+  await expect(page.getByTestId('screen-text-row')).toHaveCount(16);
+  expect(await axe(page)).toEqual([]);
+
+  // An edit while paused: the marks go and the note says why.
+  await page.locator('.cm-line').nth(5).click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' ; data');
+  await expect(page.getByTestId('source-run-changed')).toBeVisible();
+  expect(await axe(page)).toEqual([]);
   await page.getByTestId('run-stop').click();
 });

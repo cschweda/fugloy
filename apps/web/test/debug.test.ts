@@ -262,7 +262,7 @@ function motionQuery(matches: boolean) {
   return mq;
 }
 
-/** useDebug over a runner on the stub, not started, wired as createRun wires it. */
+/** useDebug over a runner on the stub, wired as createRun wires it: started before attach, as useRun does. */
 function debugOver(text: string, opts: { kit?: typeof realKit; motion?: ReturnType<typeof motionQuery>; breakpoints?: number[] } = {}) {
   const kit = opts.kit ?? realKit;
   let dbg!: DebugControl;
@@ -270,16 +270,14 @@ function debugOver(text: string, opts: { kit?: typeof realKit; motion?: ReturnTy
   const stepper = realKit.createStepper(runner);
   const { inactive } = stepper.setBreakpoints(opts.breakpoints ?? []);
   dbg = createDebug({ sources: oneSource(text), say: () => {}, state: () => {}, now: clock.now, motionQuery: () => (opts.motion ?? null) as unknown as MediaQueryList | null });
+  runner.start();
   dbg.attach({ kit, runner, stepper, result, inactive, sourceId: 's', text });
   return { dbg, runner, clock };
 }
 
 describe('useDebug', () => {
-  it('Continue starts a runner that never ran, and a breakpoint on the entry line still stops it', () => {
+  it('a breakpoint on the entry line stops the started runner before its first instruction', () => {
     const { dbg, runner, clock } = debugOver(LOOP, { breakpoints: [2] });
-    expect(runner.state).toBe('paused');
-    expect(runner.pausedBy).toBeNull();
-    dbg.continue();
     expect(runner.state).toBe('running');
     expect(dbg.mode.value).toBe('running');
     clock.frame();
@@ -287,6 +285,20 @@ describe('useDebug', () => {
     expect(dbg.mode.value).toBe('paused');
     expect(dbg.marks.value.find((x) => x.class === 'fg-run-paused')?.line).toBe(2);
     expect(dbg.announce.value).toBe('Paused at line 2, LD A,1, at a breakpoint.');
+  });
+
+  it('a step on a HALT with interrupts on says the CPU is waiting for an interrupt', () => {
+    const text = '        ORG     7000H\nSTART:  EI\n        HALT\nWAIT:   JR      WAIT\n        END     START\n';
+    const { dbg, runner, clock } = debugOver(text, { breakpoints: [3] });
+    clock.frame();
+    expect(runner.pausedBy?.kind).toBe('break');
+    expect(dbg.announce.value).toBe('Paused at line 3, HALT, at a breakpoint.');
+    dbg.step();
+    expect(runner.machine.cpu.halted).toBe(true);
+    expect(dbg.announce.value).toContain(realKit.HALTED_WAITING);
+    dbg.step();
+    expect(dbg.announce.value).toContain(realKit.HALTED_WAITING);
+    expect(realKit.HALTED_WAITING).toBe('The CPU is halted (HALT), waiting for an interrupt; press Continue to run until one comes.');
   });
 
   it('keeps the same marks array across frames whose set does not change', () => {

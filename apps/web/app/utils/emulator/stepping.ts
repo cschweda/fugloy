@@ -10,6 +10,12 @@
 //   (the one RST that takes one). Anything else is a plain step. A user breakpoint hit first wins.
 // - Run to Here sets a `once` breakpoint at each address given, then continues; given the target
 //   line, a shared address gets the same byte check as a user breakpoint.
+// - A repeating block instruction (LDIR, LDDR, CPIR, CPDR, INIR, INDR, OTIR, OTDR) runs each
+//   iteration as its own instruction at the same PC, so every breakpoint the stepper sets carries
+//   `onceAcross`: it stops only when the instruction is about to start, never between iterations
+//   (the trace's newest entry is then that same instruction at that PC). Continue from a stop there
+//   or from a pause mid-block, and Step Over on it, run until PC leaves it. An interrupt taken
+//   mid-block makes the handler's RET the newest entry, so the breakpoint stops once more there.
 // - Every temporary breakpoint is removed by `clearTemps`, which a Run calls on any pause or stop.
 // - Step and Step Over while running only pause; the next press steps.
 // - A CPU halted with interrupts off cannot move on: the actions do nothing and return the sentence.
@@ -21,6 +27,8 @@ import type { Runner } from './runner';
 export { inactiveReason };
 
 export const HALTED_INTERRUPTS_OFF = 'The CPU is halted (HALT) with interrupts off, so it will not move on. Press Stop, then Run.';
+/** Added to a step's sentence while the CPU is halted with interrupts on: each step idles until one comes. */
+export const HALTED_WAITING = 'The CPU is halted (HALT), waiting for an interrupt; press Continue to run until one comes.';
 
 /** The address a breakpoint on `line` stops at, or null for a line with no code. */
 export function breakAddress(result: AsmResult, line: number): number | null {
@@ -45,6 +53,17 @@ function byteGate(result: AsmResult, line: number, addr: number): ((m: Machine) 
 
 /** ED-prefixed LDIR, CPIR, INIR, OTIR, LDDR, CPDR, INDR, OTDR. */
 const BLOCK_REPEATS: ReadonlySet<number> = new Set([0xb0, 0xb1, 0xb2, 0xb3, 0xb8, 0xb9, 0xba, 0xbb]);
+
+/** True when the instruction the CPU ran last was a block repeat at `addr`: the next one there is its next iteration. */
+function repeating(m: Machine, addr: number): boolean {
+  const last = m.debug.trace.last(1)[0];
+  return last !== undefined && last.pc === addr && last.bytes[0] === 0xed && BLOCK_REPEATS.has(last.bytes[1]!);
+}
+
+/** `gate` (when given), plus: not between a block repeat's iterations at `addr`. */
+function onceAcross(addr: number, gate?: (m: Machine) => boolean): (m: Machine) => boolean {
+  return gate === undefined ? (mm) => !repeating(mm, addr) : (mm) => !repeating(mm, addr) && gate(mm);
+}
 
 /**
  * Where Step Over stops for the instruction at PC: after a CALL (3 bytes), a CALL cc, an RST (1
@@ -103,7 +122,7 @@ export function createStepper(runner: Runner): Stepper {
       for (const line of wanted) {
         const addr = breakAddress(result, line);
         if (addr === null || inactiveReason(result, line) !== null) inactive.push(line);
-        else if (!user.has(line)) user.set(line, m.debug.break(addr, { when: byteGate(result, line, addr) }));
+        else if (!user.has(line)) user.set(line, m.debug.break(addr, { when: onceAcross(addr, byteGate(result, line, addr)) }));
       }
       return { inactive: inactive.sort((a, b) => a - b) };
     },
@@ -131,8 +150,8 @@ export function createStepper(runner: Runner): Stepper {
         return null;
       }
       const sp0 = m.cpu.regs.sp;
-      const when = (mm: Machine): boolean => stackBack(mm.cpu.regs.sp, sp0);
-      for (const addr of targets) temps.add(m.debug.break(addr, { once: true, when }));
+      const back = (mm: Machine): boolean => stackBack(mm.cpu.regs.sp, sp0);
+      for (const addr of targets) temps.add(m.debug.break(addr, { once: true, when: onceAcross(addr, back) }));
       runner.continue();
       return null;
     },
@@ -140,7 +159,7 @@ export function createStepper(runner: Runner): Stepper {
       if (runner.state === 'stopped') return null;
       const why = runner.state === 'paused' ? stuck() : null;
       if (why !== null) return why;
-      for (const addr of addrs) temps.add(m.debug.break(addr, { once: true, when: line === undefined ? undefined : byteGate(result, line, addr) }));
+      for (const addr of addrs) temps.add(m.debug.break(addr, { once: true, when: onceAcross(addr, line === undefined ? undefined : byteGate(result, line, addr)) }));
       if (runner.state === 'paused') runner.continue();
       return null;
     },

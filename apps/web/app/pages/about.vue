@@ -64,7 +64,7 @@ const byline = (s: Source): string => (s.author === s.publisher ? s.author : `${
       Click the gutter beside a line to set a breakpoint there; breakpoints are saved with the source. These keys work once Source ✎ or Run ▶ has been opened:
     </p>
     <ul class="fg-credits" data-testid="debug-keys">
-      <li><strong class="fg-strong">F5</strong>: run the source, or continue a paused program. While a program runs or is paused, F5 never reloads the page.</li>
+      <li><strong class="fg-strong">F5</strong>: run the source, or continue a paused program. Once Source ✎ or Run ▶ has been opened, F5 runs the source from anywhere in the workbench, the Listing included, so it no longer reloads the page.</li>
       <li><strong class="fg-strong">F6</strong>: pause. <strong class="fg-strong">Shift+F5</strong>: stop.</li>
       <li><strong class="fg-strong">F9</strong>: set or clear a breakpoint on the cursor's line, in the editor or in a listing of the running program.</li>
       <li><strong class="fg-strong">F10</strong>: step over (a CALL, an RST, or a repeating block instruction runs to its end). <strong class="fg-strong">F11</strong> or <strong class="fg-strong">F7</strong>: step one instruction (macOS keeps F11 for Show Desktop).</li>

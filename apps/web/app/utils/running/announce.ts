@@ -73,7 +73,7 @@ export const announcing = ref(false);
 let installs = 0;
 let scope: EffectScope | null = null;
 
-/** Speaks `debug.announcement` (a step's after 150 ms, in the step slot); refcounted; returns the uninstall. */
+/** Speaks `debug.announcement` (a step's after 150 ms, in the step slot); refcounted; returns the uninstall, which drops any sentence still waiting once the last install goes. */
 export function speakAnnouncements(debug: { announcement: ShallowRef<{ text: string; step: boolean } | null> }): () => void {
   installs++;
   if (installs === 1) {
@@ -99,5 +99,8 @@ export function speakAnnouncements(debug: { announcement: ShallowRef<{ text: str
     scope?.stop();
     scope = null;
     announcing.value = false;
+    // A step's sentence still waiting would be said after the panels have gone.
+    for (const t of timers.values()) clearTimeout(t);
+    timers.clear();
   };
 }

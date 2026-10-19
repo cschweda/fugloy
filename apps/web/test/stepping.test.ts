@@ -168,6 +168,112 @@ describe('the stepper', () => {
     expect(temps()).toBe(0);
   });
 
+  describe('a breakpoint on a repeating block instruction (LDIR and its kin)', () => {
+    const COPY5 = program('START:  LD      HL,SRC', '        LD      DE,3C00H', '        LD      BC,5', '        LDIR', 'NEXT:   NOP', 'WAIT:   JR      WAIT', 'SRC:    DB      "HELLO"');
+    /** 16K iterations: several frames of LDIR, so a pause can land mid-block. */
+    const COPY16K = program('START:  LD      HL,8000H', '        LD      DE,9000H', '        LD      BC,4000H', '        LDIR', 'NEXT:   NOP', 'WAIT:   JR      WAIT');
+    const bc = (m: { cpu: { regs: { b: number; c: number } } }): number => m.cpu.regs.b * 256 + m.cpu.regs.c;
+
+    it('with BC=5 stops once, before the block starts, and Continue finishes the block', () => {
+      const { clock, runner, stepper, m, at, onPause } = run(COPY5, [lineWith(COPY5, 'LDIR')]);
+      const ldir = at('NEXT') - 2;
+      runner.start();
+      frames(clock, 1);
+      expect(runner.state).toBe('paused');
+      expect(runner.pc).toBe(ldir);
+      expect(runner.pausedBy?.kind).toBe('break');
+      expect(bc(m)).toBe(5);
+      expect(onPause).toHaveBeenCalledTimes(1);
+      expect(stepper.continue()).toBeNull();
+      frames(clock, 2);
+      expect(runner.state).toBe('running');
+      expect(onPause).toHaveBeenCalledTimes(1);
+      expect(runner.pc).toBe(at('WAIT'));
+      expect(bc(m)).toBe(0);
+      expect(m.video.text()[0]!.slice(0, 5)).toBe('HELLO');
+    });
+
+    it('a second pass over the line stops again (once per start, not per iteration)', () => {
+      const src = program('START:  LD      B,2', 'AGAIN:  PUSH    BC', '        LD      HL,SRC', '        LD      DE,3C00H', '        LD      BC,5', '        LDIR', '        POP     BC', '        DJNZ    AGAIN', 'WAIT:   JR      WAIT', 'SRC:    DB      "HELLO"');
+      const { clock, runner, stepper, onPause, at } = run(src, [lineWith(src, 'LDIR')]);
+      runner.start();
+      frames(clock, 1);
+      expect(onPause).toHaveBeenCalledTimes(1);
+      stepper.continue();
+      frames(clock, 1);
+      expect(onPause).toHaveBeenCalledTimes(2);
+      stepper.continue();
+      frames(clock, 2);
+      expect(onPause).toHaveBeenCalledTimes(2);
+      expect(runner.pc).toBe(at('WAIT'));
+    });
+
+    it('a pause mid-block, then Continue, runs on until PC leaves it', () => {
+      const { clock, runner, stepper, m, at, onPause } = run(COPY16K, [lineWith(COPY16K, 'LDIR')]);
+      const ldir = at('NEXT') - 2;
+      runner.start();
+      frames(clock, 1);
+      expect(runner.pc).toBe(ldir);
+      stepper.continue();
+      frames(clock, 2);
+      expect(runner.state).toBe('running');
+      runner.pause();
+      expect(runner.pausedBy?.kind).toBe('pause');
+      expect(runner.pc).toBe(ldir);
+      expect(bc(m)).toBeGreaterThan(0);
+      expect(bc(m)).toBeLessThan(0x4000);
+      stepper.continue();
+      frames(clock, 20);
+      expect(runner.state).toBe('running');
+      expect(runner.pc).toBe(at('WAIT'));
+      expect(bc(m)).toBe(0);
+      expect(onPause).toHaveBeenCalledTimes(2); // the breakpoint and the pause, nothing more
+    });
+
+    it('a step mid-block, then Continue, runs on until PC leaves it', () => {
+      const { clock, runner, stepper, m, at, onPause } = run(COPY5, [lineWith(COPY5, 'LDIR')]);
+      runner.start();
+      frames(clock, 1);
+      stepper.step();
+      stepper.step();
+      expect(runner.pc).toBe(at('NEXT') - 2);
+      expect(bc(m)).toBe(3);
+      stepper.continue();
+      frames(clock, 2);
+      expect(runner.state).toBe('running');
+      expect(runner.pc).toBe(at('WAIT'));
+      expect(onPause).toHaveBeenCalledTimes(3);
+    });
+
+    it('Step Over on it completes the whole block and stops at the next line', () => {
+      const { clock, runner, stepper, m, at, temps } = run(COPY16K, [lineWith(COPY16K, 'LDIR')]);
+      runner.start();
+      frames(clock, 1);
+      expect(runner.pc).toBe(at('NEXT') - 2);
+      expect(stepper.stepOver()).toBeNull();
+      frames(clock, 20);
+      expect(runner.state).toBe('paused');
+      expect(runner.pc).toBe(at('NEXT'));
+      expect(runner.pausedBy?.kind).toBe('break');
+      expect(stepper.wasTemp(runner.pausedBy!.id!)).toBe(true);
+      expect(bc(m)).toBe(0);
+      expect(temps()).toBe(0);
+      expect(m.debug.breaks).toHaveLength(1); // the user's, still set
+    });
+
+    it('Run to Here on an LDIR line stops once, before the block starts', () => {
+      const { clock, runner, stepper, m, out, onPause } = run(COPY5);
+      const addr = breakAddress(out.result, lineWith(COPY5, 'LDIR'))!;
+      runner.start();
+      runner.pause();
+      stepper.runTo([addr], lineWith(COPY5, 'LDIR'));
+      frames(clock, 1);
+      expect(runner.pc).toBe(addr);
+      expect(bc(m)).toBe(5);
+      expect(onPause).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it('a user breakpoint inside SUB wins over Step Over', () => {
     const { clock, runner, stepper, m, at, temps } = run(SUB, [lineWith(SUB, 'INSUB')]);
     stepper.step();

@@ -227,7 +227,8 @@ test('debugging from the keyboard (5C): F9 sets a breakpoint, Run stops there, F
   await expect(page.getByTestId('debug-announcer')).toHaveText('Paused at line 4, DEC A, at a breakpoint.');
   await expect(page.locator('.cm-line.fg-run-paused')).toContainText('DEC');
   await expect(page.getByTestId('registers')).toContainText('Half-carry');
-  let r = await new AxeBuilder({ page }).include('#right-panel-run').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']).analyze();
+  // The whole workbench while paused: Source ✎ (its gutter and ▶) and Run ▶.
+  let r = await new AxeBuilder({ page }).include('[data-testid="workbench"]').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']).analyze();
   expect(r.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
 
   // F10 steps one line; F11 and F7 step too.
@@ -258,7 +259,7 @@ test('debugging from the keyboard (5C): F9 sets a breakpoint, Run stops there, F
   await page.keyboard.press('F5');
   await page.waitForTimeout(300);
   expect(await page.evaluate(() => window.__fugloyTest?.runnerState())).toBe('running');
-  r = await new AxeBuilder({ page }).include('#right-panel-run').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']).analyze();
+  r = await new AxeBuilder({ page }).include('[data-testid="workbench"]').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']).analyze();
   expect(r.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
   // Shift+F5 stops it.
   await page.keyboard.press('Shift+F5');

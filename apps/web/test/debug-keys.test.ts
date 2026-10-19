@@ -402,6 +402,24 @@ describe('the announcements', () => {
     expect(region()?.textContent ?? '').not.toContain('Paused');
   });
 
+  it('a step sentence still waiting when the last uninstall goes is never spoken', async () => {
+    const { run, clock } = await prepare(holder, LOOP);
+    const off = speakAnnouncements(run.debug);
+    run.debug.toggleBreakpoint(4);
+    await run.run();
+    clock.frame();
+    await nextTick();
+    expect(region()!.textContent!.trim()).toBe('Paused at line 4, INC A, at a breakpoint.');
+    vi.useFakeTimers();
+    run.debug.step();
+    vi.advanceTimersByTime(50);
+    off();
+    vi.advanceTimersByTime(STEP_DEBOUNCE_MS * 2);
+    await Promise.resolve();
+    expect(run.message.value).toMatch(/^Line 5/);
+    expect(region()!.textContent!.trim()).toBe('Paused at line 4, INC A, at a breakpoint.');
+  });
+
   it('a screen sentence and a pending step sentence do not cancel each other', () => {
     page();
     vi.useFakeTimers();

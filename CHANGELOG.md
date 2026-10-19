@@ -480,11 +480,22 @@ Step, Step Over and Run to Here, breakpoints, and the registers:
     check at a shared address.
   - **Continue** after a pause that was not a breakpoint's steps past PC
     first (until the trace shows the instruction at PC ran, at most 1,000
-    steps, since a pending interrupt's handler runs first), so it never stops
-    again where it stands.
+    steps, since a pending interrupt's handler runs first), so it does not
+    stop again on the instruction it stands on.
+  - **Block instructions** (LDIR, LDDR, CPIR, CPDR, INIR, INDR, OTIR, OTDR)
+    run each iteration as an instruction at the same PC. A breakpoint on such
+    a line (and Run to Here's and Step Over's own) stops once, as the
+    instruction is about to start, not on every iteration: its `when` passes
+    only if the trace's newest entry is not that same block instruction at
+    that PC. Continue from that stop, or from a pause or step mid-block, runs
+    until PC leaves the instruction, and Step Over on it completes the whole
+    block. Stated gap: an interrupt taken mid-block makes the handler's RET
+    the newest entry, so the breakpoint stops once more there.
   - Step or Step Over while running pauses first. A HALT with interrupts off
     says "The CPU is halted (HALT) with interrupts off, so it will not move
-    on. Press Stop, then Run."
+    on. Press Stop, then Run." A step on a HALT with interrupts on idles until
+    the interrupt comes; its sentence adds "The CPU is halted (HALT), waiting
+    for an interrupt; press Continue to run until one comes."
 - **Run ▶'s debugger controls**, in a "Debugger controls" group in the bar:
   Pause/Continue, Step, Step Over, Run to Here, and **Follow** (off by
   default): with Follow on, the editor and the listing keep the running line
@@ -499,15 +510,16 @@ Step, Step Over and Run to Here, breakpoints, and the registers:
   with every instruction, are never marked. No live region.
 - **The debug keys** (`utils/running/debug-keys.ts`, a new lazy root), one
   document listener while Source ✎ or Run ▶ is mounted:
-  - F5 runs the source when nothing runs (so F5 no longer reloads the page
-    once the workbench's Source ✎ or Run ▶ has been opened, even while you
-    read a disassembly) and continues a paused program; F6 pauses; Shift+F5
+  - F5 runs the source when nothing runs, anywhere in the workbench once
+    Source ✎ or Run ▶ has been opened (so F5 no longer reloads the page then,
+    even while you read a disassembly in the Listing; plan Ruling 10) and continues a paused program; F6 pauses; Shift+F5
     stops; F9 toggles a breakpoint on the cursor's line in the editor or a
     following listing; F10 steps over; F11 or F7 steps (macOS gives F11 to
     Show Desktop); Ctrl/⌘+F10 runs to the cursor's line.
   - While a program runs or is paused, F5, Shift+F5 and Ctrl/⌘+F5 are
-    swallowed everywhere, text fields and dialogs included, so no reload ends
-    it. With no program, Shift+F5 and Ctrl/⌘+F5 reload as usual.
+    swallowed everywhere, text fields and dialogs included, so no F5 reload
+    ends it; Ctrl/⌘+R and the browser's reload button still reload. With no
+    program, Shift+F5 and Ctrl/⌘+F5 reload as usual.
   - They wait in text-entry fields and under an open dialog, and work on
     buttons, checkboxes, the editor, and the TRS-80 screen. Shift+F10, Alt
     with an F-key, and keys already handled are left alone.
@@ -530,7 +542,8 @@ Step, Step Over and Run to Here, breakpoints, and the registers:
   speaks only the last; screen sentences have their own slot. The run
   message shows the same sentence, with `aria-live` off while it repeats the
   announcer's. The announcer is installed apart from the keys chunk, so a
-  pause is spoken even if the keys fail to load.
+  pause is spoken even if the keys fail to load. When the last panel that
+  installed it goes (Close), a step sentence still waiting is dropped.
 - **The screen-text mirror** (`ScreenText.vue`, under the screen, outside its
   application role): a **Screen text** disclosure, closed by default, holding
   an `<ol>` of the screen's rows, graphics read as spaces, trailing spaces
@@ -568,12 +581,12 @@ Step, Step Over and Run to Here, breakpoints, and the registers:
   `apps/web/scripts/first-screen-size.mjs` (`pnpm --filter @fugloy/web
   size:first-screen`, after a plain `generate`; it refuses an E2E build and
   exits 1 over the 252,775-byte budget). Main at d7e0497 is **252,232
-  bytes** (18 files); this branch is **252,314 bytes** (18 files), **+82**,
-  461 under the budget (main a6b7831's 247,655 + 5,120). Two `v-model`
+  bytes** (18 files); this branch is **252,315 bytes** (18 files), **+83**,
+  460 under the budget (main a6b7831's 247,655 + 5,120). Two `v-model`
   checkboxes would have pulled Vue's `vModelCheckbox` into the shared
   runtime chunk (+201 B), so Follow and Speak use `:checked` and `@change`.
-  The lazy chunks grow: Source ✎ 104,620 → 107,044 (+2,424), Run ▶ 4,743 →
-  8,354 (+3,611), the kit 5,622 → 7,741 (+2,119), and the new debug keys
+  The lazy chunks grow: Source ✎ 104,620 → 107,045 (+2,425), Run ▶ 4,743 →
+  8,355 (+3,612), the kit 5,622 → 7,836 (+2,214), and the new debug keys
   chunk is 1,468. `utils/running/` joins the prefetch check's lazy roots.
 - **Interfaces.** `RunInput.breakpoints`, and `RunOutcome.stepper` and
   `inactive`; the kit exports the trail, stepping, register and screen-text
