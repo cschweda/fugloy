@@ -58,7 +58,7 @@ export interface Run {
   problem: Ref<boolean>;
   state: Ref<RunnerState | 'idle'>;
   report: ShallowRef<RunReport | null>;
-  /** Set when a Run found errors: Source ✎ shows and reveals `line` (a new object each time). */
+  /** Source ✎ shows `line` and moves its cursor there (a new object each time): set when a Run found errors (the first), and by Run ▶'s breakpoint list (Go to line). */
   reveal: ShallowRef<{ line: number } | null>;
   /** The last clean Run's program into the listing, even over a program opened from a file. */
   showInListing(): Promise<void>;

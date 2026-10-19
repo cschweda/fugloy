@@ -14,6 +14,7 @@ import TrsScreen from './TrsScreen.vue';
 import RegistersPanel from './RegistersPanel.vue';
 import BreakpointList from './BreakpointList.vue';
 import type { DebugKeyOptions } from '~/utils/running/debug-keys';
+import { announcing, speakAnnouncements } from '~/utils/running/announce';
 import { useRoms } from '~/composables/useRoms';
 import type { Run } from '~/composables/useRun';
 import type { Sources } from '~/composables/useSources';
@@ -44,11 +45,12 @@ const runKey = computed(() => (isMac.value ? '⌘+Enter' : 'Ctrl+Enter'));
 const underWay = computed(() => debug.mode.value === 'running' || debug.mode.value === 'paused');
 const paused = computed(() => debug.mode.value === 'paused');
 const hereKey = computed(() => (isMac.value ? '⌘+F10' : 'Ctrl+F10'));
-/** The run message says what the announcer already says: not a second live region for it. */
-const quiet = computed(() => run.message.value !== null && debug.announcement.value?.text === run.message.value);
+/** The run message says what the announcer, while it is listening, already says: not a second live region for it. */
+const quiet = computed(() => announcing.value && run.message.value !== null && debug.announcement.value?.text === run.message.value);
 
 /** In utils/lazy's loadFailed words, with reloading as the next step (lazy code does not import utils/lazy). */
 const KEYS_FAILED = 'The debugger could not be loaded: the connection may have dropped, or the site was updated since this page opened. Reload the page.';
+const KEYS_LOADING = 'The debugger is still loading. Press Run to Here again in a moment.';
 /** A sentence from a debug control that cannot act. */
 function sayProblem(text: string): void {
   run.message.value = text;
@@ -113,11 +115,13 @@ async function removeRom(): Promise<void> {
 let unsubscribe: (() => void) | null = null;
 // The debug keys load as a chunk of their own (so utils/running/ is a lazy root the manifest names).
 let keys: typeof import('~/utils/running/debug-keys') | null = null;
+let keysState: 'loading' | 'ready' | 'failed' = 'loading';
 let uninstallKeys: (() => void) | null = null;
+let unspeak: (() => void) | null = null;
 let gone = false;
 const keyOptions: DebugKeyOptions = { runNow: () => void run.run(), stop: () => run.stop(), focusTarget: () => null, say: sayProblem };
 function runToHere(): void {
-  if (keys === null) return sayProblem(KEYS_FAILED);
+  if (keys === null) return sayProblem(keysState === 'failed' ? KEYS_FAILED : KEYS_LOADING);
   keys.runToHere(debug, keyOptions);
 }
 onMounted(() => {
@@ -125,19 +129,27 @@ onMounted(() => {
   void roms.start();
   void sources.start();
   unsubscribe = run.onFrame(() => screen.value?.draw());
+  // The announcer is in this chunk: pauses are spoken even if the keys' chunk never arrives.
+  unspeak = speakAnnouncements(debug);
   import('~/utils/running/debug-keys').then(
     (m) => {
       if (gone) return;
       keys = m;
+      keysState = 'ready';
       uninstallKeys = m.installDebugKeys(debug, keyOptions);
     },
-    () => sayProblem(KEYS_FAILED),
+    () => {
+      if (gone) return;
+      keysState = 'failed';
+      sayProblem(KEYS_FAILED);
+    },
   );
 });
 onBeforeUnmount(() => {
   gone = true;
   unsubscribe?.();
   uninstallKeys?.();
+  unspeak?.();
 });
 
 defineExpose({

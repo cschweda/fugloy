@@ -49,7 +49,9 @@ async function remove(line: number, k: number): Promise<void> {
 </template>
 
 <style scoped>
-.fg-bps { display: flex; flex-direction: column; gap: 4px; font-size: 12px; outline: none; }
+.fg-bps { display: flex; flex-direction: column; gap: 4px; font-size: 12px; border-radius: 3px; outline: none; }
+/* Focus lands here (by script) after the last Remove: shown whatever the input was. */
+.fg-bps:focus { outline: 2px solid var(--fg-accent); outline-offset: 2px; }
 .fg-bps h2 { margin: 0; font-size: 13px; font-weight: 700; }
 .fg-bps p { margin: 0; }
 .fg-bps ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }

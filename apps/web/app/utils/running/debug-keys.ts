@@ -11,16 +11,15 @@
 // | F11, F7      | Step                                 | running or paused                    |
 // | Ctrl/⌘+F10   | Run to Here                          | running or paused                    |
 //
-// They act inside `data-own-keys` panels, in CodeMirror's content, and on the TRS-80 screen (whose
-// keyboard leaves these keys alone). They wait in INPUT, TEXTAREA and SELECT, under an open dialog,
-// and when something on the way already handled the key; but a plain F5 is still swallowed there
-// while a program is under way, so a reload never ends it. Shift+F10 (the listing's context menu),
-// Alt+any, and Ctrl/⌘+F5 are the browser's. The first install also routes the coordinator's
-// announcements to the page's one status region (announce.ts), a step's after 150 ms.
-import { effectScope, watch } from 'vue';
-import type { EffectScope } from 'vue';
+// They act inside `data-own-keys` panels, in CodeMirror's content, on buttons and checkboxes, and
+// on the TRS-80 screen (whose keyboard leaves these keys alone). They wait in a text-entry field
+// (TEXTAREA, SELECT, contenteditable other than the editor, and INPUT of type text, search, number,
+// email, url, tel or password), under an open dialog, and when something on the way already handled
+// the key. While a program is running or paused, F5, Shift+F5 and Ctrl/⌘+F5 are swallowed
+// everywhere, fields and dialogs included, so no reload ever ends it (outside fields Shift+F5
+// stops it). Shift+F10 (the listing's context menu) and Alt+any are the browser's. The
+// announcements are announce.ts's speakAnnouncements, installed apart from this chunk.
 import type { Debug } from '../../composables/useDebug';
-import { announcer, STEP_DEBOUNCE_MS } from './announce';
 
 export type FocusTarget = 'source' | 'listing';
 
@@ -45,12 +44,20 @@ interface Install {
   opts: DebugKeyOptions;
 }
 const installs: Install[] = [];
-let scope: EffectScope | null = null;
 
-/** Copied from utils/keys (isTyping without contenteditable, which the editor is, and modalOpen). */
-function inField(target: EventTarget | null): boolean {
-  const tag = (target as { tagName?: unknown } | null)?.tagName;
-  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+/** INPUT types that take typed text; a checkbox, radio, button or file input never uses F-keys. */
+const TEXT_TYPES: ReadonlySet<string> = new Set(['text', 'search', 'number', 'email', 'url', 'tel', 'password']);
+
+/**
+ * A text-entry field, where the keys wait (after utils/keys' isTyping, copied, not imported). The
+ * editor's contenteditable is not one: the keys act there (Ruling 10).
+ */
+export function inField(target: EventTarget | null): boolean {
+  const el = target as { tagName?: unknown; type?: unknown; isContentEditable?: unknown; closest?: (s: string) => Element | null } | null;
+  if (el === null || typeof el.tagName !== 'string') return false;
+  if (el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return true;
+  if (el.tagName === 'INPUT') return TEXT_TYPES.has(typeof el.type === 'string' && el.type !== '' ? el.type.toLowerCase() : 'text');
+  return el.isContentEditable === true && (typeof el.closest !== 'function' || el.closest('.cm-editor') === null);
 }
 const dialogOpen = (): boolean => document.querySelector('dialog[open]') !== null;
 
@@ -101,8 +108,10 @@ function onKeydown(e: KeyboardEvent): void {
   const ctrl = e.ctrlKey || e.metaKey;
   const plain = !ctrl && !e.shiftKey;
   if (e.defaultPrevented) return;
+  // No reload of any kind under a program (F5, Shift+F5, Ctrl/⌘+F5).
+  const reload = e.key === 'F5' && underWay;
   if (inField(e.target) || dialogOpen()) {
-    if (e.key === 'F5' && plain && underWay) e.preventDefault();
+    if (reload) e.preventDefault();
     return;
   }
   const claim = (act: () => void): void => {
@@ -117,6 +126,7 @@ function onKeydown(e: KeyboardEvent): void {
         return claim(mode === 'paused' ? () => debug.continue() : () => (ask((i) => (i.opts.cursorLine === undefined ? null : i.opts)) ?? opts).runNow());
       }
       if (e.shiftKey && !ctrl && underWay) return claim(() => opts.stop());
+      if (reload) e.preventDefault();
       return;
     case 'F6':
       if (plain && mode === 'running') claim(() => debug.pause());
@@ -143,29 +153,12 @@ function onKeydown(e: KeyboardEvent): void {
 export function installDebugKeys(debug: Debug, opts: DebugKeyOptions): () => void {
   const entry: Install = { debug, opts };
   installs.push(entry);
-  if (installs.length === 1) {
-    document.addEventListener('keydown', onKeydown);
-    const say = announcer();
-    scope = effectScope(true);
-    // Sync: every sentence reaches the announcer, which debounces the steps itself.
-    scope.run(() =>
-      watch(
-        debug.announcement,
-        (a) => {
-          if (a !== null) say.say(a.text, a.step ? { debounce: STEP_DEBOUNCE_MS } : undefined);
-        },
-        { flush: 'sync' },
-      ),
-    );
-  }
+  if (installs.length === 1) document.addEventListener('keydown', onKeydown);
   let removed = false;
   return () => {
     if (removed) return;
     removed = true;
     installs.splice(installs.indexOf(entry), 1);
-    if (installs.length > 0) return;
-    document.removeEventListener('keydown', onKeydown);
-    scope?.stop();
-    scope = null;
+    if (installs.length === 0) document.removeEventListener('keydown', onKeydown);
   };
 }

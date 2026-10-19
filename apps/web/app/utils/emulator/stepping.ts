@@ -73,6 +73,8 @@ export interface Stepper {
   continue(): string | null;
   /** Removes every temporary breakpoint (call on each pause and stop). */
   clearTemps(): void;
+  /** Whether emu breakpoint `id` is one of Step Over's or Run to Here's, now or until the next clearTemps after the one that removed it: a pause on it is the end of a step, not a user breakpoint. */
+  wasTemp(id: number): boolean;
 }
 
 /** True when `sp` is at or above `sp0` on the stack (a 64K ring: within 32K above). */
@@ -84,6 +86,8 @@ export function createStepper(runner: Runner): Stepper {
   /** Source line → emu breakpoint id. */
   const user = new Map<number, number>();
   const temps = new Set<number>();
+  /** The temporaries the last clearTemps removed (a pause clears them before anyone asks). */
+  let cleared = new Set<number>();
 
   const stuck = (): string | null => (m.cpu.halted && !m.cpu.regs.iff1 ? HALTED_INTERRUPTS_OFF : null);
 
@@ -148,7 +152,11 @@ export function createStepper(runner: Runner): Stepper {
     },
     clearTemps() {
       for (const id of temps) m.debug.unbreak(id);
+      cleared = new Set(temps);
       temps.clear();
+    },
+    wasTemp(id) {
+      return temps.has(id) || cleared.has(id);
     },
   };
   return stepper;

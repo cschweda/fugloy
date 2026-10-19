@@ -430,6 +430,32 @@ Fugløy's stub ROM; a disassembly opens as such a source:
 - `packages/emu/test/rom.d.ts` types the ROM config helper for the
   TypeScript tests.
 
+### Phase 5C, the running line (in progress on branch `phase5c`)
+
+Task 5 writes the full entry. Recorded here so they are not lost:
+
+- **F5 no longer reloads the page while the workbench is open.** Once
+  Source ✎ or Run ▶ has been opened, F5 runs the source when nothing is
+  running (even while you read a disassembly) and continues a paused
+  program. While a program runs or is paused, F5, Shift+F5 and Ctrl/⌘+F5
+  are swallowed everywhere, text fields and dialogs included, so no reload
+  ends it; outside text fields Shift+F5 stops it. With no program, Shift+F5
+  and Ctrl/⌘+F5 reload as usual. The debug keys (F5, F6, F7, F9, F10, F11,
+  Ctrl/⌘+F10) work on buttons and checkboxes, and wait in text-entry fields.
+- **Hand checks before release** (Playwright's synthetic keys cannot show
+  them):
+  - **Screen readers (VoiceOver and NVDA):** a pause is spoken once, from
+    the announcer; after it, the next run message (for example "Run to Here
+    runs to the line under the cursor…") is spoken too. Run ▶'s message
+    turns `aria-live` off while it repeats the announcer's sentence and back
+    on for the next one; check that the pair honours the change. Steps
+    while F10 is held are spoken once, the last.
+  - **Firefox F7:** check that `preventDefault` stops caret browsing
+    (Ruling 10). If it does not, drop the F7 alias for Step.
+  - **Chrome F5 and F11:** check that a real F5 does not reload while a
+    program runs, and whether F11 still goes to fullscreen (macOS gives F11
+    to Show Desktop first; that is why F7 exists).
+
 ## [mcp 0.1.2] - 2026-10-18
 
 The Model 4 for the MCP server, merged to main (2026-10-18). `load { model: 4 }` and `defaultModel: 4` build a Model 4 on `roms.model4`, and the

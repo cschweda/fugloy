@@ -59,7 +59,7 @@ function trySpeak(): void {
   if (text === null) return;
   spoken = rows.value;
   spokeAt = Date.now();
-  announcer().say(text);
+  announcer().say(text, { slot: 'screen' });
 }
 
 /** A frame was drawn: read the screen if it is due, else once it is (only while open or speaking). */

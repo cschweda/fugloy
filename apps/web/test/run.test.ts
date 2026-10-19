@@ -320,4 +320,26 @@ describe('Run ▶ while debugging (5C)', () => {
     expect(run.debug.announcement.value).toEqual({ text: realKit.HALTED_INTERRUPTS_OFF, step: false });
     expect(run.problem.value).toBe(true);
   });
+
+  it("Step Over's and Run to Here's own stops are announced as steps; a user breakpoint in the callee still says so (review finding 3)", async () => {
+    // 2 LD A,1; 3 CALL SUB (LOOP); 4 JR LOOP; 5 INC A (SUB); 6 RET.
+    const { run, clock } = await setup(program('START:  LD      A,1', 'LOOP:   CALL    SUB', '        JR      LOOP', 'SUB:    INC     A', '        RET'));
+    run.debug.toggleBreakpoint(3);
+    await run.run();
+    clock.frame();
+    expect(run.debug.announcement.value).toEqual({ text: 'Paused at line 3, CALL SUB, at a breakpoint.', step: false });
+    run.debug.stepOver();
+    clock.frame();
+    expect(run.debug.mode.value).toBe('paused');
+    expect(run.debug.announcement.value).toEqual({ text: expect.stringMatching(/^Line 4, JR LOOP\. Changed: A\b/), step: true });
+    run.debug.step();
+    run.debug.toggleBreakpoint(5);
+    run.debug.stepOver();
+    clock.frame();
+    expect(run.debug.announcement.value).toEqual({ text: 'Paused at line 5, INC A, at a breakpoint.', step: false });
+    run.debug.toggleBreakpoint(5);
+    run.debug.runToLine(4);
+    clock.frame();
+    expect(run.debug.announcement.value).toEqual({ text: expect.stringMatching(/^Line 4, JR LOOP\./), step: true });
+  });
 });

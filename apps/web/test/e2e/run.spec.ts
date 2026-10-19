@@ -238,6 +238,10 @@ test('debugging from the keyboard (5C): F9 sets a breakpoint, Run stops there, F
   await page.keyboard.press('F7');
   await expect(page.getByTestId('run-message')).toHaveText(/^Line 4, DEC A\./);
   await expect(page.getByTestId('debug-announcer')).toHaveText(/^Line 4, DEC A\./);
+  // The keys work while the Follow checkbox has focus (it is not a text field).
+  await page.getByTestId('run-follow').focus();
+  await page.keyboard.press('F10');
+  await expect(page.getByTestId('run-message')).toHaveText(/^Line 5, JR LOOP\./);
 
   // The breakpoint list, by keyboard: Tab to Remove, Enter.
   const remove = page.getByTestId('breakpoint-remove');
@@ -245,6 +249,8 @@ test('debugging from the keyboard (5C): F9 sets a breakpoint, Run stops there, F
   await page.keyboard.press('Enter');
   await expect(page.getByTestId('breakpoint')).toHaveCount(0);
   await expect(page.getByTestId('breakpoints')).toBeFocused();
+  // …and shows it.
+  expect(await page.getByTestId('breakpoints').evaluate((el) => getComputedStyle(el).outlineStyle)).not.toBe('none');
 
   // F5 continues; while running, F5 is swallowed: no reload under the program.
   await page.keyboard.press('F5');
@@ -258,7 +264,7 @@ test('debugging from the keyboard (5C): F9 sets a breakpoint, Run stops there, F
   await page.keyboard.press('Shift+F5');
   await expect.poll(() => page.evaluate(() => window.__fugloyTest!.runnerState())).toBe('stopped');
   const seen = await page.evaluate(() => (window as unknown as { seen: string[] }).seen);
-  expect(seen.filter((k) => /^(Shift\+)?F\d/.test(k))).toEqual(['F10:true', 'F11:true', 'F7:true', 'F5:true', 'F5:true', 'Shift+F5:true']);
+  expect(seen.filter((k) => /^(Shift\+)?F\d/.test(k))).toEqual(['F10:true', 'F11:true', 'F7:true', 'F10:true', 'F5:true', 'F5:true', 'Shift+F5:true']);
 });
 
 test('the screen-text mirror lists the screen, closed until opened, and every debug control is in the Tab order', async ({ page }) => {

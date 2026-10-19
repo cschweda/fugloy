@@ -403,7 +403,9 @@ export function createDebug(deps: DebugDeps): DebugControl {
     paused(r) {
       const a = current.value;
       if (a === null || r !== a.runner) return;
-      const stepped = r.pausedBy?.kind === 'step';
+      // A stop on Step Over's or Run to Here's own breakpoint ends a step: said as one, and debounced (Ruling 12).
+      const by = r.pausedBy;
+      const stepped = by?.kind === 'step' || (by?.kind === 'break' && by.id !== undefined && a.stepper.wasTemp(by.id));
       setMode('paused');
       const t = a.kit.trailOf(r.machine, a.result, prev);
       prev = t;

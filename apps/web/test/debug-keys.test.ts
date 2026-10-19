@@ -13,9 +13,9 @@ import { defineComponent, h, nextTick, ref, shallowRef } from 'vue';
 import type { Ref } from 'vue';
 import starter from '@fugloy/asm-examples/clear-screen.z?raw';
 import { assemble } from '@fugloy/asm';
-import { installDebugKeys } from '../app/utils/running/debug-keys';
+import { inField, installDebugKeys } from '../app/utils/running/debug-keys';
 import type { DebugKeyOptions } from '../app/utils/running/debug-keys';
-import { announcer, STEP_DEBOUNCE_MS } from '../app/utils/running/announce';
+import { announcer, announcing, speakAnnouncements, STEP_DEBOUNCE_MS } from '../app/utils/running/announce';
 import type { Debug, DebugMode } from '../app/composables/useDebug';
 import { prepareMachine } from '../app/utils/emulator/boot';
 import { stubRom } from '../app/utils/emulator/stub-rom';
@@ -166,8 +166,8 @@ describe('the debug keys', () => {
     const o = options({ focusTarget: () => 'source', cursorLine: () => 3 });
     install(d, o);
     for (const key of ['F10', 'F11', 'F7', 'F9', 'F6']) expect(press(input, { key }).defaultPrevented).toBe(false);
-    expect(press(input, { key: 'F5', shiftKey: true }).defaultPrevented).toBe(false);
-    // A reload would end the program: F5 is swallowed, but does not continue.
+    // A reload would end the program: F5 and Shift+F5 are swallowed, but do not continue or stop.
+    expect(press(input, { key: 'F5', shiftKey: true }).defaultPrevented).toBe(true);
     expect(press(input, { key: 'F5' }).defaultPrevented).toBe(true);
     const dialog = document.createElement('dialog');
     dialog.setAttribute('open', '');
@@ -179,14 +179,16 @@ describe('the debug keys', () => {
     expect([d.step, d.stepOver, d.continue, d.toggleBreakpoint, d.pause, o.runNow, o.stop].every((f) => (f as ReturnType<typeof vi.fn>).mock.calls.length === 0)).toBe(true);
   });
 
-  it('Shift+F10, Alt+F-keys, Ctrl+F5, and an event already handled are left alone', () => {
+  it('Shift+F10, Alt+F-keys, Ctrl+F5 when idle, and an event already handled are left alone', () => {
     page();
     const d = fakeDebug('paused');
     const o = options({ focusTarget: () => 'source', cursorLine: () => 3 });
     install(d, o);
     expect(press(document.body, { key: 'F10', shiftKey: true }).defaultPrevented).toBe(false);
     expect(press(document.body, { key: 'F10', altKey: true }).defaultPrevented).toBe(false);
+    d.mode.value = 'idle';
     expect(press(document.body, { key: 'F5', ctrlKey: true }).defaultPrevented).toBe(false);
+    d.mode.value = 'paused';
     const handled = new KeyboardEvent('keydown', { key: 'F10', bubbles: true, cancelable: true });
     handled.preventDefault();
     document.body.dispatchEvent(handled);
@@ -246,16 +248,83 @@ describe('the debug keys', () => {
     press(el, { key: 'a', code: 'KeyA' });
     expect(down).toHaveBeenCalledWith('a', 'KeyA');
   });
+
+  it('wait only in text-entry fields: checkboxes, radios and buttons take the keys; the editor does, other contenteditable does not', () => {
+    document.body.innerHTML = '<div class="cm-editor"><div class="cm-content" contenteditable="true" id="ed"></div></div><div contenteditable="true" id="ce"></div><textarea id="ta"></textarea><select id="se"></select>';
+    const d = fakeDebug('paused');
+    install(d, options());
+    const input = (type: string | null): HTMLInputElement => {
+      const el = document.createElement('input');
+      if (type !== null) el.setAttribute('type', type);
+      document.body.append(el);
+      return el;
+    };
+    for (const type of ['checkbox', 'radio', 'button', 'submit', 'range', 'color', 'file']) {
+      expect(inField(input(type))).toBe(false);
+      expect(press(input(type), { key: 'F10' }).defaultPrevented).toBe(true);
+    }
+    for (const type of [null, 'text', 'search', 'number', 'email', 'url', 'tel', 'password']) {
+      expect(inField(input(type))).toBe(true);
+      expect(press(input(type), { key: 'F10' }).defaultPrevented).toBe(false);
+    }
+    for (const id of ['ce', 'ta', 'se']) expect(press(document.getElementById(id)!, { key: 'F10' }).defaultPrevented).toBe(false);
+    expect(press(document.getElementById('ed')!, { key: 'F10' }).defaultPrevented).toBe(true);
+    expect(d.stepOver).toHaveBeenCalledTimes(8);
+  });
+
+  it('no reload under a program: F5, Shift+F5 and Ctrl/⌘+F5 are swallowed in fields and dialogs too; idle they are the browser\'s', () => {
+    const { input } = page();
+    const d = fakeDebug('running');
+    const o = options();
+    install(d, o);
+    for (const mods of [{}, { shiftKey: true }, { ctrlKey: true }, { metaKey: true }, { ctrlKey: true, shiftKey: true }]) {
+      expect(press(input, { key: 'F5', ...mods }).defaultPrevented).toBe(true);
+    }
+    expect(o.stop).not.toHaveBeenCalled();
+    // Outside a field: Ctrl+F5 swallowed, Shift+F5 stops.
+    expect(press(document.body, { key: 'F5', ctrlKey: true }).defaultPrevented).toBe(true);
+    d.mode.value = 'paused';
+    expect(press(document.body, { key: 'F5', metaKey: true }).defaultPrevented).toBe(true);
+    expect(o.runNow).not.toHaveBeenCalled();
+    expect(d.continue).not.toHaveBeenCalled();
+    d.mode.value = 'idle';
+    for (const mods of [{ shiftKey: true }, { ctrlKey: true }]) {
+      expect(press(input, { key: 'F5', ...mods }).defaultPrevented).toBe(false);
+      expect(press(document.body, { key: 'F5', ...mods }).defaultPrevented).toBe(false);
+    }
+  });
+
+  it('F8 is not a debug key: it reaches the TRS-80 screen\'s keyboard', async () => {
+    const result = assemble(starter, { model: 3 });
+    const machine = prepareMachine({ model: 3, rom: stubRom(3), result });
+    const down = vi.spyOn(machine.system.keyboard, 'keyDown');
+    const host = document.createElement('div');
+    document.body.append(host);
+    w = mount(defineComponent({ setup: () => () => h(TrsScreen, { machine, running: true }) }), { attachTo: host });
+    await flushPromises();
+    const d = fakeDebug('paused');
+    install(d, options());
+    const el = document.querySelector('[data-testid="trs-screen"]') as HTMLElement;
+    el.focus();
+    press(el, { key: 'F8', code: 'F8' });
+    expect(down).toHaveBeenCalledWith('F8', 'F8');
+    expect([d.step, d.stepOver, d.continue, d.pause].every((f) => (f as ReturnType<typeof vi.fn>).mock.calls.length === 0)).toBe(true);
+  });
 });
 
 describe('the announcements', () => {
   const region = (): HTMLElement | null => document.querySelector('[data-testid="debug-announcer"]');
 
-  it('are one visually hidden status region on the body, made on first install', () => {
+  it('are one visually hidden status region on the body, made on first install, apart from the keys', () => {
     expect(region()).toBeNull();
     page();
     install(fakeDebug(), options());
-    install(fakeDebug(), options());
+    // The keys alone speak nothing: Run ▶ and Source ✎ install the announcer themselves.
+    expect(region()).toBeNull();
+    expect(announcing.value).toBe(false);
+    const d = fakeDebug();
+    uninstall.push(speakAnnouncements(d), speakAnnouncements(d));
+    expect(announcing.value).toBe(true);
     const r = region()!;
     expect(r.parentElement).toBe(document.body);
     expect(r.getAttribute('role')).toBe('status');
@@ -266,7 +335,7 @@ describe('the announcements', () => {
 
   it('a breakpoint stop says "Paused at line N, …, at a breakpoint." in the region and in run.message', async () => {
     const { run, clock } = await prepare(holder, LOOP);
-    install(run.debug, options());
+    uninstall.push(speakAnnouncements(run.debug));
     run.debug.toggleBreakpoint(5);
     await run.run();
     clock.frame();
@@ -277,7 +346,7 @@ describe('the announcements', () => {
 
   it('five steps within 100 ms are spoken once, the last, 150 ms after it', async () => {
     const { run, clock } = await prepare(holder, LOOP);
-    install(run.debug, options());
+    uninstall.push(speakAnnouncements(run.debug));
     run.debug.toggleBreakpoint(4);
     await run.run();
     clock.frame();
@@ -314,5 +383,37 @@ describe('the announcements', () => {
     a.say('Line 6, JR LOOP.');
     expect(region()!.textContent).not.toBe(first);
     expect(region()!.textContent!.trim()).toBe('Line 6, JR LOOP.');
+  });
+
+  it('the last uninstall stops speaking', async () => {
+    page();
+    const { run, clock } = await prepare(holder, LOOP);
+    const a = speakAnnouncements(run.debug);
+    const b = speakAnnouncements(run.debug);
+    a();
+    a();
+    expect(announcing.value).toBe(true);
+    b();
+    expect(announcing.value).toBe(false);
+    run.debug.toggleBreakpoint(5);
+    await run.run();
+    clock.frame();
+    expect(run.message.value).toMatch(/^Paused at line 5/);
+    expect(region()?.textContent ?? '').not.toContain('Paused');
+  });
+
+  it('a screen sentence and a pending step sentence do not cancel each other', () => {
+    page();
+    vi.useFakeTimers();
+    const a = announcer();
+    const seen: string[] = [];
+    const record = (): void => void seen.push(region()!.textContent!.trim());
+    a.say('Line 6, JR LOOP.', { debounce: STEP_DEBOUNCE_MS, slot: 'step' });
+    vi.advanceTimersByTime(50);
+    a.say('Row 4: SCORE 120.', { slot: 'screen' });
+    record();
+    vi.advanceTimersByTime(STEP_DEBOUNCE_MS);
+    record();
+    expect(seen).toEqual(['Row 4: SCORE 120.', 'Line 6, JR LOOP.']);
   });
 });
