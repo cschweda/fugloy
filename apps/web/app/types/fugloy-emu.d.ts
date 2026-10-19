@@ -26,6 +26,8 @@ declare module '@fugloy/emu' {
     constructor(options: { romData: Uint8Array });
     cpu: { strictMode: boolean };
     memory: { videoRam: Uint8Array };
+    /** The Model I's lowercase modification (always false on the other models). */
+    readonly lowercase: boolean;
     keyboard: KeyboardMatrix;
     bootToCassetteBasic(): boolean;
     runSeconds(seconds: number): number;
@@ -81,6 +83,8 @@ declare module '@fugloy/emu' {
       readonly wide: boolean;
       /** The Model 4's inverse video (port $84 bit 3); false on the other models. */
       readonly inverse: boolean;
+      /** The Model III/4 alternate character set in C0H-FFH (port $EC bit 3); false on the Model I. */
+      readonly altCharset: boolean;
       text(): string[];
     };
     readonly load: { cmd(bytes: Uint8Array): CmdManifest };

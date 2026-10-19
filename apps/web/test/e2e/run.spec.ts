@@ -7,7 +7,7 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
 const ORIGIN = 'http://localhost:4173';
-const BG = [0x10, 0x12, 0x10, 0xff];
+const BG = [0, 0, 0, 0xff]; // the black tube
 
 const ready = async (page: Page): Promise<void> => {
   await page.goto('/');
@@ -35,6 +35,8 @@ test('open the site, Write a program, press Run: the screen is blank, with no RO
   expect(text).toHaveLength(16);
   for (const row of text) expect(row).toMatch(/^ {64}$/);
   await expect.poll(() => centre(page)).toEqual(BG);
+  // The Model III's raster: 64x16 cells of 8x12 from its own character generator.
+  expect(await page.getByTestId('trs-canvas').evaluate((c: HTMLCanvasElement) => [c.width, c.height])).toEqual([512, 192]);
   // Run doesn't move the focus; the screen says how to type to it.
   await expect(page.getByTestId('run-run')).toBeFocused();
   await expect(page.getByTestId('trs-screen')).toContainText('Click the screen to type to the TRS-80.');

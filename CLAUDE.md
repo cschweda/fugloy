@@ -150,8 +150,9 @@ The Model I waits for a Model I reference (MAME or xtrs, ask the user first).
   check:prefetch` proves the first screen never preloads them. Sources and
   ROMs live in IndexedDB (`useSources`, `useRoms`); ROM bytes are never
   bundled, fetched, committed, or backed up. The screen's glyphs come from
-  X.Org's public-domain misc-misc fonts (`scripts/build-glyphs.ts` writes
-  `glyphs.generated.ts`, never hand-edited). From 5C the running line's
+  xtrs's `trs_chars.c` (the TRS-80 character generators;
+  `scripts/build-glyphs.ts` writes `glyphs.generated.ts`, never hand-edited;
+  the licence is in `apps/web/NOTICE.md`). From 5C the running line's
   DOM-free logic (trail, stepping, registers, screen text) is in
   `utils/emulator/`, the coordinator in `composables/useDebug.ts`, and the
   DOM helpers in the lazy root `utils/running/` (the listing's `<style>`, the
