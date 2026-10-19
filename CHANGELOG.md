@@ -37,6 +37,21 @@ creates and pushes the tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Phase 6A, the screen's true shape (web workbench, merged to main 2026-10-19). The Model III
+  and Model 4 screens are drawn at 4:3 and the Model I at about 0.952:1, from the video timing
+  (48k.ca "Beamhacking: Video Timing", MAME `trs80.cpp`, the emulator's `models.js`); the figures
+  and their sources are in `utils/emulator/screen.ts` (`MODEL1_ASPECT`, `tubeAspect`,
+  `tubeFit`, `panelFit`). Rows scale by whole screen pixels where they fit, and no model is drawn narrower than
+  its dots across where space allows, so in a typical panel the Model I is taller than the
+  Model III.
+
+### Added
+
+- A Full screen button in Run ▶'s machine row; Esc leaves it (and the browser's own exit); keys keep
+  reaching the TRS-80, and focus is kept. The first screen is 252,262 B gzip of its 252,775 B budget.
+
 ## [emu 0.5.0] - 2026-10-19
 
 The readouts the workbench's Run ▶ uses (plan phases 5B–5D, merged to main 2026-10-19). Nothing

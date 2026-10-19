@@ -77,6 +77,10 @@ const XTRS_LICENSE = "Copyright (C) 1992 Clarendon Hill Software.\n\nPermission 
       The keys wait while you type in a text field. None of them reaches the TRS-80: other keys reach it only while its screen has focus.
       A screen reader hears each pause and step, and the registers beside the screen mark the values that changed.
     </p>
+    <p data-testid="screen-shape-about">
+      The screen is drawn at each machine's own shape: 4:3 on the Model III and 4, and narrower on the Model I, whose picture's dots came faster.
+      <strong class="fg-strong">Full screen</strong>, beside Pause, shows it on the whole display and keeps your typing on the TRS-80; <strong class="fg-strong">Esc</strong> leaves it.
+    </p>
     <p data-testid="screen-text-about">
       Under the TRS-80's screen, <strong class="fg-strong">Screen text</strong> opens a list of the screen's rows as text, for a screen reader or for copying, with graphics read as spaces and an empty row read as "blank".
       It is closed until you open it, and <strong class="fg-strong">Speak screen changes</strong>, off until you turn it on, reads out the rows that change, at most once a second.

@@ -293,5 +293,5 @@ test('the screen-text mirror lists the screen, closed until opened, and every de
   }
   for (const id of ['run-stop', 'run-pause', 'run-step', 'run-step-over', 'run-to-here', 'run-follow', 'trs-screen', 'screen-text-summary', 'screen-text-speak']) expect(order).toContain(id);
   // 5D: the machine row, each Program to try, and the Debugger's summary.
-  for (const id of ['machine-power', 'machine-reset', 'program-run-sea-dragon', 'program-run-rear-guard', 'program-run-eliminator', 'debugger-summary']) expect(order).toContain(id);
+  for (const id of ['machine-power', 'machine-reset', 'screen-fullscreen', 'program-run-sea-dragon', 'program-run-rear-guard', 'program-run-eliminator', 'debugger-summary']) expect(order).toContain(id);
 });

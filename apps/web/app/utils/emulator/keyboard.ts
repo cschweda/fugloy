@@ -2,7 +2,8 @@
 // screen element, so only while it has focus; typing in the editor, inputs, or dialogs never does.
 // They go through the matrix's own browser mapping (keyDown(e.key, e.code), keyUp(e.code)), and
 // only a mapped key's default is prevented. Tab and keys with Ctrl, ⌘, or Alt are never captured,
-// so Tab leaves the screen and the browser's shortcuts work. Blur releases every key. The debug
+// so Tab leaves the screen (except in full screen, where TrsScreen keeps it) and the browser's
+// shortcuts work. Blur releases every key. The debug
 // keys (5C Ruling 10: F5, F6, F7, F9, F10, F11) never reach the matrix: they bubble on to
 // utils/running/debug-keys, whose pattern this one matches. F8 is not a debug key and passes.
 //
