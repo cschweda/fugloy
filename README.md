@@ -33,8 +33,8 @@ and an MCP server that lets an AI assistant drive the emulator.
 | --- | --- | --- | --- |
 | **Disassembler** | Loads `.CMD`, `.BAS`, and raw files by content; recursive descent; labels; cited ROM, hardware, and DOS names; hint files; hidden code in BASIC; rebasing and relocation; zmac source that reassembles byte for byte; JSON IR; reads the emulator's label files | Released, 1.2.0 on npm | `@fugloy/disasm`, the `fugloy` command in `@fugloy/cli`, opcode tables in `@fugloy/z80` |
 | **Web workbench** | The disassembler in the browser: facing pages, the four public-domain games one click away, editing by keyboard, the **Explain** tab, block comments, exports | Live | [app.fugloy.dev](https://app.fugloy.dev/), source in `apps/web` |
-| **Emulator** | A headless, deterministic Model III and Model I that passes ZEXDOC and ZEXALL, runs `.CMD`, `.BAS`, and `.CAS` programs and disk images, and has a debugger that writes label and coverage files | 0.3.0 on npm (2026-10-18; disks and the Model I, phases 5–7) | `packages/emu` (`@fugloy/emu`) |
-| **MCP server** | Lets an AI assistant such as Claude Code load a program, run it, set breakpoints and watches, read the screen, and name what it finds in the same label file | 0.1.1 on npm (2026-10-18), MCP phases A–F; disk images and the Model I | `packages/mcp` (`@fugloy/mcp`) |
+| **Emulator** | A headless, deterministic Model III and Model I that passes ZEXDOC and ZEXALL, runs `.CMD`, `.BAS`, and `.CAS` programs and disk images, and has a debugger that writes label and coverage files | 0.3.0 on npm (2026-10-18; disks and the Model I, phases 5–7); 0.4.0 (the Model 4) is being released, not on npm until published | `packages/emu` (`@fugloy/emu`) |
+| **MCP server** | Lets an AI assistant such as Claude Code load a program, run it, set breakpoints and watches, read the screen, and name what it finds in the same label file | 0.1.1 on npm (2026-10-18), MCP phases A–F; disk images and the Model I; 0.1.2 (the Model 4) is being released, not on npm until published | `packages/mcp` (`@fugloy/mcp`) |
 | **Ahead** | An assembler and IDE in the workbench, a course in assembly for non-programmers, and, later, recompiling games to TypeScript | Planned | [Roadmap](#whats-ahead) |
 
 Its core libraries have no runtime dependencies and use no Node or browser
@@ -91,7 +91,7 @@ Sea Dragon already annotated, from
 ### The emulator
 
 `@fugloy/emu` is a headless TRS-80 Model III, and (since emu 0.3.0, phase 6) a
-Model I with its Expansion Interface, and (emu phase 6b, in main, to be released
+Model I with its Expansion Interface, and (emu phase 6b, in main, being released
 in emu 0.4.0 and mcp 0.1.2) a Model 4,
 in Model III mode and with its native hardware, in plain JavaScript, built on the
 core of [trs80-emulator](https://github.com/cschweda/trs80-emulator). It has
@@ -135,7 +135,7 @@ Rear Guard, each with a note saying how it knew.
 
 Install it with `npx -y @fugloy/mcp` as an MCP server
 (or run `node packages/mcp/bin/fugloy-mcp.js` from a clone, for development), with a
-`fugloy.mcp.json` that names your Model III ROM (and your Model I ROM, for `load` with `model: 1`, and your Model 4 ROM, for `model: 4`, in main and coming in mcp 0.1.2); the setup (from npm or from
+`fugloy.mcp.json` that names your Model III ROM (and your Model I ROM, for `load` with `model: 1`, and your Model 4 ROM, for `model: 4`, in main and being released in mcp 0.1.2); the setup (from npm or from
 a clone), the tools, and those sessions are in its
 [README](packages/mcp/README.md), and the design is in
 [docs/fugloy-mcp-spec.md](docs/fugloy-mcp-spec.md).
@@ -324,7 +324,7 @@ releases: phase 2, Pass 1 and Pass 2, as
 core decoder and loaders, as
 [v0.1.0](https://github.com/cschweda/fugloy/releases/tag/v0.1.0).
 
-The emulator, `@fugloy/emu` 0.3.0 (on npm since 2026-10-18), has all eight
+The emulator, `@fugloy/emu` 0.3.0 (on npm since 2026-10-18; 0.4.0, with the Model 4, is being released), has all eight
 of its phases built, the Model 4 and the Model I's differential run aside:
 the core of [trs80-emulator](https://github.com/cschweda/trs80-emulator)
 booting the Model III ROM to `READY` in Node (0); a Z80 core that passes
@@ -343,7 +343,7 @@ lowercase modification), 500-baud cassette, and the keyboard, on which
 fourteen programs reach their titles and four disks boot, with MCP `load`
 taking `model: 1`; and a differential harness against trsjs (7), with no
 unexplained divergence in six game sessions on the Model III. The Model 4
-(6b) is in main, to be released in emu 0.4.0 and mcp 0.1.2: on the Model 4 ROM
+(6b) is in main, being released in emu 0.4.0 and mcp 0.1.2: on the Model 4 ROM
 it boots to Model III BASIC's `READY`, where Model III programs and disks run
 (Sea Dragon matches the Model III screen for screen and T-state for T-state
 from `READY`; the two ROMs differ in 727 bytes), and its native hardware (four

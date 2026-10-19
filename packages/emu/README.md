@@ -8,14 +8,14 @@ the Z80 CPU (`src/cpu/`), the Model III memory map, I/O ports, and system
 images, and printer (`src/devices/`), the `.CAS` and `.CMD` formats
 (`src/loaders/`), and save states (`src/debug/`). Emu phase 6 added the
 Model I with its Expansion Interface (released in 0.3.0), and emu phase 6b
-the Model 4 (in main, to be released in 0.4.0, with `@fugloy/mcp` 0.1.2): Model III mode on the Model 4 ROM and the native
+the Model 4 (in main, being released in 0.4.0, with `@fugloy/mcp` 0.1.2): Model III mode on the Model 4 ROM and the native
 hardware, with a version 6 DOS booting still open, as no LS-DOS 6 or TRSDOS 6
 disk is at hand.
 Phases 0–7 of the spec's eight are done (6 for the Model I, 7 for the Model III): the Z80 core passes ZEXDOC and
 ZEXALL, the `Machine` below runs real programs, `m.debug` writes the label
 and coverage file, and phase 4, the MCP server
 [`@fugloy/mcp`](https://github.com/cschweda/fugloy/blob/main/packages/mcp/README.md),
-drives it for an AI assistant. Version 0.3.0 (on npm since 2026-10-18)
+drives it for an AI assistant. Version 0.3.0 (on npm since 2026-10-18; 0.4.0, with the Model 4, is being released and is not on npm until published)
 (`npm i @fugloy/emu`; or use it from a clone for development; Node 22 or later, or any browser bundler: it has no
 dependencies).
 
@@ -117,7 +117,7 @@ what is still unverified against the Model I manual, are in spec §5.
 
 ### The Model 4
 
-`model: 4` builds a Model 4 (emu phase 6b, in main, coming in 0.4.0), with 64 or 128K of RAM
+`model: 4` builds a Model 4 (emu phase 6b, in main, being released in 0.4.0), with 64 or 128K of RAM
 (`ram`, default 128) and 2K of video RAM, on the Model 4 ROM (the TRS32 set's
 14K `MODEL4.ROM` is recognised as `model4-trs32`; a Model I or Model III ROM is
 refused, and the Model 4's on those models). The ROM boots it in Model III

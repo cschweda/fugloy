@@ -4,7 +4,7 @@ A stdio MCP server that puts a running TRS-80 (`@fugloy/emu`) in front of
 Claude Code or any MCP client: load a program, run it, inspect memory and
 registers, type on its keyboard, read the screen, set breakpoints and
 watches, and record labels and coverage in the file the Fugløy disassembler
-reads. Version 0.1.1 (on npm since 2026-10-18), MCP phases A–F (spec §11): the tools of phases A–C
+reads. Version 0.1.1 (on npm since 2026-10-18; 0.1.2, with the Model 4, is being released and is not on npm until published), MCP phases A–F (spec §11): the tools of phases A–C
 (built as the emulator's phase 4), with which an assistant can load a game,
 find its print routine, and label it on its own; snapshots, `diff`, `search`,
 and `callees` (D); resources and prompts (E); and the guardrail tests, golden
@@ -18,7 +18,7 @@ public-domain games on its own (story 7, below).
 
 ## Set up
 
-`@fugloy/mcp` is on npm (0.1.1 since 2026-10-18, with disk images and the Model I): run it from npm with Node 22 or later
+`@fugloy/mcp` is on npm (0.1.1 since 2026-10-18, with disk images and the Model I; 0.1.2, with the Model 4, is being released and is not on npm until published): run it from npm with Node 22 or later
 (`npx -y @fugloy/mcp`; for development, use the clone setup below,
 `node packages/mcp/bin/fugloy-mcp.js`). Write a `fugloy.mcp.json` that names
 your Model III ROM, and your Model I Level II ROM and Model 4 ROM if you have
@@ -100,7 +100,7 @@ lists the tools and calls them by hand.
 ## The tools
 
 One machine per server process, a Model III, a Model I (since 0.1.1), or a
-Model 4 (in main, coming in 0.1.2, which needs `@fugloy/emu` 0.4.0); nothing
+Model 4 (in main, being released in 0.1.2, which needs `@fugloy/emu` 0.4.0); nothing
 runs between calls.
 Every result is text, and every error is a sentence the agent can act on.
 Addresses are hex (`5200`, `0x5200`, `$5200`, `5200h`), a JSON number
@@ -154,7 +154,7 @@ run      until=settled               → "BY: WAYNE WESTMORELAND & TERRY GILMAN"
 key      keys=["ENTER"] cps=1        → "1 OR 2 PLAYERS?"
 ```
 
-The Model 4 (emu phase 6b, in main, coming in 0.1.2 with `@fugloy/emu` 0.4.0): `load` with `model: 4` builds a 128K
+The Model 4 (emu phase 6b, in main, being released in 0.1.2 with `@fugloy/emu` 0.4.0): `load` with `model: 4` builds a 128K
 Model 4 on `roms.model4` and boots it to `READY` in Model III mode (memory map
 0, 2 MHz, 64 by 16), answering its `Cass ?` and `Memory Size?` for you; the
 manifest says `Model: Model 4 (128K; its ROM boots it in Model III mode:
@@ -359,7 +359,7 @@ then review the diff.
 ## Releasing
 
 `./publish.sh check mcp` on `main` packs the package (pnpm turns the
-`workspace:^` dependencies into `^` ranges: `@fugloy/emu` `^0.3.0`,
+`workspace:^` dependencies into `^` ranges: `@fugloy/emu` `^0.4.0`,
 `@fugloy/disasm` and `@fugloy/z80` `^1.2.0`), checks the tarball, installs it
 in a scratch project, and checks that `npx fugloy-mcp` answers `initialize`
 and `tools/list` over a pipe. It needs those `@fugloy` versions on npm, so
