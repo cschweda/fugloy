@@ -17,13 +17,13 @@ START:  LD      H,3DH           ; H, the High byte of the address ...
         LD      E,A             ; ... back into E: DE is 3D40H, row 5
 ```
 
-Carried over from lesson 1: `ORG 7000H`, HL as the pointer into the screen at `3C00H`, `LD (HL),...` and `INC HL`, a loop closed by `JR NZ`, and the `WAIT` loop at the end. New: setting H and L apart, a second pointer in DE, an 8-bit counter in B, and `ADD`.
+Carried over from lesson 1: `ORG 7000H`, HL as the pointer into the screen at `3C00H`, `LD (HL),...` and `INC HL`, the white block `0BFH`, a loop closed by `JR NZ`, and the `WAIT` loop at the end. New: setting H and L apart, a second pointer in DE with `LD (DE),A`, an 8-bit counter in B with `DEC B`, and `ADD A`.
 
 ## The registers
 
 The Z80 has seven 8-bit registers you name in code, and one you mostly don't:
 
-- **A**, the accumulator. 8-bit arithmetic and logic (`ADD`, `SUB`, `AND`, `OR`, `CP`) take one operand from A and leave the result in A. That is why lesson 1 copied B into A before it could `OR C`.
+- **A**, the accumulator. 8-bit arithmetic and logic (`ADD`, `SUB`, `AND`, `OR`) take one operand from A and leave the result in A; `CP` compares with A and sets only the flags. That is why lesson 1 copied B into A before it could `OR C`.
 - **F**, the flags. Each instruction that computes sets some of its bits: Z when the result was zero, C on a carry or borrow, S for the sign, and a few more. `JR NZ` and its kin read F. There is no `LD F`: the flags change as a side effect of the work.
 - **B, C, D, E, H, L**, six general registers, which pair up as **BC**, **DE** and **HL** for 16-bit values.
 

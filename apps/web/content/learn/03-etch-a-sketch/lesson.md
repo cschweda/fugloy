@@ -9,7 +9,7 @@ cite: paay 26 the keyboard's rows are read at 3801H to 3840H, one address a row
 ---
 The keyboard is memory too. The TRS-80 reads its keys as a grid of switches mapped into memory from `3800H`, one address for each row of keys and one bit for each key in the row: read the address and a bit is 1 while its key is down. There is no event and no key code, only a byte you look at whenever you like.
 
-The row read at `3840H` holds ENTER, CLEAR, BREAK, the four arrows and the space bar. On Fugløy's keyboard the arrows are bit 3 (up), 4 (down), 5 (left) and 6 (right). This program reads that byte over and over and moves a pen:
+The rows are read at `3801H` to `3840H`, one address a row, and the row read at `3840H` holds ENTER, CLEAR, BREAK, the four arrows and the space bar. The arrows are bit 3 (up), 4 (down), 5 (left) and 6 (right): that order within the row is the one Fugløy's emulator uses, from the ROM's own keyboard routine, not a page of the manuals. This program reads that byte over and over and moves a pen:
 
 ```z80
 READ:   LD      A,(3840H)       ; the arrows' row: bit 3 up, 4 down, 5 left, 6 right
@@ -18,7 +18,7 @@ READ:   LD      A,(3840H)       ; the arrows' row: bit 3 up, 4 down, 5 left, 6 r
         LD      C,A             ; keep the keys in C, so A is free
 ```
 
-Carried over: HL as a pointer into the screen and lesson 1's white block `0BFH` (lesson 1), the pairs and `ADD HL,DE` (lesson 2), and lesson 1's counted `BC` loop, which here becomes a delay. New: reading the keyboard, `AND` as a mask, `BIT` to test one bit, and keeping a pointer on the screen.
+Carried over: HL as a pointer into the screen, the white block `0BFH`, and the counted `BC` loop, which here becomes a delay (lesson 1); DE as a second pair, and an 8-bit register (C) holding a value while A does other work (lesson 2). New: reading the keyboard with `LD A,(3840H)`, `AND` as a mask, `BIT` to test one bit, `JR Z`, 16-bit adds with `ADD HL,DE` (and `LD DE,-64` to go back), `DEC HL`, and keeping a pointer on the screen.
 
 In JavaScript, with memory as an array, the read is:
 

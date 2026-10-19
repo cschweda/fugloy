@@ -11,7 +11,7 @@ cite: decker 29 the ROM's own RANDOM takes its seed from the Z80's refresh regis
 ---
 A whole game this time, if a small one. Press R, P or S on the TRS-80's screen; the program picks its own move, prints both, and says who won. Press again for another round.
 
-Carried over: the keyboard read and `AND` mask, and `BIT` to tell the keys apart (lesson 3); the screen addresses, 64 cells a row (lesson 1); `ADD HL,HL` and the pairs (lesson 2). New: copying text with `LDIR`, a table of words, `LD A,R` for a random number, `CP`, and the carry flag.
+Carried over: the screen addresses, 64 cells a row (lesson 1); `ADD A` and the pairs (lesson 2); the keyboard read with its `AND` mask and `JR Z` wait, `BIT` to tell the keys apart, and a 16-bit add into HL, `ADD HL,DE` there and `ADD HL,BC` here (lesson 3). New: copying text with `LDIR`, a table of words with `DB`, `ADD HL,HL` to double, `LD A,R` for a random number, `CP` and `SUB`, the carry flag with `JR C` and `JR NC`, and two bytes of memory as variables.
 
 ## Text is bytes in a table
 
@@ -47,11 +47,11 @@ const words = ['ROCK    ', 'PAPER   ', 'SCISSORS', 'A DRAW. ', 'YOU WIN!', 'I WI
 for (let i = 0; i < 8; i++) screen[de + i] = words[n].charCodeAt(i);
 ```
 
-`LDIR` uses BC, DE and HL, all three pairs, so anything the program still needs has to be somewhere else while it prints. Here the program's move and the verdict go to two bytes of memory, `MINE` and `VERDICT`, with `LD (MINE),A`. Only A can be stored at an address named like that, so the move goes through A. The program prints the same way three times, which lesson 5 turns into one routine with `CALL`.
+`LDIR` uses BC, DE and HL, all three pairs, so anything the program still needs has to be somewhere else while it prints. Here the program's move and the verdict go to two bytes of memory, `MINE` and `VERDICT`, with `LD (MINE),A`. Of the 8-bit registers, only A can be stored at an address named like that, so the move goes through A. The program prints the same way three times, which lesson 5 turns into one routine with `CALL`.
 
 ## Waiting for a key
 
-P, R and S are in the row read at `3804H`, as bits 0, 2 and 3 on Fugløy's keyboard. The wait is lesson 3's, with a different mask:
+P, R and S are in the row read at `3804H`, one of the rows at `3801H` to `3840H`, as bits 0, 2 and 3: as in lesson 3, that order within the row is the one Fugløy's emulator uses, not a page of the manuals. The wait is lesson 3's, with a different mask:
 
 ```z80
 KEY:    LD      A,(3804H)       ; the keyboard row with P (bit 0), R (bit 2) and S (bit 3)
