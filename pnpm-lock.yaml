@@ -106,10 +106,10 @@ importers:
   packages/asm:
     dependencies:
       '@fugloy/disasm':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../disasm
       '@fugloy/z80':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../z80
 
   packages/cli:

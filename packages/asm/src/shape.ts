@@ -11,9 +11,11 @@ import type { Cond, Reg8, Reg16, TemplateOperand } from '@fugloy/z80';
  * immediate. A number in parentheses is `(nn)` or `(n)`, which likewise match
  * either memory slot. `(IX+d)` and `(IY+d)` carry the displacement as the value;
  * `(IX)` and `(IY)` mean the plain indirect form where one exists (`JP (IX)`)
- * and `(IX+0)` everywhere else.
+ * and `(IX+0)` everywhere else. `F` fits no template; it exists so that
+ * `IN F,(C)` reaches the encoder and gets its sentence.
  */
 export type Shape =
+  | 'F'
   | Reg8
   | Reg16
   | Cond

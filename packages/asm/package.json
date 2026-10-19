@@ -19,8 +19,8 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@fugloy/disasm": "workspace:^",
-    "@fugloy/z80": "workspace:^"
+    "@fugloy/disasm": "workspace:*",
+    "@fugloy/z80": "workspace:*"
   },
   "repository": {
     "type": "git",

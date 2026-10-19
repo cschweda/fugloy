@@ -4,14 +4,14 @@
  * and the two cannot disagree. Nothing here names an opcode.
  */
 import { TABLES } from '@fugloy/z80';
-import type { Template, TemplateOperand } from '@fugloy/z80';
-import { fits, fixedNumber, slotText } from './shape.js';
+import type { Tables, Template, TemplateOperand } from '@fugloy/z80';
+import { fits, fixedNumber, isImmediate, slotText } from './shape.js';
 import type { Operand, Shape } from './shape.js';
 
 type TableName = keyof typeof TABLES;
 
 /** One real encoding: the template, and the bytes that select it. */
-interface Entry {
+export interface Entry {
   tpl: Template;
   table: TableName;
   opcode: number;
@@ -26,32 +26,65 @@ interface Entry {
  */
 const TABLE_ORDER: readonly TableName[] = ['base', 'cb', 'ed', 'dd', 'fd', 'ddcb', 'fdcb'];
 
-/** Every real encoding by mnemonic: no prefix slots, no DB fallbacks for undocumented bytes, no duplicates. */
-const INDEX: ReadonlyMap<string, readonly Entry[]> = (() => {
+/** The one allowed duplicate: these slots repeat a base instruction, which zmac assembles instead (disasm's BYTE_EXACT_EXCEPTIONS). */
+const BASE_DUPLICATES: ReadonlySet<string> = new Set(['ed:63', 'ed:6b']);
+
+const slotName = (table: TableName, opcode: number): string => `${table}:${opcode.toString(16).padStart(2, '0')}`;
+
+/** The shapes the parser gives an entry's own form: the number class for any number, `(nn)` for any memory operand. */
+function ownShapes(tpl: Template): Shape[] {
+  return tpl.operands.map((o): Shape => {
+    if (fixedNumber(o) !== undefined || o.t === 'n' || o.t === 'nn' || o.t === 'e' || o.t === 'd') return 'nn';
+    if (o.t === '(n)' || o.t === '(nn)') return '(nn)';
+    if (o.t === '(ix+d)') return o.reg === 'IX' ? '(IX+d)' : '(IY+d)';
+    return slotText(o) as Shape;
+  });
+}
+
+/** The fixed number at each slot (bit, vector, mode), which tells apart entries that fit the same shapes. */
+const fixedKey = (tpl: Template): string => tpl.operands.map((o) => fixedNumber(o) ?? '').join(',');
+
+/**
+ * Every real encoding by mnemonic: no prefix slots, no DB fallbacks for
+ * undocumented bytes. Throws if two entries fit the same shapes (and the same
+ * fixed numbers), since the encoder would then pick one silently; the base
+ * duplicates of ED 63 and ED 6B are the one exception.
+ */
+export function buildIndex(tables: Tables): Map<string, Entry[]> {
   const index = new Map<string, Entry[]>();
-  const seen = new Set<string>();
   for (const table of TABLE_ORDER) {
-    TABLES[table].forEach((tpl, opcode) => {
+    tables[table].forEach((tpl, opcode) => {
       if (tpl.prefix !== undefined || tpl.mnemonic === 'DB') return;
-      const key = `${tpl.mnemonic} ${JSON.stringify(tpl.operands)}`;
-      if (seen.has(key)) return;
-      seen.add(key);
       const list = index.get(tpl.mnemonic) ?? [];
       list.push({ tpl, table, opcode, form: tpl.operands.map(slotText).join(',') });
       index.set(tpl.mnemonic, list);
     });
   }
+  for (const [mnemonic, entries] of index) {
+    const kept = entries.filter((e) => {
+      const rivals = fitting(entries, ownShapes(e.tpl)).filter((r) => r !== e && fixedKey(r.tpl) === fixedKey(e.tpl));
+      if (rivals.length === 0) return true;
+      if (BASE_DUPLICATES.has(slotName(e.table, e.opcode))) return false;
+      if (rivals.every((r) => BASE_DUPLICATES.has(slotName(r.table, r.opcode)))) return true;
+      throw new Error(`The z80 tables give ${mnemonic} ${e.form} two encodings the encoder cannot tell apart: ${[e, ...rivals].map((r) => slotName(r.table, r.opcode)).join(' and ')}.`);
+    });
+    index.set(mnemonic, kept);
+  }
   return index;
-})();
+}
 
-/** The entries of `mnemonic` that `shapes` fit: exact fits first, then reading `(IX)` as `(IX+0)`. */
-function candidates(mnemonic: string, shapes: readonly Shape[]): Entry[] {
-  const entries = INDEX.get(mnemonic) ?? [];
+/** The entries that `shapes` fit: exact fits first, then reading `(IX)` as `(IX+0)`. */
+function fitting(entries: readonly Entry[], shapes: readonly Shape[]): Entry[] {
   const match = (indexZero: boolean): Entry[] =>
     entries.filter((e) => e.tpl.operands.length === shapes.length && e.tpl.operands.every((o, i) => fits(shapes[i]!, o, indexZero)));
   const exact = match(false);
   return exact.length > 0 ? exact : match(true);
 }
+
+const INDEX: ReadonlyMap<string, readonly Entry[]> = buildIndex(TABLES);
+
+/** The entries of `mnemonic` that `shapes` fit. */
+const candidates = (mnemonic: string, shapes: readonly Shape[]): Entry[] => fitting(INDEX.get(mnemonic) ?? [], shapes);
 
 /** The bytes that select an entry, before its operand bytes; `d` goes between CB and the opcode in DDCB and FDCB. */
 function lead(entry: Entry, d: number): number[] {
@@ -98,12 +131,33 @@ const formName = (mnemonic: string, entry: Entry): string => (entry.form === '' 
 /** The sorted, distinct forms of a mnemonic's entries. */
 const formsOf = (entries: readonly Entry[]): string[] => [...new Set(entries.map((e) => e.form))].sort();
 
+/**
+ * An operand as a message names it: a number is `n` or `nn`, a relative
+ * target `displacement`, a port `(port)`; registers and the rest as written.
+ */
+const WORDS: Readonly<Record<string, string>> = { num: 'n', e: 'displacement', '(n)': '(port)' };
+const word = (shape: string): string => WORDS[shape] ?? shape;
+
+/**
+ * IN F,(C), IN (C), and OUT (C),0 are ED 70 and ED 71, which the z80 tables
+ * hold as DB fallbacks (undocumented), so the disassembler writes them as DB
+ * and the encoder has no template for them. The sentence says how to write them.
+ */
+function undocumentedEd(mnemonic: string, operands: readonly Operand[]): string | undefined {
+  const shapes = operands.map((o) => o.shape).join(',');
+  const db = (form: string, low: string): string => `${mnemonic} ${form} is undocumented, and Fugløy writes it as DB 0EDH,${low}H; use that instead.`;
+  if (mnemonic === 'IN' && (shapes === 'F,(C)' || shapes === '(C)')) return db(shapes, '70');
+  if (mnemonic === 'OUT' && operands.length === 2 && operands[0]!.shape === '(C)' && isImmediate(operands[1]!.shape) && operands[1]!.value === 0) return db('(C),0', '71');
+  return undefined;
+}
+
 /** The sentence for a form the mnemonic lacks, with the forms worth trying instead. */
 function noForm(mnemonic: string, shapes: readonly Shape[], entries: readonly Entry[]): string {
-  const head = `${mnemonic} has no form ${shapes.join(',')}.`;
-  const all = formsOf(entries);
+  const said = shapes.map(word);
+  const head = `${mnemonic} has no form ${said.join(',')}.`;
+  const all = formsOf(entries).map((f) => (f === '' ? f : f.split(',').map(word).join(',')));
   if (all.length === 1 && all[0] === '') return `${head} ${mnemonic} takes no operands.`;
-  const first = shapes[0];
+  const first = said[0];
   const sharing = first === undefined ? [] : all.filter((f) => f.split(',')[0] === first);
   if (sharing.length === 1) return `${head} The form that starts with ${first} is ${sharing[0]}.`;
   if (sharing.length > 1) return `${head} The forms that start with ${first} are ${list(sharing, 'and')}.`;
@@ -138,7 +192,7 @@ export function encode(mnemonic: string, operands: readonly Operand[], pc: numbe
   if (entries === undefined) return { error: `Unknown instruction ${mn}.` };
   const shapes = operands.map((o) => o.shape);
   let found = candidates(mn, shapes);
-  if (found.length === 0) return { error: noForm(mn, shapes, entries) };
+  if (found.length === 0) return { error: undocumentedEd(mn, operands) ?? noForm(mn, shapes, entries) };
 
   // A fixed number (bit, RST vector, IM mode) picks the entry by its value.
   const fixedAt = found[0]!.tpl.operands.findIndex((o) => fixedNumber(o) !== undefined);

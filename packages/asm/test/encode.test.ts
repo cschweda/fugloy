@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { decodeAt, TABLES } from '@fugloy/z80';
 import type { Template, TemplateOperand } from '@fugloy/z80';
+import { buildIndex } from '../src/encode.js';
 import { encode, forms, lengthOf } from '../src/index.js';
 import type { Operand, Shape } from '../src/index.js';
 
@@ -222,8 +223,43 @@ describe('forms that do not exist', () => {
     expect(err(encode('EX', [{ shape: 'BC' }, { shape: 'DE' }], 0))).toBe("EX has no form BC,DE. Its forms are (SP),HL, (SP),IX, (SP),IY, AF,AF', and DE,HL.");
   });
 
+  it('names operands in words, not shape names', () => {
+    expect(err(encode('OUT', [{ shape: '(C)' }, { shape: 'num', value: 5 }], 0))).toBe('OUT has no form (C),n. The forms that start with (C) are (C),A, (C),B, (C),C, (C),D, (C),E, (C),H, and (C),L.');
+    expect(err(encode('LD', [{ shape: 'B' }, { shape: '(n)', value: 1 }], 0))).toMatch(/^LD has no form B,\(port\)\. /);
+    expect(err(encode('JP', [{ shape: 'BC' }, { shape: 'e', value: 1 }], 0))).toMatch(/^JP has no form BC,displacement\. /);
+  });
+
+  it('says how to write the undocumented IN F,(C), IN (C), and OUT (C),0, which the tables hold as DB', () => {
+    expect(err(encode('IN', [{ shape: 'F' }, { shape: '(C)' }], 0))).toBe('IN F,(C) is undocumented, and Fugløy writes it as DB 0EDH,70H; use that instead.');
+    expect(err(encode('in', [{ shape: '(C)' }], 0))).toBe('IN (C) is undocumented, and Fugløy writes it as DB 0EDH,70H; use that instead.');
+    expect(err(encode('OUT', [{ shape: '(C)' }, { shape: 'num', value: 0 }], 0))).toBe('OUT (C),0 is undocumented, and Fugløy writes it as DB 0EDH,71H; use that instead.');
+    expect(TABLES.ed[0x70]!.mnemonic).toBe('DB');
+    expect(TABLES.ed[0x71]!.mnemonic).toBe('DB');
+  });
+
   it('names an unknown mnemonic', () => {
     expect(err(encode('LDA', [{ shape: 'n', value: 5 }], 0))).toBe('Unknown instruction LDA.');
+  });
+});
+
+describe('the index refuses entries it cannot tell apart', () => {
+  /** TABLES with one ED slot replaced. */
+  const doctored = (opcode: number, tpl: Template): typeof TABLES => ({ ...TABLES, ed: TABLES.ed.map((t, i) => (i === opcode ? tpl : t)) });
+
+  it('builds from the real tables, keeping 22 and 2A over ED 63 and ED 6B', () => {
+    const index = buildIndex(TABLES);
+    const ld = index.get('LD')!;
+    expect(ld.some((e) => e.table === 'ed' && (e.opcode === 0x63 || e.opcode === 0x6b))).toBe(false);
+    expect([...index.values()].reduce((n, l) => n + l.length, 0)).toBe(798);
+  });
+
+  it('throws on a second encoding of the same instruction', () => {
+    expect(() => buildIndex(doctored(0x00, TABLES.base[0x3e]!))).toThrow(/LD A,n two encodings the encoder cannot tell apart: base:3e and ed:00/);
+  });
+
+  it('throws when an nn form would shadow an n form', () => {
+    const ldAnn: Template = { ...TABLES.base[0x3e]!, operands: [{ t: 'fixed', op: { kind: 'reg', reg: 'A' } }, { t: 'nn' }], length: 4 };
+    expect(() => buildIndex(doctored(0x00, ldAnn))).toThrow(/cannot tell apart/);
   });
 });
 
