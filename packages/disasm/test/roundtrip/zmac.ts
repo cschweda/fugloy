@@ -8,6 +8,10 @@
  * entry, with no warning and no error. Without zmac, asm alone assembles the
  * source and its image goes back to the caller, so the image the test already
  * expects (the program that went in) checks asm on its own.
+ *
+ * A source emitted with a machine's symbol tables is assembled by asm for that
+ * machine and DOS (`AsmOptions`), so the table names asm predefines (Ruling 5)
+ * meet the emitter's EQUs that define them again.
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -15,7 +19,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assemble as asmAssemble, toCmd } from '../../../asm/src/index.js';
-import type { AsmResult } from '../../../asm/src/index.js';
+import type { AsmOptions, AsmResult } from '../../../asm/src/index.js';
 import { expect, it } from 'vitest';
 import { loadCmd } from '../../src/cmd.js';
 import type { CmdModule } from '../../src/cmd.js';
@@ -61,10 +65,14 @@ export interface Assembled {
 const describe = (r: AsmResult): string =>
   r.diagnostics.map((d) => `${d.line}:${d.column}: ${d.severity}: ${d.message}`).join('\n');
 
-/** asm's result for an emitted source: ok, with no warning or error (an info note is fine). */
-function cleanAsm(source: string): AsmResult & { image: MemoryImage } {
-  const result = asmAssemble(source);
-  const loud = result.diagnostics.filter((d) => d.severity !== 'info');
+/**
+ * asm's result for an emitted source: ok, with no warning or error. An info note is fine, and so
+ * is the Model I/III warning (`rom-difference`): a program that calls $RSRCV is right for the
+ * Model III only, and saying so changes no byte.
+ */
+function cleanAsm(source: string, options: AsmOptions): AsmResult & { image: MemoryImage } {
+  const result = asmAssemble(source, options);
+  const loud = result.diagnostics.filter((d) => d.severity !== 'info' && d.code !== 'rom-difference');
   if (!result.ok || result.image === null || loud.length > 0) {
     const lines = source.split('\n');
     const at = loud.map((d) => `line ${d.line}: ${lines[d.line - 1] ?? ''}`).slice(0, 10).join('\n');
@@ -90,15 +98,16 @@ function expectAsmAgrees(asm: AsmResult & { image: MemoryImage }, zmac: CmdModul
 
 /**
  * Assembles zmac source into a .cmd and loads it with our own loader, checking @fugloy/asm
- * against it. Without zmac, asm's own .cmd is loaded instead (by: 'asm').
+ * against it (assembled for `options`' machine and DOS). Without zmac, asm's own .cmd is loaded
+ * instead (by: 'asm').
  */
-export function assemble(source: string): Assembled {
+export function assemble(source: string, options: AsmOptions = {}): Assembled {
   const zmac = findZmac();
   if (zmac === null) {
-    const asm = cleanAsm(source);
+    const asm = cleanAsm(source, options);
     // Shape the file as zmac's: without an END entry zmac writes no end record at all, so
     // loadCmd guesses the lowest address, where toCmd's `03 00` would give no entry.
-    let cmd = toCmd(asm);
+    let cmd = toCmd(asm, { entry: 'source' });
     if (asm.entry === null && cmd.at(-2) === 0x03 && cmd.at(-1) === 0x00) cmd = cmd.subarray(0, -2);
     return { module: loadCmd(cmd), listing: '', by: 'asm' };
   }
@@ -115,7 +124,7 @@ export function assemble(source: string): Assembled {
     }
     const module = loadCmd(new Uint8Array(readFileSync(join(dir, 'prog.cmd'))));
     const listing = readFileSync(join(dir, 'prog.lst'), 'utf8');
-    expectAsmAgrees(cleanAsm(source), module);
+    expectAsmAgrees(cleanAsm(source, options), module);
     return { module, listing, by: 'zmac' };
   } finally {
     rmSync(dir, { recursive: true, force: true });

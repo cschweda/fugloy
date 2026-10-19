@@ -151,6 +151,65 @@ function undocumentedEd(mnemonic: string, operands: readonly Operand[]): string 
   return undefined;
 }
 
+/** A byte as zmac source writes it in a DB: `05H`, `0CBH`. */
+const dbByte = (v: number): string => {
+  const h = `${v.toString(16).toUpperCase().padStart(2, '0')}H`;
+  return /^[A-F]/.test(h) ? `0${h}` : h;
+};
+
+const EIGHTY_PAIRS: Readonly<Record<string, string>> = { A: 'AF', B: 'BC', D: 'DE', H: 'HL', "AF'": 'AF' };
+const BYTE_REGISTERS: ReadonlySet<string> = new Set(['A', 'B', 'C', 'D', 'E', 'H', 'L']);
+const ROTATES: ReadonlySet<string> = new Set(['RLC', 'RRC', 'RL', 'RR', 'SLA', 'SRA', 'SLL', 'SRL', 'RES', 'SET']);
+
+/**
+ * The exact rewrite for a spelling zmac reads but the tables do not give
+ * (each is pinned with zmac's bytes in zmac-probes.test.ts): the port alone
+ * after IN or OUT, JP HL without parentheses, the 8080's PUSH B and M, PUSH
+ * AF', and the undocumented DD CB / FD CB copies to a register, which the
+ * tables keep as DB.
+ */
+function spelling(mnemonic: string, operands: readonly Operand[], written: readonly string[] | undefined): string | undefined {
+  const shapes = operands.map((o) => o.shape);
+  const text = (i: number): string => written?.[i] ?? (operands[i]!.value === undefined ? shapes[i]! : asSource(operands[i]!.value!));
+  const bare = (i: number): string => text(i).replace(/^\((.*)\)$/, '$1');
+  const one = operands.length === 1;
+  if (mnemonic === 'IN' && one && (isImmediate(shapes[0]!) || shapes[0] === '(nn)')) {
+    return `IN needs A and the port in parentheses: write IN A,(${bare(0)}).`;
+  }
+  if (mnemonic === 'OUT' && one && (isImmediate(shapes[0]!) || shapes[0] === '(nn)')) {
+    return `OUT needs the port in parentheses and then A: write OUT (${bare(0)}),A.`;
+  }
+  if (mnemonic === 'JP' && one && (shapes[0] === 'HL' || shapes[0] === 'IX' || shapes[0] === 'IY')) {
+    return `JP ${shapes[0]} jumps to the address in ${shapes[0]}, which Z80 assembly writes in parentheses: write JP (${shapes[0]}).`;
+  }
+  if ((mnemonic === 'PUSH' || mnemonic === 'POP') && one && EIGHTY_PAIRS[shapes[0]!] !== undefined) {
+    const pair = EIGHTY_PAIRS[shapes[0]!]!;
+    const why = shapes[0] === "AF'" ? `${mnemonic} works on AF, not the shadow AF'` : `${mnemonic} works on register pairs, and ${shapes[0]} is the 8080's short name for ${pair}`;
+    return `${why}: write ${mnemonic} ${pair}.`;
+  }
+  if (shapes.includes('M')) {
+    const swapped = shapes.map((sh) => (sh === 'M' ? '(HL)' : sh));
+    const withA = candidates(mnemonic, swapped).length === 0 && candidates(mnemonic, ['A', ...swapped]).length > 0;
+    if (candidates(mnemonic, swapped).length > 0 || withA) {
+      const form = shapes.map((sh, i) => (sh === 'M' ? '(HL)' : text(i)));
+      return `M is the 8080's name for the byte HL points at: write ${mnemonic} ${withA ? 'A,' : ''}${form.join(',')}.`;
+    }
+  }
+  const last = shapes[shapes.length - 1]!;
+  const index = shapes.findIndex((sh) => sh === '(IX+d)' || sh === '(IX)' || sh === '(IY+d)' || sh === '(IY)');
+  if (ROTATES.has(mnemonic) && operands.length >= 2 && BYTE_REGISTERS.has(last) && index === operands.length - 2) {
+    // The copy is the (IX+d) form with the register form's opcode in the last byte.
+    const onIndex = encode(mnemonic, operands.slice(0, -1), 0);
+    const onRegister = encode(mnemonic, [...operands.slice(0, -2), { shape: last }], 0);
+    if ('bytes' in onIndex && 'bytes' in onRegister) {
+      const bytes = [...onIndex.bytes.slice(0, -1), onRegister.bytes[onRegister.bytes.length - 1]!];
+      const head = `${mnemonic} ${operands.map((_, i) => text(i)).join(',')}`;
+      return `${head} is undocumented: it works on the byte at ${bare(index)} and also copies the result into ${last}. Fugløy writes it as data, so write DB ${bytes.map(dbByte).join(',')}.`;
+    }
+  }
+  return undefined;
+}
+
 /** Up to six forms in full; past that, the first five and how many more. */
 function capped(forms: readonly string[]): { text: string; all: boolean } {
   if (forms.length <= 6) return { text: list(forms, 'and'), all: true };
@@ -211,7 +270,7 @@ export function encode(mnemonic: string, operands: readonly Operand[], pc: numbe
   if (entries === undefined) return { error: `Unknown instruction ${mn}.` };
   const shapes = operands.map((o) => o.shape);
   let found = candidates(mn, shapes);
-  if (found.length === 0) return { error: undocumentedEd(mn, operands) ?? noForm(mn, shapes, entries, options.written) };
+  if (found.length === 0) return { error: undocumentedEd(mn, operands) ?? spelling(mn, operands, options.written) ?? noForm(mn, shapes, entries, options.written) };
 
   // A fixed number (bit, RST vector, IM mode) picks the entry by its value.
   const fixedAt = found[0]!.tpl.operands.findIndex((o) => fixedNumber(o) !== undefined);

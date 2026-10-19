@@ -108,9 +108,9 @@ const shownNames = ({ mod, a }: Listed): { name: string; table: string }[] => bu
 const withZmac = (file: string): typeof it | typeof it.skip => (resolveSample(file) === null ? it.skip : withAssembler());
 
 /** Assembles the zmac source of a listing, with its table names defined, and compares the image and the entry with the program's. */
-function expectRoundTrip({ mod, a }: Listed, file: string): string {
+function expectRoundTrip({ mod, a, tables }: Listed, file: string): string {
   const source = emitZmac(mod.image, a.pass1, a.transfer, { source: file, symbols: a.symbols, annotations: a.annotations, space: a.space, externals: a.externals, tablesUsed: a.tablesUsed });
-  const { module: back } = assemble(source);
+  const { module: back } = assemble(source, { model: tables.selection.machine, dos: tables.selection.dos });
   expectSameImage(back.image, mod.image);
   expect(back.entry).toBe(mod.entry);
   return source;

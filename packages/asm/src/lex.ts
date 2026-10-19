@@ -91,11 +91,15 @@ export function lex(line: string): Lexed {
     }
     // zmac's `$` rules: `$` alone is the address of the line; `$` and hex digits only is a
     // hex number ($FF); `$` and any other name characters is a name ($KBWAIT, $1G, $$), as
-    // the emitter's ROM names are.
+    // the emitter's ROM names are. zmac also reads `?` as the hex digit F after `$` ($? is 0FH,
+    // $A? is 0AFH, and `$? EQU 1` only draws a warning), so `$` with hex digits and a `?` is refused.
     if (c === '$' && i + 1 < line.length && IDENT_PART.test(line[i + 1]!)) {
       i++;
       while (i < line.length && IDENT_PART.test(line[i]!)) i++;
       const text = line.slice(start, i);
+      if (/^\$[0-9A-Fa-f?]*\?[0-9A-Fa-f?]*$/.test(text)) {
+        return fail(`${text} is neither a name nor a number: after $, zmac reads ? as the hex digit F. Write the number as $${text.slice(1).replace(/\?/g, 'F').toUpperCase()}, or choose a name with a letter from G to Z in it.`, start, i);
+      }
       if (!/^\$[0-9A-Fa-f]+$/.test(text)) {
         tokens.push({ kind: 'ident', text, col: start + 1, end: i + 1 });
         continue;

@@ -19,6 +19,7 @@ process.exitCode = await run(process.argv.slice(2), {
   stderr: (s) => { if (stderrOpen) process.stderr.write(s); },
   readFile: async (path) => new Uint8Array(await readFile(path)),
   writeFile: async (path, text) => { await writeFile(path, text); },
+  writeBytes: async (path, bytes) => { await writeFile(path, bytes); },
   fileExists: async (path) => { try { await access(path); return true; } catch { return false; } },
   stdoutIsTerminal: process.stdout.isTTY === true,
   env: process.env,

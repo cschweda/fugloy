@@ -23,7 +23,7 @@ function roundTrip(bytes: Uint8Array, tables: SymbolSet, annotations: Annotation
   const mod = loadRaw(bytes, 0x5200);
   const a = analyze(mod, { tables, annotations });
   const source = emitZmac(mod.image, a.pass1, a.transfer, { source: 'x.bin', symbols: a.symbols, annotations: a.annotations, space: a.space, externals: a.externals, tablesUsed: a.tablesUsed });
-  expectSameImage(assemble(source).module.image, mod.image);
+  expectSameImage(assemble(source, { model: tables.selection.machine, dos: tables.selection.dos }).module.image, mod.image);
   return source;
 }
 

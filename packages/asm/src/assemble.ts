@@ -13,10 +13,17 @@
  * They differ only under .PHASE; labels, `$`, relative jumps, the listing's
  * `address`, and the source map use the run address, and the image the load
  * address. Lines after END are listed but never read. The directives follow
- * zmac (see directives.ts); the predefined ROM names (the `rom` kind and the
- * `model`/`dos` options) are Task 5's.
+ * zmac (see directives.ts).
+ *
+ * The chosen model's ROM and hardware names (and, with `dos`, that DOS's) are
+ * predefined at the lowest priority (Ruling 5, symbols.ts): a definition in
+ * the source wins with no message, and a name the source never defines that a
+ * table has resolves to the table's value. An instruction that uses an
+ * address whose code differs between the Model I and Model III ROMs draws a
+ * warning naming both.
  */
 import { MemoryImage } from '@fugloy/disasm';
+import type { Dos, TableEntry } from '@fugloy/disasm';
 import { asSource, encode, lengthOf, show } from './encode.js';
 import type { EncodeOptions } from './encode.js';
 import { evaluate, ExprError, loneSymbol } from './expr.js';
@@ -26,7 +33,9 @@ import { CONDITIONS, isKeyword, isMnemonic, OPERATOR_WORDS, REGISTERS } from './
 import { parseLine } from './parse.js';
 import type { OperandNode, Statement } from './parse.js';
 import type { Operand, Shape } from './shape.js';
-import { nearest, suggestOperation } from './suggest.js';
+import { nearest, nearestRomName, suggestOperation } from './suggest.js';
+import { DEFAULT_MODEL, machineText, nameElsewhere, romDifference, romNames, selectionProblem, TABLE_TEXT } from './symbols.js';
+import type { Model, RomName } from './symbols.js';
 
 export type Severity = 'error' | 'warning' | 'info';
 
@@ -39,12 +48,18 @@ export interface Diagnostic {
   endColumn: number;
   severity: Severity;
   message: string;
+  /**
+   * A stable name for a diagnostic a caller may want to tell apart from the
+   * rest; only `rom-difference` (the Model I/III warning) has one so far.
+   */
+  code?: 'rom-difference';
 }
 
 export type SymbolKind = 'label' | 'equ' | 'defl' | 'rom';
 
 export interface SymbolInfo {
   value: number;
+  /** The defining line; 0 for a ROM, hardware, or DOS name the source used without defining it. */
   line: number;
   kind: SymbolKind;
 }
@@ -86,15 +101,17 @@ export interface SourceMap {
 }
 
 export interface AsmOptions {
-  model?: 1 | 3 | 4;
-  dos?: string;
+  /** The machine whose ROM names are predefined: 1, 3 (the default), or 4 (its LS-DOS 6 service calls and the Model III ROM). */
+  model?: Model;
+  /** The DOS whose names are predefined too: `trsdos` (Model III only), `ldos`, or `none` (the default). */
+  dos?: Dos;
 }
 
 export interface AsmResult {
   ok: boolean;
   image: MemoryImage | null;
   entry: number | null;
-  /** Keyed by each name as first written; names match case-insensitively, as in zmac. */
+  /** Keyed by each name as first written; names match case-insensitively, as in zmac. ROM names appear only where the source uses them. */
   symbols: Map<string, SymbolInfo>;
   sourceMap: SourceMap;
   listing: ListingLine[];
@@ -213,6 +230,12 @@ function versionAt(sym: Sym, line: number): Sym {
 }
 
 export class Assembly {
+  /** The machine the program is for, and the names its tables predefine (upper case). */
+  readonly model: Model;
+  readonly rom: ReadonlyMap<string, RomName>;
+  readonly dos: Dos;
+  /** The predefined names the source used without defining them. */
+  readonly romUsed = new Map<string, RomName>();
   readonly diagnostics: Diagnostic[] = [];
   readonly syms = new Map<string, Sym>();
   readonly items: Item[] = [];
@@ -234,8 +257,23 @@ export class Assembly {
   endItem: Item | null = null;
   entry: number | null = null;
 
-  report(severity: Severity, line: number, column: number, endColumn: number, message: string): void {
-    this.diagnostics.push({ line, column, endColumn, severity, message });
+  constructor(model: Model = DEFAULT_MODEL, dos: Dos = 'none') {
+    this.model = model;
+    this.dos = dos;
+    this.rom = romNames(model, dos);
+  }
+
+  /** A predefined name the source does not define, noted as used; undefined when the tables lack it too. */
+  romValue(name: string): number | undefined {
+    const up = name.toUpperCase();
+    const hit = this.rom.get(up);
+    if (hit === undefined) return undefined;
+    this.romUsed.set(up, hit);
+    return hit.value;
+  }
+
+  report(severity: Severity, line: number, column: number, endColumn: number, message: string, code?: Diagnostic['code']): void {
+    this.diagnostics.push(code === undefined ? { line, column, endColumn, severity, message } : { line, column, endColumn, severity, message, code });
   }
 
   error(line: number, column: number, endColumn: number, message: string): void {
@@ -411,7 +449,11 @@ export class Assembly {
   lookupBefore(node: SymNode, line: number, what: string, seen: Set<Sym>, via?: Sym): number {
     const first = this.syms.get(node.name.toUpperCase());
     if (first === undefined || first.line >= line) {
-      if (first === undefined && !this.definedLater(node.name, line)) throw new ExprError(this.undefinedMessage(node.name), node.col, node.end);
+      if (first === undefined && !this.definedLater(node.name, line)) {
+        const rom = this.romValue(node.name);
+        if (rom !== undefined) return rom;
+        throw new ExprError(this.undefinedMessage(node.name), node.col, node.end);
+      }
       throw new ExprError(`${what} cannot use ${node.name} before ${node.name} is defined, because the addresses after this line depend on it. Define ${node.name} above the ${what}.`, node.col, node.end);
     }
     let sym = first;
@@ -553,14 +595,56 @@ export class Assembly {
   /** A symbol's value as `line` sees it (which matters only for a DEFL name). */
   lookup(node: SymNode, line: number, chain: Sym[] = []): number {
     const sym = this.syms.get(node.name.toUpperCase());
-    if (sym === undefined) throw new ExprError(this.undefinedMessage(node.name), node.col, node.end);
+    if (sym === undefined) {
+      const rom = this.romValue(node.name);
+      if (rom !== undefined) return rom;
+      throw new ExprError(this.undefinedMessage(node.name), node.col, node.end);
+    }
     return this.resolve(sym.versions === undefined ? sym : versionAt(sym, line), chain);
   }
 
   undefinedMessage(name: string): string {
     if (/^[A-F][0-9A-F]*H$/i.test(name)) return `${name} is not defined. A hex number must start with a digit: write 0${name}.`;
+    if (/^\$[0-9A-F]+H$/i.test(name)) return `${name} is not defined. A hex number takes $ or H, not both: write ${name.slice(0, -1)} or 0${name.slice(1)}.`;
     const near = nearest(name, [...this.syms.values()].map((s) => s.name));
-    return near.length > 0 ? `${name} is not defined. Did you mean ${near.join(' or ')}?` : `${name} is not defined.`;
+    if (near.length > 0) return `${name} is not defined. Did you mean ${near.join(' or ')}?`;
+    const elsewhere = nameElsewhere(this.model, this.dos, name);
+    if (elsewhere !== undefined) return `${name} is not defined. ${elsewhereText(elsewhere, machineText(this.model))}`;
+    const rom = nearestRomName(name, [...this.rom.values()].map((r) => r.name));
+    if (rom.length === 1) return `${name} is not defined. Did you mean ${rom[0]}, ${describeName(this.rom.get(rom[0]!.toUpperCase())!)}?`;
+    if (rom.length > 1) return `${name} is not defined. Did you mean ${rom.join(' or ')}?`;
+    return `${name} is not defined.`;
+  }
+
+  /**
+   * Warns once for a line whose instruction uses an address the Model I and
+   * Model III ROM tables give different meanings: a CALL or JP target, an
+   * address in parentheses, or a predefined ROM name.
+   */
+  romWarning(item: Item, operands: readonly Operand[]): void {
+    const { stmt } = item;
+    const mn = stmt.op!.name;
+    for (let i = 0; i < operands.length; i++) {
+      const { shape, value } = operands[i]!;
+      const node = item.operands[i]!;
+      if (value === undefined || !('expr' in node)) continue;
+      const name = loneSymbol(node.expr);
+      const viaRom = name !== undefined && !this.syms.has(name.toUpperCase()) && this.rom.has(name.toUpperCase());
+      if (!(viaRom || shape === '(nn)' || (shape === 'nn' && (mn === 'CALL' || mn === 'JP')))) continue;
+      const diff = romDifference(value & 0xffff);
+      if (diff === undefined) continue;
+      // The Model 4 runs Model III code with the Model III ROM.
+      const [mine, theirs, machine, other] = this.model === 1 ? [diff.model1, diff.model3, 'Model I', 'Model III'] : [diff.model3, diff.model1, 'Model III', 'Model I'];
+      this.report(
+        'warning',
+        stmt.line,
+        node.col,
+        node.end,
+        `${address(value)} means different things in the two ROMs: on the ${machine} it is ${mine.name} (${mine.purpose}), on the ${other} ${theirs.name} (${theirs.purpose}). This line is right for the ${machine} only.`,
+        'rom-difference',
+      );
+      return;
+    }
   }
 
   // ---- pass 2 -------------------------------------------------------------
@@ -681,7 +765,10 @@ export class Assembly {
       if (name !== undefined) options.target = name;
     }
     const out = encode(op.name, operands, item.address!, options);
-    if ('bytes' in out) return out.bytes;
+    if ('bytes' in out) {
+      this.romWarning(item, operands);
+      return out.bytes;
+    }
     let message = out.error;
     const v = operands[0]?.value;
     if (op.name === 'RST' && v !== undefined && v >= 1 && v <= 7) {
@@ -728,8 +815,10 @@ function sourceLines(source: string): string[] {
   return lines;
 }
 
-export function assemble(source: string, _options: AsmOptions = {}): AsmResult {
-  const asm = new Assembly();
+export function assemble(source: string, options: AsmOptions = {}): AsmResult {
+  const problem = selectionProblem(options.model ?? DEFAULT_MODEL, options.dos);
+  if (problem !== undefined) throw new RangeError(problem);
+  const asm = new Assembly(options.model, options.dos);
   const lines = sourceLines(source);
   // Lines are read up to END; the rest are listed but never parsed, as zmac ignores them.
   const statements: Statement[] = [];
@@ -813,6 +902,24 @@ export function assemble(source: string, _options: AsmOptions = {}): AsmResult {
     const last = sym.versions === undefined ? sym : sym.versions[sym.versions.length - 1]!;
     if (last.value !== undefined) symbols.set(sym.name, { value: last.value & 0xffff, line: last.line, kind: sym.kind });
   }
+  for (const r of asm.romUsed.values()) symbols.set(r.name, { value: r.value, line: 0, kind: 'rom' });
 
   return { ok, image, entry: ok ? asm.entry : null, symbols, sourceMap, listing, diagnostics };
+}
+
+/** Where a name the chosen tables lack comes from, and how to get it. */
+function elsewhereText(entry: TableEntry, machine: string): string {
+  const from = TABLE_TEXT[entry.table];
+  if (entry.table.startsWith('dos-')) return `${entry.name} is a ${from} name; choose ${from} as the DOS to use it.`;
+  if (entry.table === 'svc-lsdos6') return `${entry.name} is an LS-DOS 6 service call, which only the Model 4 has.`;
+  return `${entry.name} is a ${from} name, and this program is assembled for the ${machine}.`;
+}
+
+/** `the Model III ROM routine at $01C9 (clear the screen)`: where a predefined name comes from and what it is. */
+function describeName(r: RomName): string {
+  const { entry } = r;
+  const from = TABLE_TEXT[entry.table];
+  if (entry.kind === 'port') return `the ${from} port ${show(entry.key)} (${entry.purpose})`;
+  if (entry.kind === 'svc') return `the ${from} service call ${entry.key} (${entry.purpose})`;
+  return `the ${from} ${entry.kind} at ${address(entry.key)} (${entry.purpose})`;
 }

@@ -8,3 +8,6 @@ export type { EncodeOptions, EncodeResult } from './encode.js';
 export { assemble, DEFAULT_ORIGIN } from './assemble.js';
 export type { AsmOptions, AsmResult, Diagnostic, LineAt, ListingLine, Severity, SourceMap, SymbolInfo, SymbolKind } from './assemble.js';
 export { toCmd } from './output.js';
+export type { CmdOptions } from './output.js';
+export { DEFAULT_MODEL, differentAddresses, romDifference, romNames } from './symbols.js';
+export type { Model, RomName } from './symbols.js';

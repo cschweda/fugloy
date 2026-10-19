@@ -57,3 +57,43 @@ export function suggestOperation(upper: string): string | undefined {
   const near = nearest(upper, [...mnemonics(), ...DIRECTIVES.filter((d) => d !== '=')]);
   return near.length > 0 ? orList(near) : undefined;
 }
+
+/** A table name without the `$` or `@` its source spells it with. */
+const core = (name: string): string => name.toUpperCase().replace(/^[$@]/, '');
+
+/**
+ * The ROM, hardware, or DOS names nearest `word`, at most three. A name is
+ * near when, without its leading `$` or `@`, it is within one edit of the
+ * word (two for a word of six letters or more), or it holds the word with one letter changed, added, or
+ * dropped (CLSS finds $VDCLS); the first kind ranks above the second, and
+ * among the second a closer piece, then the name closest in length to the word, wins.
+ */
+export function nearestRomName(word: string, names: Iterable<string>): string[] {
+  const w = core(word);
+  // The tables hold hundreds of names, so a short word gets one edit, not two.
+  const limit = w.length <= 5 ? 1 : 2;
+  const lengths = w.length >= 4 ? [w.length - 1, w.length, w.length + 1] : [w.length, w.length + 1];
+  let best: { name: string; score: number }[] = [];
+  for (const name of names) {
+    const c = core(name);
+    if (c === w && name.toUpperCase() === word.toUpperCase()) continue;
+    let score = distance(w, c);
+    if (score > limit) {
+      score = Infinity;
+      if (w.length >= 3) {
+        for (const n of lengths) {
+          for (let i = 0; i + n <= c.length; i++) {
+            // Closer pieces first; ties go to the name closest in length to the word.
+            const d = distance(w, c.slice(i, i + n));
+            if (d <= 1) score = Math.min(score, limit + 1 + d + Math.abs(c.length - w.length) / 100);
+          }
+        }
+      }
+    }
+    if (score === Infinity) continue;
+    const top = best[0];
+    if (top === undefined || score < top.score) best = [{ name, score }];
+    else if (score === top.score) best.push({ name, score });
+  }
+  return best.map((b) => b.name).sort().slice(0, 3);
+}

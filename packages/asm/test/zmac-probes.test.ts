@@ -151,6 +151,17 @@ describe('zmac probe: $ in names', () => {
     bothReject(program('\tDW $1G'), /^\$1G is not defined/);
     bothReject(program('\tDW $0Q'), /^\$0Q is not defined/);
   });
+  zit('$ followed by ., @, or a ? after a letter from G on starts a name', () => {
+    same(program('$.X\tEQU 5', '$@\tEQU 6', '$?X\tEQU 7', '$G?\tEQU 8', '\tDB $.X,$@,$?X,$G?'));
+  });
+  zit('$FFH is a name, so an undefined one is rejected, with the fix', () => {
+    bothReject(program('\tDW $FFH'), /^\$FFH is not defined\. A hex number takes \$ or H, not both/);
+  });
+  zit('$ with hex digits and a ? draws a zmac warning when defined (zmac reads ? as F), so an error here', () => {
+    bothReject(program('$?\tEQU 5', '\tDB 0'), /^\$\? is neither a name nor a number/);
+    bothReject(program('$A?\tEQU 5', '\tDB 0'), /^\$A\? is neither a name nor a number/);
+    bothReject(program('$1?:\tNOP'), /^\$1\? is neither a name nor a number/);
+  });
 });
 
 describe('zmac probe: 32-bit numbers', () => {
@@ -425,8 +436,9 @@ describe('deliberately stricter than zmac', () => {
   });
   // The spellings below were found by negative.test.ts's mnemonic and operand
   // grid. zmac reads each one, but the assembler takes only the forms
-  // @fugloy/z80's tables give, so it refuses them and names the forms it does
-  // take. The emitter never writes any of them.
+  // @fugloy/z80's tables give, so it refuses them and gives the exact rewrite
+  // (diagnostics.test.ts checks that each rewrite assembles to zmac's bytes
+  // here). The emitter never writes any of them.
   // ED 70H and 71H: the tables keep them as DB (Task 1 ruling), and the message gives that DB.
   zit('IN (C) and OUT (C),0', () => {
     expect(runZmac(program('\tIN (C)', '\tOUT (C),0')).bytes).toEqual([0xed, 0x70, 0xed, 0x71]);
@@ -437,26 +449,32 @@ describe('deliberately stricter than zmac', () => {
   });
   zit('IN and OUT with the port alone', () => {
     expect(runZmac(program('\tIN 38H', '\tOUT (12H)')).bytes).toEqual([0xdb, 0x38, 0xd3, 0x12]);
-    expect(errorsOf(assemble(program('\tIN 38H', '\tOUT (12H)'))).length).toBe(2);
+    expect(errorsOf(assemble(program('\tIN 38H', '\tOUT (12H)')))).toEqual(['2: IN needs A and the port in parentheses: write IN A,(38H).', '3: OUT needs the port in parentheses and then A: write OUT (12H),A.']);
   });
   zit('JP HL and JP IX without parentheses', () => {
     expect(runZmac(program('\tJP HL', '\tJP IX')).bytes).toEqual([0xe9, 0xdd, 0xe9]);
-    expect(errorsOf(assemble(program('\tJP HL', '\tJP IX'))).length).toBe(2);
+    expect(errorsOf(assemble(program('\tJP HL', '\tJP IX'))).map((e) => e.replace(/^.* write /, ''))).toEqual(['JP (HL).', 'JP (IX).']);
   });
   zit("PUSH and POP of A, B, H, or AF'", () => {
     expect(runZmac(program('\tPOP A', '\tPUSH B', '\tPUSH H', "\tPUSH AF'")).bytes).toEqual([0xf1, 0xc5, 0xe5, 0xf5]);
-    expect(errorsOf(assemble(program('\tPOP A', '\tPUSH B', '\tPUSH H', "\tPUSH AF'"))).length).toBe(4);
+    expect(errorsOf(assemble(program('\tPOP A', '\tPUSH B', '\tPUSH H', "\tPUSH AF'"))).map((e) => e.replace(/^.* write /, ''))).toEqual(['POP AF.', 'PUSH BC.', 'PUSH HL.', 'PUSH AF.']);
   });
   // The 8080 name M for (HL), which zmac reads after these five but not after AND, OR, or XOR.
   zit('ADD M, ADC M, SUB M, SBC M, and CP M', () => {
     const src = program('\tADD M', '\tADC M', '\tSUB M', '\tSBC M', '\tCP M');
     expect(runZmac(src).bytes).toEqual([0x86, 0x8e, 0x96, 0x9e, 0xbe]);
-    expect(errorsOf(assemble(src)).length).toBe(5);
+    expect(errorsOf(assemble(src)).map((e) => e.replace(/^.* write /, ''))).toEqual(['ADD A,(HL).', 'ADC A,(HL).', 'SUB (HL).', 'SBC A,(HL).', 'CP (HL).']);
   });
   // The undocumented DD CB copies to a register: the tables keep them as DB.
   zit('RL (IX+5),B and the other DD CB / FD CB register copies', () => {
     expect(runZmac(program('\tRL (IX+5),B', '\tSRL (IY),A')).bytes).toEqual([0xdd, 0xcb, 0x05, 0x10, 0xfd, 0xcb, 0x00, 0x3f]);
-    expect(errorsOf(assemble(program('\tRL (IX+5),B', '\tSRL (IY),A'))).length).toBe(2);
+    expect(errorsOf(assemble(program('\tRL (IX+5),B', '\tSRL (IY),A'))).map((e) => e.replace(/^.* write /, ''))).toEqual(['DB 0DDH,0CBH,05H,10H.', 'DB 0FDH,0CBH,00H,3FH.']);
+  });
+  // zmac reads ? as the hex digit F after $ (and in a number: 1?H is 1FH), so
+  // DB $? is DB 0FH. The assembler refuses a ? among hex digits.
+  zit('$? and $A? as numbers', () => {
+    expect(runZmac(program('\tDB $?', '\tDB $A?', '\tDW 1?H')).bytes).toEqual([0x0f, 0xaf, 0x1f, 0x00]);
+    expect(errorsOf(assemble(program('\tDB $?', '\tDB $A?', '\tDW 1?H'))).length).toBe(3);
   });
   // An EQU that names a label below the DS it sizes: the pinned zmac does not
   // finish (it crashes), so there is no zmac image to differ from.

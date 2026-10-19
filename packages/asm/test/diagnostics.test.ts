@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { assemble } from '../src/index.js';
-import { diagnosticsOf, errorsOf } from './helpers.js';
+import { bytesOf, diagnosticsOf, errorsOf } from './helpers.js';
 
 const lines = (...l: string[]): string => l.join('\n');
 
@@ -189,5 +189,62 @@ describe('forms and parentheses', () => {
 
   it('DB with nothing after it says what it needs', () => {
     expect(errorsOf(assemble(lines('\tORG 6000H', '\tDB')))).toEqual(['2: DB needs at least one value.']);
+  });
+});
+
+/**
+ * The spellings zmac reads but the tables do not give (zmac-probes.test.ts
+ * pins zmac's bytes for each): the error gives the exact rewrite, and the
+ * rewrite assembles to the bytes zmac gave the original spelling.
+ */
+describe("zmac's other spellings get the exact rewrite", () => {
+  const CASES: { written: string; message: string; zmac: number[] }[] = [
+    { written: 'IN 38H', message: 'IN needs A and the port in parentheses: write IN A,(38H).', zmac: [0xdb, 0x38] },
+    { written: 'OUT (12H)', message: 'OUT needs the port in parentheses and then A: write OUT (12H),A.', zmac: [0xd3, 0x12] },
+    { written: 'JP HL', message: 'JP HL jumps to the address in HL, which Z80 assembly writes in parentheses: write JP (HL).', zmac: [0xe9] },
+    { written: 'JP IX', message: 'JP IX jumps to the address in IX, which Z80 assembly writes in parentheses: write JP (IX).', zmac: [0xdd, 0xe9] },
+    { written: 'POP A', message: "POP works on register pairs, and A is the 8080's short name for AF: write POP AF.", zmac: [0xf1] },
+    { written: 'PUSH B', message: "PUSH works on register pairs, and B is the 8080's short name for BC: write PUSH BC.", zmac: [0xc5] },
+    { written: 'PUSH H', message: "PUSH works on register pairs, and H is the 8080's short name for HL: write PUSH HL.", zmac: [0xe5] },
+    { written: "PUSH AF'", message: "PUSH works on AF, not the shadow AF': write PUSH AF.", zmac: [0xf5] },
+    { written: 'ADD M', message: "M is the 8080's name for the byte HL points at: write ADD A,(HL).", zmac: [0x86] },
+    { written: 'SUB M', message: "M is the 8080's name for the byte HL points at: write SUB (HL).", zmac: [0x96] },
+    { written: 'CP M', message: "M is the 8080's name for the byte HL points at: write CP (HL).", zmac: [0xbe] },
+    {
+      written: 'RL (IX+5),B',
+      message: 'RL (IX+5),B is undocumented: it works on the byte at IX+5 and also copies the result into B. Fugløy writes it as data, so write DB 0DDH,0CBH,05H,10H.',
+      zmac: [0xdd, 0xcb, 0x05, 0x10],
+    },
+    {
+      written: 'SRL (IY),A',
+      message: 'SRL (IY),A is undocumented: it works on the byte at IY and also copies the result into A. Fugløy writes it as data, so write DB 0FDH,0CBH,00H,3FH.',
+      zmac: [0xfd, 0xcb, 0x00, 0x3f],
+    },
+    { written: 'IN (C)', message: 'IN (C) is undocumented, and Fugløy writes it as DB 0EDH,70H; use that instead.', zmac: [0xed, 0x70] },
+  ];
+  for (const { written, message, zmac } of CASES) {
+    it(`${written}`, () => {
+      expect(errorsOf(assemble(lines('\tORG 6000H', `\t${written}`)))).toEqual([`2: ${message}`]);
+      const rewrite = /.*(?:write|writes it as) (.+?)(?:; use that instead)?\.$/.exec(message)![1]!;
+      expect(bytesOf(['\tORG 6000H', `\t${rewrite}`].join('\n')), rewrite).toEqual(zmac);
+    });
+  }
+  it('RES and SET copies to a register are rewritten the same way', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tRES 3,(IX-2),C')))).toEqual([
+      '2: RES 3,(IX-2),C is undocumented: it works on the byte at IX-2 and also copies the result into C. Fugløy writes it as data, so write DB 0DDH,0CBH,0FEH,99H.',
+    ]);
+  });
+});
+
+describe('$ and hex digits', () => {
+  it('$FFH is not defined, and the message says to choose $ or H', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tDB $FFH')))).toEqual(['2: $FFH is not defined. A hex number takes $ or H, not both: write $FF or 0FFH.']);
+  });
+  it('$ with hex digits and a ? is refused, since zmac reads the ? as F', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '$?\tEQU 5')))).toEqual(['2: $? is neither a name nor a number: after $, zmac reads ? as the hex digit F. Write the number as $F, or choose a name with a letter from G to Z in it.']);
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tDB $A?')))).toEqual(['2: $A? is neither a name nor a number: after $, zmac reads ? as the hex digit F. Write the number as $AF, or choose a name with a letter from G to Z in it.']);
+  });
+  it('$ with ., @, or a ? after a letter from G on starts a name', () => {
+    expect(bytesOf(lines('\tORG 6000H', '$.X\tEQU 5', '$@\tEQU 6', '$?X\tEQU 7', '\tDB $.X,$@,$?X'))).toEqual([5, 6, 7]);
   });
 });

@@ -10,8 +10,8 @@ set -euo pipefail
 #   ./publish.sh status            show what is staged
 #
 # <set> is one of:
-#   core   @fugloy/z80, @fugloy/disasm, @fugloy/cli, released together at one version
-#          (disasm depends on z80, cli on both, so they publish in that order)
+#   core   @fugloy/z80, @fugloy/disasm, @fugloy/asm, @fugloy/cli, released together at one version
+#          (disasm depends on z80, asm on both, cli on all three, so they publish in that order)
 #   emu    @fugloy/emu, versioned on its own (0.x)
 #   mcp    @fugloy/mcp, versioned on its own (0.x). It depends on @fugloy/emu (and the core's
 #          disasm and z80), so publish emu first: `check mcp` refuses unless the emu version it
@@ -47,7 +47,7 @@ set -euo pipefail
 
 BRANCH="main"
 STAGE=".release"
-CORE_PACKAGES=(z80 disasm cli)
+CORE_PACKAGES=(z80 disasm asm cli)
 EMU_PACKAGES=(emu)
 MCP_PACKAGES=(mcp)
 
@@ -363,7 +363,10 @@ smoke_test() {
       cp "$OLDPWD/examples/sea-dragon/seadrg01.cmd" .
       npx --no-install fugloy seadrg01.cmd >listing.txt
       grep -q "ENTRY\|ORG\|; entry" listing.txt || { echo "fugloy printed no listing for Sea Dragon" >&2; exit 1; }
-      node --input-type=module -e 'import { decode } from "@fugloy/z80"; import { openProgram } from "@fugloy/disasm"; if (typeof decode !== "function" || typeof openProgram !== "function") process.exit(1);'
+      node --input-type=module -e 'import { decode } from "@fugloy/z80"; import { openProgram } from "@fugloy/disasm"; import { assemble } from "@fugloy/asm"; if (typeof decode !== "function" || typeof openProgram !== "function" || !assemble("\tORG 6000H\n\tRET\n").ok) process.exit(1);'
+      cp "$OLDPWD/packages/asm/examples/clear-screen.z" .
+      npx --no-install fugloy asm clear-screen.z >/dev/null
+      [[ -s clear-screen.cmd ]] || { echo "fugloy asm wrote no clear-screen.cmd" >&2; exit 1; }
     elif [[ "$set" == emu ]]; then
       node --input-type=module -e 'import { Machine, COVERAGE } from "@fugloy/emu"; if (typeof Machine !== "function" || COVERAGE.EXEC !== 1) process.exit(1);'
     else

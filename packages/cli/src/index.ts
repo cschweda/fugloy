@@ -1,5 +1,6 @@
 /**
- * The fugloy command: `fugloy <file> [--base <hex>] [--entry <hex>]... [--hints <path>] [--labels <path>] [--format listing|zmac|ir] [--sweep] [-o <path>]`.
+ * The fugloy command: `fugloy <file> [--base <hex>] [--entry <hex>]... [--hints <path>] [--labels <path>] [--format listing|zmac|ir] [--sweep] [-o <path>]`,
+ * and `fugloy asm <source> ...`, the assembler (asm.ts).
  * Reads one file, detects its format from content, runs Pass 1 with the ROM,
  * hardware, and DOS tables that `--machine` and `--dos` choose, and prints a
  * listing, zmac source, or the JSON IR. Only this package touches the file
@@ -26,6 +27,7 @@ import {
   writeHints,
 } from '@fugloy/disasm';
 import type { Dos, Hint, Machine, Session, SymbolSelection } from '@fugloy/disasm';
+import { runAsm } from './asm.js';
 import { colorListing } from './color.js';
 
 export const VERSION = '1.2.0';
@@ -35,6 +37,8 @@ export interface Io {
   stderr(text: string): void;
   readFile(path: string): Promise<Uint8Array>;
   writeFile(path: string, text: string): Promise<void>;
+  /** Writes bytes, for `fugloy asm`'s .CMD; an Io without it cannot assemble. */
+  writeBytes?(path: string, bytes: Uint8Array): Promise<void>;
   fileExists(path: string): Promise<boolean>;
   /** Whether stdout is a terminal; `--color` colors only there. */
   stdoutIsTerminal?: boolean;
@@ -43,6 +47,7 @@ export interface Io {
 }
 
 export const USAGE = `Usage: fugloy <file> [--base <hex> | --rebase <hex>] [--entry <hex>]... [--hints <path> | --write-hints <path>] [--labels <path>] [--machine 1|3|4] [--dos trsdos|ldos|none] [--format listing|zmac|ir] [--sweep] [--color] [-o <path>]
+       fugloy asm <source> [-o <out.cmd>] [--model 1|3|4] [--dos trsdos|ldos|none] [--listing]
 
 Prints a listing of a TRS-80 .CMD load module, raw binary, or tokenized Level
 II .BAS program. The format is detected from the file's content, never its
@@ -84,6 +89,8 @@ listing instead, with each code line disassembled at its true address.
   -o <path>        write the output to a file instead of stdout
   --help           show this help
   --version        show the version
+
+fugloy asm assembles Z80 source into a .CMD; see fugloy asm --help.
 `;
 
 const FORMATS = ['listing', 'zmac', 'ir'] as const;
@@ -124,6 +131,7 @@ function chooseTables(machineText: string | undefined, dosText: string | undefin
 }
 
 export async function run(argv: string[], io: Io): Promise<number> {
+  if (argv[0] === 'asm') return runAsm(argv.slice(1), io);
   const options = {
     base: { type: 'string' },
     rebase: { type: 'string' },

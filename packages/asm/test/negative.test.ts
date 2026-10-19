@@ -132,6 +132,11 @@ describe('whole programs zmac rejects', () => {
       expect(result.ok, `the assembler accepted:\n${source}`).toBe(false);
       expect(result.image).toBeNull();
       expect(errorsOf(result).length).toBeGreaterThan(0);
+      // The error is on the line zmac flags, not an unrelated one.
+      const zmacLines = [...flagged(z.output)];
+      const asmLines = new Set(result.diagnostics.filter((d) => d.severity === 'error').map((d) => d.line));
+      expect(zmacLines.length, z.output).toBeGreaterThan(0);
+      expect(zmacLines.filter((n) => !asmLines.has(n)), `zmac flags these lines and asm has no error there:\n${z.output}\n${errorsOf(result).join('\n')}`).toEqual([]);
     });
   }
 });

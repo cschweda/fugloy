@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { run } from '../src/index.js';
 import type { Io } from '../src/index.js';
-import { loadBas, loadRaw } from '@fugloy/disasm';
+import { defaultDos, loadBas, loadRaw } from '@fugloy/disasm';
+import type { Dos } from '@fugloy/disasm';
 import { assemble, expectSameImage, withAssembler } from '../../disasm/test/roundtrip/zmac.js';
 import { writeBasic } from '../../disasm/test/writers/basic-tokenizer.js';
 import type { BasicLineSpec } from '../../disasm/test/writers/basic-tokenizer.js';
@@ -653,7 +654,11 @@ describe('--machine and --dos', () => {
   for (const { flags } of CHOICES) {
     withAssembler()(`reassembles --format zmac output into the same image for ${given(flags)}`, async () => {
       const { text } = await list('--format', 'zmac', ...flags);
-      expectSameImage(assemble(text).module.image, loadRaw(ROUTINE, 0x5200).image);
+      // asm assembles for the machine and DOS the listing was named for, so its predefined names meet the listing's EQUs.
+      const flag = (name: string): string | undefined => flags[flags.indexOf(name) + 1] ?? undefined;
+      const model = Number(flags.includes('--machine') ? flag('--machine') : 3) as 1 | 3 | 4;
+      const dos = (flags.includes('--dos') ? flag('--dos') : defaultDos(model)) as Dos;
+      expectSameImage(assemble(text, { model, dos }).module.image, loadRaw(ROUTINE, 0x5200).image);
     });
   }
 
