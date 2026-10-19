@@ -57,6 +57,8 @@ narrower. The absolute shape depended on a monitor's knobs; xtrs and trsjs show 
 - **Decided (Claude's call, offered to the user, no photo available):** the Model III screen is
   4:3; the Model I is (4/3) × (36.07 / 50.50) ≈ 0.952:1, drawn from the timing figures in code
   with a comment citing them. The Model 4 keeps 4:3 (both its sizes).
+  6A ruling: no model is drawn narrower than its dots across where space allows (rows scale by
+  whole screen pixels), so in a typical panel the Model I is taller than the Model III.
 - Both enlarge with the window (as today, by whole rows) and gain a **full-screen** button
   (the Fullscreen API on the screen box; Esc leaves it). This fixes Run ▶ too.
 - A photo of a real screen can later adjust the two numbers; nothing else depends on them.
