@@ -1,0 +1,103 @@
+; Rock, paper, scissors: press R, P or S. The program picks its own move from
+; the R register, prints both moves and who won, and waits for the next key.
+; Words are copied from a table onto the screen with LDIR; the keys P, R and S
+; are bits 0, 2 and 3 of the keyboard row read at 3804H.
+
+        ORG     7000H           ; the program lives at 7000H, as in lessons 1 to 3
+
+START:  LD      HL,TITLE        ; the title, copied to row 0:
+        LD      DE,3C00H        ; LDIR copies BC bytes from where HL points
+        LD      BC,TITLEN       ; to where DE points
+        LDIR
+        LD      HL,LABELS       ; "YOU:" on row 2 and "ME:" on row 3
+        LD      DE,3C80H
+        LD      BC,4
+        LDIR
+        LD      DE,3CC0H        ; HL has moved on to "ME: "
+        LD      BC,4
+        LDIR
+
+KEY:    LD      A,(3804H)       ; the keyboard row with P (bit 0), R (bit 2) and S (bit 3)
+        AND     0DH             ; keep those three bits (0000 1101)
+        JR      Z,KEY           ; none is down: read again
+
+        LD      C,0             ; C is your move: 0 rock, 1 paper, 2 scissors
+        BIT     2,A             ; R?
+        JR      NZ,PICK
+        INC     C               ; not R: paper ...
+        BIT     0,A             ; P?
+        JR      NZ,PICK
+        INC     C               ; ... and not P either: scissors
+
+PICK:   LD      A,R             ; the R register counts up as the Z80 runs
+        AND     7FH             ; its low seven bits: 0 to 127
+MOD3:   CP      3               ; compare with 3: carry when A is less than 3
+        JR      C,GOT           ; A is 0, 1 or 2: the program's move
+        SUB     3               ; otherwise take 3 away and compare again
+        JR      MOD3
+GOT:    LD      B,A             ; B is the program's move
+
+        LD      A,C             ; who won: your move minus the program's
+        SUB     B               ; carry when it went below zero ...
+        JR      NC,KEEP
+        ADD     A,3             ; ... so add 3 back: A is now 0, 1 or 2
+KEEP:   ADD     A,3             ; 3 a draw, 4 you win, 5 I win: the verdict's word
+        LD      (VERDICT),A     ; LDIR needs B and C, so keep the verdict
+        LD      A,B             ; and the program's move in memory
+        LD      (MINE),A
+
+        LD      A,C             ; your move's word, on row 2 after "YOU: "
+        LD      DE,3C85H
+        LD      L,A             ; HL = A times 8: each word is 8 bytes
+        LD      H,0
+        ADD     HL,HL
+        ADD     HL,HL
+        ADD     HL,HL
+        LD      BC,WORDS        ; plus the table's address
+        ADD     HL,BC
+        LD      BC,8
+        LDIR
+
+        LD      A,(MINE)        ; the program's move, on row 3 after "ME: "
+        LD      DE,3CC5H
+        LD      L,A
+        LD      H,0
+        ADD     HL,HL
+        ADD     HL,HL
+        ADD     HL,HL
+        LD      BC,WORDS
+        ADD     HL,BC
+        LD      BC,8
+        LDIR
+
+        LD      A,(VERDICT)     ; who won, on row 5
+        LD      DE,3D40H
+        LD      L,A
+        LD      H,0
+        ADD     HL,HL
+        ADD     HL,HL
+        ADD     HL,HL
+        LD      BC,WORDS
+        ADD     HL,BC
+        LD      BC,8
+        LDIR
+
+LETGO:  LD      A,(3804H)       ; wait for the key to come up,
+        AND     0DH             ; so one press plays one round
+        JR      NZ,LETGO
+        JR      KEY             ; and wait for the next
+
+TITLE:  DB      'ROCK, PAPER, SCISSORS. PRESS R, P OR S.'
+TITLEN  EQU     $-TITLE         ; the title's length, counted by the assembler
+LABELS: DB      'YOU:ME: '
+WORDS:  DB      'ROCK    '      ; 0: each word is padded to 8 bytes,
+        DB      'PAPER   '      ; 1: so word n is at WORDS + 8n
+        DB      'SCISSORS'      ; 2
+        DB      'A DRAW. '      ; 3
+        DB      'YOU WIN!'      ; 4
+        DB      'I WIN.  '      ; 5
+MINE:   DB      0               ; the program's move, and the verdict's word
+VERDICT:
+        DB      0
+
+        END     START           ; the program starts at START

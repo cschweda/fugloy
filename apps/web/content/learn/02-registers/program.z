@@ -1,0 +1,30 @@
+; The registers, and why HL: write the alphabet along row 4 through HL,
+; and a white block under each letter through DE. H and L are set one byte
+; at a time, DE is built from them, and B counts the letters down.
+; The screen is memory at 3C00H-3FFFH, 64 cells a row: row 4 starts at 3D00H.
+
+        ORG     7000H           ; the program lives at 7000H, as in lesson 1
+
+START:  LD      H,3DH           ; H, the High byte of the address ...
+        LD      L,00H           ; ... and L, the Low byte: HL is 3D00H, row 4's first cell
+        LD      D,H             ; DE is a copy of HL, made a byte at a time
+        LD      E,L
+        LD      A,E             ; 8-bit sums go through A, the accumulator:
+        ADD     A,40H           ; E plus 40H, one row of 64 cells ...
+        LD      E,A             ; ... back into E: DE is 3D40H, row 5's first cell
+
+        LD      B,26            ; B counts the letters: 26
+        LD      C,41H           ; C holds the next letter: 41H is A
+
+NEXT:   LD      (HL),C          ; any register can be stored where HL points
+        LD      A,0BFH          ; but only A can be stored where DE points,
+        LD      (DE),A          ; so the white block goes through A
+        INC     HL              ; both pointers move on one cell
+        INC     DE
+        INC     C               ; the next letter
+        DEC     B               ; one letter fewer; DEC B sets the zero flag
+        JR      NZ,NEXT         ; not zero yet: the next letter
+
+WAIT:   JR      WAIT            ; done: wait here forever
+
+        END     START           ; the program starts at START

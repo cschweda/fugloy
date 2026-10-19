@@ -3,7 +3,8 @@
 // the registers; a broken program says why and shows its line (Review Focus 1); an edit survives a
 // reload and Reset to the lesson brings the original back (Review Focus 3); leaving a lesson while it
 // runs stops it (Review Focus 2, once there is a second lesson); keys typed in the editor never reach
-// the TRS-80 (Review Focus 4); the Model I shows its own shape (Review Focus 5); Explain's sentence
+// the TRS-80, and on lesson 3 the arrows plot from the screen but only move the editor's cursor in
+// the editor, and keys on the screen never type into the editor (Review Focus 4); the Model I shows its own shape (Review Focus 5); Explain's sentence
 // for a clicked line; Open in the workbench; axe is clean; and a narrow window stacks the columns.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
@@ -155,6 +156,45 @@ test('keys typed in the editor never reach the TRS-80; keys on the screen do (Re
   await expect.poll(rows).toEqual([2, 0, 0, 0, 0, 0, 0, 0]);
   await page.keyboard.up('a');
   await expect.poll(rows).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
+});
+
+test('on lesson 3 the arrows plot from the screen; in the editor they move its cursor and plot nothing (Review Focus 4)', async ({ page }) => {
+  await page.goto('/learn/03-etch-a-sketch/');
+  await expect(page.locator('.cm-content')).toContainText('NOTRT', { timeout: 30_000 });
+  await page.waitForFunction(() => window.__fugloyLearn !== undefined);
+  await runIt(page);
+  const rows = (): Promise<number[]> => page.evaluate(() => window.__fugloyLearn!.keyboardRows());
+  /** The cells the pen has lit: video.text() shows a graphics byte as ".". */
+  const lit = async (): Promise<number> => (await page.evaluate(() => window.__fugloyLearn!.screenText())).join('').split('.').length - 1;
+  const program = (): Promise<string> => page.locator('.cm-content').innerText();
+  await expect.poll(lit).toBe(1);
+
+  // In the editor, a held arrow moves the cursor and never reaches the matrix.
+  await page.locator('.cm-line', { hasText: 'START:' }).click();
+  await page.keyboard.press('Home');
+  await page.keyboard.down('ArrowRight');
+  await page.waitForTimeout(100);
+  expect(await rows()).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
+  await page.keyboard.up('ArrowRight');
+  expect(await lit()).toBe(1);
+  await page.keyboard.press('Home');
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+ArrowRight');
+  expect(await page.evaluate(() => window.getSelection()!.toString())).toBe('STA');
+  await page.keyboard.press('Home');
+
+  // On the screen, the same arrow is row 6, bit 6 (40H, 64), and the pen draws.
+  const before = await program();
+  await page.getByTestId('trs-screen').focus();
+  await page.keyboard.down('ArrowRight');
+  await expect.poll(rows).toEqual([0, 0, 0, 0, 0, 0, 64, 0]);
+  await expect.poll(lit).toBeGreaterThan(1);
+  await page.keyboard.up('ArrowRight');
+  await expect.poll(rows).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
+  // And keys typed on the screen never type into the editor.
+  await page.keyboard.press('ArrowLeft');
+  await page.keyboard.type('xyz');
+  await page.waitForTimeout(100);
+  expect(await program()).toBe(before);
 });
 
 test('a lesson that allows the Model I offers it, and runs there at the Model I shape (Review Focus 5)', async ({ page }) => {
