@@ -25,6 +25,8 @@ export interface LexError {
   message: string;
   col: number;
   end: number;
+  /** The text that replaces the span, when the message gives an exact rewrite. */
+  fix?: string;
 }
 
 export interface Lexed {
@@ -65,7 +67,7 @@ function readNumber(text: string): number | string {
 export function lex(line: string): Lexed {
   const tokens: Token[] = [];
   let i = 0;
-  const fail = (message: string, from: number, to: number): Lexed => ({ tokens, error: { message, col: from + 1, end: to + 1 } });
+  const fail = (message: string, from: number, to: number, fix?: string): Lexed => ({ tokens, error: fix === undefined ? { message, col: from + 1, end: to + 1 } : { message, col: from + 1, end: to + 1, fix } });
   while (i < line.length) {
     const c = line[i]!;
     if (c === ' ' || c === '\t') {
@@ -85,7 +87,7 @@ export function lex(line: string): Lexed {
       while (i < line.length && WORD_PART.test(line[i]!)) i++;
       const text = line.slice(start, i);
       const value = readNumber(text);
-      if (typeof value === 'string') return fail(value, start, i);
+      if (typeof value === 'string') return fail(value, start, i, /^0[bB][01]+$/.test(text) ? `${text.slice(2)}B` : undefined);
       tokens.push({ kind: 'number', text, col: start + 1, end: i + 1, value });
       continue;
     }

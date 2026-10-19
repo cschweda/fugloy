@@ -44,6 +44,13 @@ the next core release: `@fugloy/asm` joins `@fugloy/z80`, `@fugloy/disasm`,
 and `@fugloy/cli` at their shared version, and `publish.sh`'s `core` set now
 packs and smoke-tests it (`fugloy asm` on the starter program).
 
+**Release coupling.** `@fugloy/asm` imports `ROM_COMPARISON`, which
+`@fugloy/disasm` first exports in this change; disasm 1.2.0 on npm lacks it.
+So asm must never ship against an older disasm: it needs the disasm of its
+own version, and the whole core set (z80, disasm, asm, cli) releases
+together at one new version. `publish.sh` already refuses a version that is
+on npm, so asm cannot go out at 1.2.0.
+
 ### Added
 
 Core, `@fugloy/asm` (new package; runtime dependencies `@fugloy/z80` and
@@ -98,6 +105,33 @@ Core, `@fugloy/asm` (new package; runtime dependencies `@fugloy/z80` and
     keeps its DB sentence.
   - `$FFH` says to choose `$` or `H`, and `$?`/`$A?` are refused, since zmac
     reads `?` as the hex digit F.
+  - An instruction with no operands says what it needs (`DJNZ needs a
+    target: write DJNZ label.`, `LD needs operands: write LD A,number, for
+    example.`), and form lists use words (`label`, `number`, `(address)`,
+    `(port)`, `(IX+offset)`), never the Zilog letters `nn`, `n`, `d`, and `p`.
+  - `NOP NOP` says to put one instruction per line; `IF`, `MACRO`,
+    `INCLUDE`, and their kin say they are not supported yet; the 8080's `MOV`
+    and `MVI` give the LD to write; `OUT 0FFH,A` and `IN A,0FFH` get the
+    parentheses.
+  - A service call or port name used as a jump or call target or as a
+    memory address is an error, though it would assemble: on the Model 4,
+    `CALL @CLS` says `write LD A,@CLS then RST 28H`, and a port says to use
+    IN or OUT. `CALL CLS` on the Model III points to `$VDCLS`, the ROM
+    routine; as a target, ROM routines are suggested before service calls.
+  - **Fixes.** Each message that gives an exact rewrite also carries it as
+    data, `Diagnostic.fix?: { line, column, endColumn, replacement }`, for an
+    editor's one-click fix: the rewrites above, `JP (nn)`, the
+    parentheses-only-group warning, `FFH`, `$FFH`, `%1010`, `0b101`, `MOV`,
+    and an instruction in column 1.
+- **Shifts.** `>>` and `SHR` are logical shifts on 32 bits, as in zmac
+  (`-1>>31` is 1), and a shift count outside 0 to 31 is an error (zmac's
+  result there is C's undefined behaviour). The other operators were probed
+  against zmac at their negative and 32-bit edges and agree.
+- **`AsmResult.symbol(name)`** looks a name up case-insensitively, as the
+  assembler does; `symbols` stays keyed by each name as first written.
+- **Speed.** Undefined-name suggestions are kept per name and context, and
+  the edit distance prunes by length and reuses its rows: 3,000 lines with
+  62 undefined uses assemble in about 10 ms, down from about 200 ms.
 - **ROM, hardware, and DOS names** (plan Ruling 5), from the disassembler's
   cited tables:
   - `model: 1 | 3 | 4` (default 3) predefines that ROM's and hardware's
@@ -159,7 +193,9 @@ Core, `@fugloy/cli`:
   - the exit code is 0 when it assembled, 1 on an error in the source or a
     file that cannot be read, is not UTF-8, or has no bytes, and 2 for a
     usage error or an output that would overwrite the source (paths
-    compared resolved, symbolic links followed);
+    compared resolved, symbolic links followed, and then by device and
+    inode, so a hard link or `X.Z` for `x.z` on a case-insensitive file
+    system is caught);
   - the model goes to the assembler only when `--model` is given, so without
     it the Model I/III note is a warning; a model and DOS with no tables get
     `selectionProblem`'s sentence;

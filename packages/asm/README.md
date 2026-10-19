@@ -128,7 +128,8 @@ followed by other name characters is a name. Numbers are 32-bit, as in zmac:
 LOW`, and parentheses. The precedence is zmac's, which is C's: from loosest,
 `|`, `^`, `&`, shifts, `+ -`, then `* / % MOD`, then the unary operators.
 Division truncates toward zero, and MOD takes the sign of the dividend.
-`%1010` is MOD, not binary.
+Shifts work on 32 bits, and `>>` and `SHR` are logical, as in zmac:
+`-1>>31` is 1. A shift count runs from 0 to 31. `%1010` is MOD, not binary.
 
 **Parentheses.** An operand that is entirely in parentheses is a memory
 operand where the instruction has a memory form there: `LD A,(3C00H)` reads
@@ -238,6 +239,21 @@ last character it is about), `severity` (`error`, `warning`, or `info`), and
 Assembly carries on past an error, so every error in the program shows at
 once. Only a result with no error has an image.
 
+When the message gives an exact rewrite, the diagnostic also carries it as
+`fix: { line, column, endColumn, replacement }`: replace columns `column` up
+to (not including) `endColumn` of `line` with `replacement`, and the line
+says what the message asked for. An editor can offer it as a one-click fix.
+Every rewrite in the table below has one, and so do `JP (1234H)`, the
+parentheses-only-group warning, `FFH`, `$FFH`, `%1010`, `0b101`, `MOV`, and
+an instruction in column 1. A message whose rewrite leaves a part for the
+writer to choose (`write JP M,label`) has none.
+
+**An instruction with no operands** says what it needs, with a form to copy:
+
+- `DJNZ needs a target: write DJNZ label.`
+- `LD needs operands: write LD A,number, for example.`
+- `RST needs a restart address, one of 0, 8, 10H, 18H, 20H, 28H, 30H, and 38H: write RST 28H, for example.`
+
 **Unknown instructions** get the nearest mnemonics by edit distance, and a
 register glued to a mnemonic is split off:
 
@@ -245,10 +261,16 @@ register glued to a mnemonic is split off:
 - `Unknown instruction LDA. Did you mean LD A,…?`
 - `Unknown instruction INCA. Did you mean INC A?`
 - `Unknown instruction FOO. If FOO is a label, start it in column 1 or end it with a colon.`
+- `MOV is the 8080's name for what the Z80 calls LD: write LD A,(HL).` (for `MOV A,M`; `MVI` too)
+- `Fugløy does not support conditional assembly (IF) yet; keep the lines you want and delete the rest.` (and the like for `MACRO`, `REPT`, and `INCLUDE`)
+- `NOP is an instruction, not a value; put one instruction per line.` (for `NOP NOP`)
 
-**Operand forms the instruction does not have** list the forms it does have:
+**Operand forms the instruction does not have** list the forms it does have,
+in words (`label`, `number`, `(address)`, `(port)`, `(IX+offset)`) rather
+than the Zilog manual's `nn`, `n`, `d`, and `p`:
 
 - `PUSH has no form (5). Its forms are AF, BC, DE, HL, IX, and IY.`
+- `LD has no form HL,(BC). The forms that start with HL are HL,(address) and HL,number.`
 - `Only A can be loaded from an address; use LD A,(3C00H) then LD B,A.`
 - `JP (1234H) jumps to 1234H; it does not read an address from memory there. Write JP 1234H.`
 
@@ -265,6 +287,7 @@ rewrite, which assembles to the bytes zmac gives the original:
 | `ADD M` | `M is the 8080's name for the byte HL points at: write ADD A,(HL).` |
 | `RL (IX+5),B` | `RL (IX+5),B is undocumented: it works on the byte at IX+5 and also copies the result into B. Fugløy writes it as data, so write DB 0DDH,0CBH,05H,10H.` |
 | `IN (C)` | `IN (C) is undocumented, and Fugløy writes it as DB 0EDH,70H; use that instead.` |
+| `OUT 0FFH,A` | `OUT needs the port in parentheses: write OUT (0FFH),A.` (zmac refuses it too) |
 
 **Values out of range** name the value and the limit, and never truncate:
 
@@ -287,6 +310,14 @@ rewrite, which assembles to the bytes zmac gives the original:
 - `K is defined twice with different values, 5 on line 2 and 6 on line 3. Rename one of them.`
 - `X is defined in terms of itself: X → Y → X.`
 - `HL is a register name, so it cannot be a label.`
+
+**A service call or port used as a place.** A service call or port name is
+a number. As a CALL, JP, JR, or DJNZ target, or as a memory address in
+parentheses, it is an error, though it would assemble:
+
+- `@CLS is an LS-DOS 6 service call number (105), not an address: to make the call, write LD A,@CLS then RST 28H.` (`CALL @CLS` on the Model 4)
+- `CASSETTE is a port number (255 ($FF)), not an address: read it with IN A,(CASSETTE) or write it with OUT (CASSETTE),A.`
+- `CLS is not defined. @CLS is an LS-DOS 6 service call, which only the Model 4 has. On the Model III, did you mean $VDCLS, the Model III ROM routine at $01C9 (clear the screen)?` (`CALL CLS` on the Model III; on the Model 4 the routine comes first, then how a service call is made)
 
 **Forward references that would move addresses.** DS, ORG, and `.PHASE`
 take only names defined above them, since the addresses after the line
@@ -345,6 +376,8 @@ zmac's own bytes wherever zmac assembles the source.
 | `ADD M`, `ADC M`, `SUB M`, `SBC M`, `CP M` | the 8080's M for `(HL)` | error with the rewrite |
 | `RL (IX+5),B` and the other DD CB / FD CB copies to a register | the undocumented copy | error giving the DB: the tables keep them as DB |
 | `$?`, `$A?`, `1?H` | reads `?` as the hex digit F | error: `?` is not a hex digit |
+| `MOV A,B`, `MOV M,A`, `MVI A,5` | the 8080's names for LD | error with the rewrite: `LD A,B`, `LD (HL),A`, `LD A,5` |
+| a shift count outside 0 to 31 (`1<<32`, `-1>>32`, `7>>-1`) | wraps or saturates, as its C compiler happens to (`1<<32` is 1, `-1>>32` is 0) | error: a shift count runs from 0 to 31 |
 
 asm also warns in two places where zmac is silent: an ORG over bytes
 already placed, and a label on an ORG line. The bytes and the label's value
@@ -373,11 +406,17 @@ interface AsmResult {
   image: MemoryImage | null;      // @fugloy/disasm's 64K image with its load bitmap; null unless ok
   entry: number | null;           // END's entry; null without one, or unless ok
   symbols: Map<string, SymbolInfo>; // by name as first written: { value, line, kind: 'label' | 'equ' | 'defl' | 'rom' }
+  symbol(name: string): SymbolInfo | undefined; // the same, looked up in any case
   sourceMap: SourceMap;
   listing: ListingLine[];         // every source line: { line, address, load, bytes, text, value? }
-  diagnostics: Diagnostic[];      // sorted by line: { line, column, endColumn, severity, message, code? }
+  diagnostics: Diagnostic[];      // sorted by line: { line, column, endColumn, severity, message, code?, fix? }
 }
 ```
+
+Names are case-insensitive, as in zmac: `Loop`, `loop`, and `LOOP` are one
+name. `symbols` keeps each name as first written, so `symbols.get('loop')`
+misses a label written `Loop`; `symbol('loop')` finds it, as the assembler
+would, and is what an editor's hover or go-to-definition should use.
 
 `ListingLine.address` is where the line runs (the `.PHASE` address under
 `.PHASE`), `load` is where its bytes load, and both are null for a line that
@@ -424,6 +463,26 @@ result with errors, or with no bytes, throws a sentence.
 (the predefined names and the Model I/III comparison); `selectionProblem(model,
 dos)` (the sentence for a model and DOS with no tables, or undefined); `DEFAULT_ORIGIN`
 (`$5200`) and `DEFAULT_MODEL` (3); and the types.
+
+## Speed
+
+Measured on the built `dist` with Node 22 on the development Mac (an Apple
+silicon laptop), median of 20 runs, on a generated source of labels, EQUs,
+DEFL, IX operands, ROM names, DB strings, DW of `$`, and comments:
+
+| Case | Median |
+| --- | --- |
+| Module load (the encoder's index built from the tables) | 28 ms, once |
+| First `assemble` of 3,000 lines (cold JIT) | 28 ms |
+| 3,000 lines, clean | 11 ms |
+| 3,000 lines with 62 undefined-name errors (7 names) | 11 ms (was 198 ms) |
+| 3,000 lines with 375 undefined-name errors | 13 ms (was 1,149 ms) |
+| 300 lines, clean | 0.9 ms |
+
+An undefined name's suggestion is searched for once per name and context,
+and the edit distance skips names too far off in length and reuses its
+rows, so a deleted label used 60 times costs one search, not 60.
+`test/speed.test.ts` checks the 62-error case: the best of ten runs must stay under 60 ms, a wide margin over the 11 ms here for a busy test machine, and far below the old 198 ms.
 
 ## How it is built and checked
 

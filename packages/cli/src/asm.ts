@@ -8,7 +8,7 @@
  * error in the source or a file that cannot be read or written, 2 on a usage
  * error.
  */
-import { realpathSync } from 'node:fs';
+import { realpathSync, statSync } from 'node:fs';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { assemble, selectionProblem, toCmd } from '@fugloy/asm';
@@ -81,8 +81,22 @@ function realPath(p: string): string {
   }
 }
 
-/** Whether two paths name the same file: `x.z` and `./x.z` do. */
-export const samePath = (a: string, b: string): boolean => realPath(a) === realPath(b);
+/**
+ * Whether two paths name the same file: `x.z` and `./x.z` do, and so do a
+ * symbolic or hard link and its file. Where both exist, the device and inode
+ * decide, which also catches `X.Z` for `x.z` on a case-insensitive file
+ * system (realpath keeps the case it is given).
+ */
+export function samePath(a: string, b: string): boolean {
+  if (realPath(a) === realPath(b)) return true;
+  try {
+    const sa = statSync(a);
+    const sb = statSync(b);
+    return sa.ino !== 0 && sa.dev === sb.dev && sa.ino === sb.ino;
+  } catch {
+    return false;
+  }
+}
 
 /** The default output path: the source's, with its extension (if any) changed to .cmd. */
 export function defaultOutput(source: string): string {

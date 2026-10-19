@@ -132,20 +132,53 @@ const formName = (mnemonic: string, entry: Entry): string => (entry.form === '' 
 const formsOf = (entries: readonly Entry[]): string[] => [...new Set(entries.map((e) => e.form))].sort();
 
 /**
- * An operand as a message names it: a number is `n` or `nn`, a relative
- * target `displacement`, a port `(port)`; registers and the rest as written.
+ * An operand as a message names it, in words rather than the Zilog manual's
+ * letters: a number is `number` (a `label` after JP and CALL, and for a
+ * relative jump), a port `(port)`, a memory operand `(address)`, a bit
+ * number `bit`, an RST vector `address`, and the displacement of `(IX+d)`
+ * `offset`; registers and the rest as written.
  */
-const WORDS: Readonly<Record<string, string>> = { num: 'n', e: 'label', '(n)': '(port)', '(nn)': '(address)', b: 'bit' };
-const word = (shape: string): string => WORDS[shape] ?? shape;
+const WORDS: Readonly<Record<string, string>> = {
+  num: 'number',
+  n: 'number',
+  nn: 'number',
+  e: 'label',
+  '(n)': '(port)',
+  '(nn)': '(address)',
+  b: 'bit',
+  p: 'address',
+  '(IX+d)': '(IX+offset)',
+  '(IY+d)': '(IY+offset)',
+};
+const TARGETS: ReadonlySet<string> = new Set(['JP', 'CALL']);
+const word = (shape: string, mnemonic = ''): string => (shape === 'nn' && TARGETS.has(mnemonic) ? 'label' : (WORDS[shape] ?? shape));
+
+/** The jumps and calls, whose operand is where to go. */
+const GOES: ReadonlySet<string> = new Set(['JP', 'CALL', 'JR', 'DJNZ']);
+
+/** The example a bare mnemonic's message shows, where the first short form would not be the natural one. */
+const EXAMPLES: Readonly<Record<string, string>> = { LD: 'A,number', IN: 'A,(port)', OUT: '(port),A', EX: 'DE,HL', IM: '1', ADD: 'A,number', ADC: 'A,number', SBC: 'A,number', SUB: 'number', AND: 'number', OR: 'number', XOR: 'number', CP: 'number', BIT: '0,A', SET: '0,A', RES: '0,A' };
+const RESTARTS = 'one of 0, 8, 10H, 18H, 20H, 28H, 30H, and 38H';
+
+/** The sentence for a mnemonic written with no operands that needs some: what it needs, and one form to copy. */
+function needsOperands(mnemonic: string, readable: readonly string[]): string {
+  if (GOES.has(mnemonic)) return `${mnemonic} needs a target: write ${mnemonic} label.`;
+  if (mnemonic === 'RST') return `RST needs a restart address, ${RESTARTS}: write RST 28H, for example.`;
+  const count = (f: string): number => f.split(',').length;
+  const fewest = Math.min(...readable.map(count));
+  const short = readable.filter((f) => count(f) === fewest);
+  const example = EXAMPLES[mnemonic] ?? short.find((f) => f.startsWith('A')) ?? short.find((f) => /^[A-Z]/.test(f)) ?? short[0]!;
+  return `${mnemonic} needs ${fewest === 1 ? 'an operand' : 'operands'}: write ${mnemonic} ${example}, for example.`;
+}
 
 /**
  * IN F,(C), IN (C), and OUT (C),0 are ED 70 and ED 71, which the z80 tables
  * hold as DB fallbacks (undocumented), so the disassembler writes them as DB
  * and the encoder has no template for them. The sentence says how to write them.
  */
-function undocumentedEd(mnemonic: string, operands: readonly Operand[]): string | undefined {
+function undocumentedEd(mnemonic: string, operands: readonly Operand[]): Rewrite | undefined {
   const shapes = operands.map((o) => o.shape).join(',');
-  const db = (form: string, low: string): string => `${mnemonic} ${form} is undocumented, and Fugløy writes it as DB 0EDH,${low}H; use that instead.`;
+  const db = (form: string, low: string): Rewrite => ({ error: `${mnemonic} ${form} is undocumented, and Fugløy writes it as DB 0EDH,${low}H; use that instead.`, rewrite: `DB 0EDH,${low}H` });
   if (mnemonic === 'IN' && (shapes === 'F,(C)' || shapes === '(C)')) return db(shapes, '70');
   if (mnemonic === 'OUT' && operands.length === 2 && operands[0]!.shape === '(C)' && isImmediate(operands[1]!.shape) && operands[1]!.value === 0) return db('(C),0', '71');
   return undefined;
@@ -171,35 +204,43 @@ const ROTATES: ReadonlySet<string> = new Set(['RLC', 'RRC', 'RL', 'RR', 'SLA', '
  * tables keep as DB. Also a jump or call with a condition and no address
  * (JP M), which zmac rejects too.
  */
-function spelling(mnemonic: string, operands: readonly Operand[], written: readonly string[] | undefined): string | undefined {
+function spelling(mnemonic: string, operands: readonly Operand[], written: readonly string[] | undefined): Rewrite | undefined {
   const shapes = operands.map((o) => o.shape);
   const text = (i: number): string => written?.[i] ?? (operands[i]!.value === undefined ? shapes[i]! : asSource(operands[i]!.value!));
   const bare = (i: number): string => text(i).replace(/^\((.*)\)$/, '$1');
   const one = operands.length === 1;
+  const said = (message: string, rewrite: string): Rewrite => ({ error: `${message}: write ${rewrite}.`, rewrite });
   if (mnemonic === 'IN' && one && (isImmediate(shapes[0]!) || shapes[0] === '(nn)')) {
-    return `IN needs A and the port in parentheses: write IN A,(${bare(0)}).`;
+    return said('IN needs A and the port in parentheses', `IN A,(${bare(0)})`);
   }
   if (mnemonic === 'OUT' && one && (isImmediate(shapes[0]!) || shapes[0] === '(nn)')) {
-    return `OUT needs the port in parentheses and then A: write OUT (${bare(0)}),A.`;
+    return said('OUT needs the port in parentheses and then A', `OUT (${bare(0)}),A`);
+  }
+  // The port without its parentheses, beside a register: OUT 0FFH,A and IN A,0FFH.
+  if (mnemonic === 'OUT' && operands.length === 2 && isImmediate(shapes[0]!) && candidates(mnemonic, ['(nn)', shapes[1]!]).length > 0) {
+    return said('OUT needs the port in parentheses', `OUT (${text(0)}),${text(1)}`);
+  }
+  if (mnemonic === 'IN' && operands.length === 2 && isImmediate(shapes[1]!) && candidates(mnemonic, [shapes[0]!, '(nn)']).length > 0) {
+    return said('IN needs the port in parentheses', `IN ${text(0)},(${text(1)})`);
   }
   if (mnemonic === 'JP' && one && (shapes[0] === 'HL' || shapes[0] === 'IX' || shapes[0] === 'IY')) {
-    return `JP ${shapes[0]} jumps to the address in ${shapes[0]}, which Z80 assembly writes in parentheses: write JP (${shapes[0]}).`;
+    return said(`JP ${shapes[0]} jumps to the address in ${shapes[0]}, which Z80 assembly writes in parentheses`, `JP (${shapes[0]})`);
   }
   if ((mnemonic === 'PUSH' || mnemonic === 'POP') && one && EIGHTY_PAIRS[shapes[0]!] !== undefined) {
     const pair = EIGHTY_PAIRS[shapes[0]!]!;
     const why = shapes[0] === "AF'" ? `${mnemonic} works on AF, not the shadow AF'` : `${mnemonic} works on register pairs, and ${shapes[0]} is the 8080's short name for ${pair}`;
-    return `${why}: write ${mnemonic} ${pair}.`;
+    return said(why, `${mnemonic} ${pair}`);
   }
-  // After JP, CALL, JR, and RET, M is the condition "sign minus", not the 8080's (HL).
+  // After JP, CALL, JR, and RET, M is the condition "sign minus", not the 8080's (HL). The label is the writer's to choose, so no rewrite.
   if (BRANCHES.has(mnemonic) && one && CONDITION_SHAPES.has(shapes[0]!) && candidates(mnemonic, [shapes[0]!, 'nn']).length > 0) {
-    return `${mnemonic} ${text(0)} names a condition but no address to go to: write ${mnemonic} ${text(0)},label.`;
+    return { error: `${mnemonic} ${text(0)} names a condition but no address to go to: write ${mnemonic} ${text(0)},label.` };
   }
   if (shapes.includes('M') && !BRANCHES.has(mnemonic)) {
     const swapped = shapes.map((sh) => (sh === 'M' ? '(HL)' : sh));
     const withA = candidates(mnemonic, swapped).length === 0 && candidates(mnemonic, ['A', ...swapped]).length > 0;
     if (candidates(mnemonic, swapped).length > 0 || withA) {
       const form = shapes.map((sh, i) => (sh === 'M' ? '(HL)' : text(i)));
-      return `M is the 8080's name for the byte HL points at: write ${mnemonic} ${withA ? 'A,' : ''}${form.join(',')}.`;
+      return said("M is the 8080's name for the byte HL points at", `${mnemonic} ${withA ? 'A,' : ''}${form.join(',')}`);
     }
   }
   const last = shapes[shapes.length - 1]!;
@@ -211,7 +252,8 @@ function spelling(mnemonic: string, operands: readonly Operand[], written: reado
     if ('bytes' in onIndex && 'bytes' in onRegister) {
       const bytes = [...onIndex.bytes.slice(0, -1), onRegister.bytes[onRegister.bytes.length - 1]!];
       const head = `${mnemonic} ${operands.map((_, i) => text(i)).join(',')}`;
-      return `${head} is undocumented: it works on the byte at ${bare(index)} and also copies the result into ${last}. Fugløy writes it as data, so write DB ${bytes.map(dbByte).join(',')}.`;
+      const db = `DB ${bytes.map(dbByte).join(',')}`;
+      return { error: `${head} is undocumented: it works on the byte at ${bare(index)} and also copies the result into ${last}. Fugløy writes it as data, so write ${db}.`, rewrite: db };
     }
   }
   return undefined;
@@ -228,9 +270,11 @@ function capped(forms: readonly string[]): { text: string; all: boolean } {
  * instead. `written` is the operands as the source wrote them, for the head.
  */
 function noForm(mnemonic: string, shapes: readonly Shape[], entries: readonly Entry[], written?: readonly string[]): string {
-  const said = shapes.map(word);
+  const said = shapes.map((sh) => word(sh, mnemonic));
+  const all = [...new Set(formsOf(entries).map((f) => (f === '' ? f : f.split(',').map((x) => word(x, mnemonic)).join(','))))];
+  if (shapes.length === 0) return needsOperands(mnemonic, all.filter((f) => f !== ''));
   const head = `${mnemonic} has no form ${(written ?? said).join(',')}.`;
-  const all = formsOf(entries).map((f) => (f === '' ? f : f.split(',').map(word).join(',')));
+  if (mnemonic === 'RST') return `${head} RST takes a restart address, ${RESTARTS}.`;
   if (all.length === 1 && all[0] === '') return `${head} ${mnemonic} takes no operands.`;
   const first = said[0];
   const sharing = first === undefined ? [] : all.filter((f) => f.split(',')[0] === first);
@@ -251,8 +295,14 @@ function badFixed(mnemonic: string, slot: TemplateOperand, value: number, allowe
 /** What a relative jump that cannot reach should become instead. */
 const RELATIVE_FIX: Readonly<Record<string, string>> = { JR: 'Use JP.', DJNZ: 'Use DEC B and JP NZ.' };
 
-/** An error names, when it can, the index of the operand at fault. */
-export type EncodeResult = { bytes: number[] } | { error: string; operand?: number };
+/**
+ * An error names, when it can, the index of the operand at fault; and, when
+ * its sentence gives an exact rewrite, the whole instruction as rewritten.
+ */
+export type EncodeResult = { bytes: number[] } | { error: string; operand?: number; rewrite?: string };
+
+/** A sentence with the exact rewrite it gives, if any. */
+type Rewrite = { error: string; rewrite?: string };
 
 /**
  * What the caller knows beyond the values: the name a relative jump's target
@@ -277,7 +327,7 @@ export function encode(mnemonic: string, operands: readonly Operand[], pc: numbe
   if (entries === undefined) return { error: `Unknown instruction ${mn}.` };
   const shapes = operands.map((o) => o.shape);
   let found = candidates(mn, shapes);
-  if (found.length === 0) return { error: undocumentedEd(mn, operands) ?? spelling(mn, operands, options.written) ?? noForm(mn, shapes, entries, options.written) };
+  if (found.length === 0) return undocumentedEd(mn, operands) ?? spelling(mn, operands, options.written) ?? { error: noForm(mn, shapes, entries, options.written) };
 
   // A fixed number (bit, RST vector, IM mode) picks the entry by its value.
   const fixedAt = found[0]!.tpl.operands.findIndex((o) => fixedNumber(o) !== undefined);

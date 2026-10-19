@@ -180,6 +180,26 @@ describe('zmac probe: 32-bit numbers', () => {
   });
 });
 
+// The final review found >> arithmetic where zmac's is logical: these gave
+// different bytes with no message before the fix.
+describe('zmac probe: shifts are logical on 32 bits', () => {
+  zit('>> and SHR shift in zeros, so a negative value shifted right is positive', () => {
+    same(program('\tDB -1>>31', '\tDB -1 SHR 31', '\tDB (-1>>1)>>30', '\tDB (1<<31)>>31', '\tDB 0FFFFFFF0H>>28', '\tDB 0-1>>28', '\tDB ~0>>28', '\tDB 0FFFFFFFFH>>31', '\tDB (80000000H/2)>>30', '\tDB 1 SHL 31 SHR 31', '\tDB 0-1 SHR 28'));
+  });
+  zit('the low bits agree either way, and a count of 0 or 31 is fine', () => {
+    same(program('\tDW 80000000H>>16', '\tDW -1>>16', '\tDB 1<<30>>30', '\tDB -1>>0', '\tDB 1 SHL 0', '\tDB 1 SHR 31', '\tDW HIGH -2', '\tDB LOW -256', '\tDB HIGH 12345678H'));
+  });
+  zit('a logical shift that leaves a large value is out of range in a byte', () => {
+    bothReject(program('\tDB -1>>1'), /DB takes bytes/);
+    bothReject(program('\tDB -8>>1'), /DB takes bytes/);
+  });
+  zit('the other operators agree at the 32-bit edges', () => {
+    same(program('\tDB -7/2', '\tDB -7 MOD 2', '\tDB 7 MOD -2', '\tDB -7 % 2', '\tDB 7/-2', '\tDB -7/-2', '\tDB ~0', '\tDW ~1', '\tDB HIGH -1', '\tDB LOW -1', '\tDB (80000000H/-1)&0FFH', '\tDB (80000000H/-1)>>24', '\tDB 80000000H MOD -1', '\tDB 80000000H*2', '\tDB (-80000000H)>>24', '\tDB HIGH 80000000H', '\tDB -1/2', '\tDB 0FFFFFFFFH+2', '\tDB 0FFFFFFFFH/2>>30', '\tDW -1 MOD 7'));
+    bothReject(program('\tDB 80000000H/-1'), /DB takes bytes/);
+    bothReject(program('\tDB 7 MOD 0'), /divides by zero/);
+  });
+});
+
 describe('zmac probe: the optional A of the 8-bit arithmetic', () => {
   zit('SUB, AND, OR, XOR, and CP may write A first', () => {
     same(program('\tSUB A,5', '\tAND A,5', '\tOR A,5', '\tXOR A,5', '\tCP A,5', '\tCP A,(HL)', '\tSUB A,B', '\tAND A,(IX+1)', '\tOR A,IXH', '\tXOR A,A', '\tCP A,(IY-2)', '\tSUB A,IXL', '\tCP A,(IX)'));
@@ -484,6 +504,25 @@ describe('deliberately stricter than zmac', () => {
   zit('$? and $A? as numbers', () => {
     expect(runZmac(program('\tDB $?', '\tDB $A?', '\tDW 1?H')).bytes).toEqual([0x0f, 0xaf, 0x1f, 0x00]);
     expect(errorsOf(assemble(program('\tDB $?', '\tDB $A?', '\tDW 1?H'))).length).toBe(3);
+  });
+  // zmac reads the 8080's MOV and MVI too; the assembler gives the LD to write.
+  zit('MOV and MVI', () => {
+    const src = program('\tMOV A,B', '\tMOV M,A', '\tMVI A,5');
+    expect(runZmac(src).bytes).toEqual([0x78, 0x77, 0x3e, 0x05]);
+    expect(errorsOf(assemble(src)).map((e) => e.replace(/^.* write /, ''))).toEqual(['LD A,B.', 'LD (HL),A.', 'LD A,5.']);
+    expect(bytesOf(program('\tLD A,B', '\tLD (HL),A', '\tLD A,5'))).toEqual(runZmac(src).bytes);
+  });
+  // A shift count outside 0 to 31 is C's undefined behaviour in zmac: the
+  // pinned build wraps some counts and not others.
+  zit('a shift count outside 0 to 31', () => {
+    expect(runZmac(program('\tDB 1<<32', '\tDB 1 SHL 33', '\tDB -1>>32', '\tDB 7>>-1')).bytes).toEqual([0x01, 0x02, 0x00, 0x00]);
+    expect(errorsOf(assemble(program('\tDB 1<<32', '\tDB 1 SHL 33', '\tDB -1>>32', '\tDB 7>>-1', '\tLD A,(IX-8>>1)')))).toEqual([
+      '2: A shift count runs from 0 to 31; 32 is out of range.',
+      '3: A shift count runs from 0 to 31; 33 is out of range.',
+      '4: A shift count runs from 0 to 31; 32 is out of range.',
+      '5: A shift count runs from 0 to 31; -1 is out of range.',
+      '6: The displacement in (IX+d) runs from -128 to 127; 2147483644 ($7FFFFFFC) is out of range.',
+    ]);
   });
   // An EQU that names a label below the DS it sizes: the pinned zmac does not
   // finish (it crashes), so there is no zmac image to differ from.

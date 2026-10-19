@@ -126,8 +126,8 @@ export function parseLine(text: string, line: number): Statement {
 function structure(text: string, line: number, t: readonly Token[], partial: boolean): Statement {
   const stmt: Statement = { line, text, operands: [] };
   if (t.length === 0) return stmt;
-  const fail = (message: string, col: number, end: number): Statement => {
-    stmt.error = { message, col, end };
+  const fail = (message: string, col: number, end: number, fix?: string): Statement => {
+    stmt.error = fix === undefined ? { message, col, end } : { message, col, end, fix };
     return stmt;
   };
 
@@ -143,7 +143,7 @@ function structure(text: string, line: number, t: readonly Token[], partial: boo
     else if (isDefinerToken(t[1])) label(1);
     else if (first.col === 1) {
       if (!isKeyword(up)) label(1);
-      else if (t.length > 1) return fail(`${up} starts in column 1, where a word is a label. Put a space or tab before it.`, first.col, first.end);
+      else if (t.length > 1) return fail(`${up} starts in column 1, where a word is a label. Put a space or tab before it.`, first.col, first.end, `\t${first.text}`);
     }
   } else if (first.kind === 'number' && first.text.startsWith('$')) {
     // zmac takes `$AB EQU 1` as a name with a "$hex constant interpreted as symbol" warning; asm does not.
@@ -184,7 +184,7 @@ function structure(text: string, line: number, t: readonly Token[], partial: boo
     try {
       stmt.operands.push(operand(text, t, a, b));
     } catch (e) {
-      if (e instanceof ExprError) return fail(e.sentence ?? 'This operand cannot be read.', e.col, e.end);
+      if (e instanceof ExprError) return fail(e.sentence ?? 'This operand cannot be read.', e.col, e.end, e.fix);
       throw e;
     }
   }

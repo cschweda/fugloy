@@ -167,7 +167,7 @@ describe('forms and parentheses', () => {
 
   it('a form that does not exist is named as written, with at most five forms listed', () => {
     expect(errorsOf(assemble(lines('\tORG 6000H', '\tPUSH (5)')))).toEqual(['2: PUSH has no form (5). Its forms are AF, BC, DE, HL, IX, and IY.']);
-    expect(errorsOf(assemble(lines('\tORG 6000H', '\tINC (5)')))).toEqual(['2: INC has no form (5). Its forms include (HL), (IX+d), (IY+d), A, B, and 15 more.']);
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tINC (5)')))).toEqual(['2: INC has no form (5). Its forms include (HL), (IX+offset), (IY+offset), A, B, and 15 more.']);
   });
 
   it('a missing comma is named', () => {
@@ -259,5 +259,152 @@ describe('$ and hex digits', () => {
   });
   it('$ with ., @, or a ? after a letter from G on starts a name', () => {
     expect(bytesOf(lines('\tORG 6000H', '$.X\tEQU 5', '$@\tEQU 6', '$?X\tEQU 7', '\tDB $.X,$@,$?X'))).toEqual([5, 6, 7]);
+  });
+});
+
+describe('an instruction with no operands says what it needs (final review 2)', () => {
+  it('a jump or call needs a target, in words', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tDJNZ', '\tJP', '\tCALL', '\tJR')))).toEqual([
+      '2: DJNZ needs a target: write DJNZ label.',
+      '3: JP needs a target: write JP label.',
+      '4: CALL needs a target: write CALL label.',
+      '5: JR needs a target: write JR label.',
+    ]);
+  });
+  it('the rest name one form to copy, and RST its addresses', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tLD', '\tRST', '\tINC', '\tOUT')))).toEqual([
+      '2: LD needs operands: write LD A,number, for example.',
+      '3: RST needs a restart address, one of 0, 8, 10H, 18H, 20H, 28H, 30H, and 38H: write RST 28H, for example.',
+      '4: INC needs an operand: write INC A, for example.',
+      '5: OUT needs operands: write OUT (port),A, for example.',
+    ]);
+  });
+  it('form lists use words, not the Zilog letters nn, n, d, and p', () => {
+    const errors = errorsOf(assemble(lines('\tORG 6000H', '\tCALL HL', '\tRST A', '\tLD HL,(BC)', '\tINC (5)')));
+    expect(errors).toEqual([
+      '2: CALL has no form HL. Its forms include C,label, M,label, NC,label, NZ,label, P,label, and 4 more.',
+      '3: RST has no form A. RST takes a restart address, one of 0, 8, 10H, 18H, 20H, 28H, 30H, and 38H.',
+      '4: LD has no form HL,(BC). The forms that start with HL are HL,(address) and HL,number.',
+      '5: INC has no form (5). Its forms include (HL), (IX+offset), (IY+offset), A, B, and 15 more.',
+    ]);
+    for (const e of errors) expect(e).not.toMatch(/\b(nn|n|p)\b|\+d\)/);
+  });
+});
+
+describe('a service call or port is a number, never a target or an address (final review 3)', () => {
+  it('on the Model 4, CALL @CLS and JP @EXIT say how to make the call', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tCALL @CLS', '\tJP @EXIT', '\tLD HL,(@CLS)'), { model: 4 }))).toEqual([
+      '2: @CLS is an LS-DOS 6 service call number (105), not an address: to make the call, write LD A,@CLS then RST 28H.',
+      '3: @EXIT is an LS-DOS 6 service call number (22), not an address: to make the call, write LD A,@EXIT then RST 28H.',
+      '4: @CLS is an LS-DOS 6 service call number (105), not an address: to make the call, write LD A,@CLS then RST 28H.',
+    ]);
+    expect(assemble(lines('\tORG 6000H', '\tLD A,@CLS', '\tRST 28H'), { model: 4 }).ok).toBe(true);
+  });
+  it('a port name as a target or an address says to use IN or OUT, and IN and OUT take it', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tJP CASSETTE', '\tLD A,(CASSETTE)', '\tIN A,(CASSETTE)', '\tOUT (CASSETTE),A')))).toEqual([
+      '2: CASSETTE is a port number (255 ($FF)), not an address: read it with IN A,(CASSETTE) or write it with OUT (CASSETTE),A.',
+      '3: CASSETTE is a port number (255 ($FF)), not an address: read it with IN A,(CASSETTE) or write it with OUT (CASSETTE),A.',
+    ]);
+  });
+  it('a name the source defines is the source\'s, whatever the tables say', () => {
+    expect(assemble(lines('\tORG 6000H', '@CLS:\tRET', '\tCALL @CLS'), { model: 4 }).ok).toBe(true);
+  });
+  it('CALL CLS on the Model III points to $VDCLS, the ROM routine', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tCALL CLS'), { model: 3 }))).toEqual([
+      '2: CLS is not defined. @CLS is an LS-DOS 6 service call, which only the Model 4 has. On the Model III, did you mean $VDCLS, the Model III ROM routine at $01C9 (clear the screen)?',
+    ]);
+  });
+  it('CALL CLS on the Model 4 suggests the routine first, and says how a service call is made', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tCALL CLS'), { model: 4 }))).toEqual([
+      '2: CLS is not defined. Did you mean $VDCLS, the Model III ROM routine at $01C9 (clear the screen)? (@CLS is an LS-DOS 6 service call number, not an address: to use it, write LD A,@CLS then RST 28H.)',
+    ]);
+  });
+});
+
+describe('the last messages (final review 6)', () => {
+  it('an instruction where a value goes says one instruction per line', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tNOP NOP', '\tLD A,RET')))).toEqual([
+      '2: NOP is an instruction, not a value; put one instruction per line.',
+      '3: RET is an instruction, not a value; put one instruction per line.',
+    ]);
+  });
+  it('IF, MACRO, and INCLUDE are not supported yet', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tIF 1', '\tENDIF', 'MAC\tMACRO', '\tENDM', '\tINCLUDE "x.z"')))).toEqual([
+      '2: Fugløy does not support conditional assembly (IF) yet; keep the lines you want and delete the rest.',
+      '3: Fugløy does not support conditional assembly (ENDIF) yet; keep the lines you want and delete the rest.',
+      '4: Fugløy does not support macros (MACRO) yet; write the instructions out where they are used.',
+      '5: Fugløy does not support macros (ENDM) yet; write the instructions out where they are used.',
+      '6: Fugløy does not support INCLUDE yet; put the whole program in one file.',
+    ]);
+  });
+  it('MOV and MVI point to LD, with M as (HL)', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tMOV A,B', '\tMOV M,A', '\tMVI A,5')))).toEqual([
+      "2: MOV is the 8080's name for what the Z80 calls LD: write LD A,B.",
+      "3: MOV is the 8080's name for what the Z80 calls LD: write LD (HL),A.",
+      "4: MVI is the 8080's name for what the Z80 calls LD: write LD A,5.",
+    ]);
+  });
+  it('OUT 0FFH,A and IN A,0FFH get the parentheses', () => {
+    expect(errorsOf(assemble(lines('\tORG 6000H', '\tOUT 0FFH,A', '\tIN A,0FFH')))).toEqual([
+      '2: OUT needs the port in parentheses: write OUT (0FFH),A.',
+      '3: IN needs the port in parentheses: write IN A,(0FFH).',
+    ]);
+  });
+});
+
+describe('an exact rewrite comes as a fix too (final review 7)', () => {
+  /** Applies a diagnostic's fix to the source. */
+  const apply = (source: string, line: number): string => {
+    const d = assemble(source).diagnostics.find((x) => x.line === line && x.fix !== undefined);
+    expect(d, `no fix on line ${line}`).toBeDefined();
+    const { fix } = d!;
+    const all = source.split('\n');
+    const text = all[fix!.line - 1]!;
+    all[fix!.line - 1] = text.slice(0, fix!.column - 1) + fix!.replacement + text.slice(fix!.endColumn - 1);
+    return all.join('\n');
+  };
+  it('each fix, applied, assembles to the bytes the message promised', () => {
+    const cases: [string, number[]][] = [
+      ['\tJP HL', [0xe9]],
+      ['\tPUSH B', [0xc5]],
+      ['\tIN 38H', [0xdb, 0x38]],
+      ['\tOUT 0FFH,A', [0xd3, 0xff]],
+      ['\tADD M', [0x86]],
+      ['\tMOV A,M', [0x7e]],
+      ['\tIN (C)', [0xed, 0x70]],
+      ['\tRL (IX+5),B', [0xdd, 0xcb, 0x05, 0x10]],
+      ['\tJP (6000H)', [0xc3, 0x00, 0x60]],
+      ['\tSUB (5)', [0xd6, 0x05]],
+      ['\tLD A,FFH', [0x3e, 0xff]],
+      ['\tLD A,$FFH', [0x3e, 0xff]],
+      ['\tLD A,%101', [0x3e, 0x05]],
+      ['\tLD A,0b101', [0x3e, 0x05]],
+      ['ld a,1', [0x3e, 0x01]],
+    ];
+    for (const [line, bytes] of cases) {
+      const fixed = apply(lines('\tORG 6000H', line), 2);
+      expect(bytesOf(fixed), `${line} -> ${fixed.split('\n')[1]}`).toEqual(bytes);
+    }
+  });
+  it('the fix replaces the whole instruction, from the mnemonic to the last operand', () => {
+    const d = assemble(lines('\tORG 6000H', '\tOUT 0FFH,A ; send')).diagnostics[0]!;
+    expect(d.fix).toEqual({ line: 2, column: 2, endColumn: 12, replacement: 'OUT (0FFH),A' });
+  });
+  it('a message whose rewrite is the writer\'s to finish has no fix', () => {
+    const d = assemble(lines('\tORG 6000H', '\tJP M')).diagnostics[0]!;
+    expect(d.fix).toBeUndefined();
+    expect(assemble(lines('\tORG 6000H', '\tCALL NOWHERE')).diagnostics[0]!.fix).toBeUndefined();
+  });
+});
+
+describe('symbol(name) looks a name up in any case (final review 7)', () => {
+  it('finds a label, an EQU, and a ROM name however it is written', () => {
+    const r = assemble(lines('\tORG 6000H', 'Loop:\tJP loop', 'Count\tEQU 5', '\tCALL $vdcls'));
+    expect(r.symbols.has('loop')).toBe(false);
+    expect(r.symbol('loop')).toEqual({ value: 0x6000, line: 2, kind: 'label' });
+    expect(r.symbol('LOOP')).toEqual(r.symbols.get('Loop'));
+    expect(r.symbol('count')).toEqual({ value: 5, line: 3, kind: 'equ' });
+    expect(r.symbol('$VDCLS')).toEqual({ value: 0x01c9, line: 0, kind: 'rom' });
+    expect(r.symbol('nothing')).toBeUndefined();
   });
 });

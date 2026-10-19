@@ -228,19 +228,19 @@ describe('forms that do not exist', () => {
   const err = (out: ReturnType<typeof encode>): string => ('error' in out ? out.error : `no error: ${hex(out.bytes)}`);
 
   it('names the mnemonic and the form it lacks, with the forms that share the first operand', () => {
-    expect(err(encode('LD', [{ shape: 'HL' }, { shape: '(BC)' }], 0))).toBe('LD has no form HL,(BC). The forms that start with HL are HL,(address) and HL,nn.');
+    expect(err(encode('LD', [{ shape: 'HL' }, { shape: '(BC)' }], 0))).toBe('LD has no form HL,(BC). The forms that start with HL are HL,(address) and HL,number.');
     expect(err(encode('NOP', [{ shape: 'A' }], 0))).toBe('NOP has no form A. NOP takes no operands.');
     expect(err(encode('EX', [{ shape: 'BC' }, { shape: 'DE' }], 0))).toBe("EX has no form BC,DE. Its forms are (SP),HL, (SP),IX, (SP),IY, AF,AF', and DE,HL.");
   });
 
   it('names operands in words, not shape names', () => {
-    expect(err(encode('OUT', [{ shape: '(C)' }, { shape: 'num', value: 5 }], 0))).toBe('OUT has no form (C),n. The forms that start with (C) are (C),A, (C),B, (C),C, (C),D, (C),E, and 2 more.');
+    expect(err(encode('OUT', [{ shape: '(C)' }, { shape: 'num', value: 5 }], 0))).toBe('OUT has no form (C),number. The forms that start with (C) are (C),A, (C),B, (C),C, (C),D, (C),E, and 2 more.');
     expect(err(encode('LD', [{ shape: 'B' }, { shape: '(n)', value: 1 }], 0))).toMatch(/^LD has no form B,\(port\)\. /);
     expect(err(encode('JP', [{ shape: 'BC' }, { shape: 'e', value: 1 }], 0))).toMatch(/^JP has no form BC,label\. /);
   });
 
   it('lists at most five forms, then how many more', () => {
-    expect(err(encode('INC', [{ shape: '(nn)', value: 5 }], 0))).toBe('INC has no form (address). Its forms include (HL), (IX+d), (IY+d), A, B, and 15 more.');
+    expect(err(encode('INC', [{ shape: '(nn)', value: 5 }], 0))).toBe('INC has no form (address). Its forms include (HL), (IX+offset), (IY+offset), A, B, and 15 more.');
   });
 
   it('uses the operands as written when the caller gives them', () => {

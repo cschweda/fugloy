@@ -34,7 +34,7 @@ import { CONDITIONS, isKeyword, isMnemonic, OPERATOR_WORDS, REGISTERS } from './
 import { parseLine } from './parse.js';
 import type { OperandNode, Statement } from './parse.js';
 import type { Operand, Shape } from './shape.js';
-import { nearest, nearestRomName, suggestOperation } from './suggest.js';
+import { distance, nearest, nearestRomName, orList, suggestOperation } from './suggest.js';
 import { DEFAULT_MODEL, machineText, nameElsewhere, romDifference, romNames, selectionProblem, TABLE_TEXT } from './symbols.js';
 import type { Model, RomName } from './symbols.js';
 
@@ -55,6 +55,20 @@ export interface Diagnostic {
    * model is given, info when one is) has one so far.
    */
   code?: 'rom-difference';
+  /**
+   * When the message gives an exact rewrite, the edit that makes it: replace
+   * columns `column` up to (not including) `endColumn` of `line` with
+   * `replacement`. An editor can offer it as a one-click fix.
+   */
+  fix?: Fix;
+}
+
+/** One edit to the source: columns are 1-based, `endColumn` just past the last character replaced (equal to `column` to insert). */
+export interface Fix {
+  line: number;
+  column: number;
+  endColumn: number;
+  replacement: string;
 }
 
 export type SymbolKind = 'label' | 'equ' | 'defl' | 'rom';
@@ -117,8 +131,14 @@ export interface AsmResult {
   ok: boolean;
   image: MemoryImage | null;
   entry: number | null;
-  /** Keyed by each name as first written; names match case-insensitively, as in zmac. ROM names appear only where the source uses them. */
+  /**
+   * Keyed by each name as first written (`Loop` stays `Loop`), though names
+   * match case-insensitively, as in zmac; use `symbol` to look one up as the
+   * assembler does. ROM names appear only where the source uses them.
+   */
   symbols: Map<string, SymbolInfo>;
+  /** The symbol `name` means, in any case (`loop`, `LOOP`, and `Loop` are one name), or undefined. */
+  symbol(name: string): SymbolInfo | undefined;
   sourceMap: SourceMap;
   listing: ListingLine[];
   diagnostics: Diagnostic[];
@@ -128,6 +148,19 @@ export interface AsmResult {
 export const DEFAULT_ORIGIN = 0x5200;
 
 const RELATIVE: ReadonlySet<string> = new Set(['JR', 'DJNZ']);
+/** The jumps and calls, whose last operand is where to go. */
+const GOES: ReadonlySet<string> = new Set(['JP', 'CALL', 'JR', 'DJNZ']);
+
+/** zmac directives Fugløy does not have, with what to do instead. */
+const UNSUPPORTED: Readonly<Record<string, string>> = (() => {
+  const out: Record<string, string> = {};
+  const conditional = 'Fugløy does not support conditional assembly (IF, ELSE, ENDIF) yet; keep the lines you want and delete the rest.';
+  for (const d of ['IF', 'IFDEF', 'IFNDEF', 'IFEQ', 'IFNE', 'IFLT', 'IFGT', 'ELSE', 'ENDIF', 'COND', 'ENDC']) out[d] = conditional.replace('(IF, ELSE, ENDIF)', `(${d})`);
+  const macros = 'Fugløy does not support macros yet; write the instructions out where they are used.';
+  for (const d of ['MACRO', 'ENDM', 'REPT', 'IRP', 'IRPC', 'EXITM']) out[d] = macros.replace('macros', `macros (${d})`);
+  for (const d of ['INCLUDE', 'MACLIB', 'INCBIN']) out[d] = `Fugløy does not support ${d} yet; put the whole program in one file.`;
+  return out;
+})();
 
 export interface Sym {
   name: string;
@@ -171,6 +204,9 @@ interface Repeat {
 }
 
 type SymNode = Extract<Expr, { k: 'sym' }>;
+
+/** What an operand names: where a jump or call goes, a memory address, or a plain value. */
+type Place = 'go' | 'memory' | 'value';
 
 /** The operand's shape for the encoder. */
 function shapeOf(o: OperandNode): Shape {
@@ -282,18 +318,21 @@ export class Assembly {
     return hit.value;
   }
 
-  report(severity: Severity, line: number, column: number, endColumn: number, message: string, code?: Diagnostic['code']): void {
-    this.diagnostics.push(code === undefined ? { line, column, endColumn, severity, message } : { line, column, endColumn, severity, message, code });
+  report(severity: Severity, line: number, column: number, endColumn: number, message: string, code?: Diagnostic['code'], fix?: Fix): void {
+    const d: Diagnostic = { line, column, endColumn, severity, message };
+    if (code !== undefined) d.code = code;
+    if (fix !== undefined) d.fix = fix;
+    this.diagnostics.push(d);
   }
 
-  error(line: number, column: number, endColumn: number, message: string): void {
-    this.report('error', line, column, endColumn, message);
+  error(line: number, column: number, endColumn: number, message: string, fix?: Fix): void {
+    this.report('error', line, column, endColumn, message, undefined, fix);
   }
 
   /** Reports an ExprError at `line`, unless it was reported already. */
   exprError(line: number, e: unknown): void {
     if (!(e instanceof ExprError)) throw e;
-    if (e.sentence !== null) this.error(line, e.col, e.end, e.sentence);
+    if (e.sentence !== null) this.error(line, e.col, e.end, e.sentence, e.fix === undefined ? undefined : { line, column: e.col, endColumn: e.end, replacement: e.fix });
   }
 
   // ---- pass 1 -------------------------------------------------------------
@@ -306,7 +345,8 @@ export class Assembly {
     const name = op?.name;
     const kind: SymbolKind = name === 'EQU' ? 'equ' : name !== undefined && REDEFINERS.has(name) ? 'defl' : 'label';
     if (stmt.error !== undefined) {
-      this.error(line, stmt.error.col, stmt.error.end, stmt.error.message);
+      const { col, end, message, fix } = stmt.error;
+      this.error(line, col, end, message, fix === undefined ? undefined : { line, column: col, endColumn: end, replacement: fix });
       item.failed = true;
       // The label still counts (an EQU's as failed), so its uses raise nothing more.
       if (stmt.label !== undefined) this.define(stmt, kind, true);
@@ -462,7 +502,7 @@ export class Assembly {
       if (first === undefined && !this.definedLater(node.name, line)) {
         const rom = this.romValue(node.name);
         if (rom !== undefined) return rom;
-        throw new ExprError(this.undefinedMessage(node.name), node.col, node.end);
+        throw this.undefinedError(node);
       }
       throw new ExprError(`${what} cannot use ${node.name} before ${node.name} is defined, because the addresses after this line depend on it. Define ${node.name} above the ${what}.`, node.col, node.end);
     }
@@ -505,6 +545,17 @@ export class Assembly {
 
   unknown(stmt: Statement): void {
     const op = stmt.op!;
+    const unsupported = UNSUPPORTED[op.name];
+    if (unsupported !== undefined) return this.error(stmt.line, op.col, op.end, unsupported);
+    if (op.name === 'MOV' || op.name === 'MVI') {
+      // The 8080's MOV and MVI are the Z80's LD, and its M is (HL).
+      const operands = stmt.operands.map((o) => (o.text.toUpperCase() === 'M' ? '(HL)' : o.text)).join(',');
+      const rewrite = `LD${operands === '' ? '' : ` ${operands}`}`;
+      const last = stmt.operands[stmt.operands.length - 1];
+      const end = last?.end ?? op.end;
+      const fix = operands === '' ? undefined : { line: stmt.line, column: op.col, endColumn: end, replacement: rewrite };
+      return this.error(stmt.line, op.col, end, `${op.name} is the 8080's name for what the Z80 calls LD${operands === '' ? '.' : `: write ${rewrite}.`}`, fix);
+    }
     const guess = suggestOperation(op.name);
     let message = `Unknown instruction ${op.name}.`;
     if (guess !== undefined) message += ` Did you mean ${guess}?`;
@@ -531,7 +582,12 @@ export class Assembly {
       if (altLength !== null) {
         const mem = ops.find((o) => o.kind === 'mem')! as Extract<OperandNode, { kind: 'mem' }>;
         if (mn === 'JP' && ops.length === 1) {
-          this.error(stmt.line, mem.col, mem.end, `JP ${mem.text} jumps to ${mem.inner}; it does not read an address from memory there. Write JP ${mem.inner}.`);
+          this.error(stmt.line, mem.col, mem.end, `JP ${mem.text} jumps to ${mem.inner}; it does not read an address from memory there. Write JP ${mem.inner}.`, {
+            line: stmt.line,
+            column: mem.col,
+            endColumn: mem.end,
+            replacement: mem.inner,
+          });
           item.failed = true;
         } else {
           const written = `${mn} ${stmt.operands.map((o) => o.text).join(',')}`;
@@ -543,7 +599,8 @@ export class Assembly {
             const form = ops.map((o) => (o.kind === 'mem' ? '(HL)' : o.text)).join(',');
             message += ` To use the byte at address ${mem.inner}, point HL at it: LD HL,${mem.inner} then ${mn} ${form}.`;
           }
-          this.report('warning', stmt.line, mem.col, mem.end, message);
+          const lastOp = stmt.operands[stmt.operands.length - 1]!;
+          this.report('warning', stmt.line, mem.col, mem.end, message, undefined, { line: stmt.line, column: op.col, endColumn: lastOp.end, replacement: meant });
         }
         shapes = alt;
         length = altLength;
@@ -603,26 +660,84 @@ export class Assembly {
   }
 
   /** A symbol's value as `line` sees it (which matters only for a DEFL name). */
-  lookup(node: SymNode, line: number, chain: Sym[] = []): number {
+  /**
+   * A symbol's value as `line` sees it (which matters only for a DEFL name).
+   * `place` says whether the name is a jump or call target, a memory
+   * address, or a plain value, for the message when it is not defined.
+   */
+  lookup(node: SymNode, line: number, chain: Sym[] = [], place: Place = 'value'): number {
     const sym = this.syms.get(node.name.toUpperCase());
     if (sym === undefined) {
       const rom = this.romValue(node.name);
       if (rom !== undefined) return rom;
-      throw new ExprError(this.undefinedMessage(node.name), node.col, node.end);
+      throw this.undefinedError(node, place);
     }
     return this.resolve(sym.versions === undefined ? sym : versionAt(sym, line), chain);
   }
 
-  undefinedMessage(name: string): string {
+  /** The error for a name nothing defines, with the hex rewrite as a fix where there is one. */
+  undefinedError(node: SymNode, place: Place = 'value'): ExprError {
+    const { name } = node;
+    let fix: string | undefined;
+    if (/^[A-F][0-9A-F]*H$/i.test(name)) fix = `0${name}`;
+    else if (/^\$[0-9A-F]+H$/i.test(name)) fix = name.slice(0, -1);
+    return new ExprError(this.undefinedMessage(name, place), node.col, node.end, fix);
+  }
+
+  /** Whether every line has been through pass 1, so the symbols are all known and messages can be kept. */
+  placed = false;
+  /** undefinedMessage's answers once `placed`, by name and context: a deleted label used 60 times costs one search, not 60. */
+  readonly undefinedMessages = new Map<string, string>();
+
+  undefinedMessage(name: string, place: Place = 'value'): string {
+    if (!this.placed) return this.findUndefinedMessage(name, place);
+    const key = `${place} ${name}`;
+    let message = this.undefinedMessages.get(key);
+    if (message === undefined) {
+      message = this.findUndefinedMessage(name, place);
+      this.undefinedMessages.set(key, message);
+    }
+    return message;
+  }
+
+  findUndefinedMessage(name: string, place: Place): string {
     if (/^[A-F][0-9A-F]*H$/i.test(name)) return `${name} is not defined. A hex number must start with a digit: write 0${name}.`;
     if (/^\$[0-9A-F]+H$/i.test(name)) return `${name} is not defined. A hex number takes $ or H, not both: write ${name.slice(0, -1)} or 0${name.slice(1)}.`;
+    if (isMnemonic(name.toUpperCase())) return `${name.toUpperCase()} is an instruction, not a value; put one instruction per line.`;
     const near = nearest(name, [...this.syms.values()].map((s) => s.name));
     if (near.length > 0) return `${name} is not defined. Did you mean ${near.join(' or ')}?`;
+    const machine = machineText(this.model);
+    // A service call or port is a number, never somewhere to go, so a target suggests ROM routines, and an address anything but those.
+    const names = [...this.rom.values()];
+    const fits = (r: RomName): boolean => (place === 'go' ? r.entry.kind === 'routine' || r.entry.kind === 'vector' : r.entry.kind !== 'svc' && r.entry.kind !== 'port');
+    const places = names.filter(fits).map((r) => r.name);
+    const placeText = (rom: string[]): string =>
+      rom.length === 1 ? `${rom[0]}, ${describeName(this.rom.get(rom[0]!.toUpperCase())!)}` : orList(rom);
     const elsewhere = nameElsewhere(this.model, this.dos, name);
-    if (elsewhere !== undefined) return `${name} is not defined. ${elsewhereText(elsewhere, machineText(this.model))}`;
-    const rom = nearestRomName(name, [...this.rom.values()].map((r) => r.name));
-    if (rom.length === 1) return `${name} is not defined. Did you mean ${rom[0]}, ${describeName(this.rom.get(rom[0]!.toUpperCase())!)}?`;
-    if (rom.length > 1) return `${name} is not defined. Did you mean ${rom.join(' or ')}?`;
+    if (elsewhere !== undefined) {
+      let message = `${name} is not defined. ${elsewhereText(elsewhere, machine)}`;
+      // CALL CLS on the Model III: the ROM routine whose name holds the call's ($VDCLS) is the likely aim.
+      if (elsewhere.table === 'svc-lsdos6' && place === 'go') {
+        const want = elsewhere.name.toUpperCase().replace(/^[$@]/, '');
+        const rom = places
+          .filter((n) => n.toUpperCase().replace(/^[$@]/, '').includes(want))
+          .sort((a, b) => a.length - b.length || (a < b ? -1 : 1))
+          .slice(0, 3);
+        if (rom.length > 0) message += ` On the ${machine}, did you mean ${placeText(rom)}?`;
+      }
+      return message;
+    }
+    if (place !== 'value') {
+      const rom = nearestRomName(name, places);
+      // Only a service call spelled almost as the word: the call is a different thing, so a loose match would mislead.
+      const core = name.toUpperCase().replace(/^[$@]/, '');
+      const svc = names.filter((r) => r.entry.kind === 'svc' && distance(core, r.name.toUpperCase().replace(/^[$@]/, '')) <= 1).map((r) => r.name);
+      const call = svc.length > 0 ? `${svc[0]} is an LS-DOS 6 service call number, not an address: to use it, write LD A,${svc[0]} then RST 28H.` : '';
+      if (rom.length > 0) return `${name} is not defined. Did you mean ${placeText(rom)}?${call === '' ? '' : ` (${call})`}`;
+      if (call !== '') return `${name} is not defined. ${call}`;
+    }
+    const rom = nearestRomName(name, names.map((r) => r.name));
+    if (rom.length > 0) return `${name} is not defined. Did you mean ${placeText(rom)}?`;
     return `${name} is not defined.`;
   }
 
@@ -760,21 +875,45 @@ export class Assembly {
     return new Array<number>(item.length).fill(value & 0xff);
   }
 
+  /** Whether operand `i` of an instruction is where to go or a memory address (not an IN or OUT port). */
+  static isPlace(mn: string, shape: Shape, i: number, count: number): boolean {
+    return Assembly.placeOf(mn, shape, i, count) !== 'value';
+  }
+
+  /** What operand `i` of an instruction names: where to go, a memory address (not an IN or OUT port), or a plain value. */
+  static placeOf(mn: string, shape: Shape, i: number, count: number): Place {
+    if (shape === '(nn)') return mn === 'IN' || mn === 'OUT' ? 'value' : 'memory';
+    return GOES.has(mn) && i === count - 1 && (shape === 'nn' || shape === 'e' || shape === 'n') ? 'go' : 'value';
+  }
+
   encodeInstruction(item: Item, ctx: EvalContext): number[] {
     const { stmt } = item;
     const op = stmt.op!;
     const nodes = item.operands;
     const operands: Operand[] = nodes.map((o, i) => {
       const shape = item.shapes[i]!;
-      return o.kind === 'reg' || o.kind === 'ind' ? { shape } : { shape, value: evaluate(o.expr, ctx) };
+      if (o.kind === 'reg' || o.kind === 'ind') return { shape };
+      const place = Assembly.placeOf(op.name, shape, i, nodes.length);
+      return { shape, value: evaluate(o.expr, place === 'value' ? ctx : { here: ctx.here, lookup: (n) => this.lookup(n, stmt.line, [], place) }) };
     });
     const first = stmt.operands[0];
     const last = stmt.operands[stmt.operands.length - 1];
-    const fail = (message: string, at?: OperandNode): number[] => {
-      this.error(stmt.line, at?.col ?? first?.col ?? op.col, at?.end ?? last?.end ?? op.end, message);
+    const fail = (message: string, at?: OperandNode, rewrite?: string): number[] => {
+      const fix = rewrite === undefined ? undefined : { line: stmt.line, column: op.col, endColumn: last?.end ?? op.end, replacement: rewrite };
+      this.error(stmt.line, at?.col ?? first?.col ?? op.col, at?.end ?? last?.end ?? op.end, message, fix);
       item.failed = true;
       return [];
     };
+    // A service call or port name is a number: as a target or an address it is a slip, though it assembles.
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i]!;
+      if (!('expr' in node) || !Assembly.isPlace(op.name, operands[i]!.shape, i, nodes.length)) continue;
+      const name = loneSymbol(node.expr);
+      if (name === undefined || this.syms.has(name.toUpperCase())) continue;
+      const entry = this.rom.get(name.toUpperCase())?.entry;
+      if (entry?.kind === 'svc') return fail(`${name} is an LS-DOS 6 service call number (${entry.key}), not an address: to make the call, write LD A,${name} then RST 28H.`, node);
+      if (entry?.kind === 'port') return fail(`${name} is a port number (${show(entry.key)}), not an address: read it with IN A,(${name}) or write it with OUT (${name}),A.`, node);
+    }
     const ld = loadThroughA(op.name, nodes);
     if (ld !== undefined) return fail(ld);
     const options: EncodeOptions = { written: stmt.operands.map((o) => o.text) };
@@ -794,7 +933,7 @@ export class Assembly {
       message += ` zmac reads RST ${v} as RST ${asSource(v * 8)}; write RST ${asSource(v * 8)} if that is what you mean.`;
     }
     const culprit = out.operand === undefined ? undefined : nodes[out.operand];
-    return fail(message, culprit);
+    return fail(message, culprit, out.rewrite);
   }
 
   encodeData(item: Item, ctx: EvalContext): number[] {
@@ -853,6 +992,7 @@ export function assemble(source: string, options: AsmOptions = {}): AsmResult {
     asm.load = 0;
   }
   for (const stmt of statements) asm.pass1(stmt);
+  asm.placed = true;
   asm.resolveAll();
   for (const item of asm.items) asm.pass2(item);
   for (let i = statements.length; i < lines.length; i++) {
@@ -935,7 +1075,11 @@ export function assemble(source: string, options: AsmOptions = {}): AsmResult {
   }
   for (const r of asm.romUsed.values()) symbols.set(r.name, { value: r.value, line: 0, kind: 'rom' });
 
-  return { ok, image, entry: ok ? asm.entry : null, symbols, sourceMap, listing, diagnostics };
+  const byUpper = new Map<string, SymbolInfo>();
+  for (const [name, info] of symbols) byUpper.set(name.toUpperCase(), info);
+  const symbol = (name: string): SymbolInfo | undefined => byUpper.get(name.toUpperCase());
+
+  return { ok, image, entry: ok ? asm.entry : null, symbols, symbol, sourceMap, listing, diagnostics };
 }
 
 /** Where a name the chosen tables lack comes from, and how to get it. */

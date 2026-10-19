@@ -3,7 +3,8 @@
  * lookup. Precedence is zmac's, which is C's (a zmac probe settles it): from
  * loosest, `|`, `^`, `&`, `<< >> SHL SHR`, `+ -`, `* / % MOD`, then the unary
  * `+ - ~ HIGH LOW`. Arithmetic is on 32-bit integers, as zmac's is; division
- * truncates toward zero and MOD takes the sign of the dividend.
+ * truncates toward zero and MOD takes the sign of the dividend; `>>` and SHR
+ * shift logically, and a shift count must be 0 to 31.
  */
 import type { Token } from './lex.js';
 import { CONDITIONS, OPERATOR_WORDS, REGISTERS } from './names.js';
@@ -21,12 +22,17 @@ export type Expr =
   | (Span & { k: 'un'; op: string; arg: Expr })
   | (Span & { k: 'bin'; op: string; left: Expr; right: Expr });
 
-/** A problem in an expression, at a span of its line. A null message means it was reported already (a symbol that failed). */
+/**
+ * A problem in an expression, at a span of its line. A null message means it
+ * was reported already (a symbol that failed). `fix`, when the sentence gives
+ * an exact rewrite, is the text that replaces the span.
+ */
 export class ExprError extends Error {
   constructor(
     readonly sentence: string | null,
     readonly col: number,
     readonly end: number,
+    readonly fix?: string,
   ) {
     super(sentence ?? 'reported already');
   }
@@ -107,7 +113,7 @@ export function parseExpr(tokens: readonly Token[], from: number, to: number): E
         }
         const next = peek();
         if (t.text === '%' && next !== undefined && next.kind === 'number' && /^[01]+$/.test(next.text)) {
-          throw new ExprError(`zmac reads % as MOD, so %${next.text} is not a binary number; write ${next.text}B.`, t.col, next.end);
+          throw new ExprError(`zmac reads % as MOD, so %${next.text} is not a binary number; write ${next.text}B.`, t.col, next.end, `${next.text}B`);
         }
         if (t.text === ')') throw new ExprError('This ) has no matching (.', t.col, t.end);
         throw new ExprError(`${t.text} cannot start a value.`, t.col, t.end);
@@ -175,10 +181,14 @@ export function evaluate(node: Expr, ctx: EvalContext): number {
           return l & r;
         case '<<':
         case 'SHL':
-          return r >= 32 || r < 0 ? 0 : l << r;
         case '>>':
-        case 'SHR':
-          return r >= 32 || r < 0 ? (l < 0 ? -1 : 0) : l >> r;
+        case 'SHR': {
+          // zmac shifts a 32-bit value, and `>>` is logical (-1>>31 is 1). A
+          // count outside 0 to 31 is C's undefined behaviour there (zmac gives
+          // 1<<32 as 1 but -1>>32 as 0), so it is an error here.
+          if (r < 0 || r > 31) throw new ExprError(`A shift count runs from 0 to 31; ${r} is out of range.`, node.right.col, node.right.end);
+          return node.op === '<<' || node.op === 'SHL' ? l << r : (l >>> r) | 0;
+        }
         case '+':
           return (l + r) | 0;
         case '-':

@@ -1,7 +1,7 @@
 /** `fugloy asm`: diagnostics as file:line:col: severity: message, the .CMD it writes, the listing, and the exit codes. */
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { link, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -177,6 +177,21 @@ describe('fugloy asm', () => {
       await writeFile(join(dir, 'real.z'), '\tNOP\n');
       await symlink(join(dir, 'real.z'), join(dir, 'link.cmd'));
       expect(samePath(join(dir, 'link.cmd'), join(dir, 'real.z'))).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('the overwrite guard compares device and inode: a hard link, and another case on a case-insensitive file system', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'fugloy-asm-'));
+    try {
+      await writeFile(join(dir, 'game.z'), '\tNOP\n');
+      await link(join(dir, 'game.z'), join(dir, 'hard.cmd'));
+      expect(samePath(join(dir, 'hard.cmd'), join(dir, 'game.z'))).toBe(true);
+      // GAME.Z is game.z exactly when the file system ignores case (macOS and Windows by default).
+      expect(samePath(join(dir, 'GAME.Z'), join(dir, 'game.z'))).toBe(existsSync(join(dir, 'GAME.Z')));
+      await writeFile(join(dir, 'other.z'), '\tNOP\n');
+      expect(samePath(join(dir, 'other.z'), join(dir, 'game.z'))).toBe(false);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

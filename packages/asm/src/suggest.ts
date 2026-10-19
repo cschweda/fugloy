@@ -2,18 +2,27 @@
 import { forms, mnemonics } from './encode.js';
 import { DIRECTIVES, REGISTERS } from './names.js';
 
+/** Three rows reused by every call, so a distance allocates nothing once they are long enough. */
+let rows: [Int32Array, Int32Array, Int32Array] = [new Int32Array(32), new Int32Array(32), new Int32Array(32)];
+
 /** Edit distance with adjacent transpositions (LDRI to LDIR is one edit). */
 export function distance(a: string, b: string): number {
-  const d: number[][] = Array.from({ length: a.length + 1 }, (_, i) => Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
+  const n = b.length;
+  if (rows[0].length <= n) rows = [new Int32Array(n + 1), new Int32Array(n + 1), new Int32Array(n + 1)];
+  // Rows i-2, i-1, and i of the table, rotated as i grows.
+  let [before, prev, cur] = rows;
+  for (let j = 0; j <= n; j++) prev[j] = j;
   for (let i = 1; i <= a.length; i++) {
-    for (let j = 1; j <= b.length; j++) {
+    cur[0] = i;
+    for (let j = 1; j <= n; j++) {
       const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      let v = Math.min(d[i - 1]![j]! + 1, d[i]![j - 1]! + 1, d[i - 1]![j - 1]! + cost);
-      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) v = Math.min(v, d[i - 2]![j - 2]! + 1);
-      d[i]![j] = v;
+      let v = Math.min(prev[j]! + 1, cur[j - 1]! + 1, prev[j - 1]! + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) v = Math.min(v, before[j - 2]! + 1);
+      cur[j] = v;
     }
+    [before, prev, cur] = [prev, cur, before];
   }
-  return d[a.length]![b.length]!;
+  return prev[n]!;
 }
 
 /** `a`, `a or b`, `a, b, or c`. */
@@ -32,6 +41,8 @@ export function nearest(word: string, candidates: Iterable<string>): string[] {
   const limit = w.length <= 3 ? 1 : 2;
   let best: { name: string; d: number; len: number }[] = [];
   for (const name of candidates) {
+    // Each edit changes the length by at most one, so a name further off in length cannot be near.
+    if (Math.abs(name.length - w.length) > limit) continue;
     const d = distance(w, name.toUpperCase());
     if (d === 0 || d > limit) continue;
     const len = Math.abs(name.length - w.length);
@@ -77,10 +88,11 @@ export function nearestRomName(word: string, names: Iterable<string>): string[] 
   for (const name of names) {
     const c = core(name);
     if (c === w && name.toUpperCase() === word.toUpperCase()) continue;
-    let score = distance(w, c);
+    let score = Math.abs(c.length - w.length) > limit ? Infinity : distance(w, c);
     if (score > limit) {
       score = Infinity;
-      if (w.length >= 3) {
+      // A piece one edit from a word of three letters or more keeps its first or its last letter.
+      if (w.length >= 3 && (c.includes(w[0]!) || c.includes(w[w.length - 1]!))) {
         for (const n of lengths) {
           for (let i = 0; i + n <= c.length; i++) {
             // Closer pieces first; ties go to the name closest in length to the word.

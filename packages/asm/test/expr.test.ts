@@ -38,6 +38,21 @@ describe('numbers', () => {
     expect(wordOf('11111111111111111111111111111111B')).toBe(0xffff);
   });
 
+  it('>> and SHR are logical shifts on 32 bits, as in zmac', () => {
+    expect(wordOf('-1>>31')).toBe(1);
+    expect(wordOf('-1 SHR 28')).toBe(0x0f);
+    expect(wordOf('0FFFFFFF0H>>28')).toBe(0x0f);
+    expect(wordOf('(1<<31)>>31')).toBe(1);
+    expect(wordOf('80000000H>>16')).toBe(0x8000);
+  });
+
+  it('a shift count outside 0 to 31 is an error, at the count', () => {
+    const r = assemble('\tDW 1<<32');
+    expect(errorsOf(r)).toEqual(['1: A shift count runs from 0 to 31; 32 is out of range.']);
+    expect(r.diagnostics[0]!.column).toBe(8);
+    expect(errorsOf(assemble('\tDW 1 SHR -1'))).toEqual(['1: A shift count runs from 0 to 31; -1 is out of range.']);
+  });
+
   it('a number past 32 bits is an error', () => {
     expect(errorsOf(assemble('\tDW 100000000H'))).toEqual(['1: 100000000H is too large: numbers have 32 bits, at most 0FFFFFFFFH (4294967295).']);
     expect(errorsOf(assemble('\tDW 4294967296'))).toEqual(['1: 4294967296 is too large: numbers have 32 bits, at most 0FFFFFFFFH (4294967295).']);
