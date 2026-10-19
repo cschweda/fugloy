@@ -1,0 +1,87 @@
+; Invaders march: a row of six invaders on row 2 steps a cell at a time to
+; the right, and at the screen's edge turns and steps back to the left. The
+; row's state is a small table, ROW, read through IX with an offset: its
+; left column, its step (1 right, -1 left), and how many invaders it has.
+; Each invader is two cells drawn from SHAPE, four cells apart, and DJNZ
+; counts them. The game loop is lesson 6's, with WAIT called four times.
+
+        ORG     7000H           ; the program lives at 7000H, as in lessons 1 to 6
+
+START:  LD      IX,ROW          ; IX points at the row's table, for good
+        LD      HL,SHAPE        ; draw the row where it starts
+        CALL    DRAWROW
+
+LOOP:   LD      B,4             ; a march step every four WAITs:
+PAUSE:  CALL    WAIT            ; WAIT keeps BC, so B still counts after it
+        DJNZ    PAUSE           ; B minus 1, and round again until it is 0
+        CALL    MARCH
+        JR      LOOP
+
+; MARCH: erase the row, move it one cell, turn it at an edge, draw it.
+MARCH:  LD      HL,BLANK        ; erase the row where it is
+        CALL    DRAWROW
+        LD      A,(IX+0)        ; the row's left column
+        ADD     A,(IX+1)        ; plus its step: 1, or 0FFH, which is -1
+        LD      (IX+0),A        ; is its new column
+        LD      C,A             ; keep it in C
+        CP      0               ; at the left edge?
+        JR      Z,TURN
+        LD      A,(IX+2)        ; how many invaders: the row is 4 cells each,
+        ADD     A,A             ; less the last one's gap of two, so its last
+        ADD     A,A             ; left column is 64 - (4n - 2) = 66 - 4n
+        LD      B,A
+        LD      A,66
+        SUB     B
+        CP      C               ; at the right edge?
+        JR      NZ,DRAW
+TURN:   LD      A,(IX+1)        ; turn round: the step changes sign,
+        NEG                     ; 1 to -1 or -1 to 1
+        LD      (IX+1),A
+DRAW:   LD      HL,SHAPE        ; draw the row where it is now
+        CALL    DRAWROW
+        RET
+
+; DRAWROW: draw the row's invaders on row 2 (3C80H), each from the two bytes
+; HL points at, four cells apart. HL and DE are kept on the stack, as
+; lesson 5's SHOW kept BC and DE.
+DRAWROW:
+        PUSH    HL
+        PUSH    DE
+        LD      A,(IX+0)        ; the row's left column, plus 3C80H, row 2:
+        ADD     A,80H           ; the first invader's left cell
+        LD      E,A
+        LD      D,3CH
+        LD      B,(IX+2)        ; B counts the invaders for DJNZ
+NEXT:   LD      A,(HL)          ; the shape's left cell
+        LD      (DE),A
+        INC     HL
+        INC     DE
+        LD      A,(HL)          ; and its right cell
+        LD      (DE),A
+        DEC     HL              ; back to the shape's start for the next one
+        INC     DE              ; on past the gap of two:
+        INC     DE              ; invaders are four cells apart
+        INC     DE
+        DJNZ    NEXT            ; the next invader, until B is 0
+        POP     DE
+        POP     HL
+        RET
+
+; WAIT: lesson 5's delay, 133,120 T-states, about 66 ms at 2.03 MHz.
+WAIT:   PUSH    BC              ; save BC, which the loop uses
+        LD      BC,1400H        ; 1400H is 5,120 passes of 26 T-states
+DELAY:  DEC     BC
+        LD      A,B
+        OR      C
+        JR      NZ,DELAY
+        POP     BC              ; BC as the caller left it
+        RET
+
+SHAPE:  DB      9EH,0ADH        ; an invader: two cells, a head, arms and legs
+BLANK:  DB      '  '            ; two spaces, to erase one
+
+ROW:    DB      8               ; IX+0: the row's left column
+        DB      1               ; IX+1: its step, 1 right or -1 (0FFH) left
+        DB      6               ; IX+2: how many invaders
+
+        END     START           ; the program starts at START

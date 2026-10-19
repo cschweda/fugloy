@@ -209,7 +209,7 @@ const doneCount = computed(() => LESSONS.filter((l) => done.value.has(l.slug)).l
 .fg-learn-list { padding: 8px 12px; border: 1px solid var(--fg-border); border-radius: 4px; background: var(--fg-surface); font-size: 13px; }
 .fg-learn-list p { margin: 0 0 6px; }
 .fg-learn-list ol { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
-.fg-learn-list a { color: var(--fg-text); }
+.fg-learn-list a { display: inline-flex; align-items: center; min-height: 24px; color: var(--fg-text); }
 .fg-learn-list a[aria-current='page'] { font-weight: 700; color: var(--fg-text-strong); }
 .fg-learn-done { margin-left: 6px; color: var(--fg-accent); }
 .fg-learn-box { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--fg-border); border-left: 3px solid var(--fg-accent); border-radius: 4px; }
