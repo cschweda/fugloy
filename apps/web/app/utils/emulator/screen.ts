@@ -91,12 +91,22 @@ export function tubeFit(rasterHeight: number, aspect: number, availWidth: number
 }
 
 /**
- * The tube in a panel `availWidth` wide: every model at the Model III's height for that width (its
- * whole-row 4:3 fit), so the Model I shows narrower at the same height, as on the same monitor,
- * never taller. The Model III and 4 get tubeFit's own answer.
+ * The tube in a panel `availWidth` wide for a raster `rasterWidth` x `rasterHeight` dots. The
+ * Model III and 4 (4:3) get tubeFit's own whole-row fit, as before. The Model I takes the Model
+ * III's height for that width (narrower at the same height, as on the same monitor) unless that
+ * would draw it narrower than its dots (drawing fewer pixels than dots drops dot columns); then the
+ * smallest whole-row height at least `rasterWidth` wide that fits the width; and when none does,
+ * the host's width at the aspect. (Full screen needs no such rule: tubeFit's largest whole-row
+ * tube is never narrower than any smaller whole-row tube that fits.)
  */
-export function panelFit(rasterHeight: number, aspect: number, availWidth: number): { width: number; height: number } {
-  return tubeFit(rasterHeight, aspect, availWidth, tubeFit(rasterHeight, MODEL3_ASPECT, availWidth).height);
+export function panelFit(rasterHeight: number, rasterWidth: number, aspect: number, availWidth: number): { width: number; height: number } {
+  const base = tubeFit(rasterHeight, aspect, availWidth, tubeFit(rasterHeight, MODEL3_ASPECT, availWidth).height);
+  if (aspect === MODEL3_ASPECT || base.width >= rasterWidth) return base;
+  for (let k = 1; k * rasterHeight * aspect <= availWidth; k++) {
+    const height = k * rasterHeight;
+    if (height * aspect >= rasterWidth) return { width: height * aspect, height };
+  }
+  return { width: availWidth, height: availWidth / aspect };
 }
 
 /** The view a machine's screen is in now. */

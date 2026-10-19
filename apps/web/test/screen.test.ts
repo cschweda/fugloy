@@ -263,20 +263,37 @@ describe('tubeFit', () => {
 });
 
 describe('panelFit', () => {
-  it('gives every model the Model III height for the width, so the Model I is narrower, never taller', () => {
-    expect(panelFit(192, MODEL3_ASPECT, 800)).toEqual({ width: 768, height: 576 });
-    const m1 = panelFit(192, MODEL1_ASPECT, 800);
+  it('gives the Model III and 4 their own whole-row 4:3 fit, unchanged', () => {
+    expect(panelFit(192, 512, MODEL3_ASPECT, 800)).toEqual({ width: 768, height: 576 });
+    expect(panelFit(192, 512, MODEL3_ASPECT, 767)).toEqual({ width: 512, height: 384 });
+    expect(panelFit(192, 512, MODEL3_ASPECT, 600)).toEqual({ width: 512, height: 384 });
+    expect(panelFit(192, 512, MODEL3_ASPECT, 500)).toEqual({ width: 256, height: 192 });
+    expect(panelFit(192, 512, MODEL3_ASPECT, 200)).toEqual({ width: 200, height: 150 });
+    expect(panelFit(240, 640, MODEL3_ASPECT, 1000)).toEqual({ width: 960, height: 720 });
+  });
+
+  it('gives the Model I the Model III height for the width, narrower, while that is at least its 384 dots across', () => {
+    const m1 = panelFit(192, 384, MODEL1_ASPECT, 800);
     expect(m1.height).toBe(576);
     expect(m1.width).toBe(576 * MODEL1_ASPECT);
-    // Where tubeFit alone would give the Model I a taller tube (600 wide: k=3 for it, k=2 for the III).
-    expect(tubeFit(192, MODEL1_ASPECT, 600).height).toBe(576);
-    expect(panelFit(192, MODEL1_ASPECT, 600)).toEqual({ width: 384 * MODEL1_ASPECT, height: 384 });
-    // The Model 4's 80x24 is unchanged.
-    expect(panelFit(240, MODEL3_ASPECT, 1000)).toEqual({ width: 960, height: 720 });
-    // Narrower than one step: the Model III's height at the host's width, the Model I narrower.
-    expect(panelFit(192, MODEL3_ASPECT, 200)).toEqual({ width: 200, height: 150 });
-    const narrow = panelFit(192, MODEL1_ASPECT, 200);
-    expect(narrow.height).toBeCloseTo(150, 10);
-    expect(narrow.width).toBeCloseTo(150 * MODEL1_ASPECT, 10);
+  });
+
+  it('never draws the Model I narrower than its dots: the smallest whole-row height at least 384 wide that fits', () => {
+    // 600 across: the Model III height (384) would be 366 wide; k = 3 is 548 wide and fits.
+    const m1 = panelFit(192, 384, MODEL1_ASPECT, 600);
+    expect(m1.height).toBe(576);
+    expect(m1.width).toBe(576 * MODEL1_ASPECT);
+    expect(m1.width).toBeGreaterThanOrEqual(384);
+    expect(m1.width).toBeLessThanOrEqual(600);
+  });
+
+  it('falls back to the host width at the Model I shape when no whole-row height at least 384 wide fits', () => {
+    // 500 across: k = 2 is 366 wide (too narrow for the dots), k = 3 548 (too wide for the host).
+    const m1 = panelFit(192, 384, MODEL1_ASPECT, 500);
+    expect(m1.width).toBe(500);
+    expect(m1.height).toBeCloseTo(500 / MODEL1_ASPECT, 10);
+    const narrow = panelFit(192, 384, MODEL1_ASPECT, 200);
+    expect(narrow.width).toBe(200);
+    expect(narrow.height).toBeCloseTo(200 / MODEL1_ASPECT, 10);
   });
 });

@@ -6,9 +6,10 @@
 // machines' dot clocks). Its size is panelFit's: the Model III's tube for the host's width (the
 // largest 4:3 tube whose height is a whole multiple of the raster's rows, or the host's whole width
 // when not even one step fits), every model at that height and its own shape, so the Model I is
-// narrower, never taller (each row k screen pixels high on every model; across, the scale follows
-// the shape); a ResizeObserver on the host keeps it so, and the shape follows the
-// machine from its next frame. toggleFullscreen puts the box itself in full screen (the Fullscreen
+// narrower, never taller, unless that would draw it narrower than its 384 dots: then the smallest
+// whole-row height at least that wide, or the host's width at the shape (panelFit); each row is k
+// screen pixels high and across the scale follows the shape. A ResizeObserver on the host keeps it
+// so, and the shape follows the machine from its next frame. toggleFullscreen puts the box itself in full screen (the Fullscreen
 // API; Esc leaves it too): the browser stretches the box over the whole window, black, and the
 // canvas sits centred in it at tubeFit's size for the window. The box takes the focus going in and
 // coming out, however full screen ends. RunTab's machine row holds the button. The box is the
@@ -45,6 +46,7 @@ const box = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
 const focused = ref(false);
 const rasterHeight = ref(BLANK_SIZE.height);
+const rasterWidth = ref(BLANK_SIZE.width);
 /** The character generator shown now, which sets the picture's shape. */
 const font = ref<ScreenFont>('model3');
 const hostWidth = ref(0);
@@ -58,7 +60,7 @@ let resize: ResizeObserver | null = null;
 
 const aspect = computed(() => tubeAspect(font.value));
 /** The tube in the panel: its CSS width and height. */
-const panelSize = computed(() => panelFit(rasterHeight.value, aspect.value, hostWidth.value));
+const panelSize = computed(() => panelFit(rasterHeight.value, rasterWidth.value, aspect.value, hostWidth.value));
 /** The tube in full screen, centred in the window. */
 const fullSize = computed(() => tubeFit(rasterHeight.value, aspect.value, viewport.value.width, viewport.value.height));
 // The height is set and the width follows from the aspect, so the rows stay whole on every model.
@@ -107,6 +109,7 @@ function draw(): void {
     const view = blank();
     const size = screenSize(view);
     rasterHeight.value = size.height;
+    rasterWidth.value = size.width;
     font.value = view.font;
     image = null;
     c.width = size.width;
@@ -125,6 +128,7 @@ function draw(): void {
   const view = screenView(m);
   const { width, height } = screenSize(view);
   rasterHeight.value = height;
+  rasterWidth.value = width;
   font.value = view.font;
   if (image === null || c.width !== width || c.height !== height) {
     c.width = width;
