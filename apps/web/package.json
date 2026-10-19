@@ -20,8 +20,14 @@
     "outline-card-words": "tsx scripts/outline-card-words.ts"
   },
   "dependencies": {
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/lint": "^6.9.7",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.14",
     "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fugloy/asm": "workspace:*",
     "@fugloy/disasm": "workspace:*",
+    "@fugloy/emu": "workspace:*",
     "@fugloy/z80": "workspace:*",
     "@nuxt/ui": "^4.12.0",
     "nuxt": "^4.6.2",
@@ -34,7 +40,6 @@
     "@axe-core/playwright": "^4.14.0",
     "@fontsource/inter": "^5.3.0",
     "@fugloy/cli": "workspace:*",
-    "@fugloy/emu": "workspace:*",
     "@nuxt/test-utils": "^4.3.4",
     "@playwright/test": "~1.64.1",
     "@types/node": "^22.20.5",

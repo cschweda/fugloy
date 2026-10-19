@@ -1,9 +1,11 @@
 // Back up and Restore: one JSON file with the user's own work (every saved hint
-// file and each program's machine and DOS), to carry between machines. Never
-// manuals, ROMs or programs. The logic lives here so the top bar menu and the
+// file, each program's machine and DOS, and, from phase 5B, the Z80 sources
+// written in the Source tab), to carry between machines. Never manuals, ROMs or
+// programs. The logic lives here so the top bar menu and the
 // Manuals page share it.
 import { parseHints } from '@fugloy/disasm';
-import type { Prefs, Store } from './store';
+import { freeName, newSourceId } from './source-names';
+import type { Prefs, Store, StoredSource } from './store';
 
 export interface BackupProgram {
   hash: string;
@@ -18,6 +20,8 @@ export interface Backup {
   fugloyBackup: 1;
   exportedAt: string;
   programs: BackupProgram[];
+  /** The Source tab's sources (phase 5B); absent when there are none, and in older backups. */
+  sources?: StoredSource[];
 }
 
 export async function makeBackup(store: Store): Promise<string> {
@@ -30,7 +34,8 @@ export async function makeBackup(store: Store): Promise<string> {
   }
   // Settings for programs with no saved hints go too.
   for (const [hash, p] of prefs) programs.push({ hash, name: hash.slice(0, 12), prefs: p });
-  const backup: Backup = { fugloyBackup: 1, exportedAt: new Date().toISOString(), programs };
+  const sources = (await store.allSources()).map((x): StoredSource => ({ id: x.id, name: x.name, text: x.text, model: x.model, savedAt: x.savedAt }));
+  const backup: Backup = { fugloyBackup: 1, exportedAt: new Date().toISOString(), programs, ...(sources.length === 0 ? {} : { sources }) };
   return `${JSON.stringify(backup, null, 2)}\n`;
 }
 
@@ -55,8 +60,16 @@ export function parseBackup(json: string): Backup {
       throw new BackupError('this backup file is damaged (a program entry is malformed).');
     }
   }
+  if (b.sources !== undefined && (!Array.isArray(b.sources) || !b.sources.every(isSource))) {
+    throw new BackupError('this backup file is damaged (a source entry is malformed).');
+  }
   return b as Backup;
 }
+
+const isSource = (v: unknown): v is StoredSource => {
+  const x = v as Partial<StoredSource> | null;
+  return typeof x === 'object' && x !== null && typeof x.id === 'string' && typeof x.name === 'string' && x.name !== '' && typeof x.text === 'string' && (x.model === 1 || x.model === 3 || x.model === 4) && typeof x.savedAt === 'number';
+};
 
 export interface RestoreResult {
   added: number;
@@ -64,6 +77,27 @@ export interface RestoreResult {
   skipped: number;
   /** Programs whose hint text does not parse: not restored (hints or settings), with the first reason. */
   rejected: { name: string; reason: string }[];
+  /** The backup's sources: added (a clashing name suffixed, a taken id replaced), or skipped as already here. Present only when the backup has sources. */
+  sources?: { added: number; skipped: number };
+}
+
+/** Adds the sources the store lacks. A source already here (same text and model, same id or name) is skipped; nothing is replaced, and nothing asks. */
+async function restoreSources(store: Store, sources: readonly StoredSource[]): Promise<{ added: number; skipped: number }> {
+  const have = await store.allSources();
+  const out = { added: 0, skipped: 0 };
+  for (const src of sources) {
+    if (have.some((h) => h.text === src.text && h.model === src.model && (h.id === src.id || h.name === src.name))) {
+      out.skipped++;
+      continue;
+    }
+    const ids = new Set(have.map((h) => h.id));
+    const id = ids.has(src.id) || src.id.startsWith(':') ? newSourceId() : src.id;
+    const next: StoredSource = { id, name: freeName(src.name, new Set(have.map((h) => h.name))), text: src.text, model: src.model, savedAt: src.savedAt };
+    await store.putSource(next);
+    have.push(next);
+    out.added++;
+  }
+  return out;
 }
 
 /**
@@ -117,5 +151,6 @@ export async function restoreBackup(store: Store, json: string, confirm: (name: 
     else if (added) result.added++;
     else result.skipped++;
   }
+  if (backup.sources !== undefined) result.sources = await restoreSources(store, backup.sources);
   return result;
 }

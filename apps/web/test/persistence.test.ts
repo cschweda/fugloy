@@ -282,3 +282,34 @@ describe('saved hints that no longer apply', () => {
     await until(() => p.status.value === 'saved');
   });
 });
+
+describe('the database upgrade', () => {
+  it('a version 1 database upgrades to version 2 with its hints, settings and manuals intact', async () => {
+    // A database as the 1.x site left it: version 1, three stores.
+    const v1 = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open('fugloy', 1);
+      req.onupgradeneeded = () => {
+        for (const name of ['hints', 'prefs', 'manuals']) req.result.createObjectStore(name);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    const tx = v1.transaction(['hints', 'prefs', 'manuals'], 'readwrite');
+    tx.objectStore('hints').put({ name: 'a.hints', text: 'fugloy-hints 1\n', savedAt: 1 }, 'aa');
+    tx.objectStore('prefs').put({ machine: 1, dos: 'ldos' }, 'aa');
+    tx.objectStore('manuals').put({ blob: new Blob(['%PDF']), sha256: 'cd', name: 'm.pdf', addedAt: 2 }, 'trs80-m3-tech');
+    await new Promise((r) => (tx.oncomplete = r));
+    v1.close();
+
+    const s = (await openStore())!;
+    extra.push(s);
+    expect(s.db.version).toBe(2);
+    expect([...s.db.objectStoreNames].sort()).toEqual(['hints', 'manuals', 'prefs', 'roms', 'sources']);
+    expect(await s.allHints()).toEqual([{ hash: 'aa', name: 'a.hints', text: 'fugloy-hints 1\n' }]);
+    expect(await s.getPrefs('aa')).toEqual({ machine: 1, dos: 'ldos' });
+    expect(await s.manualIds()).toEqual(['trs80-m3-tech']);
+    expect((await s.getManual('trs80-m3-tech'))?.name).toBe('m.pdf');
+    expect(await s.allSources()).toEqual([]);
+    expect(await s.romModels()).toEqual([]);
+  });
+});

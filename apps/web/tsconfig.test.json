@@ -11,7 +11,8 @@
     "paths": {
       "@fugloy/z80": ["../../packages/z80/src/index.ts"],
       "@fugloy/disasm": ["../../packages/disasm/src/index.ts"],
-      "@fugloy/cli": ["../../packages/cli/src/index.ts"]
+      "@fugloy/cli": ["../../packages/cli/src/index.ts"],
+      "@fugloy/asm": ["../../packages/asm/src/index.ts"]
     }
   },
   "include": ["test/**/*.ts", "app/types/**/*.d.ts", "scripts/**/*.ts", "vitest.config.ts", "aliases.ts", "playwright.config.ts"]

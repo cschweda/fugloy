@@ -8,8 +8,9 @@
 // only through the injected page counter.
 import { computed, ref, shallowRef } from 'vue';
 import type { ComputedRef } from 'vue';
-import { SYMBOL_SOURCES, manualPage, sha256Hex } from '@fugloy/disasm';
+import { SYMBOL_SOURCES, manualPage } from '@fugloy/disasm';
 import type { Cite, ManualScan, Source } from '@fugloy/disasm';
+import { sha256 } from '../utils/hash';
 import { looksLikePdf, scanByHash, scanOf } from '../utils/manuals';
 import { openStore, requestPersistence } from '../utils/store';
 import type { Store, StoredManual } from '../utils/store';
@@ -50,20 +51,6 @@ export interface ManualsDeps {
 
 const NO_STORAGE = 'Browser storage is unavailable here (a private window, or storage turned off), so Fugløy cannot keep a manual. The workbench still works, and every citation still links to its page on archive.org.';
 
-/** Web Crypto when there is one (fast, off the main thread); the library's own SHA-256 otherwise. */
-async function defaultHash(bytes: Uint8Array): Promise<string> {
-  const subtle = globalThis.crypto?.subtle;
-  if (subtle !== undefined) {
-    try {
-      const d = new Uint8Array(await subtle.digest('SHA-256', bytes as Uint8Array<ArrayBuffer>));
-      return Array.from(d, (b) => b.toString(16).padStart(2, '0')).join('');
-    } catch {
-      // fall through
-    }
-  }
-  return sha256Hex(bytes);
-}
-
 async function defaultPageCount(blob: Blob): Promise<number | null> {
   try {
     const { loadPdf } = await import('../utils/pdf');
@@ -86,7 +73,7 @@ function storeError(err: unknown, doing: 'add' | 'offset' | 'remove' = 'add'): s
 
 export function createManuals(deps: ManualsDeps = {}): Manuals {
   const open = deps.open ?? openStore;
-  const hash = deps.hash ?? defaultHash;
+  const hash = deps.hash ?? sha256;
   const pageCount = deps.pageCount ?? defaultPageCount;
   const store = shallowRef<Store | null | undefined>(undefined);
   /** What is stored, without the blobs: source id → its record's mapping facts. */

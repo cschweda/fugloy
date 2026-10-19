@@ -1,7 +1,8 @@
 // The browser's own storage for the user's work: one IndexedDB database,
 // `fugloy`, holding hint files and per-program machine and DOS settings, keyed
-// by the program's SHA-256, and the user's manuals, keyed by source id. Nothing
-// here leaves the machine. When IndexedDB is missing or refuses (a private
+// by the program's SHA-256; the user's manuals, keyed by source id; (from
+// version 2, phase 5B) the user's Z80 sources, keyed by their id, and the ROMs
+// they added, keyed by model. Nothing here leaves the machine. When IndexedDB is missing or refuses (a private
 // window), openStore() gives null and the workbench carries on without saving.
 import type { SymbolSelection } from '@fugloy/disasm';
 
@@ -33,6 +34,31 @@ export interface StoredManual {
   addedAt: number;
 }
 
+/** A TRS-80 model the emulator builds: the Model I, III or 4. */
+export type ModelId = 1 | 3 | 4;
+
+/** A Z80 source the user writes in the Source tab (plan 5B, Ruling 11). Goes in a backup. */
+export interface StoredSource {
+  id: string;
+  name: string;
+  text: string;
+  /** The model it is written for: it assembles and runs for this one (Ruling 7). */
+  model: ModelId;
+  savedAt: number;
+}
+
+/** A ROM the user added, keyed by model (Ruling 6). Never leaves the browser, never in a backup. */
+export interface StoredRom {
+  bytes: Uint8Array;
+  /** The ROM's SHA-256, lowercase hex. */
+  sha256: string;
+  /** emu's ROM_HASHES name for it (`model3-rev-c-2ef8`); null for a ROM Fugløy does not know. */
+  recognized: string | null;
+  /** The file name it was added as. */
+  name: string;
+  addedAt: number;
+}
+
 export interface Store {
   getHints(hash: string): Promise<SavedHints | undefined>;
   putHints(hash: string, value: { name: string; text: string }): Promise<void>;
@@ -47,12 +73,27 @@ export interface Store {
   deleteManual(id: string): Promise<void>;
   /** The source ids of the stored manuals. */
   manualIds(): Promise<string[]>;
+  allSources(): Promise<StoredSource[]>;
+  putSource(source: StoredSource): Promise<void>;
+  deleteSource(id: string): Promise<void>;
+  /** The id of the source last open in the Source tab; null when none. */
+  getCurrentSource(): Promise<string | null>;
+  putCurrentSource(id: string | null): Promise<void>;
+  getRom(model: ModelId): Promise<StoredRom | undefined>;
+  putRom(model: ModelId, rom: StoredRom): Promise<void>;
+  deleteRom(model: ModelId): Promise<void>;
+  /** The models that have a ROM stored. */
+  romModels(): Promise<ModelId[]>;
   /** The open database. */
   readonly db: IDBDatabase;
 }
 
 export const DB_NAME = 'fugloy';
-const STORES = ['hints', 'prefs', 'manuals'] as const;
+/** Version 1 (the 1.x site): hints, prefs, manuals. Version 2 adds sources and roms. */
+export const DB_VERSION = 2;
+const STORES = ['hints', 'prefs', 'manuals', 'sources', 'roms'] as const;
+/** The key, in the sources store, of the current source's id; source ids never start with a colon. */
+const CURRENT = ':current';
 
 function wrap<T>(req: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -69,7 +110,21 @@ function done(tx: IDBTransaction): Promise<void> {
   });
 }
 
+async function put(db: IDBDatabase, name: (typeof STORES)[number], value: unknown, key: IDBValidKey): Promise<void> {
+  const tx = db.transaction(name, 'readwrite');
+  tx.objectStore(name).put(value, key);
+  await done(tx);
+}
+
+async function del(db: IDBDatabase, name: (typeof STORES)[number], key: IDBValidKey): Promise<void> {
+  const tx = db.transaction(name, 'readwrite');
+  tx.objectStore(name).delete(key);
+  await done(tx);
+}
+
 function make(db: IDBDatabase): Store {
+  // Another tab opening a newer version asks this one to step aside, so its upgrade is not blocked.
+  db.onversionchange = () => db.close();
   return {
     db,
     getHints: (hash) => wrap<SavedHints | undefined>(db.transaction('hints').objectStore('hints').get(hash)),
@@ -106,6 +161,22 @@ function make(db: IDBDatabase): Store {
       await done(tx);
     },
     manualIds: async () => (await wrap(db.transaction('manuals').objectStore('manuals').getAllKeys())).map(String),
+    async allSources() {
+      const os = db.transaction('sources').objectStore('sources');
+      const [keys, values] = await Promise.all([wrap(os.getAllKeys()), wrap<StoredSource[]>(os.getAll())]);
+      return values.filter((_, i) => keys[i] !== CURRENT);
+    },
+    putSource: (source) => put(db, 'sources', { id: source.id, name: source.name, text: source.text, model: source.model, savedAt: source.savedAt } satisfies StoredSource, source.id),
+    deleteSource: (id) => del(db, 'sources', id),
+    async getCurrentSource() {
+      const v = await wrap<{ id: string } | undefined>(db.transaction('sources').objectStore('sources').get(CURRENT));
+      return v?.id ?? null;
+    },
+    putCurrentSource: (id) => (id === null ? del(db, 'sources', CURRENT) : put(db, 'sources', { id }, CURRENT)),
+    getRom: (model) => wrap<StoredRom | undefined>(db.transaction('roms').objectStore('roms').get(model)),
+    putRom: (model, rom) => put(db, 'roms', rom, model),
+    deleteRom: (model) => del(db, 'roms', model),
+    romModels: async () => (await wrap(db.transaction('roms').objectStore('roms').getAllKeys())).map((k) => Number(k) as ModelId),
     async deleteProgram(hash) {
       const tx = db.transaction(['hints', 'prefs'], 'readwrite');
       tx.objectStore('hints').delete(hash);
@@ -119,7 +190,7 @@ function make(db: IDBDatabase): Store {
 export async function openStore(): Promise<Store | null> {
   try {
     if (typeof indexedDB === 'undefined' || indexedDB === null) return null;
-    const req = indexedDB.open(DB_NAME, 1);
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       for (const name of STORES) if (!req.result.objectStoreNames.contains(name)) req.result.createObjectStore(name);
     };

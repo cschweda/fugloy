@@ -206,6 +206,22 @@ Core, `@fugloy/cli`:
 Core, `@fugloy/disasm`: `ROM_COMPARISON` (each ROM address's class across the
 two machines) is exported.
 
+Workbench, phase 5B (Source and Run), in progress on branch `phase5b` (plan
+`docs/superpowers/plans/2026-10-18-phase5b-source-run.md`):
+
+- **Storage for sources and ROMs.** The browser database moves to version 2
+  with two new stores; a version 1 database keeps its hints, settings and
+  manuals. `useSources` keeps several Z80 sources (name, text, model),
+  autosaved 500 ms after typing stops; a new one is the starter,
+  `clear-screen.z`, on the Model III. `useRoms` keeps one ROM per model:
+  a ROM emu knows by its SHA-256 goes to its own model whatever the file is
+  called, and any other is kept only at a size the chosen model takes. A
+  backup carries the sources (an optional `sources` array, still
+  `fugloyBackup: 1`; a restore adds them, suffixing a clashing name, and
+  never replaces one) and never a ROM. The site now depends on `@fugloy/asm`,
+  `@fugloy/emu`, and CodeMirror 6 (`@codemirror/state`, `view`, `commands`,
+  `lint`; MIT), none of them yet on the first screen.
+
 ### Testing
 
 - zmac referees asm everywhere the round-trip harness assembles. Its
