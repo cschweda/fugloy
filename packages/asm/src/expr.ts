@@ -199,6 +199,11 @@ export function evaluate(node: Expr, ctx: EvalContext): number {
         case '%':
         case 'MOD':
           if (r === 0) throw new ExprError('This expression divides by zero.', node.col, node.end);
+          // -80000000H divided by -1 overflows zmac's C int: undefined
+          // behaviour that traps on x86 and wraps on ARM, so it has no one answer.
+          if (l === -0x80000000 && r === -1) {
+            throw new ExprError('This division overflows 32 bits (-80000000H divided by -1), and zmac gives no defined result for it.', node.col, node.end);
+          }
           return node.op === '/' ? Math.trunc(l / r) | 0 : l % r | 0;
         default:
           throw new ExprError(`${node.op} is not an operator Fugløy knows.`, node.col, node.end);

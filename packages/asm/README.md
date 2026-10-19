@@ -378,6 +378,7 @@ zmac's own bytes wherever zmac assembles the source.
 | `$?`, `$A?`, `1?H` | reads `?` as the hex digit F | error: `?` is not a hex digit |
 | `MOV A,B`, `MOV M,A`, `MVI A,5` | the 8080's names for LD | error with the rewrite: `LD A,B`, `LD (HL),A`, `LD A,5` |
 | a shift count outside 0 to 31 (`1<<32`, `-1>>32`, `7>>-1`) | wraps or saturates, as its C compiler happens to (`1<<32` is 1, `-1>>32` is 0) | error: a shift count runs from 0 to 31 |
+| `-80000000H/-1` or `-80000000H MOD -1` | undefined in its C `int`: traps on x86, wraps on ARM | error: the division overflows 32 bits |
 
 asm also warns in two places where zmac is silent: an ORG over bytes
 already placed, and a label on an ORG line. The bytes and the label's value

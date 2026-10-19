@@ -5,7 +5,7 @@
  * any zmac warning as failure). The few places where the assembler is
  * deliberately stricter than zmac are pinned at the end, each with the reason.
  */
-import { describe, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { skipIfNoZmac } from '../../disasm/test/roundtrip/zmac.js';
 import { assemble } from '../src/index.js';
 import { bytesOf, errorsOf, runZmac } from './helpers.js';
@@ -194,8 +194,7 @@ describe('zmac probe: shifts are logical on 32 bits', () => {
     bothReject(program('\tDB -8>>1'), /DB takes bytes/);
   });
   zit('the other operators agree at the 32-bit edges', () => {
-    same(program('\tDB -7/2', '\tDB -7 MOD 2', '\tDB 7 MOD -2', '\tDB -7 % 2', '\tDB 7/-2', '\tDB -7/-2', '\tDB ~0', '\tDW ~1', '\tDB HIGH -1', '\tDB LOW -1', '\tDB (80000000H/-1)&0FFH', '\tDB (80000000H/-1)>>24', '\tDB 80000000H MOD -1', '\tDB 80000000H*2', '\tDB (-80000000H)>>24', '\tDB HIGH 80000000H', '\tDB -1/2', '\tDB 0FFFFFFFFH+2', '\tDB 0FFFFFFFFH/2>>30', '\tDW -1 MOD 7'));
-    bothReject(program('\tDB 80000000H/-1'), /DB takes bytes/);
+    same(program('\tDB -7/2', '\tDB -7 MOD 2', '\tDB 7 MOD -2', '\tDB -7 % 2', '\tDB 7/-2', '\tDB -7/-2', '\tDB ~0', '\tDW ~1', '\tDB HIGH -1', '\tDB LOW -1', '\tDB 80000000H*2', '\tDB (-80000000H)>>24', '\tDB HIGH 80000000H', '\tDB -1/2', '\tDB 0FFFFFFFFH+2', '\tDB 0FFFFFFFFH/2>>30', '\tDW -1 MOD 7'));
     bothReject(program('\tDB 7 MOD 0'), /divides by zero/);
   });
 });
@@ -369,6 +368,15 @@ describe('zmac probe: END', () => {
 });
 
 describe('deliberately stricter than zmac', () => {
+  // zmac divides in a C int, where -80000000H / -1 and its MOD are undefined:
+  // on x86 zmac traps, on ARM it wraps. With no one answer, the assembler refuses.
+  it('-80000000H divided by -1', () => {
+    for (const line of ['\tDB (80000000H/-1)&0FFH', '\tDB 80000000H MOD -1', '\tDW -80000000H/-1']) {
+      const errs = errorsOf(assemble(program(line)));
+      expect(errs.length).toBe(1);
+      expect(errs[0]).toMatch(/overflows 32 bits/);
+    }
+  });
   // zmac assembles RST 1 to 7 as RST 8 to 38H (RST 1 is CF), silently. A
   // number that is not a restart address is almost always a slip, so the
   // assembler refuses it and says what zmac would have done.
