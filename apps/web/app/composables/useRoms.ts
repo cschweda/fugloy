@@ -7,7 +7,7 @@
 import { computed, ref, shallowRef } from 'vue';
 import type { ComputedRef } from 'vue';
 import { sha256 } from '../utils/hash';
-import { openStore, requestPersistence } from '../utils/store';
+import { openStoreDetailed, requestPersistence, STORE_BLOCKED } from '../utils/store';
 import type { ModelId, Store, StoredRom } from '../utils/store';
 
 export type AddRomResult = { ok: true; model: ModelId } | { ok: false; reason: string };
@@ -40,7 +40,7 @@ export interface RomIds {
 }
 
 export interface RomsDeps {
-  open?: () => Promise<Store | null>;
+  open?: () => Promise<Store | 'blocked' | null>;
   /** SHA-256 of the file, lowercase hex. */
   hash?: (bytes: Uint8Array) => Promise<string>;
   /** What is known about ROMs (utils/emulator/rom-ids, which brings emu's hash table: loaded on first add). */
@@ -52,24 +52,32 @@ const NO_STORAGE = 'Browser storage is unavailable here (a private window, or st
 const n = (v: number): string => v.toLocaleString('en-US');
 const bytesText = (sizes: readonly number[]): string => `${sizes.map(n).join(' or ')} bytes`;
 
+function wrongSize(name: string, size: number, sizes: RomIds['ROM_SIZES']): string {
+  return `${name} is ${n(size)} bytes, which no TRS-80 ROM is: the Model I’s is ${bytesText(sizes[1])}, and the Model III’s and Model 4’s ${bytesText(sizes[3])}. Pick the ROM image itself.`;
+}
+
 function storeError(err: unknown, doing: 'add' | 'remove'): string {
   const name = err instanceof DOMException || err instanceof Error ? err.name : '';
   const what = doing === 'add' ? 'the ROM was not kept' : 'the ROM was not removed';
+  if (name === 'StoreClosedError') return (err as Error).message;
   if (name === 'QuotaExceededError') return `Your browser’s storage for this site is full, so ${what}. Remove a manual or a ROM you no longer need, or free space in the browser, and try again.`;
   return `Your browser refused the change, so ${what} (${err instanceof Error ? err.message : String(err)}). Try again, or reload the page.`;
 }
 
 export function createRoms(deps: RomsDeps = {}): Roms {
-  const open = deps.open ?? openStore;
+  const open = deps.open ?? (() => openStoreDetailed());
   const hash = deps.hash ?? sha256;
   const ids = deps.ids ?? (() => import('../utils/emulator/rom-ids'));
   const store = shallowRef<Store | null | undefined>(undefined);
+  const blocked = ref(false);
   /** What is stored, without the bytes, by model. */
   const stored = ref<Partial<Record<ModelId, RomInfo>>>({});
   let starting: Promise<Store | null> | null = null;
 
   function start(): Promise<Store | null> {
-    starting ??= open().then(async (s) => {
+    starting ??= open().then(async (r) => {
+      blocked.value = r === 'blocked';
+      const s = r === 'blocked' ? null : r;
       store.value = s;
       if (s !== null) {
         const next: Partial<Record<ModelId, RomInfo>> = {};
@@ -89,13 +97,15 @@ export function createRoms(deps: RomsDeps = {}): Roms {
   }
 
   async function add(file: File, model?: ModelId): Promise<AddRomResult> {
+    const { ROM_SIZES, MODEL_NAMES, recognise } = await ids();
+    // A size no TRS-80 ROM has is refused before the file is read (it may be huge).
+    if (!([1, 3, 4] as const).some((m) => ROM_SIZES[m].includes(file.size))) return { ok: false, reason: wrongSize(file.name, file.size, ROM_SIZES) };
     let bytes: Uint8Array;
     try {
       bytes = new Uint8Array(await file.arrayBuffer());
     } catch (err) {
       return { ok: false, reason: `${file.name} could not be read (${err instanceof Error ? err.message : String(err)}). Pick the file again.` };
     }
-    const { ROM_SIZES, MODEL_NAMES, recognise } = await ids();
     const sha = await hash(bytes);
     const known = recognise(sha);
     let target: ModelId;
@@ -108,9 +118,7 @@ export function createRoms(deps: RomsDeps = {}): Roms {
       const size = bytes.length;
       if (model === undefined) {
         const fits = ([1, 3, 4] as const).filter((m) => ROM_SIZES[m].includes(size));
-        if (fits.length === 0) {
-          return { ok: false, reason: `${file.name} is ${n(size)} bytes, which no TRS-80 ROM is: the Model I’s is ${bytesText(ROM_SIZES[1])}, and the Model III’s and Model 4’s ${bytesText(ROM_SIZES[3])}. Pick the ROM image itself.` };
-        }
+        if (fits.length === 0) return { ok: false, reason: wrongSize(file.name, size, ROM_SIZES) };
         return { ok: false, reason: `Fugløy does not recognise ${file.name}, though its size suits the ${fits.map((m) => MODEL_NAMES[m]).join(' or ')}. Which model is it for?` };
       }
       if (!ROM_SIZES[model].includes(size)) {
@@ -119,7 +127,7 @@ export function createRoms(deps: RomsDeps = {}): Roms {
       target = model;
     }
     const s = await start();
-    if (s === null) return { ok: false, reason: NO_STORAGE };
+    if (s === null) return { ok: false, reason: blocked.value ? STORE_BLOCKED : NO_STORAGE };
     const record: StoredRom = { bytes, sha256: sha, recognized: known?.name ?? null, name: file.name, addedAt: Date.now() };
     try {
       await s.putRom(target, record);
@@ -157,7 +165,7 @@ export function createRoms(deps: RomsDeps = {}): Roms {
     add,
     remove,
     start,
-    unavailable: computed(() => (store.value === null ? NO_STORAGE : null)),
+    unavailable: computed(() => (store.value === null ? (blocked.value ? STORE_BLOCKED : NO_STORAGE) : null)),
   };
 }
 

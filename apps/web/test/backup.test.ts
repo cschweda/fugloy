@@ -155,4 +155,14 @@ describe('backup', () => {
     await expect(restoreBackup(a, '{"fugloyBackup":1,"programs":[],"sources":[{"name":"a.z"}]}', async () => true)).rejects.toThrow(/a source entry is malformed/);
     await expect(restoreBackup(a, '{"fugloyBackup":1,"programs":[],"sources":[{"id":"a","name":"a.z","text":"","model":2}]}', async () => true)).rejects.toBeInstanceOf(BackupError);
   });
+
+  it('restores a source whose id starts with a colon under a new id, so it cannot overwrite the store’s own keys', async () => {
+    const json = JSON.stringify({ fugloyBackup: 1, exportedAt: '', programs: [], sources: [{ id: ':current', name: 'odd.z', text: 'x', model: 3, savedAt: 1 }] });
+    const r = await restoreBackup(a, json, async () => true);
+    expect(r.sources).toEqual({ added: 1, skipped: 0 });
+    const all = await a.allSources();
+    expect(all).toEqual([expect.objectContaining({ name: 'odd.z', text: 'x' })]);
+    expect(all[0]!.id.startsWith(':')).toBe(false);
+    expect(await a.getCurrentSource()).toBeNull();
+  });
 });

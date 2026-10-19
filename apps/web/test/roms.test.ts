@@ -6,7 +6,7 @@ import { ROM_HASHES } from '@fugloy/emu';
 import { MODELS } from '../../../packages/emu/src/machine/models.js';
 import { createRoms } from '../app/composables/useRoms';
 import { ROM_SIZES } from '../app/utils/emulator/rom-ids';
-import { openStore } from '../app/utils/store';
+import { openStore, STORE_BLOCKED } from '../app/utils/store';
 import type { Store } from '../app/utils/store';
 
 const hashOf = (name: string): string => Object.entries(ROM_HASHES).find(([, n]) => n === name)![0];
@@ -81,5 +81,19 @@ describe('useRoms', () => {
     const res = await r.add(file('a.rom', M3, 0x3800));
     expect(!res.ok && res.reason).toMatch(/Browser storage is unavailable here/);
     expect(r.unavailable.value).toMatch(/Browser storage is unavailable here/);
+  });
+
+  it('refuses a file of no ROM size before reading it', async () => {
+    const r = createRoms({ open, hash });
+    const huge = { name: 'movie.mp4', size: 3_000_000_000, arrayBuffer: () => { throw new Error('read'); } } as unknown as File;
+    const res = await r.add(huge, 3);
+    expect(!res.ok && res.reason).toMatch(/movie\.mp4 is 3,000,000,000 bytes, which no TRS-80 ROM is.*14,336 or 16,384 bytes/);
+  });
+
+  it('says to close the other tabs when an older tab blocks the database', async () => {
+    const r = createRoms({ open: async () => 'blocked', hash });
+    const res = await r.add(file('a.rom', M3, 0x3800));
+    expect(!res.ok && res.reason).toBe(STORE_BLOCKED);
+    expect(r.unavailable.value).toBe(STORE_BLOCKED);
   });
 });

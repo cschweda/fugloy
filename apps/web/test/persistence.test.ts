@@ -7,7 +7,7 @@ import { createPersistence, SAVE_DELAY_MS } from '../app/composables/usePersiste
 import { createWorkbench } from '../app/composables/useWorkbench';
 import { writeHints } from '@fugloy/disasm';
 import { restoreBackup } from '../app/utils/backup';
-import { openStore } from '../app/utils/store';
+import { openStore, openStoreDetailed, StoreClosedError } from '../app/utils/store';
 import type { Store } from '../app/utils/store';
 
 const readExample = async (path: string): Promise<Uint8Array | null> => {
@@ -311,5 +311,36 @@ describe('the database upgrade', () => {
     expect((await s.getManual('trs80-m3-tech'))?.name).toBe('m.pdf');
     expect(await s.allSources()).toEqual([]);
     expect(await s.romModels()).toEqual([]);
+  });
+
+  it('gives up with blocked when an older tab holds the database open, instead of waiting forever', async () => {
+    // A 1.x tab: version 1 open, and no versionchange handler, so it never lets go.
+    const v1 = await new Promise<IDBDatabase>((resolve) => {
+      const req = indexedDB.open('fugloy', 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('hints');
+      req.onsuccess = () => resolve(req.result);
+    });
+    expect(await openStoreDetailed({ blockedMs: 50 })).toBe('blocked');
+    v1.close();
+    // Once the old tab is gone the upgrade goes through.
+    await sleep(50);
+    const s = await openStoreDetailed({ blockedMs: 50 });
+    expect(s).not.toBe('blocked');
+    if (s !== 'blocked' && s !== null) extra.push(s);
+  });
+
+  it('a store closed by another tab’s upgrade fails every call with a sentence, not silently', async () => {
+    const s = (await openStore())!;
+    extra.push(s);
+    // Another tab, on a newer site, upgrades the database.
+    const newer = await new Promise<IDBDatabase>((resolve) => {
+      const req = indexedDB.open('fugloy', 3);
+      req.onsuccess = () => resolve(req.result);
+    });
+    expect(s.closed).toBe(true);
+    await expect(s.putSource({ id: 's', name: 'a.z', text: '', model: 3, savedAt: 0 })).rejects.toBeInstanceOf(StoreClosedError);
+    await expect(s.allSources()).rejects.toThrow(/updated in another tab.*Reload this page/);
+    await expect(s.getHints('x')).rejects.toBeInstanceOf(StoreClosedError);
+    newer.close();
   });
 });

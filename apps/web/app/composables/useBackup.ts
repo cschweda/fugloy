@@ -3,6 +3,7 @@
 // file read, the confirmation question and the result message.
 import { ref } from 'vue';
 import { BackupError, makeBackup, restoreBackup } from '../utils/backup';
+import { STORE_BLOCKED, storeBlocked } from '../utils/store';
 import { usePersistence } from './usePersistence';
 import { useSources } from './useSources';
 
@@ -18,7 +19,7 @@ export function useBackup() {
 
   async function store() {
     const s = await persistence.start();
-    if (s === null) message.value = 'Back up and Restore need browser storage, which is unavailable here.';
+    if (s === null) message.value = storeBlocked() ? STORE_BLOCKED : 'Back up and Restore need browser storage, which is unavailable here.';
     return s;
   }
 
