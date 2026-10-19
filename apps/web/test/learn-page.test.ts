@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 // The Learn page's plain parts (phase 6B Task 4): the lesson text as markup (headings, paragraphs,
 // lists, code, the JavaScript aside labelled), Explain's sentence for a program line after a Run,
-// the model switch's options, the lesson's neighbours, and the run message reworded for a page
-// that has no Source ✎ tab and no ROM.
+// the model switch's options, the lesson's neighbours, the run message reworded for a page
+// that has no Source ✎ tab and no ROM, and the program column's problems list, which (as Source ✎'s,
+// through the same useSourceChecks) carries a Run's ROM-copy notes on their lines.
 import { afterEach, describe, expect, it } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import type { VueWrapper } from '@vue/test-utils';
 import { assemble, toCmd } from '@fugloy/asm';
 import LessonText from '../app/components/learn/LessonText.vue';
@@ -13,6 +14,11 @@ import { EXPLAIN_PROMPT, lessonMessage, lessonNeighbours, lessonPath, modelOptio
 import { parseLesson } from '../app/utils/learn/lesson-format';
 import type { Lesson } from '../app/utils/learn/lesson-format';
 import { lessonBySlug, LESSONS } from '../app/utils/learn/lessons';
+import LessonEditor from '../app/components/source/LessonEditor.vue';
+import * as realKit from '../app/utils/emulator/kit';
+import { createRun } from '../app/composables/useRun';
+import { createSources } from '../app/composables/useSources';
+import { fakeClock } from './emulator-support';
 
 let w: VueWrapper | null = null;
 afterEach(() => {
@@ -113,5 +119,32 @@ describe('the page helpers', () => {
     );
     expect(lessonMessage("Running on Fugløy's stub ROM (no ROM needed for this program).")).toBe("Running on Fugløy's stub ROM (no ROM needed for this program).");
     expect(EXPLAIN_PROMPT).toBe('Run the program, then click a line to read what it does.');
+  });
+});
+
+describe("the lesson editor's problems list", () => {
+  // As in source-tab.test: happy-dom fires selectionchange inside CodeMirror's own update; browsers do not.
+  const stop = (e: Event): void => e.stopImmediatePropagation();
+
+  it("shows a Run's ROM-copy note as a warning on its line, as Source ✎ does", async () => {
+    window.addEventListener('selectionchange', stop, true);
+    // Line 3 points HL into the ROM's space and line 6 copies from it: the stub's stand-in, not the ROM.
+    const program = '\tORG\t7000H\nSTART:\tLD\tDE,3C00H\n\tLD\tHL,0\n\tLD\tBC,40H\n\tNOP\n\tLDIR\nWAIT:\tJR\tWAIT\n\tEND\tSTART\n';
+    const sources = createSources({ open: async () => null, starter: async () => program });
+    await sources.start();
+    await sources.create({ name: '01-white-out.z', text: program });
+    const run = createRun({ sources, stubOnly: true, listing: false, kit: async () => realKit, runner: fakeClock() });
+    const host = document.createElement('div');
+    document.body.append(host);
+    w = mount(LessonEditor, { props: { run, sources, lesson: LESSONS[0]! }, attachTo: host });
+    await flushPromises();
+    expect(w.get('[data-testid="lesson-diag-count"]').text()).toBe('No problems: the program assembles.');
+    await w.get('[data-testid="lesson-run"]').trigger('click');
+    await flushPromises();
+    expect(run.report.value?.notes.length).toBe(1);
+    expect(w.findAll('[data-testid="lesson-diag"]').map((d) => d.text())).toEqual([expect.stringMatching(/^Warning\s*Line 3\s*Line 3 points HL at \$0000, inside the ROM's space, and line 6 copies/)]);
+    expect(w.get('[data-testid="lesson-diag-count"]').text()).toBe('1 warning');
+    run.stop();
+    window.removeEventListener('selectionchange', stop, true);
   });
 });

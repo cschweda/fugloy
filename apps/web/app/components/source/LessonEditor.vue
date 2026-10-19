@@ -3,12 +3,13 @@
 // CodeMirror editor (CodeEditor), with Run ▶ (and Ctrl/⌘+Enter anywhere on the page), Reset to the
 // lesson, Open in the workbench, and Explain's sentence for a clicked line under it.
 //
-// As in Source ✎: the text is re-assembled 250 ms after typing stops and each problem is marked on
-// its line, listed under the editor with a Fix button where asm has one (the list is the keyboard's
-// and screen reader's way to them); a Run's errors show at once and the first error's line is
-// revealed; the breakpoint gutter (a click, or F9) holds the source's breakpoints, hollow where a
-// line has no instruction; and the running line and its trail light the program while the text is
-// the one the Run assembled. The debug keys (utils/running/debug-keys) are installed here.
+// As in Source ✎, through the same useSourceChecks and ProblemsList: the text is re-assembled 250 ms
+// after typing stops and each problem is marked on its line and listed under the editor with a Fix
+// button where asm has one; a Run's errors and its ROM notes show at once, and the first error's
+// line is revealed; asm throwing, or the debug keys failing to load, is said in a sentence; the
+// breakpoint gutter (a click, or F9) holds the source's breakpoints, hollow where a line has no
+// instruction; the running line and its trail light the program while the text is the one the Run
+// assembled; and the debug keys are installed here.
 //
 // The program is the page's lesson source (one per lesson, in memory). Each edit is kept in this
 // browser through utils/learn/progress 500 ms after typing stops, and at once when the lesson is
@@ -17,19 +18,17 @@
 // (`clean`), and its .CMD (asm's toCmd, as the Run kit's) lets a click on a line show Explain's
 // sentence for it until the text changes.
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
-import { assemble, toCmd } from '@fugloy/asm';
-import type { AsmResult, Diagnostic } from '@fugloy/asm';
+import { toCmd } from '@fugloy/asm';
+import type { AsmResult } from '@fugloy/asm';
 import CodeEditor from './CodeEditor.vue';
+import ProblemsList from './ProblemsList.vue';
+import { useSourceChecks } from './useSourceChecks';
 import type { Run } from '~/composables/useRun';
 import type { Sources } from '~/composables/useSources';
 import type { Lesson } from '~/utils/learn/lesson-format';
 import { learnProgress } from '~/utils/learn/learn-run';
 import { explainSourceLine } from '~/utils/learn/explain-line';
 import { EXPLAIN_NO_CODE, EXPLAIN_PROMPT } from '~/utils/learn/page';
-import { RECHECK_DELAY_MS, severityWord } from '~/utils/source/diagnostics';
-import type { AsmFix } from '~/utils/source/diagnostics';
-import { fixExpected } from '~/utils/source/fix';
-import { inactiveReason } from '~/utils/source/lines';
 
 const props = defineProps<{ run: Run; sources: Sources; lesson: Lesson }>();
 const emit = defineEmits<{ clean: []; 'open-workbench': [text: string, model: 1 | 3] }>();
@@ -43,12 +42,25 @@ const sources = props.sources;
 const current = sources.current;
 const editor = ref<InstanceType<typeof CodeEditor> | null>(null);
 const host = ref<HTMLElement | null>(null);
-const diagnostics = shallowRef<readonly Diagnostic[]>([]);
 const isMac = ref(false);
 const runKey = computed(() => (isMac.value ? '⌘+Enter' : 'Ctrl+Enter'));
-/** The text asm read for `diagnostics`, so a fix from a list older than the latest typing is refused. */
-let assembledText = '';
+/** A sentence for what went wrong here (asm throwing, the debug keys not loading). */
+const problem = ref<string | null>(null);
 let gone = false;
+
+// Checking, the problems list, the breakpoints, the running line and the debug keys: Source ✎'s (useSourceChecks).
+const checks = useSourceChecks({
+  current,
+  editor,
+  root: host,
+  run,
+  report: () => run.report.value,
+  problem: (text) => {
+    problem.value = text;
+  },
+  runNow: () => void runNow(),
+});
+const { diagnostics, summary, check, reveal, applyListFix } = checks;
 
 // Keeping the edit.
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -66,41 +78,12 @@ function onPageHide(): void {
   if (saveTimer !== null) saveNow();
 }
 
-// Checking the text.
-let checkTimer: ReturnType<typeof setTimeout> | null = null;
-/** The last assembly of a text: the hollow breakpoints' source. */
-const asm = shallowRef<{ text: string; result: AsmResult } | null>(null);
-function cancelCheck(): void {
-  if (checkTimer !== null) clearTimeout(checkTimer);
-  checkTimer = null;
-}
-function check(): void {
-  cancelCheck();
-  const src = current.value;
-  if (src === null) return;
-  let diags: readonly Diagnostic[] = [];
-  try {
-    const result = assemble(src.text, { model: src.model });
-    asm.value = { text: src.text, result };
-    diags = result.diagnostics;
-  } catch {
-    // asm throws only on its own bugs; the Run says so in a sentence.
-  }
-  show(diags, src.text);
-}
-function show(diags: readonly Diagnostic[], text: string): void {
-  diagnostics.value = diags;
-  assembledText = text;
-  editor.value?.setDiagnostics(diags, text);
-}
-
 function onText(text: string): void {
   const src = current.value;
   if (src === null) return;
   sources.update(src.id, { text });
   scheduleSave();
-  cancelCheck();
-  checkTimer = setTimeout(check, RECHECK_DELAY_MS);
+  checks.typed();
 }
 
 // Run ▶.
@@ -124,17 +107,7 @@ async function runNow(): Promise<void> {
   emit('clean');
 }
 
-// A Run's findings for the text on screen show at once; its first error's line is revealed.
-watch(
-  () => run.report.value,
-  (r) => {
-    if (r === null || r.text !== current.value?.text) return;
-    const result = run.lastResult.value;
-    if (result !== null) asm.value = { text: r.text, result };
-    cancelCheck();
-    show(r.diagnostics, r.text);
-  },
-);
+// A Run's first error: its line, revealed.
 watch(
   () => run.reveal.value,
   (r) => {
@@ -187,104 +160,26 @@ function onEditorKeyup(e: KeyboardEvent): void {
   if (MOVES.has(e.key)) explainCursor();
 }
 
-// The running line (5C), while the text is the one the Run assembled.
-const shownMarks = computed(() => (debug.live.value ? debug.marks.value : []));
-let sentKey = '';
-function deliver(): void {
-  const set = shownMarks.value;
-  const key = set.map((m) => `${m.line}:${m.class}`).join();
-  if (key === sentKey) return;
-  sentKey = key;
-  editor.value?.setLineDecorations(set);
-}
-watch(shownMarks, deliver);
-watch(
-  () => debug.reveal.value,
-  (r) => {
-    if (r !== null && r.line !== null && debug.live.value) editor.value?.scrollToLine(r.line);
-  },
-);
-
-// Breakpoints: the source's, hollow where the latest assembly of the text on screen has no instruction.
-function showBreakpoints(): void {
-  const a = asm.value;
-  const why = new Map<number, string>();
-  if (a !== null && a.text === current.value?.text) {
-    for (const line of debug.breakpoints.value) {
-      const r = inactiveReason(a.result, line);
-      if (r !== null) why.set(line, r);
-    }
-  }
-  editor.value?.setBreakpoints(debug.breakpoints.value, [...why.keys()], (line) => why.get(line) ?? `Line ${line} has no instruction to stop at.`);
-}
-watch([() => debug.breakpoints.value, asm], showBreakpoints);
-
-// A source switched to or its model changed (the Model switch): check it at once.
+// The source (or its model, by the Model switch), once the editor is there: checked at once.
 watch(
   [() => current.value?.id, () => current.value?.model, () => editor.value !== null],
   ([id, , mounted]) => {
-    if (id === undefined || !mounted) return;
-    sentKey = '';
-    showBreakpoints();
-    deliver();
-    check();
+    if (id !== undefined && mounted) checks.documentChanged();
   },
   { flush: 'post' },
 );
 
-/** In utils/lazy's loadFailed words (lazy code does not import utils/lazy), naming what is lost. */
-const KEYS_FAILED = 'The debug keys could not be loaded: the connection may have dropped, or the site was updated since this page opened. Reload the page to use F9, F10 and the other debug keys.';
-let uninstallKeys: (() => void) | null = null;
-const loadKeys = () => import('~/utils/running/debug-keys');
-onMounted(async () => {
+onMounted(() => {
   isMac.value = /Mac|iPhone|iPad/.test(navigator.platform);
   document.addEventListener('keydown', onKeydown);
   window.addEventListener('pagehide', onPageHide);
-  const m = await loadKeys()
-    .catch(() => loadKeys())
-    .catch(() => null);
-  if (gone) return;
-  if (m === null) {
-    run.message.value = KEYS_FAILED;
-    run.problem.value = true;
-    return;
-  }
-  uninstallKeys = m.installDebugKeys(debug, {
-    runNow: () => void runNow(),
-    stop: () => run.stop(),
-    cursorLine: (where) => (where === 'source' ? (editor.value?.cursorLine() ?? null) : null),
-    say: (text) => {
-      run.message.value = text;
-      run.problem.value = true;
-    },
-  });
 });
 onBeforeUnmount(() => {
   gone = true;
-  cancelCheck();
   if (saveTimer !== null) saveNow();
   document.removeEventListener('keydown', onKeydown);
   window.removeEventListener('pagehide', onPageHide);
-  uninstallKeys?.();
 });
-
-// The problems list.
-const summary = computed(() => {
-  const n = { error: 0, warning: 0, info: 0 };
-  for (const d of diagnostics.value) n[d.severity]++;
-  const plural = (k: number, one: string): string => `${k} ${one}${k === 1 ? '' : 's'}`;
-  const parts = [n.error && plural(n.error, 'error'), n.warning && plural(n.warning, 'warning'), n.info && plural(n.info, 'note')].filter((p): p is string => typeof p === 'string');
-  return parts.length === 0 ? 'No problems: the program assembles.' : parts.join(', ');
-});
-function reveal(line: number): void {
-  editor.value?.revealLine(line);
-  editor.value?.focus();
-}
-function applyListFix(fix: AsmFix): void {
-  const applied = editor.value?.applyFix(fix, fixExpected(assembledText, fix)) ?? false;
-  if (!applied) check();
-  editor.value?.focus();
-}
 </script>
 
 <template>
@@ -314,20 +209,8 @@ function applyListFix(fix: AsmFix): void {
     </div>
     <p class="fg-lesson-hint fg-muted">Tab types a tab. To leave the editor, press Esc, then Tab. Click a line's left edge (or press F9) for a breakpoint.</p>
     <p class="fg-lesson-explain" aria-live="polite" data-testid="lesson-explain">{{ explainText }}</p>
-    <div class="fg-lesson-diags">
-      <h3 id="lesson-diags-title" class="sr-only">Problems</h3>
-      <p class="fg-muted" role="status" data-testid="lesson-diag-count">{{ summary }}</p>
-      <ul v-if="diagnostics.length > 0" aria-labelledby="lesson-diags-title">
-        <li v-for="(d, i) in diagnostics" :key="i" class="fg-lesson-diag" :class="`fg-lesson-${d.severity}`" data-testid="lesson-diag">
-          <button type="button" class="fg-lesson-go" @click="reveal(d.line)">
-            <span class="fg-lesson-sev">{{ severityWord(d.severity) }}</span>
-            <span class="fg-mono fg-lesson-line">Line {{ d.line }}</span>
-            <span>{{ d.message }}</span>
-          </button>
-          <button v-if="d.fix" type="button" class="fg-button" :aria-label="`Fix line ${d.fix.line}: write ${d.fix.replacement}`" @click="applyListFix(d.fix)">Fix</button>
-        </li>
-      </ul>
-    </div>
+    <p v-if="problem !== null" class="fg-lesson-problem" role="alert" data-testid="lesson-problem">{{ problem }}</p>
+    <ProblemsList prefix="lesson" :diagnostics="diagnostics" :summary="summary" @reveal="reveal" @fix="applyListFix" />
   </div>
 </template>
 
@@ -340,15 +223,5 @@ function applyListFix(fix: AsmFix): void {
 .fg-lesson-code :deep(.fg-code-editor) { min-height: 16rem; }
 .fg-lesson-hint { margin: 0; font-size: 11px; }
 .fg-lesson-explain { margin: 0; min-height: 3em; padding: 8px 10px; border: 1px solid var(--fg-border); border-left: 3px solid var(--fg-register); border-radius: 4px; }
-.fg-lesson-diags p { margin: 0 0 4px; }
-.fg-lesson-diags ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.fg-lesson-diag { display: flex; align-items: flex-start; gap: 6px; }
-.fg-lesson-go { display: flex; flex: 1; gap: 8px; text-align: left; padding: 2px 4px; border-radius: 3px; color: var(--fg-text); background: none; border: 0; cursor: pointer; }
-.fg-lesson-go:hover { background: var(--fg-hover); }
-.fg-lesson-go:focus-visible { outline: 2px solid var(--fg-accent); outline-offset: 1px; }
-.fg-lesson-sev { flex: none; width: 4.5em; font-weight: 600; }
-.fg-lesson-error .fg-lesson-sev { color: var(--fg-error); }
-.fg-lesson-warning .fg-lesson-sev { color: var(--fg-string); }
-.fg-lesson-info .fg-lesson-sev { color: var(--fg-register); }
-.fg-lesson-line { flex: none; width: 5em; color: var(--fg-line); }
+.fg-lesson-problem { margin: 0; color: var(--fg-error); }
 </style>
