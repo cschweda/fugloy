@@ -88,6 +88,13 @@ from mockups: "A looks good for now"): **lesson | program | TRS-80**.
 
 ## Part 2: the ladder (as many lessons as necessary)
 
+User (2026-10-19): "each lesson should be self contained, building on the previous, and provide a
+runnable deliverable at the end (on Model III emulator)." So each lesson's program is complete in
+itself (it assembles and runs alone, with nothing included from another lesson), builds on the
+lesson before it (it reuses and extends that lesson's code and ideas, and the text says what is
+carried over and what is new), and ends on a program that runs on the Model III; the Model I is an
+option where a lesson allows it, never the only one.
+
 **Claude's call** on the order and split, from the user's list; each lesson names the Z80 idea it
 shows and ends on a program that runs. On the stub ROM there is no ROM to call, so the lessons
 drive the hardware directly — itself the lesson: the screen is memory at `3C00H`, the keyboard
