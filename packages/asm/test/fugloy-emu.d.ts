@@ -10,6 +10,9 @@ declare module '@fugloy/emu' {
     readonly mem: { read(addr: number, len: number): Uint8Array; write(addr: number, bytes: ArrayLike<number>): void };
     readonly video: { text(): string[] };
     readonly load: { cmd(bytes: Uint8Array): { entry: number } };
-    run(opts: { cycles?: number }): { reason: string; cycles: number };
+    readonly keyboard: { press(key: string): void; release(key: string): void };
+    /** The CPU clock in Hz. */
+    readonly clockHz: number;
+    run(opts: { cycles?: number; until?: 'halt' }): { reason: string; cycles: number };
   }
 }

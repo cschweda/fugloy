@@ -1,0 +1,19 @@
+; White out the screen: fill all 1,024 cells of video memory with the
+; all-lit graphics block, then wait. The screen is memory at 3C00H-3FFFH,
+; 16 rows of 64 cells, one byte a cell, top left first.
+
+        ORG     7000H           ; the program lives at 7000H, in free memory
+
+START:  LD      HL,3C00H        ; HL is the pointer: the top-left cell
+        LD      BC,400H         ; BC is the counter: 400H is 1024 cells
+
+FILL:   LD      (HL),0BFH       ; store 0BFH, all six block pixels lit, where HL points
+        INC     HL              ; the pointer moves on one cell
+        DEC     BC              ; one cell fewer to go (DEC BC sets no flags ...)
+        LD      A,B             ; ... so test BC by hand: copy B into A
+        OR      C               ; and OR in C: zero only when B and C both are
+        JR      NZ,FILL         ; not zero yet: fill the next cell
+
+WAIT:   JR      WAIT            ; done: jump here forever, and the screen stays white
+
+        END     START           ; the program starts at START
