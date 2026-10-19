@@ -535,6 +535,13 @@ function rerender(kind: 'tables' | 'names'): void {
 
 // window.__fugloyTest is declared in app/types/e2e-hook.d.ts, shared with the specs.
 
+// A lesson's In a real game link, /?example=sea-dragon&at=4B9E (utils/deep-link, loaded only for a
+// query). On a fresh load of the prerendered page, Nuxt hydrates it at / and puts the query back only
+// once hydration is done, after this page has mounted, so the query is read when Nuxt is ready.
+onNuxtReady(() => {
+  if (location.search !== '') void import('~/utils/deep-link').then((d) => d.openDeepLink(location.search, wb, go));
+});
+
 onMounted(() => {
   document.addEventListener('drop', onDocumentDrop);
   void manuals.refresh();

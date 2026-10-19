@@ -2,6 +2,7 @@
 title: Invaders march
 idea: A table of data, IX with an offset, and DJNZ
 models: 3, 1
+game: sea-dragon 50EA DRAW_OBJECT
 cite: m3-trm 14 the Model III's keyboard is memory at 3800H-3BFFH, and its screen at 3C00H
 cite: m1-trh 12 the Model I's keyboard is memory from 3800H, and its screen at 3C00H
 cite: decker 64 the keyboard's rows are read at 3801H to 3840H, one address a row
@@ -94,3 +95,7 @@ The Model I has the same keyboard row, and its screen is the same memory with th
 Change the third byte of `ROW` from `6` to `8` and press Run. Eight invaders march now, and they turn at column 34 instead of 42 without any other change, because `MARCH` reads the count from `(IX+2)` each time.
 
 Then make them hurry: change `LD B,4` to `LD B,1`, one `WAIT` a step. The invaders march at the ship's speed from lesson 5. The next part builds a whole game, piece by piece: the shot hitting invaders, the row inching down, and a score.
+
+## In a real game
+
+Each object in Sea Dragon's cavern is a small record, and `DRAW_OBJECT` reads it as `MARCH` reads `ROW`: IX points at the record, with the object's kind at `(IX+00H)`, its frame at `(IX+01H)`, its row at `(IX+02H)` and its flags at `(IX+03H)`. The kind and the frame together pick the shape to draw from a table of pointers. `UPDATE_OBJECTS` loads IX with each object's record in turn and calls it.

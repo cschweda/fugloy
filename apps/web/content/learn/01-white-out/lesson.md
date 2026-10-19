@@ -2,6 +2,7 @@
 title: White out the screen
 idea: LD, a 16-bit pointer and counter, and a loop
 models: 3, 1
+game: sea-dragon 4B9E SUB_4B9E
 cite: m3-trm 14 the Model III's screen is video memory at 3C00H, 1,024 bytes
 cite: m1-trh 12 the Model I's screen is video memory at 3C00H, 16 lines of 64 characters
 cite: m1-trh 33 the Model I's screen is video memory at 3C00H, 16 lines of 64 characters
@@ -58,3 +59,7 @@ The Model I's screen is the same memory at `3C00H`, the same 16 rows of 64, so t
 Change `LD BC,400H` to `LD BC,200H` and press Run. The loop now stops after 512 cells, so only the top eight rows go white and the bottom half stays blank.
 
 Then try `LD (HL),2AH`: 2AH is the asterisk, and the screen fills with them.
+
+## In a real game
+
+Sea Dragon clears its screen the same way, in the routine at `SUB_4B9E`: HL points at `3C00H`, and every one of the 1,024 cells gets `80H`, the graphics character with no pixels lit. It stores the first cell itself with `LD (HL),80H`, then lets `LDIR`, this lesson's loop built into one instruction (lesson 4 uses it), copy each cell into the next, `3FFH` times.

@@ -7,8 +7,8 @@
 // layout. `test/prefetch.test.ts` (`check:prefetch`) checks the generated pages
 // with the same walk.
 
-/** Manifest keys (source paths relative to app/) of the lazily loaded parts: Source ✎ and its utils (with Open as source's reassembly check), Run ▶, the emulator runtime (the Run kit, and rom-ids for an added ROM), and the running line's DOM helpers (5C: the debug keys, the announcer). */
-export const LAZY_ROOTS: readonly string[] = ['components/source/', 'utils/source/', 'components/run/', 'utils/emulator/', 'utils/running/'];
+/** Manifest keys (source paths relative to app/) of the lazily loaded parts: Source ✎ and its utils (with Open as source's reassembly check), Run ▶, the emulator runtime (the Run kit, and rom-ids for an added ROM), the running line's DOM helpers (5C: the debug keys, the announcer), and the workbench's deep link (6B, needed only for a lesson's In a real game link). */
+export const LAZY_ROOTS: readonly string[] = ['components/source/', 'utils/source/', 'components/run/', 'utils/emulator/', 'utils/running/', 'utils/deep-link.ts'];
 
 /** The fields of a Nuxt client-manifest entry this needs. */
 export interface ManifestEntry {

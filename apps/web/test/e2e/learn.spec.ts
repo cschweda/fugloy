@@ -5,7 +5,7 @@
 // runs stops it (Review Focus 2, once there is a second lesson); keys typed in the editor never reach
 // the TRS-80, and on lesson 3 the arrows plot from the screen but only move the editor's cursor in
 // the editor, and keys on the screen never type into the editor (Review Focus 4); the Model I shows its own shape (Review Focus 5); Explain's sentence
-// for a clicked line; Open in the workbench; axe is clean; and a narrow window stacks the columns.
+// for a clicked line; Open in the workbench; In a real game opens Sea Dragon at its address; axe is clean; and a narrow window stacks the columns.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
@@ -232,6 +232,31 @@ test('Open in the workbench copies the program into Source ✎', async ({ page }
   await expect(page.getByTestId('source-tab')).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId('source-pick')).toContainText('01-white-out.z');
   await expect(page.getByTestId('source-tab').locator('.cm-content')).toContainText('FILL');
+});
+
+test("In a real game opens the workbench on Sea Dragon at the box's address, and the address bar goes back to /", async ({ page }) => {
+  await open(page);
+  const link = page.getByTestId('lesson-game-open');
+  await expect(link).toHaveText('Open Sea Dragon at SUB_4B9E');
+  await expect(link).toHaveAttribute('href', '/?example=sea-dragon&at=4B9E');
+  await link.click();
+  await expect(page.locator('.fg-row-cursor')).toHaveAttribute('data-addr', String(0x4b9e), { timeout: 30_000 });
+  await expect(page.locator('.fg-listing')).toContainText('SUB_4B9E:');
+  await expect.poll(() => page.evaluate(() => location.pathname + location.search)).toBe('/');
+  // A lesson with no clear match in the game has no box.
+  await page.goto('/learn/02-registers/');
+  await expect(page.getByTestId('lesson-text')).toBeVisible();
+  await expect(page.getByTestId('lesson-game')).toHaveCount(0);
+});
+
+test('the deep link works on a fresh load too, and a malformed one leaves the first screen alone', async ({ page }) => {
+  await page.goto('/?example=sea-dragon&at=4E51');
+  await expect(page.locator('.fg-row-cursor')).toHaveAttribute('data-addr', String(0x4e51), { timeout: 30_000 });
+  await expect.poll(() => page.evaluate(() => location.pathname + location.search)).toBe('/');
+  await page.goto('/?example=sea-dragon&at=XYZ');
+  await page.waitForFunction(() => window.__fugloyTest !== undefined, undefined, { timeout: 30_000 });
+  await expect(page.getByTestId('open-sea-dragon')).toBeVisible();
+  await expect(page.locator('.fg-row-cursor')).toHaveCount(0);
 });
 
 test('axe finds nothing on /learn/, running and idle', async ({ page }) => {

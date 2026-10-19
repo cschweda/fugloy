@@ -21,7 +21,7 @@
 import { computed, defineAsyncComponent, h, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import LessonText from '~/components/learn/LessonText.vue';
 import { LESSONS, lessonBySlug } from '~/utils/learn/lessons';
-import { lessonNeighbours, lessonPath } from '~/utils/learn/page';
+import { gameLink, lessonNeighbours, lessonPath } from '~/utils/learn/page';
 import { learnProgress, loadedLearn, loadLearn } from '~/utils/learn/learn-run';
 import type { LearnParts } from '~/utils/learn/learn-run';
 import { loadFailed } from '~/utils/lazy';
@@ -170,6 +170,7 @@ const doneCount = computed(() => LESSONS.filter((l) => done.value.has(l.slug)).l
       <aside v-if="lesson.game !== null" class="fg-learn-box" aria-labelledby="lesson-game-title" data-testid="lesson-game">
         <h2 id="lesson-game-title">In a real game</h2>
         <LessonText :blocks="lesson.game.blocks" />
+        <p><NuxtLink :to="gameLink(lesson.game)" data-testid="lesson-game-open">Open Sea Dragon at {{ lesson.game.name }}</NuxtLink></p>
       </aside>
       <nav class="fg-learn-pager" aria-label="Previous and next lesson">
         <NuxtLink v-if="prev !== null" class="fg-button" :to="lessonPath(prev.slug)" data-testid="lesson-prev">◀ {{ prev.number }}. {{ prev.title }}</NuxtLink>
@@ -214,6 +215,8 @@ const doneCount = computed(() => LESSONS.filter((l) => done.value.has(l.slug)).l
 .fg-learn-done { margin-left: 6px; color: var(--fg-accent); }
 .fg-learn-box { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--fg-border); border-left: 3px solid var(--fg-accent); border-radius: 4px; }
 .fg-learn-box h2 { margin: 0; font-size: 15px; font-weight: 700; color: var(--fg-text-strong); }
+.fg-learn-box > p { margin: 0; font-size: 14px; }
+.fg-learn-box > p a { color: var(--fg-accent); text-decoration: underline; }
 .fg-learn-pager { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .fg-learn-problem { color: var(--fg-error); }
 </style>

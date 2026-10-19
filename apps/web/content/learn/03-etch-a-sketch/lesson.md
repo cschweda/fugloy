@@ -2,6 +2,7 @@
 title: Etch-a-sketch
 idea: Reading the keyboard as memory, AND and BIT, and moving a pointer with bounds
 models: 3, 1
+game: sea-dragon 518D MOVE_PLAYER
 cite: m3-trm 14 the Model III's keyboard is memory at 3800H-3BFFH, and its screen at 3C00H
 cite: m1-trh 12 the Model I's keyboard is memory from 3800H, and its screen at 3C00H
 cite: decker 64 the keyboard's rows are read at 3801H to 3840H, one address a row
@@ -71,3 +72,7 @@ The Model I's keyboard is memory from `3800H` too, with the same rows, so the pr
 Change `LD (HL),0BFH` under `NOTRT:` to `LD (HL),2AH` and press Run, then click the screen and hold an arrow. The trail is drawn in asterisks now, but the white block from `START` is still there where the pen began.
 
 Then make the pen faster: change `LD BC,1000H` to `LD BC,400H`. A quarter of the delay is a quarter of the wait, and the pen crosses the screen in under a second.
+
+## In a real game
+
+Sea Dragon's `MOVE_PLAYER` reads the same row, `LD A,(3840H)` (the listing writes it `KEYBOARD+0040H`), and tests the same bits: `BIT 5` for left, `BIT 6` for right, `BIT 3` for up and `BIT 4` for down. It keeps the sub on its stretch of the screen as this program keeps the pen: before a move left or right, it compares the sub's place, `PLAYER_POS`, with the end it may not pass, `452EH` or `454DH`, and stays put when they are equal.

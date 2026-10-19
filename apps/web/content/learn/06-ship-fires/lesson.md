@@ -2,6 +2,7 @@
 title: The ship fires
 idea: A game loop, two things moving at once, and state kept in memory with DB and DW
 models: 3, 1
+game: sea-dragon 4CB8 MAIN_LOOP
 cite: m3-trm 14 the Model III's keyboard is memory at 3800H-3BFFH, and its screen at 3C00H
 cite: m1-trh 12 the Model I's keyboard is memory from 3800H, and its screen at 3C00H
 cite: decker 64 the keyboard's rows are read at 3801H to 3840H, one address a row
@@ -77,3 +78,7 @@ The Model I has the same keyboard row and the same screen, so the program runs u
 Make the shot twice as fast: in `MOVESHOT`, change `LD DE,-64` to `LD DE,-128`, and press Run. The shot now skips a row each turn, rows 14, 12, 10 and on to 0, and from there `3B80H` and up is off the screen.
 
 Then watch the shot's address. Change it back to `-64`, set a breakpoint on the `SHOTUP:` line (click its left edge), press Run, click the screen and press the space bar. `FIRE` puts the shot at `3F9FH`, row 14 above the ship's middle, and on the next turn the program stops at `SHOTUP` with HL at `3F5FH`, a row up. Each Continue is one more turn, and HL goes down by `40H`, 64, each time.
+
+## In a real game
+
+Sea Dragon's `MAIN_LOOP` is this loop at full size: one pass is one frame of play. It calls `DRAW_CAVERN`, `DRAW_PLAYER`, `UPDATE_OBJECTS`, `AIR_SUPPLY` and `MOVE_PLAYER` in turn, copies the finished frame to the screen, waits, and jumps back with `JP Z,MAIN_LOOP`. What the game knows between frames lives in memory, as `SHIPX` and `SHOT` do here: `PLAYER_POS`, `DISTANCE`, `AIR` and `SCORE` are names for bytes and words.

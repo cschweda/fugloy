@@ -2,6 +2,7 @@
 title: A ship along the bottom
 idea: CALL and RET, the stack with PUSH and POP, a counted delay, and erasing and redrawing
 models: 3, 1
+game: sea-dragon 4E51 L4E51
 cite: m3-trm 14 the Model III's keyboard is memory at 3800H-3BFFH, and its screen at 3C00H
 cite: m1-trh 12 the Model I's keyboard is memory from 3800H, and its screen at 3C00H
 cite: decker 64 the keyboard's rows are read at 3801H to 3840H, one address a row
@@ -83,3 +84,7 @@ The Model I has the same keyboard row and the same screen, so the program runs u
 Set a breakpoint on the `PUSH DE` line in `SHOW` (click its left edge) and press Run: the program stops on its way to drawing the ship. SP is `FFFAH`: the `CALL` pushed its return address at `FFFCH`, below the stand-in ROM's at `FFFEH`, and `PUSH BC` took SP down two more. Press Step and SP is `FFF8H`, the saved DE on top. Step on through `LDIR`, the two pops and the `RET`, and SP is back at `FFFEH`.
 
 Then take the `PUSH DE` and `POP DE` out of `SHOW`, click the breakpoint away, and press Run. Each `SHOW` now leaves DE three cells past where it drew, so the erase misses the ship and the left arrow moves it right, five cells a move, leaving a copy behind at every place it was.
+
+## In a real game
+
+Sea Dragon waits between frames with this lesson's loop, at `L4E51`: `DEC BC`, then `LD A,B`, `OR C` and `JR NZ` round again. Its count is not written into the code but read from a variable with `LD BC,(FRAME_DELAY)`, and halved with `SRL B` and `RR C`; it is shorter for an Expert, so the game runs faster. While it counts, the loop also looks at the space bar, so each shot needs a fresh press.

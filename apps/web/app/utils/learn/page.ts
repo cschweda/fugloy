@@ -1,9 +1,10 @@
-// The Learn page's small pure helpers (phase 6B Task 4): where a lesson lives, its neighbours, the
-// model switch's options, Explain's prompt, and the run message reworded for this page. The page
-// has no Source ✎ tab and never uses a ROM, so the two sentences Run ▶ ends with that point there
-// ("Fix it in Source ✎", "Add a Model III ROM in the Run tab, or …") are said the lesson's way.
+// The Learn page's small pure helpers (phase 6B Task 4): where a lesson lives, its neighbours, its
+// In a real game box's workbench link (Task 7, the URL utils/deep-link opens), the model switch's
+// options, Explain's prompt, and the run message reworded for this page. The page has no Source ✎
+// tab and never uses a ROM, so the two sentences Run ▶ ends with that point there ("Fix it in
+// Source ✎", "Add a Model III ROM in the Run tab, or …") are said the lesson's way.
 // No DOM, no Vue.
-import type { Lesson } from './lesson-format';
+import type { GameBox, Lesson } from './lesson-format';
 
 /** What a lesson line says before a clean Run (and after an edit since it). */
 export const EXPLAIN_PROMPT = 'Run the program, then click a line to read what it does.';
@@ -13,6 +14,9 @@ export const EXPLAIN_NO_CODE = (line: number): string => `Line ${line} has no in
 
 /** A lesson's page, as the site links it (with the slash of the directory it is generated as). */
 export const lessonPath = (slug: string): string => `/learn/${slug}/`;
+
+/** An In a real game box's link: the workbench on the game, the cursor at the box's run address. */
+export const gameLink = (game: Pick<GameBox, 'example' | 'addr'>): string => `/?example=${game.example}&at=${game.addr.toString(16).toUpperCase().padStart(4, '0')}`;
 
 /** The lessons before and after `slug` in `lessons`, or null at either end. */
 export function lessonNeighbours<T extends Pick<Lesson, 'slug'>>(lessons: readonly T[], slug: string): { prev: T | null; next: T | null } {

@@ -2,6 +2,7 @@
 title: Rock, paper, scissors
 idea: Text from a table, a random number from R, CP, and the flags behind the jumps
 models: 3, 1
+game: sea-dragon 4BAC START_GAME
 cite: m3-trm 14 the Model III's keyboard is memory at 3800H-3BFFH, and its screen at 3C00H
 cite: m1-trh 12 the Model I's keyboard is memory from 3800H, and its screen at 3C00H
 cite: decker 64 the keyboard's rows are read at 3801H to 3840H, one address a row
@@ -111,3 +112,7 @@ CHEAT:  LD      B,A
 ```
 
 Press Run, click the screen, and play a few rounds: `I WIN.` every time. `XOR A` is the usual way to zero A, one byte shorter than `LD A,0`.
+
+## In a real game
+
+After the title, Sea Dragon's `START_GAME` asks *1 or 2 Players?* and waits for an answer, as this program waits for R, P or S. It prints the question with `PRINT_TEXT`, which copies B characters from HL to the screen at DE, then reads the keyboard row at `3810H` over and over: `CP 02H` with `JR Z` takes key 1, and `CP 04H` with `JP NZ` goes back to read again for anything but key 2.
