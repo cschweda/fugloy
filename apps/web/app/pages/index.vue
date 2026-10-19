@@ -134,6 +134,19 @@ async function writeProgram(id?: string): Promise<void> {
   leftTab.value = 'source';
   rightTab.value = 'run';
 }
+// Open as source ✎ (Task 5), from the Program tab or Export ▾: the new source shows in Source ✎, beside the listing.
+const opener = useOpenAsSource();
+watch(opener.requests, () => {
+  leftTab.value = 'source';
+});
+async function openAsSource(): Promise<void> {
+  if (session.value === null) return;
+  try {
+    await opener.open(session.value);
+  } catch (err) {
+    wb.report(err instanceof Error ? err.message : String(err));
+  }
+}
 const persistence = usePersistence();
 const nav = useNavigation(scrollTo);
 const listing = ref<InstanceType<typeof ListingView> | null>(null);
@@ -622,7 +635,9 @@ onBeforeUnmount(() => {
               :name="session.name"
               :diagnostics="session.analysis.pass1.diagnostics"
               :proposals="session.analysis.proposals"
+              :can-source="opener.can(session)"
               @symbol="showTable"
+              @open-source="openAsSource"
               @apply-hint-lines="editor.applyHintLines"
             />
           </div>

@@ -147,3 +147,26 @@ test('leaving the workbench for another page stops the program', async ({ page }
   await page.waitForFunction(() => window.__fugloyTest !== undefined);
   expect(await page.evaluate(() => window.__fugloyTest!.runnerState())).toBe('stopped');
 });
+
+test('Open as source ✎ turns Sea Dragon into a source beside its listing; with no ROM, Run names the first ROM call', async ({ page }) => {
+  await ready(page);
+  await page.getByTestId('open-sea-dragon').click();
+  await expect(page.getByTestId('file-name')).toHaveText('seadrg01.cmd');
+  // Export ▾ offers it too.
+  await page.getByTestId('export-summary').click();
+  await expect(page.getByTestId('export-open-source')).toHaveText('Open as source ✎');
+  await page.getByTestId('export-summary').click();
+  await page.getByRole('tab', { name: 'Program' }).click();
+  await page.getByTestId('open-as-source').click();
+  await expect(page.getByRole('tab', { name: 'Source ✎' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('source-pick').locator('option:checked')).toHaveText('seadrg01.z');
+  await expect(page.locator('.cm-content')).toContainText('ORG');
+  await expect(page.getByTestId('source-diag-count')).toHaveText(/No problems|warning|note/);
+  // It reassembles to the program exactly, so there is no note.
+  await expect(page.getByTestId('source-open-note')).toHaveCount(0);
+  await page.keyboard.press('ControlOrMeta+Enter');
+  await expect(page.getByTestId('run-message')).toContainText("calls $DELAY, the ROM's routine at $0060");
+  expect(await page.evaluate(() => window.__fugloyTest!.runnerState())).toBe('idle');
+  // The disassembly stays open: a Run of the source never replaces a program opened from a file.
+  await expect(page.getByTestId('file-name')).toHaveText('seadrg01.cmd');
+});

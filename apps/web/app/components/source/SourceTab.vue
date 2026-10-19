@@ -11,6 +11,7 @@ import type { Diagnostic } from '@fugloy/asm';
 import CodeEditor from './CodeEditor.vue';
 import ConfirmDialog from '~/components/ConfirmDialog.vue';
 import { useSources } from '~/composables/useSources';
+import { useOpenAsSource } from '~/composables/useOpenAsSource';
 import { download } from '~/utils/exports';
 import { RECHECK_DELAY_MS, severityWord } from '~/utils/source/diagnostics';
 import { fixExpected } from '~/utils/source/fix';
@@ -29,6 +30,9 @@ const diagnostics = shallowRef<readonly Diagnostic[]>([]);
 let assembledText = '';
 const ready = ref(false);
 const problem = ref<string | null>(null);
+// Open as source ✎: when the text does not assemble back to the program, one sentence says where.
+const opened = useOpenAsSource();
+const openNote = computed(() => (opened.note.value !== null && opened.note.value.sourceId === current.value?.id ? opened.note.value.text : null));
 
 onMounted(async () => {
   await sources.start();
@@ -268,6 +272,7 @@ defineExpose({
     <p v-if="sources.unavailable.value || sources.saveError.value || problem" class="fg-edit-message" role="alert" data-testid="source-message">
       {{ problem ?? sources.saveError.value ?? sources.unavailable.value }}
     </p>
+    <p v-if="openNote !== null" class="fg-source-note" role="note" data-testid="source-open-note">{{ openNote }}</p>
     <CodeEditor
       v-if="ready && current !== null"
       ref="editor"
@@ -313,6 +318,7 @@ defineExpose({
 .fg-source-bar, .fg-source-rename { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 12px; border-bottom: 1px solid var(--fg-border); font-size: 12px; }
 .fg-source-bar select { max-width: 16rem; }
 .fg-source-error { color: var(--fg-error); }
+.fg-source-note { flex: none; margin: 0; padding: 4px 12px; font-size: 12px; border-bottom: 1px solid var(--fg-border); color: var(--fg-string); }
 .fg-source-editor { flex: 1; min-height: 8rem; overflow: hidden; }
 .fg-source-hint { flex: none; margin: 0; padding: 2px 12px; font-size: 11px; border-top: 1px solid var(--fg-border); }
 .fg-source-diags { flex: none; max-height: 30%; overflow: auto; padding: 4px 12px 8px; border-top: 1px solid var(--fg-border); font-size: 12px; }

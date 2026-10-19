@@ -9,6 +9,9 @@
 // memory only, and `unavailable` says so. DOM-free.
 import { computed, ref, shallowRef } from 'vue';
 import type { ComputedRef, Ref, ShallowRef } from 'vue';
+import { renderSession } from '@fugloy/disasm';
+import type { Session } from '@fugloy/disasm';
+import { stemOf } from '../utils/exports';
 import { freeName, newSourceId } from '../utils/source-names';
 import { openStoreDetailed, requestPersistence, STORE_BLOCKED } from '../utils/store';
 import type { ModelId, Store, StoredSource } from '../utils/store';
@@ -25,6 +28,12 @@ export interface Sources {
   current: ComputedRef<Source | null>;
   /** Makes a source (the starter unless `text` is given, on the Model III unless `model` is), saves it, and makes it current. */
   create(opts?: { name?: string; text?: string; model?: ModelId }): Promise<Source>;
+  /**
+   * Open as source ✎ (Task 5): a new source holding the program's zmac text (what Export ▾ downloads),
+   * named after its file (`seadrg01.cmd` is `seadrg01.z`), on the program's model, made current.
+   * `text` replaces the rendering (tests).
+   */
+  fromSession(s: Session, text?: string): Promise<Source>;
   select(id: string): Promise<void>;
   /** Changes the text or model at once; the save follows 500 ms after the last change. */
   update(id: string, patch: Partial<Pick<Source, 'text' | 'model'>>): void;
@@ -243,6 +252,7 @@ export function createSources(deps: SourcesDeps = {}): Sources {
     list,
     current,
     create,
+    fromSession: (s, text) => create({ name: `${stemOf(s.name)}.z`, text: text ?? renderSession(s, 'zmac'), model: s.selection?.machine ?? 3 }),
     select,
     update,
     rename,

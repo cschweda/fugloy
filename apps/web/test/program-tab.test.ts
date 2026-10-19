@@ -89,6 +89,15 @@ describe('ProgramTab details', () => {
     expect(w.emitted('apply-hint-lines')).toEqual([[['block 0:$0010 table 4 2']], [['block 0:$0100 relocate $4000', 'block 0:$0000 entry']]]);
   });
 
+  it('offers Open as source ✎ only when asked to, and emits open-source on a click', async () => {
+    expect(mount(ProgramTab, { props: base }).find('[data-testid="open-as-source"]').exists()).toBe(false);
+    const w = mount(ProgramTab, { props: { ...base, canSource: true } });
+    const button = w.get('[data-testid="open-as-source"]');
+    expect(button.text()).toBe('Open as source ✎');
+    await button.trigger('click');
+    expect(w.emitted('open-source')).toEqual([[]]);
+  });
+
   it('gives a conflict its own badge style', () => {
     const conflict = { ...facts, machine: { ...facts.machine, fit: 'conflict' as const } };
     const w = mount(ProgramTab, { props: { ...base, facts: conflict } });

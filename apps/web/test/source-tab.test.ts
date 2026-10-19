@@ -195,6 +195,20 @@ describe('the Source toolbar', () => {
     expect(sources.current.value?.name).toBe('clear-screen.z');
   });
 
+  it("shows Open as source's reassembly note above its own source only", async () => {
+    const { useOpenAsSource } = await import('../app/composables/useOpenAsSource');
+    const { w } = await open();
+    const first = sources.current.value!;
+    const note = 'This source assembles to different bytes from EDFORM.CMD, first at $7000, so Run will not run the original exactly. Compare that line with the Listing before you rely on it.';
+    useOpenAsSource().note.value = { sourceId: first.id, text: note };
+    await flushPromises();
+    expect(w.get('[data-testid="source-open-note"]').text()).toBe(note);
+    await sources.create({ name: 'other.z', text: STARTER });
+    await flushPromises();
+    expect(w.find('[data-testid="source-open-note"]').exists()).toBe(false);
+    useOpenAsSource().note.value = null;
+  });
+
   it('downloads the source as a .z file', async () => {
     const { w, view } = await open();
     typeAll(view(), '; mine\n');

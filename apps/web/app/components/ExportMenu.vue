@@ -4,8 +4,10 @@
 import { computed, ref } from 'vue';
 import { casWarnings, download, exportFile, exportKinds } from '~/utils/exports';
 import type { ExportKind } from '~/utils/exports';
+import { useOpenAsSource } from '~/composables/useOpenAsSource';
 
 const wb = useWorkbench();
+const opener = useOpenAsSource();
 const menu = ref<HTMLDetailsElement | null>(null);
 const failure = ref<string | null>(null);
 
@@ -36,6 +38,19 @@ function run(kind: ExportKind): void {
     failure.value = `Could not export: ${err instanceof Error ? err.message : String(err)}`;
   }
 }
+
+/** Open as source ✎: the zmac text as a new source in Source ✎ (the page shows the tab). */
+async function openSource(): Promise<void> {
+  const s = wb.session.value;
+  if (s === null) return;
+  failure.value = null;
+  try {
+    await opener.open(s);
+    if (menu.value !== null) menu.value.open = false;
+  } catch (err) {
+    failure.value = err instanceof Error ? err.message : String(err);
+  }
+}
 </script>
 
 <template>
@@ -49,6 +64,10 @@ function run(kind: ExportKind): void {
           <p v-for="w in warnings" :key="w" class="text-xs" role="note" data-testid="export-warning">Warning: this program {{ w }}. It still downloads.</p>
           <p v-if="noEntry" class="text-xs" role="note" data-testid="export-warning">No entry point: a .CAS needs one, so this cannot be exported.</p>
         </template>
+      </template>
+      <template v-if="wb.session.value !== null && opener.can(wb.session.value)">
+        <button type="button" class="fg-button" data-testid="export-open-source" @click="openSource">Open as source ✎</button>
+        <p class="fg-muted text-xs">Edit it and run it in Source ✎.</p>
       </template>
       <p v-if="failure !== null" class="text-xs" role="alert" data-testid="export-failure">{{ failure }}</p>
     </div>

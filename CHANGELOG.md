@@ -213,8 +213,11 @@ and always false on the Model III and Model I. `Video` already computed both
 privately. The site now reads them instead of reaching into the system's
 memory.
 
-Workbench, phase 5B (Source and Run), in progress on branch `phase5b` (plan
-`docs/superpowers/plans/2026-10-18-phase5b-source-run.md`):
+Workbench, phase 5B (Source and Run), built on branch `phase5b`, all five
+tasks done (plan `docs/superpowers/plans/2026-10-18-phase5b-source-run.md`).
+A program typed in **Source ✎** runs on an emulated TRS-80 in **Run ▶** with
+one press, on the user's ROM or, for a program that never calls the ROM, on
+Fugløy's stub ROM; a disassembly opens as such a source:
 
 - **Storage for sources and ROMs.** The browser database moves to version 2
   with two new stores; a version 1 database keeps its hints, settings and
@@ -329,6 +332,50 @@ Workbench, phase 5B (Source and Run), in progress on branch `phase5b` (plan
   page (the Run tab says so). The quiet refresh swaps the program into the
   open listing in place, so focus and Explain stay put; Ctrl/⌘+Enter inside
   the listing's inline editor, notes or row menu runs nothing.
+- **Open as source ✎**, in the Program tab (a Source section) and in Export
+  ▾, turns the open disassembly into a new source and shows it in Source ✎,
+  beside the listing. The source is the zmac text Export ▾ writes
+  (`renderSession(s, 'zmac')`, hints included), named after the file
+  (`seadrg01.cmd` becomes `seadrg01.z`, then `seadrg01-2.z` on a second
+  open; nothing is replaced), on the program's own model
+  (`session.selection.machine`), and made current (`useSources.fromSession`).
+  Then, in a 0.6 KB lazy chunk that shares asm's, the text is assembled for
+  that model and compared with the program's image and entry. Sea Dragon
+  comes back byte for byte, with its entry. A text that does not reassemble
+  exactly opens with a one-line note above the editor naming the first
+  address that differs (or the first error's line, or both entries); the
+  test spells the ED form of `LD (nn),HL`, which the emitter writes as DB
+  (`BYTE_EXACT_EXCEPTIONS`), as the instruction, which asm builds as `22`.
+  A BASIC program has no Z80 source, so it is not offered. The disassembly
+  stays open: by the listing rule above, a Run of the new source never
+  replaces a program opened from a file, so with no ROM a Run of Sea Dragon's
+  source names its first ROM call (`Line 744 calls $DELAY, the ROM's routine
+  at $0060…`), and on the user's Model III ROM it runs from the booted
+  snapshot to Sea Dragon's title screen (a local test, gated on
+  `fugloy.mcp.json`). `utils/source/` joins the lazy roots of the prefetch
+  check.
+- **The About page** has a new section, **ROMs, and the stub ROM**: Fugløy
+  ships no ROM; ROM bytes are never bundled, fetched, committed, or put in a
+  backup; a ROM added in Run ▶ is recognised by its SHA-256 and stays in the
+  browser; and the stub ROM is Fugløy's own `stub-rom.z`, assembled in the
+  browser at Run, which turns off interrupts, sets a stack, blanks the
+  screen, and halts, with the rest of the ROM's space HALT, so it holds no
+  Tandy code. The credits quote the misc-misc fonts' header ("Public domain
+  terminal emulator font. Share and enjoy."), name the pinned release
+  (font-misc-misc 1.1.3) and say that the Model III's special and katakana
+  characters are not drawn, since their only source is the character ROM;
+  CodeMirror 6 is credited under the MIT License.
+- **Final sizes** (gzip level 9, measured on a plain `nuxt generate` of this
+  branch): the first screen's JavaScript (the module script, its
+  modulepreloads and their static imports, 16 files) is **254,707 bytes**,
+  +4,308 over the 250,399-byte baseline before 5B, within the 5 KB budget
+  (+567 in this last step, for the Open as source button, menu item and
+  opener). Lazy, fetched when Source ✎ first opens: the Source chunk
+  (CodeMirror and the tab) 104.5 KB plus 0.6 KB of CSS, and asm 16.1 KB.
+  When Run ▶ first opens: the Run tab and screen 4.7 KB plus 0.6 KB of CSS,
+  and emu 36.4 KB. On the first Run: the kit 5.6 KB. After Open as source:
+  the reassembly check 0.6 KB. Together, about 169 KB of JavaScript that a
+  visitor who only reads listings never downloads.
 
 ### Testing
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// About: what Fugløy is, where your files go (nowhere), how storage and Back up / Restore work, and credits.
+// About: what Fugløy is, where your files go (nowhere), how storage and Back up / Restore work, ROMs and the stub ROM, and credits.
 import { SYMBOL_SOURCES } from '@fugloy/disasm';
 import type { Source } from '@fugloy/disasm';
 import { EXAMPLES } from '~/data/examples';
@@ -45,6 +45,18 @@ const byline = (s: Source): string => (s.author === s.publisher ? s.author : `${
       A program's hints can also be exported as a plain text hint file from the Export menu, a format made to be kept in git.
     </p>
 
+    <h2 id="roms">ROMs, and the stub ROM</h2>
+    <p data-testid="rom-statement">
+      Fugløy ships no ROM. The TRS-80's ROMs are Tandy's, so their bytes are never bundled, fetched, committed, or put in a backup.
+      To run a program that calls the ROM, add your own copy in <strong class="fg-strong">Run ▶</strong>, one per model: Fugløy recognises the Model I, III, and 4 ROMs by their SHA-256, and keeps any other file only at a size the model takes.
+      Your ROM stays in this browser.
+    </p>
+    <p data-testid="stub-rom">
+      A program that never calls the ROM runs without one, on Fugløy's <strong class="fg-strong">stub ROM</strong>: a few lines of Fugløy's own Z80 source (<code>stub-rom.z</code>), assembled in your browser when you press Run.
+      It turns off interrupts, sets up a stack, blanks the screen, and halts, and the rest of the ROM's space is filled with HALT, so it holds no Tandy code.
+      A program that calls a ROM routine, or reaches into the ROM's space, is stopped with a sentence naming its line, before it runs or the moment it gets there.
+    </p>
+
     <h2 id="credits">Credits</h2>
 
     <h3 id="credit-games">The games</h3>
@@ -86,7 +98,12 @@ const byline = (s: Source): string => (s.author === s.publisher ? s.author : `${
       <li data-testid="credit-glyphs">
         The emulated TRS-80 screen's characters come from the X.Org
         <a href="https://gitlab.freedesktop.org/xorg/font/misc-misc" rel="noopener noreferrer" target="_blank">misc-misc</a> fonts (<code>6x12</code> and <code>6x10</code>), which are in the public domain.
-        Nothing is copied from a TRS-80's character ROM.
+        Their headers say: “Public domain terminal emulator font.  Share and enjoy.” Fugløy converts its pinned copy (font-misc-misc 1.1.3) once, recording each file's SHA-256.
+        Nothing is copied from a TRS-80's character ROM, so the Model III's special and katakana characters are not drawn.
+      </li>
+      <li data-testid="credit-codemirror">
+        <a href="https://codemirror.net/" rel="noopener noreferrer" target="_blank">CodeMirror 6</a> by Marijn Haverbeke and others, the editor in <strong class="fg-strong">Source ✎</strong>, under the MIT License.
+        It is served from this site, loaded only when you first open Source ✎.
       </li>
     </ul>
 
