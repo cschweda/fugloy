@@ -128,6 +128,8 @@ export function createSources(deps: SourcesDeps = {}): Sources {
         failed.delete(id);
         if (failed.size === 0) saveError.value = null;
       } catch (err) {
+        // Removed while the write was under way: its failure no longer matters.
+        if (byId.value[id] === undefined) return;
         failed.add(id);
         saveError.value = saveSentence(err);
       }
