@@ -1,8 +1,8 @@
 // The Learn page's small pure helpers (phase 6B Task 4): where a lesson lives, its neighbours, its
 // In a real game box's workbench link (Task 7, the URL utils/deep-link opens), the model switch's
 // options, Explain's prompt, and the run message reworded for this page. The page has no Source ✎
-// tab and never uses a ROM, so the two sentences Run ▶ ends with that point there ("Fix it in
-// Source ✎", "Add a Model III ROM in the Run tab, or …") are said the lesson's way.
+// tab and never uses a ROM, so the sentences that point there ("Fix it in Source ✎", "Add a Model III ROM in the
+// Run tab, …", the ROM-copy note's same advice, "Press Run to run the source") are said the lesson's way.
 // No DOM, no Vue.
 import type { GameBox, Lesson } from './lesson-format';
 
@@ -30,4 +30,9 @@ const MODEL_LABELS: Readonly<Record<1 | 3, string>> = { 1: 'Model I', 3: 'Model 
 export const modelOptions = (models: readonly (1 | 3)[]): { value: 1 | 3; label: string }[] => models.map((value) => ({ value, label: MODEL_LABELS[value] }));
 
 /** A run message as the Learn page says it. */
-export const lessonMessage = (text: string): string => text.replace(/ in Source ✎/g, '').replace(/Add a Model (?:I|III|4) ROM in the Run tab, or /g, 'Lessons run without one, so ');
+export const lessonMessage = (text: string): string =>
+  text
+    .replace(/ in Source ✎/g, '')
+    .replace(/Add a Model (?:I|III|4) ROM in the Run tab, or /g, 'Lessons run without one, so ')
+    .replace(/Add a Model (?:I|III|4) ROM in the Run tab if the program means to read the ROM\./g, 'Lessons run without a ROM, so copy from your own data if the program needs those bytes.')
+    .replace(/Press Run to run the source on this one\./g, "Press Run ▶ to run the lesson's program on this one.");

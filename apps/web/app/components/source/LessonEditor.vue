@@ -26,6 +26,7 @@ import { useSourceChecks } from './useSourceChecks';
 import type { Run } from '~/composables/useRun';
 import type { Sources } from '~/composables/useSources';
 import type { Lesson } from '~/utils/learn/lesson-format';
+import { lessonMessage } from '~/utils/learn/page';
 import { learnProgress } from '~/utils/learn/learn-run';
 import { explainSourceLine } from '~/utils/learn/explain-line';
 import { EXPLAIN_NO_CODE, EXPLAIN_PROMPT } from '~/utils/learn/page';
@@ -48,13 +49,19 @@ const runKey = computed(() => (isMac.value ? '⌘+Enter' : 'Ctrl+Enter'));
 const problem = ref<string | null>(null);
 let gone = false;
 
+/** The last Run's findings with the ROM-copy note's advice said the lesson's way (a lesson cannot take a ROM). */
+const lessonReport = computed(() => {
+  const r = run.report.value;
+  return r === null ? null : { ...r, notes: r.notes.map((n) => ({ ...n, message: lessonMessage(n.message) })) };
+});
+
 // Checking, the problems list, the breakpoints, the running line and the debug keys: Source ✎'s (useSourceChecks).
 const checks = useSourceChecks({
   current,
   editor,
   root: host,
   run,
-  report: () => run.report.value,
+  report: () => lessonReport.value,
   problem: (text) => {
     problem.value = text;
   },

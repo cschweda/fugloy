@@ -187,9 +187,11 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
 });
 
 describe.skipIf(!built || process.env.FUGLOY_REQUIRE_SEO !== '1')('the site as Netlify builds it', () => {
-  it('does not contain the browser checks\' window.__fugloyTest hook', () => {
+  it('does not contain the browser checks\' window.__fugloyTest or window.__fugloyLearn hooks', () => {
     const files = walk(out).filter((f) => /\.(m?js|html)$/.test(f));
     expect(files.length).toBeGreaterThan(5);
-    expect(files.filter((f) => readFileSync(join(out, f), 'utf8').includes('__fugloyTest'))).toEqual([]);
+    for (const hook of ['__fugloyTest', '__fugloyLearn']) {
+      expect(files.filter((f) => readFileSync(join(out, f), 'utf8').includes(hook)), hook).toEqual([]);
+    }
   });
 });

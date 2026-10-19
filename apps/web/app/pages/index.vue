@@ -2,7 +2,7 @@
 // The workbench. With no program open, the first screen (drop zone and the
 // four games); with one, two facing pages: the listing on the left, the
 // companion tabs on the right, and the status line under them.
-import { computed, defineAsyncComponent, h, markRaw, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
+import { computed, h, markRaw, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { addressKey, summaryNotes, withHintFile, withSelection } from '@fugloy/disasm';
 import { download } from '~/utils/exports';
 import { MODEL3_DEFAULT } from '~/composables/useWorkbench';
@@ -36,7 +36,7 @@ import FacingPages from '~/components/workbench/FacingPages.vue';
 import PageTabs from '~/components/workbench/PageTabs.vue';
 import type { PageTab } from '~/components/workbench/PageTabs.vue';
 
-import { lazyLoad, loadFailed } from '~/utils/lazy';
+import { lazyComponent, lazyLoad, loadFailed } from '~/utils/lazy';
 import { loaded, loadRun as loadRunAndSources, loadSources } from '~/utils/load-sources';
 import { canOpenAsSource, openAsSourceAsks, openAsSourceRequests } from '~/utils/open-as-source';
 import type { Run } from '~/composables/useRun';
@@ -312,12 +312,12 @@ function onDocumentDrop(e: DragEvent): void {
 // screen; it only shows once a program is open, and says so while it loads): a click on a row opens it on that row; while it shows, every
 // cursor move re-explains (arrow keys, G, a followed link). Before the first
 // click it shows a prompt. Other tabs stay put on arrow keys.
-const ExplainTab = defineAsyncComponent({
-  loader: () => import('~/components/side/ExplainTab.vue'),
-  loadingComponent: { render: () => h('p', { class: 'fg-muted', role: 'status', 'data-testid': 'explain-loading' }, 'Loading Explain…') },
-  delay: 0,
-  errorComponent: { render: () => h('p', { role: 'alert', 'data-testid': 'explain-load-error' }, loadFailed('The Explain tab', 'Open the tab again')) },
-});
+const ExplainTab = lazyComponent(
+  () => import('~/components/side/ExplainTab.vue'),
+  'The Explain tab',
+  { render: () => h('p', { class: 'fg-muted', role: 'status', 'data-testid': 'explain-loading' }, 'Loading Explain…') },
+  'explain-load-error',
+);
 const explainStarted = ref(false);
 /** The row last clicked, while the cursor is still on its address (a label or note row explains itself, not the line under it). */
 const clicked = shallowRef<Row | null>(null);

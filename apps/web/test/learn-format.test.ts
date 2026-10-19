@@ -1,6 +1,8 @@
 // The lesson format (phase 6B Task 1): a lesson's front matter and its Markdown subset, parsed to a
 // Lesson, and each rule's error a sentence naming the lesson and the line. The lessons under
 // content/learn/ load through LESSONS, in order, each numbered by its folder.
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseLesson } from '../app/utils/learn/lesson-format';
 import type { Lesson } from '../app/utils/learn/lesson-format';
@@ -249,4 +251,75 @@ describe('LESSONS', () => {
   it('carries each lesson its program', () => {
     for (const lesson of LESSONS) expect(lesson.program).toMatch(/\bEND\b/);
   });
+});
+
+// A lesson's z80 snippets are quoted from its program.z, so they cannot drift from the program that runs.
+// Each fenced z80 block is checked on its own: every code line of it must appear in program.z, in the
+// block's order (other program lines may lie between, since a snippet may skip some). A line is compared
+// by its code alone: the comment after ';' (outside quotes) is dropped, runs of blanks collapse to one, and
+// leading and trailing blanks go. Blank lines, comment-only lines, and a line that is only `...` are
+// skipped, so a snippet may elide with `...` or `; ...` and may reword a comment. Blocks under a
+// `## Try it` heading are exercises: they add to the program, so they are not quoted from it and are not checked.
+describe('the lessons\' z80 snippets', () => {
+  const codeOf = (line: string): string => {
+    let quote = '';
+    let end = line.length;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i]!;
+      if (quote !== '') {
+        if (c === quote) quote = '';
+      } else if (c === "'" || c === '"') quote = c;
+      else if (c === ';') {
+        end = i;
+        break;
+      }
+    }
+    return line.slice(0, end).replace(/\s+/g, ' ').trim();
+  };
+  const lines = (text: string): string[] => text.split(/\r\n|\r|\n/).map(codeOf).filter((l) => l !== '' && l !== '...');
+  const dir = join(__dirname, '..', 'content', 'learn');
+  const snippets = (md: string): string[][] => {
+    const out: string[][] = [];
+    let cur: string[] | null = null;
+    let exercise = false;
+    for (const l of md.split(/\r\n|\r|\n/)) {
+      if (cur === null) {
+        if (/^## /.test(l)) exercise = /^## Try it\s*$/.test(l);
+        else if (/^```z80\s*$/.test(l)) cur = [];
+      } else if (/^```\s*$/.test(l)) {
+        if (!exercise) out.push(cur);
+        cur = null;
+      } else cur.push(l);
+    }
+    return out;
+  };
+  /** The snippet lines that are not in `program` in order (empty when it matches). */
+  const missing = (snippet: string, program: string): string[] => {
+    const prog = lines(program);
+    let at = 0;
+    const gone: string[] = [];
+    for (const l of lines(snippet)) {
+      const i = prog.indexOf(l, at);
+      if (i < 0) gone.push(l);
+      else at = i + 1;
+    }
+    return gone;
+  };
+
+  it('tells a snippet that matches from one that drifted', () => {
+    const program = 'START:  LD  HL,3C00H ; top\n        LD  BC,400H\n\nFILL:   LD  (HL),0BFH\n        DEC BC\n';
+    expect(missing('START:  LD HL,3C00H  ; reworded\n...\n        DEC     BC', program)).toEqual([]);
+    expect(missing('        LD  BC,401H\n        DEC BC', program)).toEqual(['LD BC,401H']);
+    expect(missing('        DEC BC\n        LD  BC,400H', program)).toEqual(['LD BC,400H']);
+    expect(codeOf("        DB 'A;B' ; x")).toBe("DB 'A;B'");
+  });
+
+  for (const slug of readdirSync(dir).sort()) {
+    it(`${slug}: every z80 snippet is lines of program.z`, () => {
+      const program = readFileSync(join(dir, slug, 'program.z'), 'utf8');
+      const blocks = snippets(readFileSync(join(dir, slug, 'lesson.md'), 'utf8'));
+      expect(blocks.length).toBeGreaterThan(0);
+      for (const block of blocks) expect(missing(block.join('\n'), program)).toEqual([]);
+    });
+  }
 });

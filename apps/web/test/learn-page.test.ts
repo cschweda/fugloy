@@ -118,6 +118,12 @@ describe('the page helpers', () => {
       'Line 5 calls $VDCLS, the ROM\'s routine at $01C9 (clear the screen), but no ROM is loaded. Lessons run without one, so do this in your own code.',
     );
     expect(lessonMessage("Running on Fugløy's stub ROM (no ROM needed for this program).")).toBe("Running on Fugløy's stub ROM (no ROM needed for this program).");
+    expect(lessonMessage('Line 3 points HL at $0000, inside the ROM\'s space, and line 6 copies from where HL points (LDIR). With no ROM loaded, that copies Fugløy\'s stand-in, not the ROM. Add a Model III ROM in the Run tab if the program means to read the ROM.')).toBe(
+      'Line 3 points HL at $0000, inside the ROM\'s space, and line 6 copies from where HL points (LDIR). With no ROM loaded, that copies Fugløy\'s stand-in, not the ROM. Lessons run without a ROM, so copy from your own data if the program needs those bytes.',
+    );
+    expect(lessonMessage('The program stopped because you changed the model. Press Run to run the source on this one.')).toBe(
+      "The program stopped because you changed the model. Press Run ▶ to run the lesson's program on this one.",
+    );
     expect(EXPLAIN_PROMPT).toBe('Run the program, then click a line to read what it does.');
   });
 });
@@ -142,7 +148,8 @@ describe("the lesson editor's problems list", () => {
     await w.get('[data-testid="lesson-run"]').trigger('click');
     await flushPromises();
     expect(run.report.value?.notes.length).toBe(1);
-    expect(w.findAll('[data-testid="lesson-diag"]').map((d) => d.text())).toEqual([expect.stringMatching(/^Warning\s*Line 3\s*Line 3 points HL at \$0000, inside the ROM's space, and line 6 copies/)]);
+    expect(w.findAll('[data-testid="lesson-diag"]').map((d) => d.text())).toEqual([expect.stringMatching(/^Warning\s*Line 3\s*Line 3 points HL at \$0000, inside the ROM's space, and line 6 copies .*Lessons run without a ROM, so copy from your own data/)]);
+    expect(w.text()).not.toContain('in the Run tab');
     expect(w.get('[data-testid="lesson-diag-count"]').text()).toBe('1 warning');
     run.stop();
     window.removeEventListener('selectionchange', stop, true);
