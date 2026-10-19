@@ -55,8 +55,8 @@ jobs:
       # test:seo generates the site as Netlify does (and checks the test hook is not in it); the Playwright web server
       # generates it again with NUXT_PUBLIC_E2E=1, which compiles the hook in, before serving it.
       - run: pnpm --filter @fugloy/web test:seo
-      # check:prefetch generates the site again and checks that no page prefetches or preloads a lazily loaded part (Source ✎, Run ▶, emu).
-      - run: pnpm --filter @fugloy/web check:prefetch
+      # On test:seo's build: no page prefetches or preloads a lazily loaded part (Source ✎, Run ▶, emu), and the first screen still preloads its page.
+      - run: pnpm --filter @fugloy/web test:prefetch
       # Timing limits in listing-perf.spec.ts apply only with FUGLOY_PERF=1, so a slow runner cannot fail the build.
       - run: pnpm --filter @fugloy/web test:e2e
       - if: failure()

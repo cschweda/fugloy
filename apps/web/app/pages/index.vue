@@ -280,7 +280,7 @@ function onRowClick(row: Row): void {
   explainStarted.value = true;
   rightTab.value = 'explain';
 }
-watch(wb.openCount, () => {
+watch(wb.viewKey, () => {
   explainStarted.value = false;
   clicked.value = null;
 });
@@ -428,7 +428,8 @@ const KEYS: Record<string, KeyBinding> = {
 useWorkbenchKeys({
   keys: KEYS,
   active: () => session.value !== null && !editor.busy.value,
-  anywhereActive: () => workbenchOpen.value,
+  // Not while a listing edit (the inline editor, notes, the row menu) is open: Ctrl/⌘+Enter there runs nothing.
+  anywhereActive: () => workbenchOpen.value && !editor.busy.value,
   inListing: (target) => target instanceof Element && target.closest('.fg-listing') !== null,
 });
 
@@ -524,6 +525,8 @@ function installTestHook(): void {
   };
 }
 onBeforeUnmount(() => {
+  // Leaving for another page stops the program: nothing could show it (its frames would run on unseen).
+  run.stop();
   cancelWarm?.();
   document.removeEventListener('drop', onDocumentDrop);
   if (__FUGLOY_E2E__) delete window.__fugloyTest;
@@ -562,7 +565,7 @@ onBeforeUnmount(() => {
             </form>
             <ListingView
               v-if="session !== null"
-              :key="wb.openCount.value"
+              :key="wb.viewKey.value"
               ref="listing"
               class="min-h-0 flex-1"
               :rows="shownRows"

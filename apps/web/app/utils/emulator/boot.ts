@@ -15,6 +15,11 @@ export const BOOT_SECONDS = 8;
 /** How often the boot looks at the screen, in emulated seconds. */
 const SLICE = 0.05;
 
+/** A failure already worded as a sentence with its next step: shown as it is. */
+export class SentenceError extends Error {
+  override name = 'SentenceError';
+}
+
 const snapshots = new Map<string, Snapshot>();
 /** Each ROM array's SHA-256, so a Run with the same bytes does not hash them again. */
 const hashes = new WeakMap<Uint8Array, string>();
@@ -50,7 +55,7 @@ function bootToReady(m: Machine, model: Model): void {
       quiet = 0;
     }
   }
-  throw new Error(
+  throw new SentenceError(
     `The ROM did not reach READY within ${BOOT_SECONDS} emulated seconds, so Fugløy cannot run programs on it. Check that it is a ${MODEL_NAMES[model]} ROM, or remove it to run on Fugløy's stand-in.`,
   );
 }
@@ -63,7 +68,7 @@ export function bootedSnapshot(model: Model, rom: Uint8Array): Snapshot {
   const m = new Machine({ model, roms: { level2: rom } });
   if (isStub(model, rom)) {
     const r = m.run({ until: 'halt', cycles: m.clockHz });
-    if (r.reason !== 'halt') throw new Error("Fugløy's stand-in ROM did not finish starting. Reload the page and run the program again.");
+    if (r.reason !== 'halt') throw new SentenceError("Fugløy's stand-in ROM did not finish starting. Reload the page and run the program again.");
   } else bootToReady(m, model);
   const snap = m.debug.snapshot();
   snapshots.set(key, snap);

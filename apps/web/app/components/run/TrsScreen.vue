@@ -29,6 +29,11 @@ function draw(): void {
   if (c === null || ctx === null) return;
   const m = props.machine;
   if (m === null) {
+    // No machine (a Run that did not start): a blank 64x16 tube.
+    wide.value = false;
+    image = null;
+    c.width = 384;
+    c.height = 192;
     ctx.fillStyle = `rgb(${SCREEN_BG[0]},${SCREEN_BG[1]},${SCREEN_BG[2]})`;
     ctx.fillRect(0, 0, c.width, c.height);
     return;

@@ -62,6 +62,11 @@ export function runOnce(kit: RunKit, input: RunInput): RunOutcome {
     const runner = kit.createRunner({ ...input.runner, machine, result, stub: rom === null });
     return { ...base, notes, bytes, runner, problem: false, message: rom === null ? STUB_RUNNING : `Running on your ${kit.MODEL_NAMES[model]} ROM.` };
   } catch (err) {
-    return { ...base, notes, bytes, message: err instanceof Error ? err.message : String(err) };
+    // The boot's own failures are sentences already; anything else is the emulator's, wrapped in one.
+    const message =
+      err instanceof kit.SentenceError
+        ? err.message
+        : `The emulator could not start the program (${err instanceof Error ? err.message.replace(/\.$/, '') : String(err)}). Press Run to try again, or reload the page if it happens again.`;
+    return { ...base, notes, bytes, message };
   }
 }

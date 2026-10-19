@@ -1,10 +1,11 @@
-// The parts of the site loaded on first use (plan 5B: Source ✎ now, Run ▶ in
-// Task 4) must not be prefetched with the first screen. Nuxt's client
+// The parts of the site loaded on first use (plan 5B: Source ✎, Run ▶, and
+// the emulator runtime) must not be prefetched with the first screen. Nuxt's client
 // manifest flags every dynamic import for `<link rel="prefetch">`, so the
 // `build:manifest` hook (nuxt.config.ts) clears the flags of everything a lazy
 // root reaches, through `imports` and `dynamicImports`, with its CSS, except
-// what the static entry closure needs anyway. `scripts/check-prefetch.ts`
-// checks the generated pages with the same walk.
+// what the static entry closure needs anyway. The walk never enters a page or
+// layout. `test/prefetch.test.ts` (`check:prefetch`) checks the generated pages
+// with the same walk.
 
 /** Manifest keys (source paths relative to app/) of the lazily loaded parts: Source ✎, Run ▶, and the emulator runtime (the Run kit, and rom-ids for an added ROM). */
 export const LAZY_ROOTS: readonly string[] = ['components/source/', 'components/run/', 'utils/emulator/'];

@@ -70,8 +70,13 @@ export interface Workbench {
   rawCandidate: ShallowRef<{ bytes: Uint8Array; name: string } | null>;
   /** The last file dropped was a PDF: point at the Manuals page. */
   suggestManuals: Ref<boolean>;
-  /** Counts programs opened; the listing is keyed by it, so nothing carries over between programs. */
+  /** Counts programs opened, a Run's refresh of its own listing included: edit history, steps and saved work start over. */
   openCount: Ref<number>;
+  /**
+   * The listing's key: bumps with `openCount`, except on a Run's quiet refresh of the same source's
+   * listing, which swaps the program in place so the listing keeps its focus and Explain its state.
+   */
+  viewKey: Ref<number>;
   /** An example is being fetched. */
   busy: Ref<boolean>;
   /** Where the open program came from (Ruling 10). */
@@ -109,6 +114,7 @@ export function createWorkbench(deps: { readExample: ExampleReader }): Workbench
   const rawCandidate = shallowRef<{ bytes: Uint8Array; name: string } | null>(null);
   const suggestManuals = ref(false);
   const openCount = ref(0);
+  const viewKey = ref(0);
   const busy = ref(false);
   const origin = shallowRef<SessionOrigin>(null);
   const keptView = ref(false);
@@ -131,6 +137,7 @@ export function createWorkbench(deps: { readExample: ExampleReader }): Workbench
 
   function commit(s: Session, from: Example | null, opts: OpenOpts = {}): void {
     const keep = opts.keepView === true ? cursor.value : null;
+    const inPlace = opts.keepView === true && opts.sourceId !== undefined && origin.value?.sourceId === opts.sourceId && session.value !== null;
     origin.value = opts.origin === 'source' && opts.sourceId !== undefined ? { kind: 'source', sourceId: opts.sourceId } : null;
     keptView.value = opts.keepView === true;
     session.value = s;
@@ -138,8 +145,9 @@ export function createWorkbench(deps: { readExample: ExampleReader }): Workbench
     // A quiet refresh keeps the cursor where its address still has a row.
     cursor.value = keep !== null && rows.value.some((r) => 'addr' in r && r.addr === keep) ? keep : null;
     selection.value = null;
-    symbolFocus.value = null;
+    if (!inPlace) symbolFocus.value = null;
     openCount.value++;
+    if (!inPlace) viewKey.value++;
   }
 
   /** Opens and analyzes; returns the session, or null after setting the error. Never throws. */
@@ -272,9 +280,10 @@ export function createWorkbench(deps: { readExample: ExampleReader }): Workbench
     selection.value = null;
     symbolFocus.value = null;
     openCount.value++;
+    viewKey.value++;
   }
 
-  return { session, rows, facts, example, cursor, selection, symbolFocus, error, errorDetails, rawCandidate, suggestManuals, openCount, busy, origin, keptView, writing, openSource, openBytes, openRaw, openExample, report, wouldReplace, setSelection, close };
+  return { session, rows, facts, example, cursor, selection, symbolFocus, error, errorDetails, rawCandidate, suggestManuals, openCount, viewKey, busy, origin, keptView, writing, openSource, openBytes, openRaw, openExample, report, wouldReplace, setSelection, close };
 }
 
 let shared: Workbench | null = null;

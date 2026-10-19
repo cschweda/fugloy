@@ -48,6 +48,7 @@ const fakeRun: Run = {
   report: shallowRef(null),
   reveal: shallowRef(null),
   showInListing: vi.fn(async () => {}),
+  listable: computed(() => false),
   onFrame: () => () => {},
   busy: ref(false),
 };
@@ -205,7 +206,7 @@ describe('the Run tab', () => {
     expect(drop.defaultPrevented).toBe(true);
     expect(added).toEqual([{ name: 'level2.rom', model: undefined, fallback: 1 }]);
     expect(pageDrops).toEqual([]);
-    expect(document.querySelector('[data-testid="run-rom-message"]')!.textContent).toBe('level2.rom is kept in this browser as the Model III ROM. Press Run to use it.');
+    expect(document.querySelector('[data-testid="run-rom-status"]')!.textContent).toBe('level2.rom is kept in this browser as the Model III ROM. Press Run to use it.');
   });
 
   it('Run, Stop and the model select drive Run and the source', async () => {
@@ -219,5 +220,22 @@ describe('the Run tab', () => {
     await t.get('[data-testid="run-model"]').setValue('4');
     expect(sources.current.value?.model).toBe(4);
     expect(t.get('[data-testid="run-message"]').text()).toContain('on a fresh Model 4');
+  });
+
+  it('says a refused ROM in the alert region, and good news in the status region', async () => {
+    sources = createSources({ open: async () => null, starter: async () => starter });
+    await sources.start();
+    await sources.create();
+    const add = vi.spyOn(fakeRoms, 'add').mockResolvedValueOnce({ ok: false, reason: 'big.bin is 9 bytes, which no TRS-80 ROM is.' });
+    const t = attach(RunTab, { run: fakeRun, sources });
+    await flushPromises();
+    const input = t.get('[data-testid="run-rom-input"]').element as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [new File([new Uint8Array(9)], 'big.bin')], configurable: true });
+    await t.get('[data-testid="run-rom-input"]').trigger('change');
+    await flushPromises();
+    expect(t.get('[data-testid="run-rom-alert"]').text()).toBe('big.bin is 9 bytes, which no TRS-80 ROM is.');
+    expect(t.get('[data-testid="run-rom-status"]').text()).toBe('');
+    expect(t.get('[data-testid="run-rom-status"]').attributes('role')).toBe('status');
+    add.mockRestore();
   });
 });

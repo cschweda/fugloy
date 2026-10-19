@@ -107,3 +107,43 @@ test('a program opened from a file is never replaced by a Run, until Show in Lis
   await expect(page.getByRole('tab', { name: 'Listing' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByTestId('save-state')).toHaveText('not saved (assembled from your source)');
 });
+
+test('Ctrl/⌘+Enter in the listing runs and refreshes it in place, keeping the focus there; inside the inline editor it runs nothing', async ({ page }) => {
+  await ready(page);
+  await page.getByTestId('write-program').click();
+  await expect(page.locator('.cm-content')).toContainText('ORG');
+  await page.evaluate(() => window.__fugloyTest!.run());
+  await expect(page.getByTestId('file-name')).toHaveText('clear-screen.cmd');
+  await page.getByRole('tab', { name: 'Listing' }).click();
+  const row = page.locator('.fg-row-code').first();
+  const inListing = (): Promise<boolean> => page.evaluate(() => document.activeElement?.closest('.fg-listing') != null);
+  await page.getByTestId('run-stop').click();
+  await row.click();
+  expect(await inListing()).toBe(true);
+  await page.keyboard.press('ControlOrMeta+Enter');
+  await expect.poll(() => page.evaluate(() => window.__fugloyTest!.runnerState())).toBe('running');
+  expect(await inListing()).toBe(true);
+  await expect(page.getByRole('tab', { name: 'Listing' })).toHaveAttribute('aria-selected', 'true');
+
+  // In the inline editor (N), Ctrl/⌘+Enter runs nothing and the editor stays open.
+  await page.getByTestId('run-stop').click();
+  await row.click();
+  await page.keyboard.press('n');
+  await expect(page.getByTestId('inline-edit-input')).toBeFocused();
+  await page.keyboard.press('ControlOrMeta+Enter');
+  await expect(page.getByTestId('inline-edit-input')).toBeFocused();
+  expect(await page.evaluate(() => window.__fugloyTest!.runnerState())).toBe('stopped');
+});
+
+test('leaving the workbench for another page stops the program', async ({ page }) => {
+  await ready(page);
+  await page.getByTestId('write-program').click();
+  await expect(page.locator('.cm-content')).toContainText('ORG');
+  await page.evaluate(() => window.__fugloyTest!.run());
+  await expect.poll(() => page.evaluate(() => window.__fugloyTest!.runnerState())).toBe('running');
+  await page.getByRole('link', { name: 'About' }).click();
+  await expect(page).toHaveURL(/\/about\/$/);
+  await page.goBack();
+  await page.waitForFunction(() => window.__fugloyTest !== undefined);
+  expect(await page.evaluate(() => window.__fugloyTest!.runnerState())).toBe('stopped');
+});

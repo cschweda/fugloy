@@ -3,7 +3,7 @@
 // the workbench), Stop, Show in Listing, what the run says, the TRS-80's screen, and the ROM for
 // the model, added from a file or dropped on the tab and kept in this browser only. The page
 // loads this component lazily, with emu.
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import TrsScreen from './TrsScreen.vue';
 import { useRoms } from '~/composables/useRoms';
 import type { Run } from '~/composables/useRun';
@@ -74,13 +74,14 @@ async function removeRom(): Promise<void> {
     romMessage.value = `The ${MODEL_NAMES[m]} ROM is removed from this browser.`;
   } catch (err) {
     romProblem.value = true;
-    romMessage.value = err instanceof Error ? err.message : String(err);
+    // useRoms words its own failures with a next step; anything else gets one.
+    const msg = err instanceof Error ? err.message : String(err);
+    romMessage.value = /try again|reload/i.test(msg) ? msg : `The ${MODEL_NAMES[m]} ROM could not be removed (${msg.replace(/\.$/, '')}). Reload the page and try again.`;
   }
 }
 
-// Draw each frame the runner runs, and whenever the machine changes.
+// Draw each frame the runner runs (TrsScreen draws by itself when the machine changes).
 let unsubscribe: (() => void) | null = null;
-watch(machine, () => screen.value?.draw(), { flush: 'post' });
 onMounted(() => {
   isMac.value = /Mac|iPhone|iPad/.test(navigator.platform);
   void roms.start();
@@ -105,7 +106,7 @@ defineExpose({
       </select>
       <button type="button" class="fg-button fg-button-primary" data-testid="run-run" :aria-busy="run.busy.value" :title="`Assemble and run (${runKey})`" @click="run.run()">Run ▶</button>
       <button type="button" class="fg-button" data-testid="run-stop" :disabled="!running" @click="run.stop()">Stop</button>
-      <button type="button" class="fg-button" data-testid="run-show-listing" :disabled="run.lastResult.value?.ok !== true" @click="run.showInListing()">Show in Listing</button>
+      <button type="button" class="fg-button" data-testid="run-show-listing" :disabled="!run.listable.value" @click="run.showInListing()">Show in Listing</button>
     </div>
     <p class="fg-run-message" :class="{ 'fg-run-problem': run.problem.value }" role="status" aria-live="polite" data-testid="run-message">
       {{ run.message.value ?? `Press Run ▶ or ${runKey} to assemble the source and run it on a fresh ${MODEL_NAMES[model]}.` }}
@@ -125,7 +126,10 @@ defineExpose({
         <input ref="picker" type="file" class="sr-only" tabindex="-1" aria-hidden="true" data-testid="run-rom-input" @change="onPick" />
       </p>
       <p class="fg-muted fg-run-note">A ROM stays in this browser: it is never uploaded and never goes in a backup.</p>
-      <p v-if="romMessage !== null" :class="romProblem ? 'fg-run-problem' : ''" role="alert" data-testid="run-rom-message">{{ romMessage }}</p>
+      <p class="fg-muted fg-run-note" data-testid="run-keeps-running">A program keeps running while you look at another tab of the workbench; it pauses while this browser tab is hidden, and Stop or leaving the workbench ends it.</p>
+      <!-- Both regions stay in the page, so a screen reader announces what fills them: news politely, a refusal at once. -->
+      <p role="status" data-testid="run-rom-status">{{ romProblem ? '' : romMessage }}</p>
+      <p class="fg-run-problem" role="alert" data-testid="run-rom-alert">{{ romProblem ? romMessage : '' }}</p>
       <p v-if="roms.unavailable.value !== null" class="fg-run-problem" role="alert">{{ roms.unavailable.value }}</p>
     </div>
   </section>

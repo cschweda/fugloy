@@ -295,7 +295,7 @@ Workbench, phase 5B (Source and Run), in progress on branch `phase5b` (plan
   Machine. Errors go to Source ✎, the first revealed, and nothing runs. A
   clean program refreshes its own listing quietly (no tab switch, the cursor
   kept where its address still exists, no saved-work or carry-over dialog,
-  nothing saved), and never replaces a program opened from a file unless
+  nothing saved, and no remount of the listing), and never replaces a program opened from a file unless
   **Show in Listing** is pressed. Code assembled into the ROM's space is
   refused on any ROM; with no ROM stored, a program that needs one is
   refused with a sentence naming its line, and every other program runs on
@@ -322,7 +322,13 @@ Workbench, phase 5B (Source and Run), in progress on branch `phase5b` (plan
   (`lazy-chunks.ts`) now covers `components/run/` and `utils/emulator/`, and
   never walks into a page or layout: the Run tab imports the page's chunk,
   and the page's own preload must stay (`check:prefetch` checks it). CI runs
-  `check:prefetch` beside `test:seo`.
+  the prefetch test (`test:prefetch`) on `test:seo`'s build, with no second
+  generate.
+  A program keeps running while another workbench tab is shown, pauses while
+  the browser tab is hidden, and stops on Stop, Close, or leaving for another
+  page (the Run tab says so). The quiet refresh swaps the program into the
+  open listing in place, so focus and Explain stay put; Ctrl/⌘+Enter inside
+  the listing's inline editor, notes or row menu runs nothing.
 
 ### Testing
 

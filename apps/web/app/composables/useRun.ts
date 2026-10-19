@@ -5,8 +5,8 @@
 // ROM-copy notes go to Source's list as warnings. The work itself (utils/emulator/run-once), asm,
 // emu and the ROM store load with the kit on the first Run, so this file is all the first screen
 // carries. `lastResult` and `runner` are kept for 5C.
-import { ref, shallowRef } from 'vue';
-import type { Ref, ShallowRef } from 'vue';
+import { computed, ref, shallowRef } from 'vue';
+import type { ComputedRef, Ref, ShallowRef } from 'vue';
 import type { AsmResult, Diagnostic } from '@fugloy/asm';
 import { defaultDos } from '@fugloy/disasm';
 import type { RunKit } from '../utils/emulator/kit';
@@ -43,6 +43,8 @@ export interface Run {
   reveal: ShallowRef<{ line: number } | null>;
   /** The last clean Run's program into the listing, even over a program opened from a file. */
   showInListing(): Promise<void>;
+  /** The last Run wrote a program that Show in Listing can open (cleared by every Run that writes none). */
+  listable: ComputedRef<boolean>;
   /** Called after each frame the runner runs, and when a run starts; returns the unsubscribe. */
   onFrame(cb: (r: Runner) => void): () => void;
   busy: Ref<boolean>;
@@ -76,7 +78,7 @@ export function createRun(deps: RunDeps = {}): Run {
     for (const cb of frameListeners) cb(r);
   };
   /** The source and its program from the last clean Run, for Show in Listing. */
-  let lastClean: { source: Source; bytes: Uint8Array } | null = null;
+  const clean = shallowRef<{ source: Source; bytes: Uint8Array } | null>(null);
 
   function say(text: string | null, isProblem = false): void {
     message.value = text;
@@ -84,8 +86,8 @@ export function createRun(deps: RunDeps = {}): Run {
   }
 
   function showListing(force: boolean): void {
-    if (lastClean === null) return;
-    const { source, bytes } = lastClean;
+    if (clean.value === null) return;
+    const { source, bytes } = clean.value;
     wb.openSource(bytes, cmdName(source.name), { sourceId: source.id, selection: { machine: source.model, dos: defaultDos(source.model) }, force });
   }
 
@@ -109,6 +111,7 @@ export function createRun(deps: RunDeps = {}): Run {
     }
     runner.value?.stop();
     runner.value = null;
+    clean.value = null;
     state.value = 'idle';
     const { model, text } = source;
     const rom = roms.have(model) ? await roms.bytes(model) : null;
@@ -117,7 +120,7 @@ export function createRun(deps: RunDeps = {}): Run {
     report.value = { text, diagnostics: out.diagnostics, notes: out.notes };
     if (out.errorLine !== null) reveal.value = { line: out.errorLine };
     if (out.bytes !== null) {
-      lastClean = { source, bytes: out.bytes };
+      clean.value = { source, bytes: out.bytes };
       showListing(false);
     }
     say(out.message, out.problem);
@@ -147,6 +150,7 @@ export function createRun(deps: RunDeps = {}): Run {
     report,
     reveal,
     busy,
+    listable: computed(() => clean.value !== null),
     async showInListing() {
       showListing(true);
     },

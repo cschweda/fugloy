@@ -182,4 +182,35 @@ describe('Run ▶', () => {
     await run.run();
     expect(run.message.value).toBe('There is no source to run. Open Source ✎ to write a program, then press Run.');
   });
+
+  it('a Run that writes no program clears what Show in Listing would open', async () => {
+    const { run, sources } = await setup(null);
+    await run.run();
+    expect(run.listable.value).toBe(true);
+    sources.update(sources.current.value!.id, { text: '; nothing but a comment\n' });
+    await run.run();
+    expect(run.lastResult.value?.ok).toBe(true);
+    expect(run.listable.value).toBe(false);
+    expect(run.message.value).toMatch(/Write some instructions in Source ✎, then press Run again\.$/);
+  });
+
+  it("an emulator failure becomes a sentence with a next step; the boot's own sentences pass as they are", async () => {
+    const boom = vi.fn(() => {
+      throw new Error('boom');
+    });
+    const { run } = await setup(null, { kit: { ...realKit, prepareMachine: boom } });
+    await run.run();
+    expect(run.message.value).toBe('The emulator could not start the program (boom). Press Run to try again, or reload the page if it happens again.');
+    const said = 'The ROM did not reach READY within 8 emulated seconds, so Fugløy cannot run programs on it. Check that it is a Model III ROM, or remove it to run on Fugløy’s stand-in.';
+    const { run: run2 } = await setup(null, {
+      kit: {
+        ...realKit,
+        prepareMachine: () => {
+          throw new realKit.SentenceError(said);
+        },
+      },
+    });
+    await run2.run();
+    expect(run2.message.value).toBe(said);
+  });
 });

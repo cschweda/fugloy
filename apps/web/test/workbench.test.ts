@@ -188,8 +188,12 @@ describe('useWorkbench', () => {
       expect(wb.origin.value).toEqual({ kind: 'source', sourceId: 's-1' });
       expect(wb.keptView.value).toBe(true);
       wb.cursor.value = 0x7002;
+      const [opens, key] = [wb.openCount.value, wb.viewKey.value];
       expect(wb.openSource(cmd(1), 'mine.cmd', { sourceId: 's-1', selection: sel })).toBe(true);
       expect(wb.cursor.value).toBe(0x7002);
+      // Swapped in place: the listing keeps its key (and its focus), while history and saved state start over.
+      expect(wb.viewKey.value).toBe(key);
+      expect(wb.openCount.value).toBe(opens + 1);
       // Another source's Run does not replace this one's listing.
       expect(wb.openSource(cmd(), 'other.cmd', { sourceId: 's-2', selection: sel })).toBe(false);
       expect(wb.session.value?.name).toBe('mine.cmd');
@@ -203,8 +207,10 @@ describe('useWorkbench', () => {
       expect(wb.openSource(cmd(), 'mine.cmd', { sourceId: 's-1', selection: sel })).toBe(false);
       expect(wb.session.value?.name).toBe('seadrg01.cmd');
       expect(wb.openCount.value).toBe(count);
+      const key = wb.viewKey.value;
       expect(wb.openSource(cmd(), 'mine.cmd', { sourceId: 's-1', selection: sel, force: true })).toBe(true);
       expect(wb.session.value?.name).toBe('mine.cmd');
+      expect(wb.viewKey.value).toBe(key + 1);
       expect(wb.keptView.value).toBe(false);
       // A file opened afterwards is a file again.
       wb.openBytes(Uint8Array.from([0xc9]), 'x.bin', { base: 0x7000 });
