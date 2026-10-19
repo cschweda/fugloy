@@ -1,8 +1,12 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { BackupError, makeBackup, restoreBackup } from '../app/utils/backup';
+import { parseHints } from '@fugloy/disasm';
+import { BackupError, makeBackup, restoreBackup as restore } from '../app/utils/backup';
 import { openStore } from '../app/utils/store';
 import type { Store } from '../app/utils/store';
+
+/** restoreBackup with disasm's parseHints, as useBackup passes it. */
+const restoreBackup = (s: Store, json: string, confirm: (name: string) => Promise<boolean>) => restore(s, json, confirm, parseHints);
 
 const open: Store[] = [];
 const wipe = (): Promise<unknown> => new Promise((r) => (indexedDB.deleteDatabase('fugloy').onsuccess = r));
@@ -101,5 +105,68 @@ describe('backup', () => {
     expect(await a.getHints('bad')).toBeUndefined();
     expect(await a.getPrefs('bad')).toBeUndefined();
     expect((await a.getHints('h1'))!.text).toBe(HINTS);
+  });
+  it('carries the sources, and never the ROMs: no roms key and no ROM bytes', async () => {
+    await a.putSource({ id: 's1', name: 'clear.z', text: ' ORG 7000H\n', model: 3, savedAt: 1 });
+    await a.putSource({ id: 's2', name: 'other.z', text: ' NOP\n', model: 1, savedAt: 2 });
+    // A ROM whose bytes are recognisable, so a leak would show.
+    const rom = new Uint8Array(0x3800).fill(0xa5);
+    await a.putRom(3, { bytes: rom, sha256: 'f'.repeat(64), recognized: 'model3-rev-c-2ef8', name: 'model3.rom', addedAt: 3 });
+    const json = await makeBackup(a);
+    const parsed = JSON.parse(json);
+    expect(parsed.fugloyBackup).toBe(1);
+    expect(parsed.sources).toEqual([
+      { id: 's1', name: 'clear.z', text: ' ORG 7000H\n', model: 3, savedAt: 1 },
+      { id: 's2', name: 'other.z', text: ' NOP\n', model: 1, savedAt: 2 },
+    ]);
+    expect(Object.keys(parsed).sort()).toEqual(['exportedAt', 'fugloyBackup', 'programs', 'sources']);
+    expect(json).not.toMatch(/rom/i);
+    expect(json).not.toMatch(/:\s*165\b/); // 0xA5 as a number
+    expect(json).not.toContain('f'.repeat(64));
+  });
+
+  it('writes no sources key when there are none', async () => {
+    await a.putHints('h1', { name: 'one.hints', text: HINTS });
+    expect(JSON.parse(await makeBackup(a)).sources).toBeUndefined();
+  });
+
+  it('a restore adds the sources the store lacks, suffixes a clashing name, and skips identical ones', async () => {
+    await a.putSource({ id: 's1', name: 'clear.z', text: 'one', model: 3, savedAt: 1 });
+    await a.putSource({ id: 's2', name: 'other.z', text: 'two', model: 1, savedAt: 2 });
+    const json = await makeBackup(a);
+    const b = await fresh();
+    await b.putSource({ id: 's1', name: 'clear.z', text: 'one', model: 3, savedAt: 5 }); // the same work
+    await b.putSource({ id: 'x', name: 'other.z', text: 'mine', model: 3, savedAt: 6 }); // a different source, same name
+    const r = await restoreBackup(b, json, async () => { throw new Error('sources never ask'); });
+    expect(r.sources).toEqual({ added: 1, skipped: 1 });
+    const all = await b.allSources();
+    expect(all.map((x) => [x.name, x.text]).sort()).toEqual([['clear.z', 'one'], ['other-2.z', 'two'], ['other.z', 'mine']]);
+    expect(new Set(all.map((x) => x.id)).size).toBe(3);
+  });
+
+  it('restores a source whose id is taken by different text as a new source, replacing nothing', async () => {
+    await a.putSource({ id: 's1', name: 'clear.z', text: 'old', model: 3, savedAt: 1 });
+    const json = await makeBackup(a);
+    await a.putSource({ id: 's1', name: 'clear.z', text: 'new', model: 3, savedAt: 2 });
+    const r = await restoreBackup(a, json, async () => true);
+    expect(r.sources).toEqual({ added: 1, skipped: 0 });
+    const all = await a.allSources();
+    expect(all.find((x) => x.id === 's1')!.text).toBe('new');
+    expect(all.find((x) => x.id !== 's1')).toMatchObject({ name: 'clear-2.z', text: 'old' });
+  });
+
+  it('rejects a damaged source entry', async () => {
+    await expect(restoreBackup(a, '{"fugloyBackup":1,"programs":[],"sources":[{"name":"a.z"}]}', async () => true)).rejects.toThrow(/a source entry is malformed/);
+    await expect(restoreBackup(a, '{"fugloyBackup":1,"programs":[],"sources":[{"id":"a","name":"a.z","text":"","model":2}]}', async () => true)).rejects.toBeInstanceOf(BackupError);
+  });
+
+  it('restores a source whose id starts with a colon under a new id, so it cannot overwrite the store’s own keys', async () => {
+    const json = JSON.stringify({ fugloyBackup: 1, exportedAt: '', programs: [], sources: [{ id: ':current', name: 'odd.z', text: 'x', model: 3, savedAt: 1 }] });
+    const r = await restoreBackup(a, json, async () => true);
+    expect(r.sources).toEqual({ added: 1, skipped: 0 });
+    const all = await a.allSources();
+    expect(all).toEqual([expect.objectContaining({ name: 'odd.z', text: 'x' })]);
+    expect(all[0]!.id.startsWith(':')).toBe(false);
+    expect(await a.getCurrentSource()).toBeNull();
   });
 });

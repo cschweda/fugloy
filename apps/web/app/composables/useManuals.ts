@@ -8,10 +8,11 @@
 // only through the injected page counter.
 import { computed, ref, shallowRef } from 'vue';
 import type { ComputedRef } from 'vue';
-import { SYMBOL_SOURCES, manualPage, sha256Hex } from '@fugloy/disasm';
+import { SYMBOL_SOURCES, manualPage } from '@fugloy/disasm';
 import type { Cite, ManualScan, Source } from '@fugloy/disasm';
+import { sha256 } from '../utils/hash';
 import { looksLikePdf, scanByHash, scanOf } from '../utils/manuals';
-import { openStore, requestPersistence } from '../utils/store';
+import { openStore, requestPersistence, STORE_BLOCKED, storeBlocked } from '../utils/store';
 import type { Store, StoredManual } from '../utils/store';
 
 export type AddResult = { ok: true; sourceId: string } | { ok: false; reason: string };
@@ -50,19 +51,8 @@ export interface ManualsDeps {
 
 const NO_STORAGE = 'Browser storage is unavailable here (a private window, or storage turned off), so Fugløy cannot keep a manual. The workbench still works, and every citation still links to its page on archive.org.';
 
-/** Web Crypto when there is one (fast, off the main thread); the library's own SHA-256 otherwise. */
-async function defaultHash(bytes: Uint8Array): Promise<string> {
-  const subtle = globalThis.crypto?.subtle;
-  if (subtle !== undefined) {
-    try {
-      const d = new Uint8Array(await subtle.digest('SHA-256', bytes as Uint8Array<ArrayBuffer>));
-      return Array.from(d, (b) => b.toString(16).padStart(2, '0')).join('');
-    } catch {
-      // fall through
-    }
-  }
-  return sha256Hex(bytes);
-}
+/** Why nothing can be stored: another tab holds the database, or there is no storage. */
+const noStorage = (): string => (storeBlocked() ? STORE_BLOCKED : NO_STORAGE);
 
 async function defaultPageCount(blob: Blob): Promise<number | null> {
   try {
@@ -80,13 +70,14 @@ async function defaultPageCount(blob: Blob): Promise<number | null> {
 function storeError(err: unknown, doing: 'add' | 'offset' | 'remove' = 'add'): string {
   const name = err instanceof DOMException || err instanceof Error ? err.name : '';
   const what = { add: 'the manual was not kept', offset: 'the page offset was not saved', remove: 'the manual was not removed' }[doing];
+  if (name === 'StoreClosedError') return (err as Error).message;
   if (name === 'QuotaExceededError') return `Your browser’s storage for this site is full, so ${what}. Remove a manual you no longer need, or free space in the browser, and try again. The workbench keeps working.`;
   return `Your browser refused the change, so ${what} (${err instanceof Error ? err.message : String(err)}). The workbench keeps working, and citations still link to archive.org.`;
 }
 
 export function createManuals(deps: ManualsDeps = {}): Manuals {
   const open = deps.open ?? openStore;
-  const hash = deps.hash ?? defaultHash;
+  const hash = deps.hash ?? sha256;
   const pageCount = deps.pageCount ?? defaultPageCount;
   const store = shallowRef<Store | null | undefined>(undefined);
   /** What is stored, without the blobs: source id → its record's mapping facts. */
@@ -143,7 +134,7 @@ export function createManuals(deps: ManualsDeps = {}): Manuals {
     if (id === undefined) return { ok: false, reason: `${file.name} is not one of the archive.org scans Fugløy knows. Which manual is it?` };
     if (!SYMBOL_SOURCES.some((s) => s.id === id)) return { ok: false, reason: `There is no manual called ${id}.` };
     const s = await start();
-    if (s === null) return { ok: false, reason: NO_STORAGE };
+    if (s === null) return { ok: false, reason: noStorage() };
     const blob = new Blob([bytes as Uint8Array<ArrayBuffer>], { type: 'application/pdf' });
     const record: StoredManual = { blob, sha256: sha, name: file.name, addedAt: Date.now() };
     if (known === undefined) {
@@ -176,7 +167,7 @@ export function createManuals(deps: ManualsDeps = {}): Manuals {
 
   async function setOffset(id: string, pdfPageOfPrinted1: number): Promise<void> {
     const s = await start();
-    if (s === null) throw new Error(NO_STORAGE);
+    if (s === null) throw new Error(noStorage());
     const next = await (async () => {
       try {
         const m = await s.getManual(id);
@@ -233,7 +224,7 @@ export function createManuals(deps: ManualsDeps = {}): Manuals {
       const s = await start();
       if (s !== null) await load(s);
     },
-    unavailable: computed(() => (store.value === null ? NO_STORAGE : null)),
+    unavailable: computed(() => (store.value === null ? noStorage() : null)),
   };
 }
 

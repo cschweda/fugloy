@@ -22,7 +22,16 @@ export interface OpenOpts {
   hintSource?: string;
   /** The symbol tables to use; without it the machine verdict picks them. */
   selection?: SymbolSelection;
+  /** Where the program came from: `source` is a Run of a Source ✎ program (plan 5B, Ruling 10), which persistence skips. */
+  origin?: 'file' | 'source';
+  /** With `origin: 'source'`: the source it was assembled from. */
+  sourceId?: string;
+  /** Keep the tab and, if its address still exists, the cursor (a quiet refresh). */
+  keepView?: boolean;
 }
+
+/** Where the open program came from: a Source ✎ program, by its source id, or null for a file or an example. */
+export type SessionOrigin = { kind: 'source'; sourceId: string } | null;
 
 /** What the Symbol tab shows: a program label, or a ROM, hardware or DOS name. */
 export type SymbolFocus = { kind: 'label'; addr: number } | { kind: 'table'; entry: TableEntry };
@@ -61,10 +70,21 @@ export interface Workbench {
   rawCandidate: ShallowRef<{ bytes: Uint8Array; name: string } | null>;
   /** The last file dropped was a PDF: point at the Manuals page. */
   suggestManuals: Ref<boolean>;
-  /** Counts programs opened; the listing is keyed by it, so nothing carries over between programs. */
+  /** Counts programs opened, a Run's refresh of its own listing included: edit history, steps and saved work start over. */
   openCount: Ref<number>;
+  /**
+   * The listing's key: bumps with `openCount`, except on a Run's quiet refresh of the same source's
+   * listing, which swaps the program in place so the listing keeps its focus and Explain its state.
+   */
+  viewKey: Ref<number>;
   /** An example is being fetched. */
   busy: Ref<boolean>;
+  /** Where the open program came from (Ruling 10). */
+  origin: ShallowRef<SessionOrigin>;
+  /** The last open asked to keep the view (a quiet refresh): the page leaves its tabs and cursor alone. */
+  keptView: Ref<boolean>;
+  /** The workbench is open on Source ✎ and Run ▶ with no program (Ruling 12: "Write a program", "Continue"). */
+  writing: Ref<boolean>;
   openBytes(bytes: Uint8Array, name: string, opts?: OpenOpts): void;
   openRaw(base: number): void;
   /** Ignored while an example is loading. */
@@ -88,7 +108,11 @@ export function createWorkbench(deps: { readExample: ExampleReader }): Workbench
   const rawCandidate = shallowRef<{ bytes: Uint8Array; name: string } | null>(null);
   const suggestManuals = ref(false);
   const openCount = ref(0);
+  const viewKey = ref(0);
   const busy = ref(false);
+  const origin = shallowRef<SessionOrigin>(null);
+  const keptView = ref(false);
+  const writing = ref(false);
 
   const rows = computed(() => rowsOf(session.value));
   const facts = computed(() => (session.value === null ? null : programFacts(session.value.analysis)));
@@ -105,13 +129,19 @@ export function createWorkbench(deps: { readExample: ExampleReader }): Workbench
     suggestManuals.value = false;
   }
 
-  function commit(s: Session, from: Example | null): void {
+  function commit(s: Session, from: Example | null, opts: OpenOpts = {}): void {
+    const keep = opts.keepView === true ? cursor.value : null;
+    const inPlace = opts.keepView === true && opts.sourceId !== undefined && origin.value?.sourceId === opts.sourceId && session.value !== null;
+    origin.value = opts.origin === 'source' && opts.sourceId !== undefined ? { kind: 'source', sourceId: opts.sourceId } : null;
+    keptView.value = opts.keepView === true;
     session.value = s;
     example.value = from;
-    cursor.value = null;
+    // A quiet refresh keeps the cursor where its address still has a row.
+    cursor.value = keep !== null && rows.value.some((r) => 'addr' in r && r.addr === keep) ? keep : null;
     selection.value = null;
-    symbolFocus.value = null;
+    if (!inPlace) symbolFocus.value = null;
     openCount.value++;
+    if (!inPlace) viewKey.value++;
   }
 
   /** Opens and analyzes; returns the session, or null after setting the error. Never throws. */
@@ -162,7 +192,7 @@ export function createWorkbench(deps: { readExample: ExampleReader }): Workbench
 
   function openBytes(bytes: Uint8Array, name: string, opts: OpenOpts = {}): void {
     const s = open(bytes, name, opts);
-    if (s !== null) commit(s, null);
+    if (s !== null) commit(s, null, opts);
   }
 
   function openRaw(base: number): void {
@@ -227,13 +257,17 @@ export function createWorkbench(deps: { readExample: ExampleReader }): Workbench
     clearProblem();
     session.value = null;
     example.value = null;
+    origin.value = null;
+    keptView.value = false;
+    writing.value = false;
     cursor.value = null;
     selection.value = null;
     symbolFocus.value = null;
     openCount.value++;
+    viewKey.value++;
   }
 
-  return { session, rows, facts, example, cursor, selection, symbolFocus, error, errorDetails, rawCandidate, suggestManuals, openCount, busy, openBytes, openRaw, openExample, report, wouldReplace, setSelection, close };
+  return { session, rows, facts, example, cursor, selection, symbolFocus, error, errorDetails, rawCandidate, suggestManuals, openCount, viewKey, busy, origin, keptView, writing, openBytes, openRaw, openExample, report, wouldReplace, setSelection, close };
 }
 
 let shared: Workbench | null = null;

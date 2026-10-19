@@ -19,8 +19,10 @@ const props = defineProps<{
   name?: string;
   diagnostics: readonly Diagnostic[];
   proposals: readonly (TableProposal | MoverProposal)[];
+  /** Whether Open as source ✎ is offered: machine code, not a BASIC program. */
+  canSource?: boolean;
 }>();
-const emit = defineEmits<{ symbol: [entry: TableEntry]; 'apply-hint-lines': [lines: string[]] }>();
+const emit = defineEmits<{ symbol: [entry: TableEntry]; 'apply-hint-lines': [lines: string[]]; 'open-source': [] }>();
 
 const FIT = {
   model1: { one: true, three: false },
@@ -57,6 +59,14 @@ const evidence = computed(() => splitEvidence(props.facts.machine.evidence));
         <h3 class="fg-strong fg-mono text-base font-bold">{{ name }}</h3>
         <p v-if="facts.name !== undefined" class="fg-muted">Name record: <span class="fg-mono">{{ facts.name }}</span></p>
       </template>
+    </section>
+
+    <section v-if="canSource" data-testid="spec-source">
+      <h2 class="fg-sec">Source</h2>
+      <p>
+        <button type="button" class="fg-button" data-testid="open-as-source" @click="emit('open-source')">Open as source ✎</button>
+        <span class="fg-muted"> Turns this disassembly into Z80 source you can edit, then run with Run ▶. The listing stays as it is.</span>
+      </p>
     </section>
 
     <section data-testid="spec-machine">

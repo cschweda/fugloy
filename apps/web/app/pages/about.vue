@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// About: what Fugløy is, where your files go (nowhere), how storage and Back up / Restore work, and credits.
+// About: what Fugløy is, where your files go (nowhere), how storage and Back up / Restore work, ROMs and the stub ROM, and credits.
 import { SYMBOL_SOURCES } from '@fugloy/disasm';
 import type { Source } from '@fugloy/disasm';
 import { EXAMPLES } from '~/data/examples';
@@ -34,15 +34,28 @@ const byline = (s: Source): string => (s.author === s.publisher ? s.author : `${
 
     <h2 id="storage">What is saved, and where</h2>
     <p>
-      Your hints (the names, comments, and declarations you add) and each program's machine and DOS settings are saved in this browser, in its own storage, as you work.
+      Your hints (the names, comments, and declarations you add), each program's machine and DOS settings, and the Z80 sources you write in <strong class="fg-strong">Source ✎</strong> are saved in this browser, in its own storage, as you work.
       Storage belongs to one browser on one computer: another browser, another profile, or a private window starts empty, and clearing the site's data erases it.
-      Manuals you add stay there too. Programs and ROMs are never stored; you open them again each visit.
+      Manuals you add stay there too, and so does a ROM you add in <strong class="fg-strong">Run ▶</strong>: it is stored in this browser only, never put in a backup, and never uploaded. Programs are never stored; you open them again each visit.
     </p>
     <p>
       To carry your work somewhere else, use <strong class="fg-strong">Your work</strong> in the top bar.
-      <strong class="fg-strong">Back up</strong> downloads one JSON file with your hints and settings, and nothing else: no manuals, ROMs, or programs.
-      <strong class="fg-strong">Restore…</strong> reads such a file on another browser or computer. It adds what is missing, and when a program already has different hints here, it asks before replacing them.
+      <strong class="fg-strong">Back up</strong> downloads one JSON file with your hints, settings, and sources, and nothing else: no manuals, ROMs, or programs.
+      <strong class="fg-strong">Restore…</strong> reads such a file on another browser or computer. It adds what is missing, and when a program already has different hints here, it asks before replacing them. A source is never replaced: one whose name is taken here is added under a new name.
       A program's hints can also be exported as a plain text hint file from the Export menu, a format made to be kept in git.
+    </p>
+
+    <h2 id="roms">ROMs, and the stub ROM</h2>
+    <p data-testid="rom-statement">
+      Fugløy ships no ROM. The TRS-80's ROMs are Tandy's, so their bytes are never bundled, fetched, committed, or put in a backup.
+      To run a program that calls the ROM, add your own copy in <strong class="fg-strong">Run ▶</strong>, one per model: Fugløy recognises the Model I, III, and 4 ROMs by their SHA-256, and keeps any other file only at a size the model takes.
+      Your ROM stays in this browser.
+    </p>
+    <p data-testid="stub-rom">
+      A program that never calls the ROM runs without one, on Fugløy's <strong class="fg-strong">stub ROM</strong>: a few lines of Fugløy's own Z80 source (<code>stub-rom.z</code>), assembled in your browser when you press Run.
+      It turns off interrupts, sets up a stack, blanks the screen, and halts, and the rest of the ROM's space is filled with HALT, so it holds no Tandy code.
+      A program that calls or jumps into the ROM is stopped with a sentence naming its line, before it runs or the moment it gets there.
+      One that only reads the ROM's bytes (through a pointer, say) is not stopped: on the stub it reads HALT instructions, not Tandy's code.
     </p>
 
     <h2 id="credits">Credits</h2>
@@ -82,6 +95,16 @@ const byline = (s: Source): string => (s.author === s.publisher ? s.author : `${
         <a href="https://www.jetbrains.com/lp/mono/" rel="noopener noreferrer" target="_blank">JetBrains Mono</a>, the typeface of the listing, by JetBrains, under the
         <a href="https://openfontlicense.org/" rel="noopener noreferrer" target="_blank">SIL Open Font License 1.1</a>.
         It is served from this site, from the <a href="https://fontsource.org/fonts/jetbrains-mono" rel="noopener noreferrer" target="_blank">Fontsource</a> package.
+      </li>
+      <li data-testid="credit-glyphs">
+        The emulated TRS-80 screen's characters come from the X.Org
+        <a href="https://gitlab.freedesktop.org/xorg/font/misc-misc" rel="noopener noreferrer" target="_blank">misc-misc</a> fonts (<code>6x12</code> and <code>6x10</code>), which are in the public domain.
+        Their headers say: “Public domain terminal emulator font.  Share and enjoy.” Fugløy converts its pinned copy (font-misc-misc 1.1.3) once, recording each file's SHA-256.
+        Nothing is copied from a TRS-80's character ROM, so the Model III's special and katakana characters are not drawn.
+      </li>
+      <li data-testid="credit-codemirror">
+        <a href="https://codemirror.net/" rel="noopener noreferrer" target="_blank">CodeMirror 6</a> by Marijn Haverbeke and others, the editor in <strong class="fg-strong">Source ✎</strong>, under the MIT License.
+        It is served from this site, loaded only when you first open Source ✎.
       </li>
     </ul>
 

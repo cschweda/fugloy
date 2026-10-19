@@ -129,17 +129,11 @@ test('a PDF points at the Manuals page, and an empty file says it is empty', asy
   await expect(page.getByTestId('load-raw')).toHaveCount(0);
 });
 
-test('the dimmed tabs say "coming later", and the divider drags', async ({ page }) => {
+test('every tab is live now, and the divider drags', async ({ page }) => {
   await ready(page);
   await page.getByTestId('open-armored-patrol').click();
   await expect(page.getByTestId('file-name')).toHaveText('ARMOUR.III');
-  for (const name of ['Source ✎', 'Run ▶']) {
-    const tab = page.getByRole('tab', { name });
-    await expect(tab).toHaveAttribute('aria-disabled', 'true');
-    await tab.hover();
-    await expect(tab.getByRole('tooltip')).toHaveText('Coming later');
-    await expect(tab.getByRole('tooltip')).toHaveCSS('opacity', '1');
-  }
+  for (const name of ['Source ✎', 'Run ▶']) await expect(page.getByRole('tab', { name })).not.toHaveAttribute('aria-disabled', 'true');
   const left = page.locator('.fg-page-left');
   const before = (await left.boundingBox())!.width;
   const divider = (await page.getByRole('separator').boundingBox())!;

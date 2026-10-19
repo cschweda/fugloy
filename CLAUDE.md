@@ -11,7 +11,7 @@ later phases follow, in the Roadmap's order. The recompiler and
 bundler stay in Part 2 until the plan's kill criteria have been reviewed. If a
 task seems to need machinery from a later step, stop and say so.
 
-Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.2.0, `@fugloy/emu` 0.4.0, and `@fugloy/mcp` 0.1.2 on npm (2026-10-18); emu phases 5–7 released in emu 0.3.0; the Model 4 (emu phase 6b) done for Model III mode and the native hardware, merged to main (2026-10-18); emu 0.4.0 and mcp 0.1.2 published 2026-10-18; a version 6 DOS boot still needs an LS-DOS 6 / TRSDOS 6 disk. Plan phase 5A, the assembler (`@fugloy/asm` and `fugloy asm`), built on branch `phase5a` (2026-10-18; plan `docs/superpowers/plans/2026-10-18-phase5a-assembler.md`), unreleased, to go out with the next core version; 5B and 5C (the workbench's Source ✎ and Run ▶, the running line) follow.**
+Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.2.0, `@fugloy/emu` 0.4.0, and `@fugloy/mcp` 0.1.2 on npm (2026-10-18); emu phases 5–7 released in emu 0.3.0; the Model 4 (emu phase 6b) done for Model III mode and the native hardware, merged to main (2026-10-18); emu 0.4.0 and mcp 0.1.2 published 2026-10-18; a version 6 DOS boot still needs an LS-DOS 6 / TRSDOS 6 disk. Plan phase 5A, the assembler (`@fugloy/asm` and `fugloy asm`), merged to main (2026-10-18; plan `docs/superpowers/plans/2026-10-18-phase5a-assembler.md`), unreleased, to go out with the next core version. 5B, the workbench's Source ✎ and Run ▶ (CodeMirror 6 editor with inline errors and one-click fixes; one press assembles and runs on a fresh machine, on the user's ROM, stored per model in the browser, or on Fugløy's stub ROM; Open as source ✎ turns a disassembly into a source that reassembles byte for byte), merged to main (2026-10-19), all five tasks done (plan `docs/superpowers/plans/2026-10-18-phase5b-source-run.md`), not yet merged; 5C (the running line) follows.**
 v1 is disassembler phases 1–4: the core decoder and loaders (v0.1.0), Pass 1
 and Pass 2 (v0.2.0), the cited symbol tables (phase 3: eight JSON tables, 634
 entries, in `packages/disasm/data/symbols/`, compiled by `pnpm symbols`), and
@@ -142,7 +142,16 @@ The Model I waits for a Model I reference (MAME or xtrs, ask the user first).
 - `apps/web` — Nuxt 4 + Nuxt UI, static generation, no server routes (phase 4).
   The folder is `apps/web` (package `@fugloy/web`); the emu spec's
   `apps/workbench` means the same app. Its tests run with `pnpm test:web`,
-  its browser tests with `pnpm --filter @fugloy/web test:e2e`.
+  its browser tests with `pnpm --filter @fugloy/web test:e2e`. From 5B it
+  imports asm and emu: emu only through `app/utils/emulator/` (the stub ROM
+  `stub-rom.z`, boot and snapshot, the `Runner`, the screen, the keyboard,
+  the ROM checks); Source ✎ (`components/source/`, CodeMirror 6), Run ▶
+  (`components/run/`) and the kit load lazily, and `pnpm --filter @fugloy/web
+  check:prefetch` proves the first screen never preloads them. Sources and
+  ROMs live in IndexedDB (`useSources`, `useRoms`); ROM bytes are never
+  bundled, fetched, committed, or backed up. The screen's glyphs come from
+  X.Org's public-domain misc-misc fonts (`scripts/build-glyphs.ts` writes
+  `glyphs.generated.ts`, never hand-edited).
 - `packages/emu` — headless, deterministic TRS-80 emulator core (the Model III
   and, from emu phase 6, the Model I; from emu phase 6b, the Model 4), plain JavaScript ESM, no DOM, no Node APIs. Spec: `docs/fugloy-emu-spec.md`.
   Extracted from `cschweda/trs80-emulator` in its phase 0 (`NOTICE.md`); tests
@@ -213,8 +222,8 @@ The Model I waits for a Model I reference (MAME or xtrs, ask the user first).
 The plan's phase 5 (assembler and IDE) is not placed in this sequence: it comes
 after v1 and needs phases 3 and 4 and emu phases 2–3. Its design
 (`docs/superpowers/specs/2026-10-18-phase5-assembler-ide-design.md`) splits it
-into 5A, the assembler (built on branch `phase5a`), 5B, the workbench's
-Source ✎ and Run ▶, and 5C, the running line. Phase 6, **Learn assembly
+into 5A, the assembler (merged to main), 5B, the workbench's
+Source ✎ and Run ▶ (merged to main (2026-10-19)), and 5C, the running line. Phase 6, **Learn assembly
 with Fugløy** (requested 2026-10-17), follows phase 5: an introduction to
 assembly language for non-programmers, not only retro fans, on the small and
 straightforward Z80, with instant feedback (Explain's tutor voice on each line

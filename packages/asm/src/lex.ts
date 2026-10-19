@@ -126,8 +126,9 @@ export function lex(line: string): Lexed {
           i++;
           break;
         }
-        const code = ch.codePointAt(0)!;
-        if (code > 0x7f) return fail(`This string holds ${String.fromCodePoint(code)}, which is not plain ASCII; write its code as a number instead.`, i, i + 1);
+        // By whole code points: a character outside the BMP (an emoji) is two UTF-16 units, named and marked whole.
+        const code = line.codePointAt(i)!;
+        if (code > 0x7f) return fail(`This string holds ${String.fromCodePoint(code)}, which is not plain ASCII; write its code as a number instead.`, i, i + (code > 0xffff ? 2 : 1));
         chars.push(code);
         i++;
       }
@@ -145,7 +146,8 @@ export function lex(line: string): Lexed {
       tokens.push({ kind: 'op', text: c, col: start + 1, end: i + 1 });
       continue;
     }
-    return fail(`${c} has no meaning here.`, start, start + 1);
+    const cp = line.codePointAt(start)!;
+    return fail(`${String.fromCodePoint(cp)} has no meaning here.`, start, start + (cp > 0xffff ? 2 : 1));
   }
   return { tokens };
 }

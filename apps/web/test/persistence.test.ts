@@ -5,9 +5,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createEditing } from '../app/composables/useEditing';
 import { createPersistence, SAVE_DELAY_MS } from '../app/composables/usePersistence';
 import { createWorkbench } from '../app/composables/useWorkbench';
-import { writeHints } from '@fugloy/disasm';
+import { parseHints, writeHints } from '@fugloy/disasm';
 import { restoreBackup } from '../app/utils/backup';
-import { openStore } from '../app/utils/store';
+import { openStore, openStoreDetailed, StoreClosedError } from '../app/utils/store';
 import type { Store } from '../app/utils/store';
 
 const readExample = async (path: string): Promise<Uint8Array | null> => {
@@ -261,7 +261,7 @@ describe('saved hints that no longer apply', () => {
     await sleep(100);
     const bad = `${writeHints(s.hintFile)}block 1:$0000 relocate $8100 $0100\n`;
     const json = JSON.stringify({ fugloyBackup: 1, exportedAt: '', programs: [{ hash: s.hash, name: 'mine.hints', hints: bad }] });
-    expect((await restoreBackup(opened!, json, async () => true)).added).toBe(1);
+    expect((await restoreBackup(opened!, json, async () => true, parseHints)).added).toBe(1);
     await a.p.refresh();
     await sleep(SAVE_DELAY_MS + 150);
     expect((await opened!.getHints(s.hash))!.text).toBe(bad);
@@ -280,5 +280,67 @@ describe('saved hints that no longer apply', () => {
     expect(p.blockedAsk.value).toBe(false);
     await until(async () => (await opened!.getHints(hash))!.text.includes('MINE'));
     await until(() => p.status.value === 'saved');
+  });
+});
+
+describe('the database upgrade', () => {
+  it('a version 1 database upgrades to version 2 with its hints, settings and manuals intact', async () => {
+    // A database as the 1.x site left it: version 1, three stores.
+    const v1 = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open('fugloy', 1);
+      req.onupgradeneeded = () => {
+        for (const name of ['hints', 'prefs', 'manuals']) req.result.createObjectStore(name);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    const tx = v1.transaction(['hints', 'prefs', 'manuals'], 'readwrite');
+    tx.objectStore('hints').put({ name: 'a.hints', text: 'fugloy-hints 1\n', savedAt: 1 }, 'aa');
+    tx.objectStore('prefs').put({ machine: 1, dos: 'ldos' }, 'aa');
+    tx.objectStore('manuals').put({ blob: new Blob(['%PDF']), sha256: 'cd', name: 'm.pdf', addedAt: 2 }, 'trs80-m3-tech');
+    await new Promise((r) => (tx.oncomplete = r));
+    v1.close();
+
+    const s = (await openStore())!;
+    extra.push(s);
+    expect(s.db.version).toBe(2);
+    expect([...s.db.objectStoreNames].sort()).toEqual(['hints', 'manuals', 'prefs', 'roms', 'sources']);
+    expect(await s.allHints()).toEqual([{ hash: 'aa', name: 'a.hints', text: 'fugloy-hints 1\n' }]);
+    expect(await s.getPrefs('aa')).toEqual({ machine: 1, dos: 'ldos' });
+    expect(await s.manualIds()).toEqual(['trs80-m3-tech']);
+    expect((await s.getManual('trs80-m3-tech'))?.name).toBe('m.pdf');
+    expect(await s.allSources()).toEqual([]);
+    expect(await s.romModels()).toEqual([]);
+  });
+
+  it('gives up with blocked when an older tab holds the database open, instead of waiting forever', async () => {
+    // A 1.x tab: version 1 open, and no versionchange handler, so it never lets go.
+    const v1 = await new Promise<IDBDatabase>((resolve) => {
+      const req = indexedDB.open('fugloy', 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('hints');
+      req.onsuccess = () => resolve(req.result);
+    });
+    expect(await openStoreDetailed({ blockedMs: 50 })).toBe('blocked');
+    v1.close();
+    // Once the old tab is gone the upgrade goes through.
+    await sleep(50);
+    const s = await openStoreDetailed({ blockedMs: 50 });
+    expect(s).not.toBe('blocked');
+    if (s !== 'blocked' && s !== null) extra.push(s);
+  });
+
+  it('a store closed by another tab’s upgrade fails every call with a sentence, not silently', async () => {
+    const s = (await openStore())!;
+    extra.push(s);
+    // Another tab, on a newer site, upgrades the database.
+    const newer = await new Promise<IDBDatabase>((resolve) => {
+      const req = indexedDB.open('fugloy', 3);
+      req.onsuccess = () => resolve(req.result);
+    });
+    expect(s.closed).toBe(true);
+    await expect(s.putSource({ id: 's', name: 'a.z', text: '', model: 3, savedAt: 0 })).rejects.toBeInstanceOf(StoreClosedError);
+    await expect(s.allSources()).rejects.toThrow(/updated in another tab.*Reload this page/);
+    await expect(s.getHints('x')).rejects.toBeInstanceOf(StoreClosedError);
+    newer.close();
   });
 });

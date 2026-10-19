@@ -93,6 +93,26 @@ describe('the Model 4 video', () => {
     expect(m.video.text()[0].slice(0, 4)).toBe('OKHI');
   });
 
+  it('reports the layout and inverse video through video.wide and video.inverse, read-only', () => {
+    const m = model4();
+    expect([m.video.wide, m.video.inverse]).toEqual([false, false]);
+    m.io.out(0x84, 0x04);
+    expect([m.video.wide, m.video.inverse, m.video.rows]).toEqual([true, false, 24]);
+    m.io.out(0xec, 0x04);
+    expect([m.video.wide, m.video.columns]).toEqual([true, 40]);
+    m.io.out(0x84, 0x08);
+    expect([m.video.wide, m.video.inverse]).toEqual([false, true]);
+    expect(() => {
+      'use strict';
+      /** @type {any} */ (m.video).inverse = false;
+    }).toThrow(TypeError);
+    expect(m.video.inverse).toBe(true);
+    // The Model III and Model I have neither.
+    const m3 = model3();
+    m3.io.out(0x84, 0x0c);
+    expect([m3.video.wide, m3.video.inverse]).toEqual([false, false]);
+  });
+
   it('diffs over rows of 80 bytes in 80-column mode', () => {
     const m = model4();
     m.io.out(0x84, 0x06);

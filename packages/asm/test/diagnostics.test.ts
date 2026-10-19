@@ -69,6 +69,11 @@ describe('a bad line keeps its label', () => {
     expect(errorsOf(assemble(lines('\tORG 6000H', 'LOOP:\tFROB 1', '\tJP LOOP')))).toEqual(['2: Unknown instruction FROB.']);
   });
 
+  it('a character outside the BMP is named and marked whole, not as half a surrogate pair', () => {
+    expect(diagnosticsOf(assemble(lines('\tORG 6000H', "\tDB '😀'")))).toEqual(['2:6-8 error: This string holds 😀, which is not plain ASCII; write its code as a number instead.']);
+    expect(diagnosticsOf(assemble(lines('\tORG 6000H', '\tDB 1😀')))).toEqual(['2:6-8 error: 😀 has no meaning here.']);
+  });
+
   it('an EQU whose value has an error is defined but failed, so its uses raise nothing more', () => {
     expect(errorsOf(assemble(lines('\tORG 6000H', 'X\tEQU 0b101', '\tDB X')))).toEqual(['2: 0b101 is not a number; write binary as 101B.']);
   });

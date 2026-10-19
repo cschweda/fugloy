@@ -130,7 +130,7 @@ memory maps and the 128K page select behind port `$84` (`m.mem.ram` holds the
 32K banks in order, so in map 0 the CPU's address A is `ram[A]`; on the other
 models `ram[0]` is `$4000`; `m.mem.map` reads `{ map, page, register }`, null
 on the other models), 80 by 24 video (port `$84` bit 2;
-`m.video.columns` and `m.video.rows`), inverse video, and 4 MHz (port `$EC`
+`m.video.columns`, `m.video.rows`, and `m.video.wide`), inverse video (`m.video.inverse`), and 4 MHz (port `$EC`
 bit 6; `m.clockHz` follows it, and the timer runs at 60 Hz there, following xtrs; unverified, spec §5). Every fact
 is from MAME and xtrs, cited in spec §5 with what is unverified:
 

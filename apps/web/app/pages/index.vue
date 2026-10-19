@@ -2,7 +2,7 @@
 // The workbench. With no program open, the first screen (drop zone and the
 // four games); with one, two facing pages: the listing on the left, the
 // companion tabs on the right, and the status line under them.
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
+import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { addressKey, summaryNotes, withHintFile, withSelection } from '@fugloy/disasm';
 import { download } from '~/utils/exports';
 import { MODEL3_DEFAULT } from '~/composables/useWorkbench';
@@ -38,6 +38,16 @@ import FacingPages from '~/components/workbench/FacingPages.vue';
 import PageTabs from '~/components/workbench/PageTabs.vue';
 import type { PageTab } from '~/components/workbench/PageTabs.vue';
 
+import { lazyLoad, loadFailed } from '~/utils/lazy';
+import { loaded, loadRun as loadRunAndSources, loadSources } from '~/utils/load-sources';
+import { canOpenAsSource, openAsSourceAsks, openAsSourceRequests } from '~/utils/open-as-source';
+import type { Run } from '~/composables/useRun';
+import type { Sources } from '~/composables/useSources';
+
+// Source ✎ brings CodeMirror and asm, and Run ▶ brings emu, so each loads on first open, off the
+// first screen (plan 5B). If a chunk cannot be fetched, the panel says so and offers Retry.
+const NO_LISTING = 'Run the source to see its listing here.';
+
 usePageSeo({
   title: 'Fugløy',
   description: 'Open a TRS-80 .CMD or .BAS program and read it as Z80 assembly with named ROM and DOS routines, in your browser. Free, and your files never leave your machine.',
@@ -72,7 +82,7 @@ type RightTab = 'explain' | 'symbol' | 'index' | 'program' | 'manual' | 'run';
 const LEFT_TABS: PageTab<LeftTab>[] = [
   { id: 'listing', label: 'Listing' },
   { id: 'hints', label: 'Hints' },
-  { id: 'source', label: 'Source ✎', later: true },
+  { id: 'source', label: 'Source ✎' },
 ];
 const RIGHT_TABS: PageTab<RightTab>[] = [
   { id: 'explain', label: 'Explain' },
@@ -80,10 +90,100 @@ const RIGHT_TABS: PageTab<RightTab>[] = [
   { id: 'index', label: 'Index' },
   { id: 'program', label: 'Program' },
   { id: 'manual', label: 'Manual' },
-  { id: 'run', label: 'Run ▶', later: true },
+  { id: 'run', label: 'Run ▶' },
 ];
 const leftTab = ref<LeftTab>('listing');
 const rightTab = ref<RightTab>('program');
+
+// Run ▶ (Ruling 8): one press, from anywhere in the workbench, assembles and runs on a fresh
+// machine. It shows the Run tab but never moves the focus. Errors show in Source ✎, the first revealed.
+// Run (composables/useRun) and the sources load on the first Run, or with Source ✎ or Run ▶, so
+// neither is on the first screen.
+// Back from another page, they are already loaded (and the program was stopped on leaving).
+const run = shallowRef<Run | null>(loaded()?.run ?? null);
+const sources = shallowRef<Sources | null>(loaded()?.sources ?? null);
+async function loadRun(): Promise<Run> {
+  const both = await loadRunAndSources();
+  sources.value = both.sources;
+  run.value = both.run;
+  return both.run;
+}
+const sourceTab = lazyLoad(async () => {
+  const [c] = await Promise.all([import('~/components/source/SourceTab.vue'), loadRun()]);
+  return markRaw(c.default);
+}, loadFailed('The Source editor'));
+const { value: SourceTab, error: sourceError } = sourceTab;
+// Source ✎ loads the first time it is opened, then stays mounted (hidden), keeping the editor's undo history.
+const runTab = lazyLoad(async () => {
+  const [c] = await Promise.all([import('~/components/run/RunTab.vue'), loadRun()]);
+  return markRaw(c.default);
+}, loadFailed('The Run tab'));
+const { value: RunTab, error: runError } = runTab;
+watch(leftTab, (t) => {
+  if (t === 'source') void sourceTab.load();
+});
+watch(rightTab, (t) => {
+  if (t === 'run') void runTab.load();
+});
+const sourcePanel = ref<{ showLine(line: number): void } | null>(null);
+/** The workbench shows with a program open, or while writing one (Ruling 12). */
+const workbenchOpen = computed(() => session.value !== null || wb.writing.value);
+/** Bumped by Close and by leaving the page: a press still loading Run's own module then runs nothing. */
+let runPresses = 0;
+async function runNow(): Promise<void> {
+  rightTab.value = 'run';
+  const press = runPresses;
+  // If Run's module cannot load, the Run tab, loading the same module, says so and offers Retry.
+  const r = await loadRun().catch(() => null);
+  if (r !== null && press === runPresses) await r.run();
+}
+/** Stops the program, or cancels a Run still loading (Close, leaving the page). */
+function stopRun(): void {
+  runPresses++;
+  run.value?.stop();
+}
+watch(
+  () => run.value?.reveal.value ?? null,
+  async (r) => {
+    if (r === null) return;
+    leftTab.value = 'source';
+    await sourceTab.load();
+    await nextTick();
+    sourcePanel.value?.showLine(r.line);
+  },
+);
+// Leaving the workbench stops the program (its frames would run on unseen), or a Run still loading.
+watch(workbenchOpen, (o) => {
+  if (!o) stopRun();
+});
+/** "Write a program" (a new source, the starter) or "Continue" one: Source ✎ beside Run ▶, with or without a program. */
+async function writeProgram(id?: string): Promise<void> {
+  const s = await loadSources().catch(() => null);
+  if (s === null) return wb.report(loadFailed('The Source editor', 'Press the button again'));
+  await s.start();
+  if (id !== undefined) await s.select(id);
+  else if (s.list.value.length > 0) await s.create();
+  wb.writing.value = true;
+  leftTab.value = 'source';
+  rightTab.value = 'run';
+}
+// Open as source ✎ (Task 5), from the Program tab or Export ▾ (which asks through openAsSourceAsks):
+// the new source shows in Source ✎, beside the listing. Its module loads on first use.
+watch(openAsSourceRequests, () => {
+  leftTab.value = 'source';
+});
+watch(openAsSourceAsks, () => void openAsSource());
+async function openAsSource(): Promise<void> {
+  if (session.value === null) return;
+  try {
+    const { useOpenAsSource } = await import('~/composables/useOpenAsSource').catch(() => {
+      throw new Error(loadFailed('Open as source', 'Try again'));
+    });
+    await useOpenAsSource().open(session.value);
+  } catch (err) {
+    wb.report(err instanceof Error ? err.message : String(err));
+  }
+}
 const persistence = usePersistence();
 const nav = useNavigation(scrollTo);
 const listing = ref<InstanceType<typeof ListingView> | null>(null);
@@ -141,6 +241,11 @@ const firstLine = computed(() => (foldable.value && !headerOpen.value ? headerLi
 /** A program just opened: put the cursor on its entry (else its first instruction), past the header. */
 function showOpened(): void {
   if (session.value === null) return;
+  // A Run's quiet refresh of its own listing (Ruling 10) keeps the tabs and the cursor.
+  if (wb.keptView.value) {
+    if (cursor.value !== null) scrollTo(cursor.value);
+    return;
+  }
   leftTab.value = 'listing';
   headerOpen.value = false;
   const at = cursor.value ?? facts.value?.entry ?? firstCodeAddr(rows.value);
@@ -225,7 +330,7 @@ function onRowClick(row: Row): void {
   explainStarted.value = true;
   rightTab.value = 'explain';
 }
-watch(wb.openCount, () => {
+watch(wb.viewKey, () => {
   explainStarted.value = false;
   clicked.value = null;
 });
@@ -367,11 +472,14 @@ const KEYS: Record<string, KeyBinding> = {
   'shift+arrowdown': { run: () => step(1, true), listing: true },
   'shift+arrowup': { run: () => step(-1, true), listing: true },
   enter: { run: followCursor, listing: true },
+  'ctrl+enter': { run: () => void runNow(), anywhere: true },
 };
 
 useWorkbenchKeys({
   keys: KEYS,
   active: () => session.value !== null && !editor.busy.value,
+  // Not while a listing edit (the inline editor, notes, the row menu) is open: Ctrl/⌘+Enter there runs nothing.
+  anywhereActive: () => workbenchOpen.value && !editor.busy.value,
   inListing: (target) => target instanceof Element && target.closest('.fg-listing') !== null,
 });
 
@@ -420,6 +528,11 @@ declare global {
       load: (bytes: number[], name: string, hints?: string, base?: number) => void;
       /** The open program's loaded bytes, in address order. */
       loadedBytes: () => number[];
+      /** Presses Run ▶. */
+      run: () => Promise<void>;
+      /** The running machine's screen as text rows (m.video.text()); empty with no machine. */
+      screenText: () => string[];
+      runnerState: () => string;
     };
   }
 }
@@ -453,9 +566,14 @@ function installTestHook(): void {
       const image = session.value?.module.image;
       return image === undefined ? [] : image.runs().flatMap((r) => Array.from(image.bytes.subarray(r.start, r.end + 1)));
     },
+    run: () => runNow(),
+    screenText: () => run.value?.runner.value?.machine.video.text() ?? [],
+    runnerState: () => run.value?.state.value ?? 'idle',
   };
 }
 onBeforeUnmount(() => {
+  // Leaving for another page stops the program, or a Run still loading: nothing could show it.
+  stopRun();
   cancelWarm?.();
   document.removeEventListener('drop', onDocumentDrop);
   if (__FUGLOY_E2E__) delete window.__fugloyTest;
@@ -464,8 +582,8 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="flex min-h-0 flex-1 flex-col">
-    <div v-if="session !== null" class="flex min-h-0 flex-1 flex-col" data-testid="workbench">
-      <h1 class="sr-only">{{ session.name }}, disassembled</h1>
+    <div v-if="workbenchOpen" class="flex min-h-0 flex-1 flex-col" data-testid="workbench">
+      <h1 class="sr-only">{{ session === null ? 'Your program' : `${session.name}, disassembled` }}</h1>
       <OpenProblem bar />
       <FacingPages ref="pages">
         <template #left-name>Listing</template>
@@ -473,6 +591,7 @@ onBeforeUnmount(() => {
         <template #left>
           <PageTabs v-model="leftTab" :tabs="LEFT_TABS" label="Left page" id-prefix="left" />
           <div id="left-panel-listing" v-show="leftTab === 'listing'" role="tabpanel" aria-labelledby="left-tab-listing" class="flex min-h-0 flex-1 flex-col">
+            <p v-if="session === null" class="fg-panel fg-muted" data-testid="no-listing">{{ NO_LISTING }}</p>
             <form v-if="goOpen" class="fg-goto" data-testid="goto-box" @submit.prevent="submitGo">
               <label for="goto-input" class="fg-muted">Go to</label>
               <input
@@ -492,7 +611,8 @@ onBeforeUnmount(() => {
               <span id="goto-error" class="fg-goto-error" role="alert" data-testid="goto-error">{{ goError }}</span>
             </form>
             <ListingView
-              :key="wb.openCount.value"
+              v-if="session !== null"
+              :key="wb.viewKey.value"
               ref="listing"
               class="min-h-0 flex-1"
               :rows="shownRows"
@@ -510,44 +630,67 @@ onBeforeUnmount(() => {
             <p v-if="editMessage !== null" class="fg-edit-message" role="alert" data-testid="edit-message">{{ editMessage }}</p>
           </div>
           <div id="left-panel-hints" v-show="leftTab === 'hints'" role="tabpanel" aria-labelledby="left-tab-hints" class="fg-panel">
-            <HintsTab />
+            <HintsTab v-if="session !== null" />
+            <p v-else class="fg-muted">{{ NO_LISTING }}</p>
+          </div>
+          <div id="left-panel-source" v-show="leftTab === 'source'" role="tabpanel" aria-labelledby="left-tab-source" class="flex min-h-0 flex-1 flex-col" data-testid="source-panel" data-own-keys>
+            <component :is="SourceTab" v-if="SourceTab !== null" ref="sourcePanel" :report="run?.report.value ?? null" @run="runNow" />
+            <div v-else-if="sourceError !== null" class="fg-panel" data-testid="source-load-error">
+              <p role="alert">{{ sourceError }}</p>
+              <p><button type="button" class="fg-button" data-testid="source-load-retry" @click="sourceTab.load()">Retry</button></p>
+            </div>
+            <p v-else class="fg-panel fg-muted" role="status" data-testid="source-loading">Loading the editor…</p>
           </div>
         </template>
         <template #right>
           <PageTabs v-model="rightTab" :tabs="RIGHT_TABS" label="Right page" id-prefix="right" />
           <div id="right-panel-explain" v-show="rightTab === 'explain'" role="tabpanel" aria-labelledby="right-tab-explain" class="fg-panel" data-testid="explain-panel">
-            <ExplainTab :target="explainTarget" :active="rightTab === 'explain'" @go="go" @table="showTable">
+            <p v-if="session === null" class="fg-muted">{{ NO_LISTING }}</p>
+            <ExplainTab v-else :target="explainTarget" :active="rightTab === 'explain'" @go="go" @table="showTable">
               <template #summary-actions="{ summary }">
                 <button type="button" class="fg-button fg-explain-use" data-testid="explain-use-comment" @click="editor.openNotes({ start: summary.start, name: summary.name, text: summaryNotes(summary).join('\n') })">Use as comment</button>
               </template>
             </ExplainTab>
           </div>
           <div id="right-panel-symbol" v-show="rightTab === 'symbol'" role="tabpanel" aria-labelledby="right-tab-symbol" class="fg-panel">
-            <SymbolTab @go="go" @open-manual="openManual" />
+            <p v-if="session === null" class="fg-muted">{{ NO_LISTING }}</p>
+            <SymbolTab v-else @go="go" @open-manual="openManual" />
           </div>
           <div id="right-panel-index" v-show="rightTab === 'index'" role="tabpanel" aria-labelledby="right-tab-index" class="fg-panel">
-            <IndexTab @label="showLabel" @table="showTable" @go="go" />
+            <p v-if="session === null" class="fg-muted">{{ NO_LISTING }}</p>
+            <IndexTab v-else @label="showLabel" @table="showTable" @go="go" />
           </div>
           <div id="right-panel-program" v-show="rightTab === 'program'" role="tabpanel" aria-labelledby="right-tab-program" class="fg-panel" data-testid="program-panel">
+            <p v-if="session === null" class="fg-muted">{{ NO_LISTING }}</p>
             <ProgramTab
-              v-if="facts !== null"
+              v-else-if="facts !== null"
               :facts="facts"
               :example="example"
               :name="session.name"
               :diagnostics="session.analysis.pass1.diagnostics"
               :proposals="session.analysis.proposals"
+              :can-source="canOpenAsSource(session)"
               @symbol="showTable"
+              @open-source="openAsSource"
               @apply-hint-lines="editor.applyHintLines"
             />
           </div>
           <div id="right-panel-manual" v-show="rightTab === 'manual'" role="tabpanel" aria-labelledby="right-tab-manual" class="fg-panel" data-testid="manual-panel">
             <ManualTab :request="manualRequest" @back="backToListing" />
           </div>
+          <div id="right-panel-run" v-show="rightTab === 'run'" role="tabpanel" aria-labelledby="right-tab-run" class="flex min-h-0 flex-1 flex-col" data-testid="run-panel" data-own-keys>
+            <component :is="RunTab" v-if="RunTab !== null && run !== null && sources !== null" :run="run" :sources="sources" />
+            <div v-else-if="runError !== null" class="fg-panel" data-testid="run-load-error">
+              <p role="alert">{{ runError }}</p>
+              <p><button type="button" class="fg-button" @click="runTab.load()">Retry</button></p>
+            </div>
+            <p v-else class="fg-panel fg-muted" role="status" data-testid="run-loading">Loading the emulator…</p>
+          </div>
         </template>
       </FacingPages>
       <StatusLine />
     </div>
-    <FirstScreen v-else :reading="reading" @file="receive" />
+    <FirstScreen v-else :reading="reading" @file="receive" @write="writeProgram" />
     <RowMenu v-if="menu !== null && session !== null" :items="editor.menuItems.value" :x="menu.x" :y="menu.y" @pick="editor.pickMenu" @close="editor.closeMenu()" />
     <InlineEdit
       v-if="inline !== null && session !== null"

@@ -118,6 +118,20 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
     expect(read('about/index.html')).toMatch(/JetBrains Mono[\s\S]*SIL Open Font License 1\.1/);
   });
 
+  it('About credits the screen font with its public-domain statement, gives the ROM statement, and describes the stub ROM', () => {
+    const about = read('about/index.html').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+    expect(about).toMatch(/misc-misc[^.]*public domain/);
+    expect(about).toContain('Public domain terminal emulator font. Share and enjoy.');
+    expect(about).toMatch(/Fugløy ships no ROM/);
+    expect(about).toMatch(/never bundled, fetched, committed, or put in a backup/);
+    expect(about).toMatch(/stub ROM/);
+    expect(about).toMatch(/holds no Tandy code/);
+    // Only calls and jumps into the ROM are caught; a read through a pointer is not (the plan's stated gap).
+    expect(about).toMatch(/calls or jumps into the ROM is stopped/);
+    expect(about).not.toMatch(/reaches into the ROM/);
+    expect(about).toMatch(/CodeMirror[^.]*MIT/);
+  });
+
   it('ships the social card and favicons', () => {
     for (const f of ['og-image.png', 'favicon.svg', 'favicon.ico', 'apple-touch-icon.png']) expect(existsSync(join(out, f))).toBe(true);
     const png = readFileSync(join(out, 'og-image.png'));

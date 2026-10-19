@@ -123,6 +123,10 @@ Core, `@fugloy/asm` (new package; runtime dependencies `@fugloy/z80` and
     editor's one-click fix: the rewrites above, `JP (nn)`, the
     parentheses-only-group warning, `FFH`, `$FFH`, `%1010`, `0b101`, `MOV`,
     and an instruction in column 1.
+  - A string is read by whole code points: a character outside the BMP (an
+    emoji, two UTF-16 units) is named whole in "This string holds 😀, which
+    is not plain ASCII", and the mark spans both units; so does "has no
+    meaning here" outside a string.
 - **Shifts.** `>>` and `SHR` are logical shifts on 32 bits, as in zmac
   (`-1>>31` is 1), and a shift count outside 0 to 31 is an error (zmac's
   result there is C's undefined behaviour). The other operators were probed
@@ -205,6 +209,196 @@ Core, `@fugloy/cli`:
 
 Core, `@fugloy/disasm`: `ROM_COMPARISON` (each ROM address's class across the
 two machines) is exported.
+
+Emu, `@fugloy/emu` (unreleased; for the workbench's Run tab): `m.video.wide`
+and `m.video.inverse`, read-only. They are true on a Model 4 in the
+80-column layout (port `$84` bit 2) and with inverse video (port `$84` bit 3),
+and always false on the Model III and Model I. `Video` already computed both
+privately. The site now reads them instead of reaching into the system's
+memory.
+
+Workbench, phase 5B (Source and Run), merged to main (2026-10-19), all five
+tasks done (plan `docs/superpowers/plans/2026-10-18-phase5b-source-run.md`).
+A program typed in **Source ✎** runs on an emulated TRS-80 in **Run ▶** with
+one press, on the user's ROM or, for a program that never calls the ROM, on
+Fugløy's stub ROM; a disassembly opens as such a source:
+
+- **Storage for sources and ROMs.** The browser database moves to version 2
+  with two new stores; a version 1 database keeps its hints, settings and
+  manuals. `useSources` keeps several Z80 sources (name, text, model),
+  autosaved 500 ms after typing stops; a new one is the starter,
+  `clear-screen.z`, on the Model III. `useRoms` keeps one ROM per model:
+  a ROM emu knows by its SHA-256 goes to its own model whatever the file is
+  called, and any other is kept only at a size the chosen model takes. A
+  backup carries the sources (an optional `sources` array, still
+  `fugloyBackup: 1`; a restore adds them, suffixing a clashing name, and
+  never replaces one) and never a ROM. The site now depends on `@fugloy/asm`,
+  `@fugloy/emu`, and CodeMirror 6 (`@codemirror/state`, `view`, `commands`,
+  `lint`; MIT), none of them yet on the first screen.
+- **The emulator runtime** (`apps/web/app/utils/emulator/`, no DOM; used by
+  Run ▶). With no ROM, a program runs on Fugløy's own stub ROM
+  (`stub-rom.z`: DI, a stack, a blank screen, a return address of its own,
+  HALT; assembled by asm at run time and padded with HALT to the model's ROM
+  size, so it holds no Tandy code). Code assembled into the ROM's space is
+  refused on any machine, naming the ORG line. A program that needs the ROM
+  is caught twice, each time with a sentence naming the line:
+  - **Before running:**
+    - refused: any ROM-table name (routines and the ROM's RAM variables,
+      in code or in DB and DW), an RST, a CALL or JP into the ROM, a fixed
+      read inside the ROM, and a fixed access to a ROM variable;
+    - a warning, not a refusal: `LD HL` with a ROM address feeding a block
+      copy.
+  - **At run time:** when PC lands in the stub's HALTs (emu leaves PC just
+    past a HALT, which a test checks). The runner keeps emu's instruction
+    trace under the stub, so the stop always names the last program line
+    run. It says when a final RET returned to the ROM, when the program ran
+    into memory that is not its own (on the Model I the empty
+    `$3000-$37FF`, whose `$FF` bytes are RST 38H), and when an EI let an
+    interrupt reach `$0038`.
+
+  On the Model III every interrupt stays masked until a program unmasks one
+  at port `E0H`, so a bare EI runs on there, as on the hardware; the Model
+  I's clock interrupt cannot be masked.
+
+  A user ROM boots to READY once per ROM per page session, answering Cass?
+  and Memory Size? (SIZE? on the Model I). Its snapshot is kept, keyed by
+  the ROM's SHA-256 with no Machine built for the hash. The runner paces
+  frames by elapsed time at the machine's clock, read each frame, capped at
+  a 30th of a second, carrying overshoot.
+
+  `renderScreen` draws video RAM into an RGBA buffer: 2x3 graphics blocks,
+  32-column doubling, and the Model 4's 80x24 and inverse video, read
+  through emu's new `m.video.wide` and `m.video.inverse`. Its glyphs are
+  X.Org font-misc-misc's `6x12.bdf` and `6x10.bdf` (public domain),
+  converted by `apps/web/scripts/build-glyphs.ts`, which refuses a font
+  whose header does not say so, into `glyphs.generated.ts`, which records
+  each font's pinned URL and SHA-256. `attachKeyboard` passes keys from the
+  screen element only.
+- **Source ✎**, the editor, is live in the workbench (the left page, beside
+  Listing and Hints). It is CodeMirror 6
+  with no language package: comments and labels are styled by a
+  `MatchDecorator` that reads each line as asm does. The source is
+  re-assembled 250 ms after typing stops; each problem is marked on its
+  characters, and listed under the editor as severity, line and message. A
+  click on a problem puts the cursor on its line. Where asm gives an exact
+  rewrite, a Fix button (and a Fix action in the mark's tooltip) applies it
+  as one undo step, and only if the line still holds the text asm saw. The
+  toolbar picks, makes, renames, deletes (after a confirm) and downloads
+  sources as `.z`. Ctrl+Enter / ⌘+Enter in the editor emits Run; Tab types a
+  tab, and Esc then Tab leaves the editor. The workbench's keys (G, N, ;,
+  Ctrl+Z...) never fire inside the Source panel, which is marked
+  `data-own-keys`, a rule any panel can opt into. Sources are flushed on
+  leave with the hints. The tab, CodeMirror and asm load when the tab first
+  opens, with a loading line, and a sentence and Retry if a chunk cannot be
+  fetched. The build prefetches nothing a lazy root (`apps/web/lazy-chunks.ts`)
+  reaches, and `pnpm --filter @fugloy/web check:prefetch` checks every
+  generated page for it. Open as source's reassembly note goes away at the
+  first edit to that source, since it describes the text as it was opened.
+- **Run ▶** is live: one press (the Run button, or Ctrl+Enter / ⌘+Enter
+  anywhere in the workbench, the editor and the TRS-80 screen included)
+  assembles the current source and runs it on a fresh `@fugloy/emu`
+  Machine. Errors go to Source ✎, the first revealed, and nothing runs. A
+  clean program refreshes its own listing quietly (no tab switch, the cursor
+  kept where its address still exists, no saved-work or carry-over dialog,
+  nothing saved, and no remount of the listing), and never replaces a program opened from a file unless
+  **Show in Listing** is pressed. Code assembled into the ROM's space is
+  refused on any ROM; with no ROM stored, a program that needs one is
+  refused with a sentence naming its line, and every other program runs on
+  Fugløy's stub ROM ("Running on Fugløy's stub ROM (no ROM needed for this
+  program)."). The ROM-copy notes join Source's list as warnings. A ROM is
+  added from a file or dropped on the tab (an unrecognised one of the right
+  size goes to the tab's model) and kept in this browser only, never in a
+  backup, never uploaded; the About page says so. The screen is a canvas
+  (768x576, or 640x480 for 80x24, pixelated), the only element whose keys
+  reach the TRS-80; Tab leaves it, blur releases every key, and while a
+  program runs unfocused it says "Click the screen to type to the TRS-80.".
+  The tab's model select sets the source's model. The first screen gains
+  **Write a program** and **Continue <name>**, and the workbench opens on
+  Source ✎ and Run ▶ with no program; the listing-bound tabs then say "Run
+  the source to see its listing here." The Run tab is handed its Run and
+  sources by the page so its chunk imports none of the first screen's
+  modules, which otherwise split the shared chunks into smaller pieces that
+  compress worse. The prefetch rule
+  (`lazy-chunks.ts`) now covers `components/run/` and `utils/emulator/`, and
+  never walks into a page or layout: the Run tab imports the page's chunk,
+  and the page's own preload must stay (`check:prefetch` checks it). CI runs
+  the prefetch test (`test:prefetch`) on `test:seo`'s build, with no second
+  generate.
+  A program keeps running while another workbench tab is shown, pauses while
+  the browser tab is hidden, and stops on Stop, Close, or leaving for another
+  page (the Run tab says so). The quiet refresh swaps the program into the
+  open listing in place, so focus and Explain stay put; Ctrl/⌘+Enter inside
+  the listing's inline editor, notes or row menu runs nothing.
+  A Run waits for its parts (the kit, the ROM store, the ROM's bytes), and
+  reads the stored ROMs itself, so the first Run of a visit, pressed in the
+  editor before the Run tab was ever opened, uses the ROM kept on an earlier
+  visit. Stop (enabled while a Run loads), Close and leaving the page cancel
+  a Run still loading: it never starts afterwards, and never reopens the
+  workbench. After the wait, Run reads the current source again and runs
+  that, so what runs, and the line an error reveals, is the text on screen
+  when it starts. Changing the model or switching source stops a running
+  program, saying why ("The program stopped because you changed the model.
+  Press Run to run the source on this one."). Each model's ROM bytes are
+  read once and handed to every Run as the same array, so the boot cache
+  knows it without hashing it again; the cache keeps one snapshot per
+  model's ROM, so a replaced ROM's is dropped, and a Run writes its `.CMD`
+  once. A file of a size two models take, dropped with a third model
+  selected, says "Choose its model in the Run tab’s Model select, then add
+  the file again."
+- **Open as source ✎**, in the Program tab (a Source section) and in Export
+  ▾, turns the open disassembly into a new source and shows it in Source ✎,
+  beside the listing. The source is the zmac text Export ▾ writes
+  (`renderSession(s, 'zmac')`, hints included), named after the file
+  (`seadrg01.cmd` becomes `seadrg01.z`, then `seadrg01-2.z` on a second
+  open; nothing is replaced), on the program's own model
+  (`session.selection.machine`), and made current (`useSources.fromSession`).
+  Then, in a 0.6 KB lazy chunk that shares asm's, the text is assembled for
+  that model and compared with the program's image and entry. Sea Dragon
+  comes back byte for byte, with its entry. A text that does not reassemble
+  exactly opens with a one-line note above the editor naming the first
+  address that differs (or the first error's line, or both entries); the
+  test spells the ED form of `LD (nn),HL`, which the emitter writes as DB
+  (`BYTE_EXACT_EXCEPTIONS`), as the instruction, which asm builds as `22`.
+  A BASIC program has no Z80 source, so it is not offered. The disassembly
+  stays open: by the listing rule above, a Run of the new source never
+  replaces a program opened from a file, so with no ROM a Run of Sea Dragon's
+  source names its first ROM call (`Line 744 calls $DELAY, the ROM's routine
+  at $0060…`), and on the user's Model III ROM it runs from the booted
+  snapshot to Sea Dragon's title screen (a local test, gated on
+  `fugloy.mcp.json`). `utils/source/` joins the lazy roots of the prefetch
+  check.
+- **The About page** has a new section, **ROMs, and the stub ROM**: Fugløy
+  ships no ROM; ROM bytes are never bundled, fetched, committed, or put in a
+  backup; a ROM added in Run ▶ is recognised by its SHA-256 and stays in the
+  browser; and the stub ROM is Fugløy's own `stub-rom.z`, assembled in the
+  browser at Run, which turns off interrupts, sets a stack, blanks the
+  screen, and halts, with the rest of the ROM's space HALT, so it holds no
+  Tandy code. The credits quote the misc-misc fonts' header ("Public domain
+  terminal emulator font. Share and enjoy."), name the pinned release
+  (font-misc-misc 1.1.3) and say that the Model III's special and katakana
+  characters are not drawn, since their only source is the character ROM;
+  CodeMirror 6 is credited under the MIT License. A program that calls or
+  jumps into the ROM is stopped; one that only reads the ROM's bytes is not,
+  and the page says so.
+- **First-screen size.** The budget is +5,120 bytes gzip over main before
+  5B (a6b7831). Method: a plain `nuxt generate`, then the module script and
+  modulepreloads in the generated `index.html` and their static-import
+  closure, each file gzipped at level 9 and summed. Main is **247,655
+  bytes** (13 files); this branch is **252,232 bytes** (18 files), **+4,577**.
+  What keeps it there: Run (`useRun`), the sources (`useSources`), Open as
+  source's work (`useOpenAsSource`) and the backup code (`utils/backup`)
+  load on first use; only the workbench page imports them, by dynamic
+  import, so the top bar, on every page, carries no route to them, and the
+  layout reaches loaded sources through `utils/store`; the first screen's
+  "Continue" looks its source up after the page shows; `restoreBackup` is
+  handed disasm's `parseHints` rather than importing it; and a dynamic
+  import's preload list leaves out the files its importer has already loaded
+  (`apps/web/preload-deps.ts`; what is fetched, and when, is unchanged). A
+  lazy module that imports a small first-screen module splits the shared
+  chunks into pieces that compress worse, so the lazy modules avoid that.
+  Lazy, fetched when Source ✎ first opens: CodeMirror and the tab, with asm.
+  When Run ▶ first opens: the Run tab and screen, and emu. On the first Run:
+  the kit. After Open as source: the reassembly check.
 
 ### Testing
 

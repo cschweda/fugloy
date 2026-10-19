@@ -26,6 +26,9 @@ declare global {
       rerender: (kind: 'tables' | 'names') => void;
       load: (bytes: number[], name: string, hints?: string, base?: number) => void;
       loadedBytes: () => number[];
+      run: () => Promise<void>;
+      screenText: () => string[];
+      runnerState: () => string;
     };
   }
 }
