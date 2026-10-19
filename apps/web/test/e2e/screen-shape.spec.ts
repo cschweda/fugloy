@@ -1,5 +1,5 @@
 // Phase 6A: each model's picture at its true shape, and full screen, on the stub ROM (CI has no
-// ROM). The Model III's tube is 4:3; the Model I's is (4/3) x (384 / 10.6445 MHz) / (512 /
+// ROM). The Model III's tube is 4:3; the Model I's, at the Model III's height, is (4/3) x (384 / 10.6445 MHz) / (512 /
 // 10.1376 MHz), about 0.952, and switching model changes it at the next Run. Full screen puts the
 // screen box itself in full screen, the tube centred on black at whole rows within the window,
 // with the keyboard's focus kept on the box going in and coming out.
@@ -60,6 +60,9 @@ test('the Model III tube is 4:3, and the Model I one about 0.952, from the next 
   expect(Math.abs(m1.tube.w - m1.box.w)).toBeLessThanOrEqual(1);
   expect(m1.tube.h).toBe(m1.box.h);
   expect(m1.box.h % 192).toBe(0);
+  // The same height as the Model III at the same panel width: narrower, never taller.
+  expect(m1.box.h).toBe(m3.box.h);
+  expect(m1.box.w).toBeLessThan(m3.box.w);
 });
 
 test('Full screen shows the tube at whole rows within the window, keeps the keys on it, and comes back to the panel', async ({ page }) => {

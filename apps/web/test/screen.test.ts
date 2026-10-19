@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { CG_MODEL1, CG_MODEL1_LOWERCASE, CG_MODEL3, CG_MODEL4 } from '../app/utils/emulator/glyphs.generated';
 import type { GlyphSet } from '../app/utils/emulator/glyphs.generated';
 import { Machine } from '@fugloy/emu';
-import { SCREEN_BG, SCREEN_FG, renderNotice, renderScreen, screenSize, screenView, tubeAspect, tubeFit, MODEL1_ASPECT, MODEL3_ASPECT } from '../app/utils/emulator/screen';
+import { SCREEN_BG, SCREEN_FG, renderNotice, renderScreen, screenSize, screenView, tubeAspect, tubeFit, panelFit, MODEL1_ASPECT, MODEL3_ASPECT } from '../app/utils/emulator/screen';
 import type { ScreenView } from '../app/utils/emulator/screen';
 import { stubRom } from '../app/utils/emulator/stub-rom';
 
@@ -259,5 +259,24 @@ describe('tubeFit', () => {
     expect(fit.height).toBeCloseTo(100, 10);
     expect(fit.width).toBeCloseTo(100 * MODEL1_ASPECT, 10);
     expect(fit.width).toBeLessThanOrEqual(150);
+  });
+});
+
+describe('panelFit', () => {
+  it('gives every model the Model III height for the width, so the Model I is narrower, never taller', () => {
+    expect(panelFit(192, MODEL3_ASPECT, 800)).toEqual({ width: 768, height: 576 });
+    const m1 = panelFit(192, MODEL1_ASPECT, 800);
+    expect(m1.height).toBe(576);
+    expect(m1.width).toBe(576 * MODEL1_ASPECT);
+    // Where tubeFit alone would give the Model I a taller tube (600 wide: k=3 for it, k=2 for the III).
+    expect(tubeFit(192, MODEL1_ASPECT, 600).height).toBe(576);
+    expect(panelFit(192, MODEL1_ASPECT, 600)).toEqual({ width: 384 * MODEL1_ASPECT, height: 384 });
+    // The Model 4's 80x24 is unchanged.
+    expect(panelFit(240, MODEL3_ASPECT, 1000)).toEqual({ width: 960, height: 720 });
+    // Narrower than one step: the Model III's height at the host's width, the Model I narrower.
+    expect(panelFit(192, MODEL3_ASPECT, 200)).toEqual({ width: 200, height: 150 });
+    const narrow = panelFit(192, MODEL1_ASPECT, 200);
+    expect(narrow.height).toBeCloseTo(150, 10);
+    expect(narrow.width).toBeCloseTo(150 * MODEL1_ASPECT, 10);
   });
 });

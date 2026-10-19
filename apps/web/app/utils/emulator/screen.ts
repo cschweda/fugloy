@@ -90,6 +90,15 @@ export function tubeFit(rasterHeight: number, aspect: number, availWidth: number
   return { width, height: width / aspect };
 }
 
+/**
+ * The tube in a panel `availWidth` wide: every model at the Model III's height for that width (its
+ * whole-row 4:3 fit), so the Model I shows narrower at the same height, as on the same monitor,
+ * never taller. The Model III and 4 get tubeFit's own answer.
+ */
+export function panelFit(rasterHeight: number, aspect: number, availWidth: number): { width: number; height: number } {
+  return tubeFit(rasterHeight, aspect, availWidth, tubeFit(rasterHeight, MODEL3_ASPECT, availWidth).height);
+}
+
 /** The view a machine's screen is in now. */
 export function screenView(m: Machine): ScreenView {
   const v = m.video;

@@ -3,10 +3,11 @@
 // one pixel per character generator pixel (384x192 on the Model I, 512x192 on the Model III and 4,
 // 640x240 at the Model 4's 80x24), shown with pixelated scaling on a black tube at the model's
 // picture shape (tubeAspect: 4:3 on the Model III and 4, about 0.952 on the Model I, from the two
-// machines' dot clocks). Its size is tubeFit's: the largest tube at that shape that fits the host's
-// width whose height is a whole multiple of the raster's rows (each row k screen pixels high on
-// every model; across, the scale follows the shape), or the host's whole width at the shape when
-// not even one step fits; a ResizeObserver on the host keeps it so, and the shape follows the
+// machines' dot clocks). Its size is panelFit's: the Model III's tube for the host's width (the
+// largest 4:3 tube whose height is a whole multiple of the raster's rows, or the host's whole width
+// when not even one step fits), every model at that height and its own shape, so the Model I is
+// narrower, never taller (each row k screen pixels high on every model; across, the scale follows
+// the shape); a ResizeObserver on the host keeps it so, and the shape follows the
 // machine from its next frame. toggleFullscreen puts the box itself in full screen (the Fullscreen
 // API; Esc leaves it too): the browser stretches the box over the whole window, black, and the
 // canvas sits centred in it at tubeFit's size for the window. The box takes the focus going in and
@@ -19,7 +20,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { Machine } from '@fugloy/emu';
 import { attachKeyboard } from '~/utils/emulator/keyboard';
-import { renderNotice, renderScreen, SCREEN_BG, screenSize, screenView, tubeAspect, tubeFit } from '~/utils/emulator/screen';
+import { renderNotice, renderScreen, SCREEN_BG, screenSize, screenView, panelFit, tubeAspect, tubeFit } from '~/utils/emulator/screen';
 import type { ScreenFont, ScreenView } from '~/utils/emulator/screen';
 import type { ModelId } from '~/utils/store';
 
@@ -57,7 +58,7 @@ let resize: ResizeObserver | null = null;
 
 const aspect = computed(() => tubeAspect(font.value));
 /** The tube in the panel: its CSS width and height. */
-const panelSize = computed(() => tubeFit(rasterHeight.value, aspect.value, hostWidth.value));
+const panelSize = computed(() => panelFit(rasterHeight.value, aspect.value, hostWidth.value));
 /** The tube in full screen, centred in the window. */
 const fullSize = computed(() => tubeFit(rasterHeight.value, aspect.value, viewport.value.width, viewport.value.height));
 // The height is set and the width follows from the aspect, so the rows stay whole on every model.
