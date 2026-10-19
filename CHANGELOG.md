@@ -402,8 +402,8 @@ Fugløy's stub ROM; a disassembly opens as such a source:
   When Run ▶ first opens: the Run tab and screen, and emu. On the first Run:
   the kit. After Open as source: the reassembly check.
 
-Workbench, phase 5C (the running line), built on branch `phase5c`
-(2026-10-19), all five tasks done, not yet merged (plan
+Workbench, phase 5C (the running line), merged to main
+(2026-10-19), all five tasks done (plan
 `docs/superpowers/plans/2026-10-19-phase5c-running-line.md`). With it phase
 5's deliverable is met. While a program runs, the line it is on is lit live,
 with a fading trail of the lines just before it, in **Source ✎** and in a

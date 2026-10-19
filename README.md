@@ -33,7 +33,7 @@ for writing new programs.
 | Part | What it does | Status | Where |
 | --- | --- | --- | --- |
 | **Disassembler** | Loads `.CMD`, `.BAS`, and raw files by content; recursive descent; labels; cited ROM, hardware, and DOS names; hint files; hidden code in BASIC; rebasing and relocation; zmac source that reassembles byte for byte; JSON IR; reads the emulator's label files | Released, 1.2.0 on npm | `@fugloy/disasm`, the `fugloy` command in `@fugloy/cli`, opcode tables in `@fugloy/z80` |
-| **Web workbench** | The disassembler in the browser: facing pages, the four public-domain games one click away, editing by keyboard, the **Explain** tab, block comments, exports; and **Source ✎** and **Run ▶**, where Z80 source you type (or a disassembly opened as source) runs on an emulated TRS-80 with one press, and the running line: the line a program is on lit live with its trail, in the source and in its listing, with breakpoints, stepping, the registers, and a screen-text mirror | Live; Source ✎ and Run ▶ merged to main and live (plan phase 5B); the running line built on branch `phase5c` (5C), not yet merged | [app.fugloy.dev](https://app.fugloy.dev/), source in `apps/web` |
+| **Web workbench** | The disassembler in the browser: facing pages, the four public-domain games one click away, editing by keyboard, the **Explain** tab, block comments, exports; and **Source ✎** and **Run ▶**, where Z80 source you type (or a disassembly opened as source) runs on an emulated TRS-80 with one press, and the running line: the line a program is on lit live with its trail, in the source and in its listing, with breakpoints, stepping, the registers, and a screen-text mirror | Live; Source ✎ and Run ▶ merged to main and live (plan phase 5B); the running line (5C) merged and live | [app.fugloy.dev](https://app.fugloy.dev/), source in `apps/web` |
 | **Emulator** | A headless, deterministic Model III and Model I that passes ZEXDOC and ZEXALL, runs `.CMD`, `.BAS`, and `.CAS` programs and disk images, and has a debugger that writes label and coverage files | 0.4.0 on npm (2026-10-18; the Model 4, emu phase 6b), after 0.3.0 (disks and the Model I, phases 5–7) | `packages/emu` (`@fugloy/emu`) |
 | **MCP server** | Lets an AI assistant such as Claude Code load a program, run it, set breakpoints and watches, read the screen, and name what it finds in the same label file | 0.1.1 on npm (2026-10-18), MCP phases A–F; disk images and the Model I; 0.1.2 (the Model 4) also published 2026-10-18 | `packages/mcp` (`@fugloy/mcp`) |
 | **Assembler** | Z80 source to a `.CMD`, with errors as sentences on the right line, ROM routines by name per model, a note where the Model I and Model III ROMs differ, and zmac's bytes on every source the disassembler writes | Merged to main (plan phase 5A), unreleased; releases with core | `packages/asm` (`@fugloy/asm`), the `fugloy asm` command |
@@ -107,7 +107,7 @@ Sea Dragon opened that way reassembles byte for byte and, on your Model III
 ROM, runs to its title screen. The screen's characters are drawn from
 X.Org's public-domain misc-misc fonts, not from a TRS-80 character ROM.
 
-**The running line** (plan phase 5C, built on branch `phase5c`) shows a
+**The running line** (plan phase 5C, merged to main 2026-10-19) shows a
 program running: the line it is on is lit live, with a fading trail of the
 lines just before it, in Source ✎ and in a disassembled listing of the same
 program, relocated code included. Click the gutter (or press F9) to set a
@@ -371,8 +371,8 @@ What people come to Fugløy for, and how each one is done today.
   Guard from the `label-pass` prompt.
 - **As someone learning assembly,** I want to write Z80 code and run it at
   once. *Today:* Source ✎ and Run ▶ in the workbench assemble and run it with
-  one press; the running line, with breakpoints and stepping, is built on
-  branch `phase5c`.
+  one press; the running line, with breakpoints and stepping, is merged to
+  main (2026-10-19).
 
 Planned, per the roadmap:
 
@@ -429,8 +429,8 @@ roadmap in [CLAUDE.md](CLAUDE.md)). Phase 5 has begun: its assembler,
 releases with the next core version; the workbench's Source ✎ and Run ▶
 (5B), where Z80 code is written, assembled, and run on an emulated Model I,
 III, or 4 with one press, are merged to main (2026-10-19); the running line
-(5C), with breakpoints, stepping, and the registers, is built on branch
-`phase5c`, and with it phase 5's deliverable is met. Every change is
+(5C), with breakpoints, stepping, and the registers, is merged to main
+(2026-10-19), and with it phase 5's deliverable is met. Every change is
 recorded in [CHANGELOG.md](CHANGELOG.md); core releases are tagged `vX.Y.Z`
 on `main`, the emulator's `emu-vX.Y.Z`, and the MCP server's `mcp-vX.Y.Z`.
 
