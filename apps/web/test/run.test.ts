@@ -286,3 +286,38 @@ describe('Run ▶', () => {
     expect(run.problem.value).toBe(true);
   });
 });
+
+describe('Run ▶ while debugging (5C)', () => {
+  // Line 2 LD A,1; 3 INC A (LOOP); 4 JR LOOP.
+  const LOOP2 = program('START:  LD      A,1', 'LOOP:   INC     A', '        JR      LOOP');
+
+  it('each pause and step is an announcement of its own: the sentence, and whether a step made it (Ruling 12)', async () => {
+    const { run, clock } = await setup(LOOP2);
+    run.debug.toggleBreakpoint(3);
+    await run.run();
+    clock.frame();
+    const paused = run.debug.announcement.value;
+    expect(paused).toEqual({ text: 'Paused at line 3, INC A, at a breakpoint.', step: false });
+    expect(run.message.value).toBe(paused!.text);
+    run.debug.step();
+    const first = run.debug.announcement.value;
+    expect(first).toEqual({ text: expect.stringMatching(/^Line 4, JR LOOP\./), step: true });
+    run.debug.step();
+    run.debug.step();
+    // The same line again is a new announcement, so it is spoken again.
+    expect(run.debug.announcement.value).not.toBe(first);
+    expect(run.debug.announcement.value!.text).toMatch(/^Line 4, JR LOOP\./);
+  });
+
+  it('a sentence the stepper returns is announced too, as a problem', async () => {
+    const { run, clock } = await setup(program('START:  DI', '        HALT', 'NEXT:   NOP'));
+    run.debug.toggleBreakpoint(2);
+    await run.run();
+    clock.frame();
+    run.debug.step();
+    run.debug.step();
+    run.debug.step();
+    expect(run.debug.announcement.value).toEqual({ text: realKit.HALTED_INTERRUPTS_OFF, step: false });
+    expect(run.problem.value).toBe(true);
+  });
+});

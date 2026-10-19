@@ -3,8 +3,17 @@
 // the workbench), Stop, Show in Listing, what the run says, the TRS-80's screen, and the ROM for
 // the model, added from a file or dropped on the tab and kept in this browser only. The page
 // loads this component lazily, with emu.
+//
+// 5C: Pause/Continue, Step, Step Over, Run to Here and Follow in the bar, each with its key in its
+// title (the keys themselves are utils/running/debug-keys, installed here and by Source ✎); the
+// registers beside the screen; the source's breakpoints under it. The run message stays quiet for
+// a sentence the announcer already says (one voice, and steps debounced). The checkboxes use
+// :checked and @change, not v-model: vModelCheckbox would join Vue's shared chunk on the first screen.
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import TrsScreen from './TrsScreen.vue';
+import RegistersPanel from './RegistersPanel.vue';
+import BreakpointList from './BreakpointList.vue';
+import type { DebugKeyOptions } from '~/utils/running/debug-keys';
 import { useRoms } from '~/composables/useRoms';
 import type { Run } from '~/composables/useRun';
 import type { Sources } from '~/composables/useSources';
@@ -15,6 +24,7 @@ import type { ModelId } from '~/utils/store';
 const props = defineProps<{ run: Run; sources: Sources }>();
 const run = props.run;
 const sources = props.sources;
+const debug = run.debug;
 const roms = useRoms();
 const screen = ref<InstanceType<typeof TrsScreen> | null>(null);
 const picker = ref<HTMLInputElement | null>(null);
@@ -30,6 +40,24 @@ const machine = computed(() => run.runner.value?.machine ?? null);
 const running = computed(() => run.state.value === 'running' || run.state.value === 'paused');
 const rom = computed(() => roms.info(model.value));
 const runKey = computed(() => (isMac.value ? '⌘+Enter' : 'Ctrl+Enter'));
+/** Stepping needs a program running or paused. */
+const underWay = computed(() => debug.mode.value === 'running' || debug.mode.value === 'paused');
+const paused = computed(() => debug.mode.value === 'paused');
+const hereKey = computed(() => (isMac.value ? '⌘+F10' : 'Ctrl+F10'));
+/** The run message says what the announcer already says: not a second live region for it. */
+const quiet = computed(() => run.message.value !== null && debug.announcement.value?.text === run.message.value);
+
+/** In utils/lazy's loadFailed words, with reloading as the next step (lazy code does not import utils/lazy). */
+const KEYS_FAILED = 'The debugger could not be loaded: the connection may have dropped, or the site was updated since this page opened. Reload the page.';
+/** A sentence from a debug control that cannot act. */
+function sayProblem(text: string): void {
+  run.message.value = text;
+  run.problem.value = true;
+}
+function pauseOrContinue(): void {
+  if (paused.value) debug.continue();
+  else debug.pause();
+}
 
 function setModel(e: Event): void {
   const src = sources.current.value;
@@ -83,13 +111,34 @@ async function removeRom(): Promise<void> {
 
 // Draw each frame the runner runs (TrsScreen draws by itself when the machine changes).
 let unsubscribe: (() => void) | null = null;
+// The debug keys load as a chunk of their own (so utils/running/ is a lazy root the manifest names).
+let keys: typeof import('~/utils/running/debug-keys') | null = null;
+let uninstallKeys: (() => void) | null = null;
+let gone = false;
+const keyOptions: DebugKeyOptions = { runNow: () => void run.run(), stop: () => run.stop(), focusTarget: () => null, say: sayProblem };
+function runToHere(): void {
+  if (keys === null) return sayProblem(KEYS_FAILED);
+  keys.runToHere(debug, keyOptions);
+}
 onMounted(() => {
   isMac.value = /Mac|iPhone|iPad/.test(navigator.platform);
   void roms.start();
   void sources.start();
   unsubscribe = run.onFrame(() => screen.value?.draw());
+  import('~/utils/running/debug-keys').then(
+    (m) => {
+      if (gone) return;
+      keys = m;
+      uninstallKeys = m.installDebugKeys(debug, keyOptions);
+    },
+    () => sayProblem(KEYS_FAILED),
+  );
 });
-onBeforeUnmount(() => unsubscribe?.());
+onBeforeUnmount(() => {
+  gone = true;
+  unsubscribe?.();
+  uninstallKeys?.();
+});
 
 defineExpose({
   focusScreen(): void {
@@ -108,11 +157,25 @@ defineExpose({
       <button type="button" class="fg-button fg-button-primary" data-testid="run-run" :aria-busy="run.busy.value" :title="`Assemble and run (${runKey})`" @click="run.run()">Run ▶</button>
       <button type="button" class="fg-button" data-testid="run-stop" :disabled="!running && !run.busy.value" @click="run.stop()">Stop</button>
       <button type="button" class="fg-button" data-testid="run-show-listing" :disabled="!run.listable.value" @click="run.showInListing()">Show in Listing</button>
+      <span class="fg-run-debug" role="group" aria-label="Debugger controls">
+        <button type="button" class="fg-button" data-testid="run-pause" :disabled="!underWay" :title="paused ? 'Continue running (F5)' : 'Pause the program (F6)'" @click="pauseOrContinue">{{ paused ? 'Continue' : 'Pause' }}</button>
+        <button type="button" class="fg-button" data-testid="run-step" :disabled="!underWay" title="Step: run one instruction (F11 or F7)" @click="debug.step()">Step</button>
+        <button type="button" class="fg-button" data-testid="run-step-over" :disabled="!underWay" title="Step Over: run one instruction, or a whole CALL, RST or block instruction (F10)" @click="debug.stepOver()">Step Over</button>
+        <button type="button" class="fg-button" data-testid="run-to-here" :disabled="!underWay" :title="`Run to Here: run to the line under the cursor in Source ✎ (${hereKey})`" @click="runToHere">Run to Here</button>
+        <label class="fg-run-follow" title="Keep the running line in view while the program runs">
+          <input type="checkbox" data-testid="run-follow" :checked="debug.follow.value" @change="debug.follow.value = ($event.target as HTMLInputElement).checked" />
+          Follow
+        </label>
+      </span>
     </div>
-    <p class="fg-run-message" :class="{ 'fg-run-problem': run.problem.value }" role="status" aria-live="polite" data-testid="run-message">
+    <p class="fg-run-message" :class="{ 'fg-run-problem': run.problem.value }" role="status" :aria-live="quiet ? 'off' : 'polite'" data-testid="run-message">
       {{ run.message.value ?? `Press Run ▶ or ${runKey} to assemble the source and run it on a fresh ${MODEL_NAMES[model]}.` }}
     </p>
-    <div class="fg-run-screen"><TrsScreen ref="screen" :machine="machine" :running="running" /></div>
+    <div class="fg-run-machine">
+      <div class="fg-run-screen"><TrsScreen ref="screen" :machine="machine" :running="running" /></div>
+      <RegistersPanel :debug="debug" />
+    </div>
+    <BreakpointList class="fg-run-bps" :run="run" :sources="sources" />
     <div class="fg-run-rom" data-testid="run-rom">
       <h2 class="fg-strong">{{ MODEL_NAMES[model] }} ROM</h2>
       <p v-if="rom !== null" data-testid="run-rom-have">
@@ -142,7 +205,11 @@ defineExpose({
 .fg-run-bar { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 12px; border-bottom: 1px solid var(--fg-border); font-size: 12px; }
 .fg-run-message { margin: 0 12px; min-height: 1.5em; }
 .fg-run-problem { color: var(--fg-error); }
-.fg-run-screen { flex: none; padding: 0 12px; }
+.fg-run-debug { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.fg-run-follow { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; }
+.fg-run-machine { display: flex; flex: none; flex-wrap: wrap; align-items: flex-start; gap: 12px; padding: 0 12px; }
+.fg-run-screen { flex: 1 1 24rem; min-width: 0; max-width: 768px; }
+.fg-run-bps { margin: 0 12px; }
 .fg-run-rom { margin: 0 12px; display: flex; flex-direction: column; gap: 4px; }
 .fg-run-rom h2 { margin: 6px 0 0; font-size: 13px; font-weight: 700; }
 .fg-run-rom p { margin: 0; }

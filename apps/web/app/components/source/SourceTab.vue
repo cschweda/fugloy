@@ -12,7 +12,9 @@
 // pause brings its line into view without moving the selection; while running, Follow does so at
 // most 4 times a second, once the line has left view. The gutter's breakpoints are the source's;
 // the hollow ones (no instruction to stop at) come from this tab's own assembly of the text on
-// screen, so they are right before any Run and after edits.
+// screen, so they are right before any Run and after edits. The debug keys (utils/running/
+// debug-keys) are installed here and by Run ▶: F9 toggles the cursor line's breakpoint, and Run to
+// Here runs to the cursor line when focus is, or was last, in this editor.
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { assemble } from '@fugloy/asm';
 import type { AsmResult, Diagnostic } from '@fugloy/asm';
@@ -26,6 +28,7 @@ import { download } from '~/utils/exports';
 import { RECHECK_DELAY_MS, severityWord } from '~/utils/source/diagnostics';
 import { fixExpected } from '~/utils/source/fix';
 import { inactiveReason } from '~/utils/source/lines';
+import type { FocusTarget } from '~/utils/running/debug-keys';
 import type { AsmFix } from '~/utils/source/diagnostics';
 import type { RunReport } from '~/composables/useRun';
 
@@ -146,6 +149,39 @@ onMounted(() => {
   observer.observe(root.value);
 });
 onBeforeUnmount(() => observer?.disconnect());
+
+// The debug keys, and where focus was last among the editor and the listing (Run to Here's line).
+let lastFocus: FocusTarget | null = null;
+function onFocusIn(e: FocusEvent): void {
+  const el = e.target instanceof Element ? e.target : null;
+  if (el === null) return;
+  if (el.closest('.cm-editor') !== null && root.value?.contains(el) === true) lastFocus = 'source';
+  else if (el.closest('.fg-listing') !== null) lastFocus = 'listing';
+}
+let uninstallKeys: (() => void) | null = null;
+let gone = false;
+onMounted(async () => {
+  document.addEventListener('focusin', onFocusIn);
+  // A chunk of its own, shared with Run ▶ (Run ▶ says it if it cannot load).
+  const m = await import('~/utils/running/debug-keys').catch(() => null);
+  if (m === null || gone) return;
+  uninstallKeys = m.installDebugKeys(debug, {
+    runNow: () => emit('run'),
+    stop: () => run.stop(),
+    focusTarget: () => lastFocus,
+    // The listing's line comes with Task 4 (the listing follows the run).
+    cursorLine: (where) => (where === 'source' ? (editor.value?.cursorLine() ?? null) : null),
+    say: (text) => {
+      run.message.value = text;
+      run.problem.value = true;
+    },
+  });
+});
+onBeforeUnmount(() => {
+  gone = true;
+  document.removeEventListener('focusin', onFocusIn);
+  uninstallKeys?.();
+});
 
 function onBreakpoints(lines: number[]): void {
   debug.setBreakpoints(lines);

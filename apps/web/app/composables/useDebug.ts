@@ -24,6 +24,11 @@ import type { Sources } from './useSources';
 
 export type DebugMode = 'idle' | 'running' | 'paused' | 'stopped';
 
+export interface Announcement {
+  text: string;
+  step: boolean;
+}
+
 export interface RegisterView {
   rows: RegisterRow[];
   flags: FlagRow[];
@@ -58,6 +63,8 @@ export interface Debug {
   reveal: ShallowRef<{ line: number | null } | null>;
   /** The latest sentence for screen readers (a pause, a step). */
   announce: Ref<string | null>;
+  /** The same, a new object for every sentence (the same words twice are said twice); `step` when a step made it, which the announcer debounces (Ruling 12). */
+  announcement: ShallowRef<Announcement | null>;
   toggleBreakpoint(line: number): void;
   /** Replaces the breakpoints (the editor carried them through an edit). */
   setBreakpoints(lines: readonly number[]): void;
@@ -166,6 +173,11 @@ export function createDebug(deps: DebugDeps): DebugControl {
   const registers = shallowRef<RegisterView | null>(null);
   const reveal = shallowRef<{ line: number | null } | null>(null);
   const announce = ref<string | null>(null);
+  const announcement = shallowRef<Announcement | null>(null);
+  function speak(text: string, step: boolean): void {
+    announce.value = text;
+    announcement.value = { text, step };
+  }
   const current = shallowRef<DebugRun | null>(null);
 
   /** The last frame's trail, for its `out` line (reset for each Run: Task 1, finding 9). */
@@ -277,7 +289,7 @@ export function createDebug(deps: DebugDeps): DebugControl {
     const a = current.value;
     if (why !== null) {
       say(why, true);
-      announce.value = why;
+      speak(why, false);
     }
     if (a !== null && a.runner.state === 'running') setMode('running');
   }
@@ -295,6 +307,7 @@ export function createDebug(deps: DebugDeps): DebugControl {
     registers,
     reveal,
     announce,
+    announcement,
     toggleBreakpoint(line) {
       setBreakpoints(breakpoints.value.includes(line) ? breakpoints.value.filter((n) => n !== line) : [...breakpoints.value, line]);
     },
@@ -355,6 +368,7 @@ export function createDebug(deps: DebugDeps): DebugControl {
       registers.value = null;
       reveal.value = null;
       announce.value = null;
+      announcement.value = null;
       marks.value = [];
       inactive.value = live.value ? run.inactive : [];
       setMode(run.runner.state === 'running' ? 'running' : run.runner.state);
@@ -379,7 +393,8 @@ export function createDebug(deps: DebugDeps): DebugControl {
       const key = a.kit.marksKey(set);
       const at = now();
       if (at - regsAt >= REGISTERS_INTERVAL_MS) {
-        regsAt = at;
+        // On a 250 ms beat, not 250 ms after the frame that read them: 4 a second at any frame rate.
+        regsAt = at - regsAt < 2 * REGISTERS_INTERVAL_MS ? regsAt + REGISTERS_INTERVAL_MS : at;
         readRegs(false);
       }
       if (key === shownKey || at - shownAt < (reduced.value ? REDUCED_INTERVAL_MS : MARKS_INTERVAL_MS)) return;
@@ -399,8 +414,8 @@ export function createDebug(deps: DebugDeps): DebugControl {
       const line = t.now;
       reveal.value = { line: line ?? t.out };
       const text = sentence(r, a, line, stepped && before !== null ? changedNames(snap, before) : stepped ? [] : null);
-      announce.value = text;
       say(text);
+      speak(text, stepped);
     },
     stopped(r) {
       const a = current.value;
