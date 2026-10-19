@@ -87,6 +87,11 @@ A screen-reader text mirror of the TRS-80 screen comes with it. 5C completes pha
 6. **When the listing follows a run.** It follows only when the open session is the running source's own listing (`origin.sourceId`), or when its loaded bytes equal `result.image`'s on every byte asm loaded (the Open-as-source case).
    - The check is a 64K compare, run once per (session, Run) pair.
    - Otherwise the listing shows no marks, and F9 in the listing says: "This listing is not the program that is running. Set breakpoints in Source ✎."
+   - F9 in the listing says something else in four cases around that one (Task 4, recorded in its fix round):
+     - before any program from Source ✎ has run, or after a Run that made none: "No program from Source ✎ is running, so this listing has no source lines to stop at. Press Run, or set breakpoints in Source ✎."
+     - after the program has stopped (switching source stops it too). The listing then shows no marks, so a toggle there would not be seen, and F9 refuses: "The program has stopped, so the listing no longer shows its breakpoints. Set breakpoints in Source ✎, or press Run first."
+     - after the source was edited since the Run: "The source has changed since this Run, so the listing's lines no longer match it. Set breakpoints in Source ✎, or press Run first."
+     - with the cursor on no instruction of the program: "The listing's cursor is not on an instruction of the running program. Move it to one, then press F9 again."
 7. **Following the line on screen:**
    - On a pause, a breakpoint, or a step, the editor brings the line into view with `showLine`, which scrolls without moving the selection. A following listing does the same with `scrollToAddr`, through the `:scroll-listing` prop.
    - While running, this happens only with **Follow** on: a checkbox in the Run bar, off by default and kept for the session. It scrolls at most 4 times a second, and only once the line leaves view.

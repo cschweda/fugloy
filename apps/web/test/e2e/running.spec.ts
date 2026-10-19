@@ -105,10 +105,13 @@ test('the listing follows the run: a gutter breakpoint stops it, the row is lit,
   await expect.poll(() => page.evaluate(() => window.__fugloyTest!.debugMode())).toBe('running');
   await expect.poll(async () => (await page.evaluate(() => window.__fugloyTest!.listingMarks()))?.marks.length ?? 0).toBeGreaterThan(0);
   expect(await axe(page)).toEqual([]);
+  // The frame-cost hook counts frames while running (Task 5 measures with it).
+  expect((await page.evaluate(() => window.__fugloyTest!.frameCost(300))).frames).toBeGreaterThan(0);
 
-  // Stop: the listing's marks go.
+  // Stop: the listing's marks go, and the hook refuses to report a cost it never measured.
   await page.getByTestId('run-stop').click();
   await expect.poll(() => page.evaluate(() => document.getElementById('fg-running-line'))).toBeNull();
+  await expect(page.evaluate(() => window.__fugloyTest!.frameCost(200))).rejects.toThrow(/counted no frames/);
 });
 
 test('a program opened from a file that is not the running one shows no marks, and F9 there says why', async ({ page }) => {

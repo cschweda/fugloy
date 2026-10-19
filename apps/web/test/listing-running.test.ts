@@ -21,10 +21,10 @@ import { createRun } from '../app/composables/useRun';
 import { createSources } from '../app/composables/useSources';
 import { createWorkbench } from '../app/composables/useWorkbench';
 import { installListingFollow, LISTING_STYLE_ID, listingCss, listingStyleWrites } from '../app/utils/running/listing-style';
-import { installDebugKeys, LISTING_NOT_RUNNING } from '../app/utils/running/debug-keys';
+import { installDebugKeys, LISTING_CHANGED, LISTING_NOT_RUNNING, LISTING_NOTHING_RUN, LISTING_STOPPED, runToHere } from '../app/utils/running/debug-keys';
 import type { DebugKeyOptions } from '../app/utils/running/debug-keys';
 import { fakeClock } from './emulator-support';
-import { LOOP, noRoms } from './source-run-support';
+import { FakeIO, LOOP, noRoms } from './source-run-support';
 
 /** A .CMD of an assembled program: one 01 record per run, then 02 with the entry. */
 function cmdOf(result: AsmResult): Uint8Array {
@@ -47,6 +47,8 @@ const A = { start: 0x7000, inc: 0x7002, dec: 0x7003, jr: 0x7004 };
 const cleanups: (() => void)[] = [];
 afterEach(() => {
   for (const c of cleanups.splice(0)) c();
+  vi.unstubAllGlobals();
+  FakeIO.all = [];
   document.head.querySelector(`#${LISTING_STYLE_ID}`)?.remove();
   document.body.innerHTML = '';
 });
@@ -75,9 +77,10 @@ async function frames(clock: ReturnType<typeof fakeClock>, n: number): Promise<v
 const style = (): HTMLStyleElement | null => document.getElementById(LISTING_STYLE_ID) as HTMLStyleElement | null;
 const sel = (addr: number): string => `[data-addr="${addr}"]`;
 
-/** A listing on the page, with a row for each address; `inView` says which rows are on screen. */
-function fakeListing(addrs: number[], inView: (addr: number) => boolean = () => false): HTMLElement {
+/** A listing on the page, with a row for each address; `inView` says which rows are on screen, `shown` whether it is displayed. */
+function fakeListing(addrs: number[], inView: (addr: number) => boolean = () => false, shown: () => boolean = () => true): HTMLElement {
   const el = document.createElement('div');
+  el.checkVisibility = () => shown();
   el.className = 'fg-listing';
   el.tabIndex = 0;
   el.getBoundingClientRect = () => ({ top: 0, bottom: 400, left: 0, right: 800, height: 400, width: 800, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
@@ -96,7 +99,7 @@ function fakeListing(addrs: number[], inView: (addr: number) => boolean = () => 
 }
 
 function keyOpts(over: Partial<DebugKeyOptions> = {}): DebugKeyOptions & { say: ReturnType<typeof vi.fn> } {
-  return { runNow: vi.fn(), stop: vi.fn(), say: vi.fn(), focusTarget: () => null, ...over } as never;
+  return { runNow: vi.fn(), stop: vi.fn(), say: vi.fn(), ...over } as never;
 }
 const press = (target: Element, key: string, init: KeyboardEventInit = {}): KeyboardEvent => {
   const e = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init });
@@ -312,7 +315,6 @@ describe('F9 and Run to Here from the listing', () => {
     await frames(clock, 2);
     const opts = keyOpts();
     cleanups.push(installDebugKeys(run.debug, opts));
-    const { runToHere } = await import('../app/utils/running/debug-keys');
     const listing = fakeListing([A.start, A.inc, A.dec, A.jr]);
     listing.focus();
     const button = document.createElement('button');
@@ -322,6 +324,102 @@ describe('F9 and Run to Here from the listing', () => {
     expect(runToHere(run.debug, opts)).toBeNull();
     await frames(clock, 1);
     expect(run.debug.reveal.value?.line).toBe(4);
+  });
+});
+
+describe('fix round 1', () => {
+  it('a pause while the listing is hidden scrolls once it shows; a resume first drops it', async () => {
+    vi.stubGlobal('IntersectionObserver', FakeIO);
+    const { run, clock, scroll } = await setup();
+    let shown = false;
+    fakeListing([A.start, A.inc, A.dec, A.jr], () => false, () => shown);
+    run.debug.toggleBreakpoint(5);
+    await run.run();
+    await frames(clock, 1);
+    expect(run.debug.mode.value).toBe('paused');
+    expect(scroll).not.toHaveBeenCalled();
+    shown = true;
+    FakeIO.show();
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll).toHaveBeenCalledWith(A.dec);
+    FakeIO.show();
+    expect(scroll).toHaveBeenCalledTimes(1);
+    // Hidden again, paused again by a step, then resumed before the listing shows: no stale scroll.
+    shown = false;
+    run.debug.step();
+    await flushPromises();
+    expect(scroll).toHaveBeenCalledTimes(1);
+    run.debug.toggleBreakpoint(5); // off, so the loop runs on
+    run.debug.continue();
+    await frames(clock, 1);
+    expect(run.debug.mode.value).toBe('running');
+    shown = true;
+    FakeIO.show();
+    expect(scroll).toHaveBeenCalledTimes(1);
+  });
+
+  it('after an edit, the listing shows only the breakpoints emu holds: none on a data line', async () => {
+    const text = LOOP.replace('        END     START', 'DATA:   DB      5\n        END     START');
+    const { run, sources, src, clock } = await setup(text);
+    run.debug.toggleBreakpoint(5);
+    run.debug.toggleBreakpoint(7); // DB 5, at $7006: no instruction to stop at
+    await run.run();
+    await frames(clock, 1);
+    expect(run.debug.inactive.value).toEqual([7]);
+    expect(run.debug.listing.value?.breaks).toEqual([A.dec]);
+    sources.update(src.id, { text: `${text}; edited\n` });
+    await flushPromises();
+    expect(run.debug.dirty.value).toBe(true);
+    expect(run.debug.inactive.value).toEqual([]);
+    expect(run.debug.listing.value?.breaks).toEqual([A.dec]);
+  });
+
+  it('F9 in the listing: before any Run, after a stop, and after an edit, it refuses with its sentence and toggles nothing', async () => {
+    const { run, wb, sources, src, clock } = await setup();
+    const opts = keyOpts();
+    cleanups.push(installDebugKeys(run.debug, opts));
+    // Before any Run: an unrelated listing, nothing running.
+    wb.openBytes(cmdOf(assemble(LOOP)), 'loop.cmd');
+    const listing = fakeListing([A.start, A.inc, A.dec, A.jr]);
+    wb.cursor.value = A.dec;
+    expect(press(listing, 'F9').defaultPrevented).toBe(true);
+    expect(opts.say).toHaveBeenLastCalledWith(LISTING_NOTHING_RUN);
+    await run.run();
+    await frames(clock, 2);
+    // Edited since the Run: the lines no longer match.
+    sources.update(src.id, { text: `${LOOP}; edited\n` });
+    await flushPromises();
+    press(listing, 'F9');
+    expect(opts.say).toHaveBeenLastCalledWith(LISTING_CHANGED);
+    sources.update(src.id, { text: LOOP });
+    await flushPromises();
+    // Stopped: the listing shows no marks, so F9 there says so rather than toggling unseen.
+    run.stop();
+    await flushPromises();
+    press(listing, 'F9');
+    expect(opts.say).toHaveBeenLastCalledWith(LISTING_STOPPED);
+    expect(run.debug.breakpoints.value).toEqual([]);
+    expect(LISTING_STOPPED).toMatch(/^The program has stopped.*Source ✎, or press Run first\.$/);
+  });
+
+  it('Follow switched on scrolls at once when the running line is out of view, without waiting for it to move', async () => {
+    const { run, clock, scroll } = await setup(WAIT);
+    fakeListing([0x7000, 0x7002]);
+    await run.run();
+    await frames(clock, 10);
+    expect(scroll).not.toHaveBeenCalled();
+    run.debug.follow.value = true;
+    await flushPromises();
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll).toHaveBeenCalledWith(0x7002);
+  });
+
+  it('an image with no loaded bytes follows no listing', () => {
+    const wb = createWorkbench({ readExample: async () => null });
+    wb.openBytes(cmdOf(assemble(LOOP)), 'loop.cmd');
+    const empty = assemble('        ORG     7000H\nX       EQU     1\n        END\n');
+    expect(empty.image?.runs().length ?? 0).toBe(0);
+    expect(listingFollows(wb.session.value, empty, 'x', null)).toBe(false);
   });
 });
 

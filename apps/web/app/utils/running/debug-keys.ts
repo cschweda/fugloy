@@ -21,8 +21,10 @@
 // announcements are announce.ts's speakAnnouncements, installed apart from this chunk.
 //
 // In the listing (Ruling 6), F9 and Run to Here use the listing cursor's line (`debug.listingLine`)
-// while the listing shows the program that is running; F9 in any other listing says so. Where focus
-// was last, the editor or the listing, is tracked here too (a focusin listener beside the keydown).
+// while the listing shows the program that is running. Otherwise F9 there says why (`listingRefusal`:
+// nothing has run, another program, stopped, edited, or no instruction under the cursor). This module
+// is the one tracker of where focus was last, the editor or the listing (a focusin listener beside
+// the keydown); with neither yet, Run to Here uses the editor's line.
 import type { Debug } from '../../composables/useDebug';
 
 export type FocusTarget = 'source' | 'listing';
@@ -32,9 +34,7 @@ export interface DebugKeyOptions {
   runNow(): void;
   /** Stop (Shift+F5). */
   stop(): void;
-  /** Where focus is, or was last, among the editor and the listing: Run to Here's line comes from there (Ruling 9). */
-  focusTarget(): FocusTarget | null;
-  /** The source line under that cursor (null when there is none). */
+  /** The source line under the editor's cursor (null when there is none); the listing's comes from `debug.listingLine`. */
   cursorLine?(where: FocusTarget): number | null;
   /** run.message: a sentence when a key cannot act. */
   say(text: string): void;
@@ -42,6 +42,10 @@ export interface DebugKeyOptions {
 
 /** F9 in a listing that is not the running program (Ruling 6). */
 export const LISTING_NOT_RUNNING = 'This listing is not the program that is running. Set breakpoints in Source ✎.';
+/** F9 in a listing before any program from Source ✎ has run (or after a Run that made none). */
+export const LISTING_NOTHING_RUN = 'No program from Source ✎ is running, so this listing has no source lines to stop at. Press Run, or set breakpoints in Source ✎.';
+/** F9 in the last Run's listing once that program has stopped (switching source stops it too): its marks are gone. */
+export const LISTING_STOPPED = 'The program has stopped, so the listing no longer shows its breakpoints. Set breakpoints in Source ✎, or press Run first.';
 /** F9 in the running program's listing after its source was edited: the lines no longer match. */
 export const LISTING_CHANGED = 'The source has changed since this Run, so the listing\'s lines no longer match it. Set breakpoints in Source ✎, or press Run first.';
 /** F9 in the running program's listing with the cursor on no instruction of it. */
@@ -90,18 +94,18 @@ function ask<T>(f: (i: Install) => T | null | undefined): T | null {
   return null;
 }
 
-/** Where focus was last among the editor and the listing, as this module saw it. */
+/** Where focus was last among the editor and the listing (Run to Here's line, Ruling 9): this module is the one tracker. */
 let lastPlace: FocusTarget | null = null;
 function onFocusIn(e: FocusEvent): void {
   const at = placeOf(e.target);
   if (at !== null) lastPlace = at;
 }
 
-/** The cursor line at `where` (else where focus was last): the listing's from `debug`, the editor's from whichever tab knows it. */
+/** The cursor line at `where` (else where focus was last, the editor by default): the listing's from `debug`, the editor's from whichever tab knows it. */
 function cursorAt(debug: Debug, where: FocusTarget | null): number | null {
-  const at = where ?? ask((i) => i.opts.focusTarget()) ?? lastPlace;
+  const at = where ?? lastPlace ?? 'source';
   if (at === 'listing') return debug.listingLine();
-  return at === null ? null : ask((i) => i.opts.cursorLine?.(at));
+  return ask((i) => i.opts.cursorLine?.(at));
 }
 
 /**
@@ -116,6 +120,15 @@ export function runToHere(debug: Debug, opts: Pick<DebugKeyOptions, 'say'>, wher
   }
   debug.runToLine(line);
   return null;
+}
+
+/** Why F9 in the listing cannot toggle a line (Ruling 6, and the cases around it). */
+function listingRefusal(debug: Debug): string {
+  if (debug.mode.value === 'idle') return LISTING_NOTHING_RUN;
+  if (!debug.listingProgram.value) return LISTING_NOT_RUNNING;
+  if (debug.mode.value === 'stopped' || !debug.listingFollows.value) return LISTING_STOPPED;
+  if (debug.dirty.value) return LISTING_CHANGED;
+  return LISTING_NO_LINE;
 }
 
 function onKeydown(e: KeyboardEvent): void {
@@ -154,9 +167,10 @@ function onKeydown(e: KeyboardEvent): void {
       if (!plain) return;
       const where = placeOf(e.target);
       if (where === 'listing') {
-        const line = debug.listingLine();
+        // After a stop the listing shows no marks, so a toggle there would be unseen: refused with a sentence.
+        const line = debug.mode.value === 'stopped' ? null : debug.listingLine();
         if (line !== null) return claim(() => debug.toggleBreakpoint(line));
-        return claim(() => opts.say(!debug.listingFollows.value ? LISTING_NOT_RUNNING : debug.dirty.value ? LISTING_CHANGED : LISTING_NO_LINE));
+        return claim(() => opts.say(listingRefusal(debug)));
       }
       const line = where === null ? null : cursorAt(debug, where);
       if (line !== null) claim(() => debug.toggleBreakpoint(line));

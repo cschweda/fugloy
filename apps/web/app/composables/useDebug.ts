@@ -76,8 +76,10 @@ export interface Debug {
   announce: Ref<string | null>;
   /** The same, a new object for every sentence (the same words twice are said twice); `step` when a step made it, which the announcer debounces (Ruling 12). */
   announcement: ShallowRef<Announcement | null>;
-  /** The open listing shows the program this Run runs (Ruling 6). */
+  /** The open listing shows the program this Run runs (Ruling 6), and the source on screen is that Run's. */
   listingFollows: ComputedRef<boolean>;
+  /** The open listing is the last Run's program (its own listing, or the same bytes), whichever source is on screen. */
+  listingProgram: ComputedRef<boolean>;
   /** What the listing shows while the program runs or is paused; null when it does not follow, or nothing runs. */
   listing: ComputedRef<ListingMarks | null>;
   /** The run address of a line of the Run's source, for the listing's rows (null for none). */
@@ -215,7 +217,7 @@ export function createDebug(deps: DebugDeps): DebugControl {
   const live = computed(() => sameSource() && sources.current.value!.text === current.value!.text);
   const dirty = computed(() => sameSource() && sources.current.value!.text !== current.value!.text);
 
-  /** The lines whose breakpoints emu has now: set when they are applied (they outlive an edit, Ruling 8). */
+  /** The lines whose breakpoints emu has now, the inactive ones left out: set when they are applied (they outlive an edit, Ruling 8). */
   const applied = ref<number[]>([]);
   const wb = deps.wb;
   /** The listing is the Run's program: its 64K compare runs once per (session, Run) pair. */
@@ -237,7 +239,7 @@ export function createDebug(deps: DebugDeps): DebugControl {
       if (addr !== null) out.marks.push({ addr, class: mk.class });
     }
     for (const line of applied.value) {
-      const addr = inactive.value.includes(line) ? null : listingAddr(line);
+      const addr = listingAddr(line);
       if (addr !== null) out.breaks.push(addr);
     }
     return out;
@@ -276,8 +278,9 @@ export function createDebug(deps: DebugDeps): DebugControl {
       inactive.value = [];
       return;
     }
-    inactive.value = a.stepper.setBreakpoints(breakpoints.value).inactive;
-    applied.value = [...breakpoints.value];
+    const off = a.stepper.setBreakpoints(breakpoints.value).inactive;
+    inactive.value = off;
+    applied.value = breakpoints.value.filter((n) => !off.includes(n));
   }
 
   function save(): void {
@@ -359,6 +362,7 @@ export function createDebug(deps: DebugDeps): DebugControl {
     announce,
     announcement,
     listingFollows,
+    listingProgram: sameProgram,
     listing,
     listingAddr,
     listingLine() {
@@ -433,7 +437,7 @@ export function createDebug(deps: DebugDeps): DebugControl {
       announcement.value = null;
       marks.value = [];
       inactive.value = live.value ? run.inactive : [];
-      applied.value = live.value ? [...breakpoints.value] : [];
+      applied.value = live.value ? breakpoints.value.filter((n) => !run.inactive.includes(n)) : [];
       setMode(run.runner.state === 'running' ? 'running' : run.runner.state);
     },
     detach() {

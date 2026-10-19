@@ -517,33 +517,7 @@ function rerender(kind: 'tables' | 'names'): void {
   session.value = withHintFile(s, { ...s.hintFile, hints }, s.hintSource);
 }
 
-declare global {
-  interface Window {
-    /** Drives the workbench from the Playwright checks (test/e2e). Takes only bytes it is handed; fetches nothing. */
-    __fugloyTest?: {
-      rowCount: () => number;
-      scrollToAddr: (addr: number) => void;
-      setCursor: (addr: number | null) => void;
-      rerender: (kind: 'tables' | 'names') => void;
-      load: (bytes: number[], name: string, hints?: string, base?: number) => void;
-      /** The open program's loaded bytes, in address order. */
-      loadedBytes: () => number[];
-      /** Presses Run ▶. */
-      run: () => Promise<void>;
-      /** The running machine's screen as text rows (m.video.text()); empty with no machine. */
-      screenText: () => string[];
-      runnerState: () => string;
-      /** Pauses the running program (5C). */
-      pause: () => void;
-      /** The debugger's mode: idle, running, paused or stopped. */
-      debugMode: () => string;
-      /** What the listing's <style> lights, by address; null when the listing does not follow. */
-      listingMarks: () => { marks: { addr: number; class: string }[]; breaks: number[] } | null;
-      /** The running-line update's cost per frame over `ms` milliseconds of running. */
-      frameCost: (ms: number) => Promise<{ frames: number; mean: number; max: number }>;
-    };
-  }
-}
+// window.__fugloyTest is declared in app/types/e2e-hook.d.ts, shared with the specs.
 
 onMounted(() => {
   document.addEventListener('drop', onDocumentDrop);
@@ -598,6 +572,8 @@ function installTestHook(): void {
       };
       await new Promise((done) => setTimeout(done, ms));
       d.frame = orig;
+      // None counted: nothing ran, or useRun stopped calling debug.frame through the object.
+      if (frames === 0) throw new Error(`frameCost counted no frames in ${ms} ms. Start the program running, then measure again.`);
       return { frames, mean: frames === 0 ? 0 : total / frames, max };
     },
   };

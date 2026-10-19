@@ -151,6 +151,12 @@ export function listingFollows(session: ListingImage | null, result: AsmResult, 
   const want = result.image;
   if (want === null) return false;
   const { bytes, loaded } = session.module.image;
-  for (let a = 0; a < 0x10000; a++) if (want.loaded[a] !== 0 && (loaded[a] === 0 || bytes[a] !== want.bytes[a])) return false;
-  return true;
+  let any = false;
+  for (let a = 0; a < 0x10000; a++) {
+    if (want.loaded[a] === 0) continue;
+    if (loaded[a] === 0 || bytes[a] !== want.bytes[a]) return false;
+    any = true;
+  }
+  // An image with no bytes would match any listing.
+  return any;
 }

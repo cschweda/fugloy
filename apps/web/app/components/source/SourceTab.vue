@@ -28,7 +28,6 @@ import { download } from '~/utils/exports';
 import { RECHECK_DELAY_MS, severityWord } from '~/utils/source/diagnostics';
 import { fixExpected } from '~/utils/source/fix';
 import { inactiveReason } from '~/utils/source/lines';
-import type { FocusTarget } from '~/utils/running/debug-keys';
 import { speakAnnouncements } from '~/utils/running/announce';
 import type { AsmFix } from '~/utils/source/diagnostics';
 import type { RunReport } from '~/composables/useRun';
@@ -153,20 +152,12 @@ onBeforeUnmount(() => observer?.disconnect());
 
 /** In utils/lazy's loadFailed words (lazy code does not import utils/lazy), naming what is lost. */
 const KEYS_FAILED = 'The debug keys could not be loaded: the connection may have dropped, or the site was updated since this page opened. Reload the page to use F9, F10 and the other debug keys.';
-// The debug keys, and where focus was last among the editor and the listing (Run to Here's line).
-let lastFocus: FocusTarget | null = null;
-function onFocusIn(e: FocusEvent): void {
-  const el = e.target instanceof Element ? e.target : null;
-  if (el === null) return;
-  if (el.closest('.cm-editor') !== null && root.value?.contains(el) === true) lastFocus = 'source';
-  else if (el.closest('.fg-listing') !== null) lastFocus = 'listing';
-}
+// The debug keys (they track where focus was last, the editor or the listing, themselves).
 let uninstallKeys: (() => void) | null = null;
 let unspeak: (() => void) | null = null;
 let gone = false;
 const loadKeys = () => import('~/utils/running/debug-keys');
 onMounted(async () => {
-  document.addEventListener('focusin', onFocusIn);
   unspeak = speakAnnouncements(debug);
   // A chunk of its own, shared with Run ▶; tried twice, then this tab's status line says so.
   const m = await loadKeys()
@@ -180,7 +171,6 @@ onMounted(async () => {
   uninstallKeys = m.installDebugKeys(debug, {
     runNow: () => emit('run'),
     stop: () => run.stop(),
-    focusTarget: () => lastFocus,
     // The listing's line comes from the Run itself (debug.listingLine), which debug-keys asks.
     cursorLine: (where) => (where === 'source' ? (editor.value?.cursorLine() ?? null) : null),
     say: (text) => {
@@ -192,7 +182,6 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   gone = true;
   unspeak?.();
-  document.removeEventListener('focusin', onFocusIn);
   uninstallKeys?.();
 });
 

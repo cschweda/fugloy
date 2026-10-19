@@ -123,7 +123,7 @@ let uninstallKeys: (() => void) | null = null;
 let unspeak: (() => void) | null = null;
 let unfollow: (() => void) | null = null;
 let gone = false;
-const keyOptions: DebugKeyOptions = { runNow: () => void run.run(), stop: () => run.stop(), focusTarget: () => null, say: sayProblem };
+const keyOptions: DebugKeyOptions = { runNow: () => void run.run(), stop: () => run.stop(), say: sayProblem };
 function runToHere(): void {
   if (keys === null) return sayProblem(keysState === 'failed' ? KEYS_FAILED : KEYS_LOADING);
   keys.runToHere(debug, keyOptions);

@@ -38,7 +38,7 @@ function fakeDebug(m: DebugMode = 'paused') {
 }
 
 function options(over: Partial<DebugKeyOptions> = {}): DebugKeyOptions & { runNow: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn>; say: ReturnType<typeof vi.fn> } {
-  return { runNow: vi.fn(), stop: vi.fn(), say: vi.fn(), focusTarget: () => null, cursorLine: () => null, ...over } as never;
+  return { runNow: vi.fn(), stop: vi.fn(), say: vi.fn(), cursorLine: () => null, ...over } as never;
 }
 
 let uninstall: (() => void)[] = [];
@@ -133,7 +133,7 @@ describe('the debug keys', () => {
   it('F9 in the editor toggles the cursor line; Ctrl+F10 and ⌘+F10 run to the cursor line', () => {
     const { editor, button } = page();
     const d = fakeDebug('idle');
-    install(d, options({ focusTarget: () => 'source', cursorLine: (where) => (where === 'source' ? 7 : null) }));
+    install(d, options({ cursorLine: (where) => (where === 'source' ? 7 : null) }));
     expect(press(editor, { key: 'F9' }).defaultPrevented).toBe(true);
     expect(d.toggleBreakpoint).toHaveBeenCalledWith(7);
     // F9 elsewhere: not the editor's.
@@ -163,7 +163,7 @@ describe('the debug keys', () => {
   it('nothing fires in an INPUT or under an open dialog; F5 is still swallowed there while a program is under way', () => {
     const { input } = page();
     const d = fakeDebug('paused');
-    const o = options({ focusTarget: () => 'source', cursorLine: () => 3 });
+    const o = options({ cursorLine: () => 3 });
     install(d, o);
     for (const key of ['F10', 'F11', 'F7', 'F9', 'F6']) expect(press(input, { key }).defaultPrevented).toBe(false);
     // A reload would end the program: F5 and Shift+F5 are swallowed, but do not continue or stop.
@@ -182,7 +182,7 @@ describe('the debug keys', () => {
   it('Shift+F10, Alt+F-keys, Ctrl+F5 when idle, and an event already handled are left alone', () => {
     page();
     const d = fakeDebug('paused');
-    const o = options({ focusTarget: () => 'source', cursorLine: () => 3 });
+    const o = options({ cursorLine: () => 3 });
     install(d, o);
     expect(press(document.body, { key: 'F10', shiftKey: true }).defaultPrevented).toBe(false);
     expect(press(document.body, { key: 'F10', altKey: true }).defaultPrevented).toBe(false);
@@ -203,7 +203,7 @@ describe('the debug keys', () => {
     const add = vi.spyOn(document, 'addEventListener');
     const remove = vi.spyOn(document, 'removeEventListener');
     const a = installDebugKeys(d, options());
-    const b = installDebugKeys(d, options({ focusTarget: () => 'source', cursorLine: () => 4 }));
+    const b = installDebugKeys(d, options({ cursorLine: () => 4 }));
     expect(add.mock.calls.filter(([t]) => t === 'keydown').length).toBe(1);
     press(document.body, { key: 'F10' });
     expect(d.stepOver).toHaveBeenCalledTimes(1);

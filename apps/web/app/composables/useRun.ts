@@ -126,6 +126,7 @@ function buildRun(deps: RunDeps): Run {
     wb,
   });
   const frame = (r: Runner): void => {
+    // Called through the object: the e2e hook frameCost (pages/index.vue) wraps debug.frame to time it.
     debug.frame(r);
     for (const cb of frameListeners) cb(r);
   };

@@ -18,18 +18,6 @@ const PERF = process.env.FUGLOY_PERF === '1';
 declare global {
   interface Window {
     __longTasks: number[];
-    /** Set by the workbench (app/pages/index.vue). */
-    __fugloyTest?: {
-      rowCount: () => number;
-      scrollToAddr: (addr: number) => void;
-      setCursor: (addr: number | null) => void;
-      rerender: (kind: 'tables' | 'names') => void;
-      load: (bytes: number[], name: string, hints?: string, base?: number) => void;
-      loadedBytes: () => number[];
-      run: () => Promise<void>;
-      screenText: () => string[];
-      runnerState: () => string;
-    };
   }
 }
 

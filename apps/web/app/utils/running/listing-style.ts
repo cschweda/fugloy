@@ -50,7 +50,8 @@ export function listingCss(l: ListingMarks): string {
   const breaks = new Set(l.breaks);
   const marker = (addr: number, text: string, colour: string): string => `${sel(addr)} .fg-col-line::before{content:"${text}";float:left;color:var(${colour})}`;
   for (const addr of breaks) if (best.get(addr) !== 'fg-run-paused') css += marker(addr, '●', '--fg-error');
-  // ▶ on the paused line: a cue that is not colour alone; red when a breakpoint stopped it there.
+  // ▶ on the paused line: a cue that is not colour alone. Red when the row holds a breakpoint (whether
+  // the breakpoint or a step stopped there), whose ● gives way to it; orange otherwise.
   for (const [addr, cls] of best) if (cls === 'fg-run-paused') css += marker(addr, '▶', breaks.has(addr) ? '--fg-error' : '--fg-string');
   return css;
 }
@@ -76,12 +77,9 @@ export function writeListingStyle(css: string | null): void {
   writes++;
 }
 
-/** The listing on the page, if it is displayed (a hidden tab's listing is not scrolled). */
-function shownListing(): HTMLElement | null {
-  const el = document.querySelector<HTMLElement>('.fg-listing');
-  if (el === null) return null;
-  return typeof el.checkVisibility !== 'function' || el.checkVisibility() ? el : null;
-}
+/** The listing on the page, displayed or not; null when there is none. */
+const listingElement = (): HTMLElement | null => document.querySelector<HTMLElement>('.fg-listing');
+const displayed = (el: HTMLElement): boolean => typeof el.checkVisibility !== 'function' || el.checkVisibility();
 
 /** Whether a code or data row at `addr` is drawn and wholly inside the listing's view. */
 function rowInView(listing: HTMLElement, addr: number): boolean {
@@ -96,33 +94,75 @@ function rowInView(listing: HTMLElement, addr: number): boolean {
 
 /**
  * Keeps the listing's style in step with `debug.listing`, and scrolls the listing through `scroll`
- * (the page's scrollTo) as Ruling 7 says. Returns the uninstall, which also removes the style.
+ * (the page's scrollTo) as Ruling 7 says. A pause while the listing is hidden (another left tab)
+ * keeps its row and scrolls there once the listing shows, unless the program moves on first, as
+ * Source ✎ does. Returns the uninstall, which also removes the style.
  */
 export function installListingFollow(debug: Debug, scroll: (addr: number) => void, opts: { now?: () => number } = {}): () => void {
   const now = opts.now ?? (() => performance.now());
   let followAt = -Infinity;
+  let pending: number | null = null;
+  let observer: IntersectionObserver | null = null;
+  const unobserve = (): void => {
+    observer?.disconnect();
+    observer = null;
+  };
+  const clearPending = (): void => {
+    pending = null;
+    unobserve();
+  };
+  /** Scrolls once `el` shows (happy with any observer that reports it intersecting). */
+  function whenShown(el: HTMLElement): void {
+    unobserve();
+    if (typeof IntersectionObserver !== 'function') return;
+    observer = new IntersectionObserver((entries) => {
+      if (!entries.some((e) => e.isIntersecting) || pending === null) return;
+      const addr = pending;
+      clearPending();
+      scroll(addr);
+    });
+    observer.observe(el);
+  }
+  /** Follow, while running: at most 4 times a second, and only once the row has left view. */
+  function follow(l: ListingMarks | null): void {
+    if (l === null || !debug.follow.value || debug.mode.value !== 'running') return;
+    const addr = l.marks.find((m) => m.class === 'fg-run-now')?.addr;
+    const at = now();
+    if (addr === undefined || at - followAt < LISTING_FOLLOW_MS) return;
+    const listing = listingElement();
+    if (listing === null || !displayed(listing) || rowInView(listing, addr)) return;
+    followAt = at;
+    scroll(addr);
+  }
   const stops = [
     watch(debug.listing, (l) => writeListingStyle(l === null ? null : listingCss(l)), { immediate: true }),
     // A pause or a step: its row into view (scrollTo leaves a row already in full view alone).
     watch(debug.reveal, (r) => {
       if (r === null || r.line === null || !debug.listingFollows.value) return;
       const addr = debug.listingAddr(r.line);
-      if (addr !== null) scroll(addr);
-    }),
-    // Follow, while running: at most 4 times a second, and only once the row has left view.
-    watch(debug.listing, (l) => {
-      if (l === null || !debug.follow.value || debug.mode.value !== 'running') return;
-      const addr = l.marks.find((m) => m.class === 'fg-run-now')?.addr;
-      const at = now();
-      if (addr === undefined || at - followAt < LISTING_FOLLOW_MS) return;
-      const listing = shownListing();
-      if (listing === null || rowInView(listing, addr)) return;
-      followAt = at;
+      if (addr === null) return;
+      const el = listingElement();
+      if (el !== null && !displayed(el)) {
+        pending = addr;
+        whenShown(el);
+        return;
+      }
+      clearPending();
       scroll(addr);
+    }),
+    // A scroll waiting for the listing to show is stale once the program moves on.
+    watch(debug.mode, (m) => {
+      if (m !== 'paused') clearPending();
+    }),
+    watch(debug.listing, follow),
+    // Follow switched on: one check now, not only when the line next moves.
+    watch(debug.follow, (on) => {
+      if (on) follow(debug.listing.value);
     }),
   ];
   return () => {
     for (const stop of stops) stop();
+    clearPending();
     writeListingStyle(null);
   };
 }
