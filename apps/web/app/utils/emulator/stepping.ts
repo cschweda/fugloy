@@ -15,21 +15,16 @@
 // - A CPU halted with interrupts off cannot move on: the actions do nothing and return the sentence.
 import type { AsmResult } from '@fugloy/asm';
 import type { Machine } from '@fugloy/emu';
-import { isDataLine } from './rom-use';
+import { inactiveReason } from '../source/lines';
 import type { Runner } from './runner';
+
+export { inactiveReason };
 
 export const HALTED_INTERRUPTS_OFF = 'The CPU is halted (HALT) with interrupts off, so it will not move on. Press Stop, then Run.';
 
 /** The address a breakpoint on `line` stops at, or null for a line with no code. */
 export function breakAddress(result: AsmResult, line: number): number | null {
   return result.sourceMap.addressesOf(line)[0] ?? null;
-}
-
-/** Why a breakpoint on `line` cannot stop, as a sentence; null when it can. */
-export function inactiveReason(result: AsmResult, line: number): string | null {
-  if (breakAddress(result, line) === null) return `Line ${line} has no instruction to stop at.`;
-  const l = result.listing.find((x) => x.line === line);
-  return l !== undefined && isDataLine(l) ? `Line ${line} holds data, not an instruction to stop at.` : null;
 }
 
 /**

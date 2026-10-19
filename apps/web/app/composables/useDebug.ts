@@ -99,7 +99,8 @@ export interface DebugDeps {
   /** Keeps run.state in step with the runner. */
   state(s: Runner['state']): void;
   now?: (() => number) | undefined;
-  reducedMotion?: () => boolean;
+  /** prefers-reduced-motion's query (null where there is none); followed as it changes. */
+  motionQuery?: () => MediaQueryList | null;
 }
 
 const hex4 = (n: number): string => `$${n.toString(16).toUpperCase().padStart(4, '0')}`;
@@ -139,11 +140,11 @@ function changedNames(now: RegSnap, prev: RegSnap): string[] {
   return out;
 }
 
-const defaultReduced = (): boolean => {
+const defaultMotionQuery = (): MediaQueryList | null => {
   try {
-    return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    return typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
   } catch {
-    return false;
+    return null;
   }
 };
 
@@ -156,7 +157,12 @@ export function createDebug(deps: DebugDeps): DebugControl {
   const breakpoints = ref<number[]>([]);
   const inactive = ref<number[]>([]);
   const follow = ref(false);
-  const reduced = ref((deps.reducedMotion ?? defaultReduced)());
+  // Followed for the session: one listener on the page's one Run, never removed.
+  const motion = (deps.motionQuery ?? defaultMotionQuery)();
+  const reduced = ref(motion?.matches === true);
+  motion?.addEventListener?.('change', (e) => {
+    reduced.value = e.matches;
+  });
   const registers = shallowRef<RegisterView | null>(null);
   const reveal = shallowRef<{ line: number | null } | null>(null);
   const announce = ref<string | null>(null);

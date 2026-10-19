@@ -226,6 +226,24 @@ describe('the Run tab', () => {
     expect(t.get('[data-testid="run-message"]').text()).toContain('on a fresh Model 4');
   });
 
+  it('Stop works while a program is paused, and the screen treats it as under way', async () => {
+    sources = createSources({ open: async () => null, starter: async () => starter });
+    await sources.start();
+    await sources.create();
+    fakeRun.state.value = 'paused';
+    try {
+      const t = attach(RunTab, { run: fakeRun, sources });
+      await flushPromises();
+      const stop = t.get<HTMLButtonElement>('[data-testid="run-stop"]');
+      expect(stop.element.disabled).toBe(false);
+      await stop.trigger('click');
+      expect(fakeRun.stop).toHaveBeenCalled();
+      expect(t.text()).toContain('Click the screen to type to the TRS-80.');
+    } finally {
+      fakeRun.state.value = 'idle';
+    }
+  });
+
   it('says a refused ROM in the alert region, and good news in the status region', async () => {
     sources = createSources({ open: async () => null, starter: async () => starter });
     await sources.start();

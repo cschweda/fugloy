@@ -125,7 +125,7 @@ watch(leftTab, (t) => {
 watch(rightTab, (t) => {
   if (t === 'run') void runTab.load();
 });
-const sourcePanel = ref<{ showLine(line: number): void } | null>(null);
+const sourcePanel = ref<{ cursorToLine(line: number): void } | null>(null);
 /** The workbench shows with a program open, or while writing one (Ruling 12). */
 const workbenchOpen = computed(() => session.value !== null || wb.writing.value);
 /** Bumped by Close and by leaving the page: a press still loading Run's own module then runs nothing. */
@@ -149,7 +149,7 @@ watch(
     leftTab.value = 'source';
     await sourceTab.load();
     await nextTick();
-    sourcePanel.value?.showLine(r.line);
+    sourcePanel.value?.cursorToLine(r.line);
   },
 );
 // Leaving the workbench stops the program (its frames would run on unseen), or a Run still loading.

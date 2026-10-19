@@ -26,7 +26,8 @@ const isMac = ref(false);
 const MODELS: readonly ModelId[] = [1, 3, 4];
 const model = computed<ModelId>(() => sources.current.value?.model ?? 3);
 const machine = computed(() => run.runner.value?.machine ?? null);
-const running = computed(() => run.state.value === 'running');
+/** A program is under way: running, or paused (5C) at a breakpoint, a step, or Pause. Stop ends either. */
+const running = computed(() => run.state.value === 'running' || run.state.value === 'paused');
 const rom = computed(() => roms.info(model.value));
 const runKey = computed(() => (isMac.value ? '⌘+Enter' : 'Ctrl+Enter'));
 

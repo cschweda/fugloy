@@ -268,7 +268,7 @@ describe('the Source toolbar', () => {
     expect(w.findAll('[data-testid="source-diag"]').map((d) => d.text())).toEqual([expect.stringMatching(/^Warning\s*Line 2\s*Line 2 points HL/)]);
     expect(w.get('[data-testid="source-diag-count"]').text()).toBe('1 warning');
     (document.activeElement as HTMLElement | null)?.blur();
-    (w.vm as unknown as { showLine(n: number): void }).showLine(3);
+    (w.vm as unknown as { cursorToLine(n: number): void }).cursorToLine(3);
     expect(view().state.doc.lineAt(view().state.selection.main.head).number).toBe(3);
     expect(view().hasFocus).toBe(false);
     // Typing makes the notes stale: the next check drops them.

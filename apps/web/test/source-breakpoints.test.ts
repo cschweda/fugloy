@@ -6,7 +6,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
 import type { VueWrapper } from '@vue/test-utils';
-import { breakpointLines } from '../app/utils/source/run-marks';
+import { redo, undo } from '@codemirror/commands';
+import { breakpointField, breakpointLines } from '../app/utils/source/run-marks';
 import type { Holder } from './source-run-support';
 import { clickGutter, FakeIO, gutterMarks, LOOP, memoryStore, mountSource, prepare } from './source-run-support';
 
@@ -81,6 +82,66 @@ describe('breakpoints in the Source gutter', () => {
     await flushPromises();
     expect(breakpointLines(v.state)).toEqual([]);
     expect(m.sources.current.value?.breakpoints).toEqual([]);
+  });
+
+  it('undo brings back a breakpoint deleted with its line, and redo removes it again', async () => {
+    const { clock } = await prepare(holder, LOOP);
+    const m = await mountSource(SourceTab, holder, clock);
+    w = m.w;
+    clickGutter(m.view(), 5);
+    await flushPromises();
+    const v = m.view();
+    const line = v.state.doc.line(5);
+    v.dispatch({ changes: { from: line.from, to: line.to + 1 }, userEvent: 'delete' });
+    await flushPromises();
+    expect(breakpointLines(v.state)).toEqual([]);
+    expect(undo(v)).toBe(true);
+    await flushPromises();
+    expect(v.state.doc.line(5).text).toContain('DEC');
+    expect(breakpointLines(v.state)).toEqual([5]);
+    expect(m.sources.current.value?.breakpoints).toEqual([5]);
+    expect(redo(v)).toBe(true);
+    await flushPromises();
+    expect(breakpointLines(v.state)).toEqual([]);
+    expect(m.sources.current.value?.breakpoints).toEqual([]);
+  });
+
+  it('with no breakpoints, an edit leaves the breakpoint set as it was', async () => {
+    const { clock } = await prepare(holder, LOOP);
+    const m = await mountSource(SourceTab, holder, clock);
+    w = m.w;
+    const v = m.view();
+    const before = v.state.field(breakpointField);
+    v.dispatch({ changes: { from: 0, insert: '; typed\n' }, userEvent: 'input.type' });
+    expect(v.state.field(breakpointField)).toBe(before);
+  });
+
+  it('a breakpoint on a line with no code is hollow before any Run, and stays right after an edit', async () => {
+    const { clock } = await prepare(holder, LOOP);
+    const m = await mountSource(SourceTab, holder, clock);
+    w = m.w;
+    clickGutter(m.view(), 3);
+    clickGutter(m.view(), 4);
+    await flushPromises();
+    expect(m.run.runner.value).toBeNull();
+    expect(gutterMarks(m.view())).toEqual([
+      { text: '○', title: 'Line 3 has no instruction to stop at.' },
+      { text: '●', title: expect.stringMatching(/^Breakpoint/) },
+    ]);
+    // A line typed above: both move down; the next check (250 ms) keeps the right one hollow.
+    vi.useFakeTimers();
+    const v = m.view();
+    v.dispatch({ changes: { from: 0, insert: '; header\n' }, userEvent: 'input.type' });
+    await vi.advanceTimersByTimeAsync(250);
+    expect(breakpointLines(v.state)).toEqual([4, 5]);
+    expect(gutterMarks(v)).toEqual([
+      { text: '○', title: 'Line 4 has no instruction to stop at.' },
+      { text: '●', title: expect.stringMatching(/^Breakpoint/) },
+    ]);
+    // Code typed on the hollow line: it can stop now.
+    v.dispatch({ changes: { from: v.state.doc.line(4).from, to: v.state.doc.line(4).to, insert: '        NOP' }, userEvent: 'input.type' });
+    await vi.advanceTimersByTimeAsync(250);
+    expect(gutterMarks(v).map((g) => g.text)).toEqual(['●', '●']);
   });
 
   it('opens a source with its saved breakpoints', async () => {

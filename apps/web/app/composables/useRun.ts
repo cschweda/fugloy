@@ -13,7 +13,7 @@
 //
 // 5C: `debug` (composables/useDebug) is the running line's coordinator. Each Run hands it the
 // runner and its Stepper, after applying the source's saved breakpoints before the first frame.
-import { computed, ref, shallowRef, watch } from 'vue';
+import { computed, effectScope, ref, shallowRef, watch } from 'vue';
 import type { ComputedRef, Ref, ShallowRef } from 'vue';
 import type { AsmResult, Diagnostic } from '@fugloy/asm';
 import { defaultDos } from '@fugloy/disasm';
@@ -95,7 +95,15 @@ export function openSourceListing(wb: Workbench, bytes: Uint8Array, name: string
 
 const cmdName = (name: string): string => `${name.replace(/\.[^.]*$/, '') || 'program'}.cmd`;
 
+/**
+ * A Run, with its watchers (and its coordinator's) in a detached effect scope of their own, so they
+ * live as long as the Run whichever component's setup first asked for it.
+ */
 export function createRun(deps: RunDeps = {}): Run {
+  return effectScope(true).run(() => buildRun(deps))!;
+}
+
+function buildRun(deps: RunDeps): Run {
   const sources = deps.sources ?? useSources();
   const wb = deps.wb ?? useWorkbench();
   const loadKit = deps.kit ?? (() => import('../utils/emulator/kit'));

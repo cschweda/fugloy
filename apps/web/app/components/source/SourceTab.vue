@@ -10,10 +10,12 @@
 // the text is the one the Run assembled (otherwise one sentence says why). A set reaches the editor
 // only when it changes, and never while this panel is hidden: the latest is sent once it shows. A
 // pause brings its line into view without moving the selection; while running, Follow does so at
-// most 4 times a second, once the line has left view. The gutter's breakpoints are the source's.
+// most 4 times a second, once the line has left view. The gutter's breakpoints are the source's;
+// the hollow ones (no instruction to stop at) come from this tab's own assembly of the text on
+// screen, so they are right before any Run and after edits.
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { assemble } from '@fugloy/asm';
-import type { Diagnostic } from '@fugloy/asm';
+import type { AsmResult, Diagnostic } from '@fugloy/asm';
 import CodeEditor from './CodeEditor.vue';
 import ConfirmDialog from '~/components/ConfirmDialog.vue';
 import { useSources } from '~/composables/useSources';
@@ -23,6 +25,7 @@ import { SOURCE_CHANGED } from '~/composables/useDebug';
 import { download } from '~/utils/exports';
 import { RECHECK_DELAY_MS, severityWord } from '~/utils/source/diagnostics';
 import { fixExpected } from '~/utils/source/fix';
+import { inactiveReason } from '~/utils/source/lines';
 import type { AsmFix } from '~/utils/source/diagnostics';
 import type { RunReport } from '~/composables/useRun';
 
@@ -32,7 +35,8 @@ const emit = defineEmits<{ run: []; fix: [fix: AsmFix] }>();
 
 const sources = useSources();
 const current = sources.current;
-const debug = useRun().debug;
+const run = useRun();
+const debug = run.debug;
 const root = ref<HTMLElement | null>(null);
 const editor = ref<InstanceType<typeof CodeEditor> | null>(null);
 const diagnostics = shallowRef<readonly Diagnostic[]>([]);
@@ -78,10 +82,8 @@ const shown = (): boolean => root.value !== null && (typeof root.value.checkVisi
 function deliver(): void {
   const ed = editor.value;
   if (ed === null || !shown()) return;
-  if (pendingShow !== null) {
-    ed.showLine(pendingShow);
-    pendingShow = null;
-  }
+  if (pendingShow !== null && debug.live.value) ed.scrollToLine(pendingShow);
+  pendingShow = null;
   const set = shownMarks.value;
   const key = keyOf(set);
   if (key === sentKey) return;
@@ -93,14 +95,39 @@ function deliver(): void {
   const at = performance.now();
   if (at - followAt < FOLLOW_INTERVAL_MS || ed.lineVisible(line)) return;
   followAt = at;
-  ed.showLine(line);
+  ed.scrollToLine(line);
 }
 watch(shownMarks, deliver);
+// A scroll waiting for the panel to show is stale once the program moves on.
+watch(debug.mode, (m) => {
+  if (m !== 'paused') pendingShow = null;
+});
 
-function showBreakpoints(): void {
-  editor.value?.setBreakpoints(debug.breakpoints.value, debug.inactive.value, debug.inactiveWhy);
+/** The last assembly of a text, from check() or from a Run: the hollow breakpoints' source. */
+const asm = shallowRef<{ text: string; result: AsmResult } | null>(null);
+interface Hollow {
+  lines: number[];
+  why: Map<number, string>;
 }
-watch([debug.breakpoints, debug.inactive], showBreakpoints);
+let lastHollow: Hollow = { lines: [], why: new Map() };
+/** The breakpoints with no instruction to stop at, by the latest assembly of the text on screen (the last known while a new one is pending). */
+const hollow = computed<Hollow>(() => {
+  const a = asm.value;
+  if (a === null || a.text !== current.value?.text) return lastHollow;
+  const why = new Map<number, string>();
+  for (const line of debug.breakpoints.value) {
+    const r = inactiveReason(a.result, line);
+    if (r !== null) why.set(line, r);
+  }
+  lastHollow = { lines: [...why.keys()], why };
+  return lastHollow;
+});
+const noStop = (line: number): string => `Line ${line} has no instruction to stop at.`;
+function showBreakpoints(): void {
+  const h = hollow.value;
+  editor.value?.setBreakpoints(debug.breakpoints.value, h.lines, (line) => h.why.get(line) ?? noStop(line));
+}
+watch([debug.breakpoints, hollow], showBreakpoints);
 
 // A pause or step: its line into view, now or once the panel shows.
 watch(debug.reveal, (r) => {
@@ -134,7 +161,9 @@ function check(): void {
   }
   let diags: readonly Diagnostic[];
   try {
-    diags = assemble(src.text, { model: src.model }).diagnostics;
+    const result = assemble(src.text, { model: src.model });
+    asm.value = { text: src.text, result };
+    diags = result.diagnostics;
   } catch (err) {
     diags = [];
     problem.value = err instanceof Error ? err.message : String(err);
@@ -160,6 +189,8 @@ function onText(text: string): void {
   if (src === null) return;
   // The reassembly note describes the text as it was opened: the first edit makes it stale.
   if (opened.note.value?.sourceId === src.id) opened.note.value = null;
+  // A pause's line is in the old text.
+  pendingShow = null;
   sources.update(src.id, { text });
   scheduleCheck();
 }
@@ -193,6 +224,9 @@ watch(
   () => props.report,
   (r) => {
     if (r != null && r.text === current.value?.text) {
+      // The Run assembled this text: its result stands in for the check it cancels.
+      const result = run.lastResult.value;
+      if (result !== null) asm.value = { text: r.text, result };
       cancelCheck();
       show(r.diagnostics, r.text);
     }
@@ -301,8 +335,8 @@ defineExpose({
     show(diags, text ?? current.value?.text ?? '');
   },
   revealLine: reveal,
-  /** Scrolls to a line and puts the cursor there without taking the focus (Run never moves it), once the editor is there. */
-  showLine(line: number): void {
+  /** Moves the cursor to a line and scrolls it into view, without taking the focus (Run never moves it), once the editor is there. */
+  cursorToLine(line: number): void {
     if (editor.value === null) pendingReveal = line;
     else editor.value.revealLine(line);
   },

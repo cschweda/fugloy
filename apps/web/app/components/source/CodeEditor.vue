@@ -68,10 +68,13 @@ const theme = EditorView.theme(
     '.cm-line.fg-run-paused': { backgroundColor: 'rgba(255, 166, 87, 0.22)', boxShadow: 'inset 3px 0 0 var(--fg-string)' },
     '.cm-line.fg-run-out': { backgroundColor: 'rgba(121, 192, 255, 0.12)', boxShadow: 'inset 3px 0 0 var(--fg-register)' },
     '.cm-line.fg-run-stopped': { backgroundColor: 'rgba(255, 161, 152, 0.16)', boxShadow: 'inset 3px 0 0 var(--fg-error)' },
-    '.fg-bp-gutter .cm-gutterElement': { cursor: 'pointer', padding: '0 3px', position: 'relative', color: 'var(--fg-error)' },
+    '.fg-bp-gutter .cm-gutterElement': { cursor: 'pointer', padding: '0 3px', color: 'var(--fg-error)' },
     '.fg-bp-gutter .cm-gutterElement:hover': { backgroundColor: 'var(--fg-hover)' },
     '.fg-bp-off': { color: 'var(--fg-muted)' },
-    '.fg-bp-pc': { color: 'var(--fg-string)', position: 'absolute', left: '3px', top: 0 },
+    // The paused line's cell: tinted like its band, with ▶ in place of ● (red when on a breakpoint).
+    '.fg-bp-gutter .cm-gutterElement.fg-bp-pc-line': { backgroundColor: 'rgba(255, 166, 87, 0.22)' },
+    '.fg-bp-pc': { color: 'var(--fg-string)' },
+    '.fg-bp-pc.fg-bp-pc-break': { color: 'var(--fg-error)' },
   },
   { dark: true },
 );
@@ -199,8 +202,8 @@ defineExpose({
     const off = new Set(inactive);
     view.dispatch({ effects: setBreakpointMarks.of(lines.map((line) => ({ line, why: off.has(line) ? why(line) : null }))) });
   },
-  /** 5C: scrolls line `n` into view, if it is not, without moving the selection or the focus. */
-  showLine(n: number): void {
+  /** 5C: scrolls line `n` into view, if it is not, without moving the cursor (unlike `revealLine`) or the focus. */
+  scrollToLine(n: number): void {
     if (view === null || n < 1 || n > view.state.doc.lines) return;
     view.dispatch({ effects: EditorView.scrollIntoView(view.state.doc.line(n).from, { y: 'nearest' }) });
   },

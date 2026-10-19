@@ -4,10 +4,13 @@
 //   stopped); the paused line also gets a ▶ in the breakpoint gutter, a cue that is not colour.
 // - `setBreakpointMarks` replaces the breakpoints: ● for one that stops, ○ for a line with no
 //   instruction to stop at (its title says why). They are carried through edits: a line moved by
-//   an edit takes its breakpoint along, and a line deleted whole loses it.
-// - `breakpointGutter(onToggle)` draws them and reports a click on a line.
+//   an edit takes its breakpoint along, and a line deleted whole loses it, which an undo of that
+//   edit brings back (`invertedEffects`; CodeMirror's history keeps no field of its own).
+// - `breakpointGutter(onToggle)` draws them and reports a click on a line. On the paused line the
+//   ▶ takes the ●'s place (red when it is a breakpoint), and the cell is tinted (`fg-bp-pc-line`).
 import { Annotation, RangeSet, StateEffect, StateField } from '@codemirror/state';
 import type { ChangeSet, EditorState, Extension, Line, Text } from '@codemirror/state';
+import { invertedEffects } from '@codemirror/commands';
 import { Decoration, EditorView, GutterMarker, gutter } from '@codemirror/view';
 import type { DecorationSet } from '@codemirror/view';
 
@@ -41,15 +44,23 @@ export const lineField = StateField.define<DecorationSet>({
 
 class PcMarker extends GutterMarker {
   override elementClass = 'fg-bp-pc-line';
+  /** `onBreakpoint`: the paused line holds a breakpoint, drawn as this one mark. */
+  constructor(readonly onBreakpoint: boolean) {
+    super();
+  }
+  override eq(other: GutterMarker): boolean {
+    return other instanceof PcMarker && other.onBreakpoint === this.onBreakpoint;
+  }
   override toDOM(): Node {
     const el = document.createElement('span');
-    el.className = 'fg-bp-pc';
+    el.className = this.onBreakpoint ? 'fg-bp-pc fg-bp-pc-break' : 'fg-bp-pc';
     el.textContent = '▶';
-    el.title = 'Paused here';
+    el.title = this.onBreakpoint ? 'Paused here, at a breakpoint. Click to remove the breakpoint.' : 'Paused here.';
     return el;
   }
 }
-const pcMarker = new PcMarker();
+const pcMarker = new PcMarker(false);
+const pcOnBreak = new PcMarker(true);
 
 /** The ▶ on the paused line, from the last `setLines`. */
 const pcField = StateField.define<RangeSet<GutterMarker>>({
@@ -95,7 +106,22 @@ function deletesLine(changes: ChangeSet, line: Line): boolean {
   return gone;
 }
 
+/** The breakpoints an edit deletes with their lines: each line's start (in `before`) and marker. */
+function lostBreakpoints(set: RangeSet<BreakpointMarker>, changes: ChangeSet, before: Text): { pos: number; why: string | null }[] {
+  const lost: { pos: number; why: string | null }[] = [];
+  set.between(0, before.length, (from, _to, value) => {
+    if (deletesLine(changes, before.lineAt(from))) lost.push({ pos: from, why: value.why });
+  });
+  return lost;
+}
+
+/** Puts back breakpoints an undone edit deleted; positions map through later changes. */
+const restoreBreakpoints = StateEffect.define<{ pos: number; why: string | null }[]>({
+  map: (value, mapping) => value.map((b) => ({ pos: mapping.mapPos(b.pos), why: b.why })),
+});
+
 function mapBreakpoints(set: RangeSet<BreakpointMarker>, changes: ChangeSet, before: Text, after: Text): RangeSet<BreakpointMarker> {
+  if (set.size === 0) return set;
   const out: { from: number; value: BreakpointMarker }[] = [];
   const seen = new Set<number>();
   set.between(0, before.length, (from, _to, value) => {
@@ -115,6 +141,14 @@ export const breakpointField = StateField.define<RangeSet<BreakpointMarker>>({
   update(set, tr) {
     let next = tr.docChanged ? mapBreakpoints(set, tr.changes, tr.startState.doc, tr.state.doc) : set;
     for (const e of tr.effects) {
+      if (e.is(restoreBreakpoints)) {
+        const doc = tr.state.doc;
+        const have = new Set<number>();
+        next.between(0, doc.length, (from) => void have.add(from));
+        const add = e.value.map((b) => ({ from: doc.lineAt(Math.min(b.pos, doc.length)).from, why: b.why })).filter((b) => !have.has(b.from));
+        if (add.length > 0) next = next.update({ add: add.map((b) => (b.why === null ? stops : new BreakpointMarker(b.why)).range(b.from)), sort: true });
+        continue;
+      }
       if (!e.is(setBreakpointMarks)) continue;
       const doc = tr.state.doc;
       const marks = e.value
@@ -125,6 +159,13 @@ export const breakpointField = StateField.define<RangeSet<BreakpointMarker>>({
     }
     return next;
   },
+});
+
+/** An edit that deletes breakpoints with their lines records how to put them back, for undo. */
+const undoLost = invertedEffects.of((tr) => {
+  if (!tr.docChanged) return [];
+  const lost = lostBreakpoints(tr.startState.field(breakpointField), tr.changes, tr.startState.doc);
+  return lost.length === 0 ? [] : [restoreBreakpoints.of(lost)];
 });
 
 /** The breakpoint lines in a state, in order. */
@@ -142,14 +183,35 @@ class Spacer extends GutterMarker {
   }
 }
 
+/**
+ * The gutter's marks: the breakpoints, with the paused line's ▶ in place of its ● (one mark, not
+ * two drawn over each other). Rebuilt only when either set changes.
+ */
+let memo: { bps: RangeSet<GutterMarker>; pc: RangeSet<GutterMarker>; out: RangeSet<GutterMarker> } | null = null;
+function gutterMarks(state: EditorState): RangeSet<GutterMarker> {
+  const bps = state.field(breakpointField);
+  const pc = state.field(pcField);
+  if (memo !== null && memo.bps === bps && memo.pc === pc) return memo.out;
+  let out: RangeSet<GutterMarker> = bps;
+  if (pc.size > 0) {
+    const at = pc.iter().from;
+    let onBreak = false;
+    out = bps.update({ filter: (from) => (from === at ? ((onBreak = true), false) : true) });
+    out = out.update({ add: [(onBreak ? pcOnBreak : pcMarker).range(at)] });
+  }
+  memo = { bps, pc, out };
+  return out;
+}
+
 /** The breakpoint gutter; `onToggle` gets the line a primary click landed on. */
 export function breakpointGutter(onToggle: (line: number) => void): Extension {
   return [
     breakpointField,
     pcField,
+    undoLost,
     gutter({
       class: 'fg-bp-gutter',
-      markers: (v) => [v.state.field(breakpointField), v.state.field(pcField)],
+      markers: (v) => gutterMarks(v.state),
       initialSpacer: () => new Spacer(),
       domEventHandlers: {
         mousedown(view, block, event) {
