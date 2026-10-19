@@ -7,7 +7,7 @@ import { blockIdentities } from '../../src/hints/identity.js';
 import type { MemoryImage } from '../../src/memory.js';
 import { analyze } from '../../src/pipeline.js';
 import { CMD_FIXTURES } from '../fixtures.js';
-import { assemble, expectSameImage, skipIfNoZmac } from '../roundtrip/zmac.js';
+import { assemble, expectSameImage, withAssembler } from '../roundtrip/zmac.js';
 import { CmdWriter } from '../writers/cmd-writer.js';
 
 const moves = (bytes: Uint8Array) => analyze(loadCmd(bytes)).proposals.filter((p) => p.kind === 'move');
@@ -105,7 +105,7 @@ describe('proposeMovers', () => {
   });
 });
 
-skipIfNoZmac()('applying a mover proposal analyzes the copy at its runtime address and still reassembles the file', () => {
+withAssembler()('applying a mover proposal analyzes the copy at its runtime address and still reassembles the file', () => {
   const mod = loadCmd(CMD_FIXTURES['mover']!());
   const [proposal] = moves(CMD_FIXTURES['mover']!());
   const { file, errors } = parseHints(hintText(mod.image, proposal!.hints));

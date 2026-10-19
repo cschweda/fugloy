@@ -9,7 +9,7 @@ import { parseHints } from '../../src/hints/format.js';
 import { programHash } from '../../src/hints/identity.js';
 import { renderPass1Listing } from '../../src/listing.js';
 import { analyze } from '../../src/pipeline.js';
-import { assemble, expectSameImage, skipIfNoZmac } from '../roundtrip/zmac.js';
+import { assemble, expectSameImage, withAssembler } from '../roundtrip/zmac.js';
 import { readSample, resolveSample } from './samples.js';
 
 const examples = new URL('../../../../examples/sea-dragon/', import.meta.url);
@@ -20,7 +20,7 @@ it('ships ten Sea Dragon builds in examples/, where the tests find them', () => 
   }
 });
 
-skipIfNoZmac()('the committed seadrg01.hints moves analysis into the game at $497F, and the zmac output still rebuilds the image', () => {
+withAssembler()('the committed seadrg01.hints moves analysis into the game at $497F, and the zmac output still rebuilds the image', () => {
   const bytes = readSample('seadrg01.cmd');
   const mod = loadCmd(bytes);
   const parsed = parseHints(readFileSync(new URL('seadrg01.hints', examples), 'utf8'));

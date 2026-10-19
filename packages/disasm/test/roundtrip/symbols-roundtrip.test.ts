@@ -11,9 +11,9 @@ import { loadRaw } from '../../src/raw.js';
 import { selectSymbols } from '../../src/symbols/select.js';
 import type { SymbolSelection, SymbolSet } from '../../src/symbols/select.js';
 import { entry, tablesOf } from '../symbols/helpers.js';
-import { assemble, expectSameImage, skipIfNoZmac } from './zmac.js';
+import { assemble, expectSameImage, withAssembler } from './zmac.js';
 
-const test = skipIfNoZmac();
+const test = withAssembler();
 
 /** The 27-byte routine of the social card: clear the screen, wait for ENTER, jump to DOS. */
 const ROUTINE = Uint8Array.from([0xf3, 0x31, 0x00, 0x70, 0x21, 0x00, 0x3c, 0x11, 0x01, 0x3c, 0x01, 0xff, 0x03, 0x36, 0x20, 0xed, 0xb0, 0xcd, 0x49, 0x00, 0xfe, 0x0d, 0x20, 0xf9, 0xc3, 0x2d, 0x40]);

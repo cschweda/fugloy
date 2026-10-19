@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { run } from '../src/index.js';
 import type { Io } from '../src/index.js';
 import { loadBas, loadRaw } from '@fugloy/disasm';
-import { assemble, expectSameImage, skipIfNoZmac } from '../../disasm/test/roundtrip/zmac.js';
+import { assemble, expectSameImage, withAssembler } from '../../disasm/test/roundtrip/zmac.js';
 import { writeBasic } from '../../disasm/test/writers/basic-tokenizer.js';
 import type { BasicLineSpec } from '../../disasm/test/writers/basic-tokenizer.js';
 
@@ -212,7 +212,7 @@ describe('pass 1 flags', () => {
     expect(b.err.join('')).toContain('--rebase needs a hex address');
   });
 
-  skipIfNoZmac()('reassembles a rebased .BAS into the program saved from the new base', async () => {
+  withAssembler()('reassembles a rebased .BAS into the program saved from the new base', async () => {
     const { io, out } = capture();
     expect(await run([`${fixtures}bas/prog-62c8.bas`, '--rebase', '7000', '--format', 'zmac'], io)).toBe(0);
     const saved7000 = loadBas(new Uint8Array(await readFile(`${fixtures}bas/prog-7000.bas`)));
@@ -228,7 +228,7 @@ describe('pass 1 flags', () => {
     expect(text).toContain('700D  C3 00 00      JP $RESET               ; entry');
   });
 
-  skipIfNoZmac()('a .BAS file\'s zmac output assembles back to the same image', async () => {
+  withAssembler()('a .BAS file\'s zmac output assembles back to the same image', async () => {
     const bas = `${fixtures}bas/prog-62c8.bas`;
     const { io, out } = capture();
     expect(await run([bas, '--format', 'zmac'], io)).toBe(0);
@@ -651,7 +651,7 @@ describe('--machine and --dos', () => {
   });
 
   for (const { flags } of CHOICES) {
-    skipIfNoZmac()(`reassembles --format zmac output into the same image for ${given(flags)}`, async () => {
+    withAssembler()(`reassembles --format zmac output into the same image for ${given(flags)}`, async () => {
       const { text } = await list('--format', 'zmac', ...flags);
       expectSameImage(assemble(text).module.image, loadRaw(ROUTINE, 0x5200).image);
     });

@@ -135,6 +135,24 @@ describe('zmac probe: number forms', () => {
   });
 });
 
+// The emitter names ROM routines $KBWAIT, $JP2DOS, and so on (the Model III
+// manual's spelling); the round-trip corpus found that the assembler read them as bad numbers.
+describe('zmac probe: $ in names', () => {
+  zit('$ and hex digits only is a number; $ and other name characters is a name', () => {
+    same(program('$KB\tEQU 1234H', '\tDW $KB', '\tDW $FF', '$KBWAIT\tEQU 0049H', '\tCALL $KBWAIT', '\tJP $KBWAIT+1'));
+  });
+  zit('$ anywhere in a name, and $ alone is the address of the line', () => {
+    same(program('A$B\tEQU 1', 'KB$\tEQU 2', '$$\tEQU 3', '$_X\tEQU 4', '\tDW A$B,KB$,$$,$_X', '$X:\tNOP', '\tDW $X', '\tDW $', '\tDW $+1', '\tLD A,($X)'));
+  });
+  zit('a name that is all hex digits after the $ draws a zmac warning, so an error here', () => {
+    bothReject(program('$AB\tEQU 1234H', '\tDW 0'), /^\$AB is the hex number ABH, so it cannot be a name/);
+  });
+  zit('$1G and $0Q are names, so undefined ones are rejected', () => {
+    bothReject(program('\tDW $1G'), /^\$1G is not defined/);
+    bothReject(program('\tDW $0Q'), /^\$0Q is not defined/);
+  });
+});
+
 describe('zmac probe: 32-bit numbers', () => {
   zit('a number wraps to 32-bit two\'s complement: 0FFFFFFFFH is -1', () => {
     same(program('\tDW 0FFFFFFFFH', '\tLD A,0FFFFFFFFH', '\tDW -0FFFFFFFFH', '\tDW 0FFFF0000H>>16', '\tDW 4294967295', '\tDW 11111111111111111111111111111111B'));
@@ -404,6 +422,41 @@ describe('deliberately stricter than zmac', () => {
     expect(zd.clean, zd.output).toBe(true);
     expect(zd.image!.bytes[0x6064]).toBe(0xaa);
     expect(errorsOf(assemble(deflOnly))).toEqual(['4: DS cannot use Y here: Y uses X on line 2, before X is defined on line 3, and the addresses after this line depend on it. Define X above line 2.']);
+  });
+  // The spellings below were found by negative.test.ts's mnemonic and operand
+  // grid. zmac reads each one, but the assembler takes only the forms
+  // @fugloy/z80's tables give, so it refuses them and names the forms it does
+  // take. The emitter never writes any of them.
+  // ED 70H and 71H: the tables keep them as DB (Task 1 ruling), and the message gives that DB.
+  zit('IN (C) and OUT (C),0', () => {
+    expect(runZmac(program('\tIN (C)', '\tOUT (C),0')).bytes).toEqual([0xed, 0x70, 0xed, 0x71]);
+    expect(errorsOf(assemble(program('\tIN (C)', '\tOUT (C),0')))).toEqual([
+      '2: IN (C) is undocumented, and Fugløy writes it as DB 0EDH,70H; use that instead.',
+      '3: OUT (C),0 is undocumented, and Fugløy writes it as DB 0EDH,71H; use that instead.',
+    ]);
+  });
+  zit('IN and OUT with the port alone', () => {
+    expect(runZmac(program('\tIN 38H', '\tOUT (12H)')).bytes).toEqual([0xdb, 0x38, 0xd3, 0x12]);
+    expect(errorsOf(assemble(program('\tIN 38H', '\tOUT (12H)'))).length).toBe(2);
+  });
+  zit('JP HL and JP IX without parentheses', () => {
+    expect(runZmac(program('\tJP HL', '\tJP IX')).bytes).toEqual([0xe9, 0xdd, 0xe9]);
+    expect(errorsOf(assemble(program('\tJP HL', '\tJP IX'))).length).toBe(2);
+  });
+  zit("PUSH and POP of A, B, H, or AF'", () => {
+    expect(runZmac(program('\tPOP A', '\tPUSH B', '\tPUSH H', "\tPUSH AF'")).bytes).toEqual([0xf1, 0xc5, 0xe5, 0xf5]);
+    expect(errorsOf(assemble(program('\tPOP A', '\tPUSH B', '\tPUSH H', "\tPUSH AF'"))).length).toBe(4);
+  });
+  // The 8080 name M for (HL), which zmac reads after these five but not after AND, OR, or XOR.
+  zit('ADD M, ADC M, SUB M, SBC M, and CP M', () => {
+    const src = program('\tADD M', '\tADC M', '\tSUB M', '\tSBC M', '\tCP M');
+    expect(runZmac(src).bytes).toEqual([0x86, 0x8e, 0x96, 0x9e, 0xbe]);
+    expect(errorsOf(assemble(src)).length).toBe(5);
+  });
+  // The undocumented DD CB copies to a register: the tables keep them as DB.
+  zit('RL (IX+5),B and the other DD CB / FD CB register copies', () => {
+    expect(runZmac(program('\tRL (IX+5),B', '\tSRL (IY),A')).bytes).toEqual([0xdd, 0xcb, 0x05, 0x10, 0xfd, 0xcb, 0x00, 0x3f]);
+    expect(errorsOf(assemble(program('\tRL (IX+5),B', '\tSRL (IY),A'))).length).toBe(2);
   });
   // An EQU that names a label below the DS it sizes: the pinned zmac does not
   // finish (it crashes), so there is no zmac image to differ from.

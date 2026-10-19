@@ -35,7 +35,6 @@ export interface Lexed {
 const IDENT_START = /[A-Za-z_.@?]/;
 const IDENT_PART = /[A-Za-z0-9_.$@?]/;
 const WORD_PART = /[A-Za-z0-9_]/;
-const HEX = /[0-9A-Fa-f]/;
 const OPS2 = ['<<', '>>'];
 const OPS1 = '(),:+-*/%&|^~=$';
 
@@ -90,11 +89,17 @@ export function lex(line: string): Lexed {
       tokens.push({ kind: 'number', text, col: start + 1, end: i + 1, value });
       continue;
     }
-    if (c === '$' && i + 1 < line.length && HEX.test(line[i + 1]!)) {
+    // zmac's `$` rules: `$` alone is the address of the line; `$` and hex digits only is a
+    // hex number ($FF); `$` and any other name characters is a name ($KBWAIT, $1G, $$), as
+    // the emitter's ROM names are.
+    if (c === '$' && i + 1 < line.length && IDENT_PART.test(line[i + 1]!)) {
       i++;
-      while (i < line.length && WORD_PART.test(line[i]!)) i++;
+      while (i < line.length && IDENT_PART.test(line[i]!)) i++;
       const text = line.slice(start, i);
-      if (!/^\$[0-9A-Fa-f]+$/.test(text)) return fail(`${text} is not a number. ${NUMBER_FORMS}`, start, i);
+      if (!/^\$[0-9A-Fa-f]+$/.test(text)) {
+        tokens.push({ kind: 'ident', text, col: start + 1, end: i + 1 });
+        continue;
+      }
       const value = bounded(text, text.slice(1), 16);
       if (typeof value === 'string') return fail(value, start, i);
       tokens.push({ kind: 'number', text, col: start + 1, end: i + 1, value });

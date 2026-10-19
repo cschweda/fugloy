@@ -6,9 +6,9 @@ import { emitZmac } from '../../src/emit/zmac.js';
 import { analyze } from '../../src/pipeline.js';
 import { loadRaw } from '../../src/raw.js';
 import { BAS_FIXTURES, CMD_FIXTURES, pattern } from '../fixtures.js';
-import { assemble, expectSameImage, skipIfNoZmac } from './zmac.js';
+import { assemble, expectSameImage, withAssembler } from './zmac.js';
 
-const test = skipIfNoZmac();
+const test = withAssembler();
 
 for (const [name, make] of Object.entries(CMD_FIXTURES)) {
   test(`cmd/${name} round-trips through zmac to the same image, bitmap, and entry`, () => {

@@ -4,7 +4,7 @@ import { Kind } from '../../src/analysis/map.js';
 import { emitZmac } from '../../src/emit/zmac.js';
 import { analyze } from '../../src/pipeline.js';
 import { loadRaw } from '../../src/raw.js';
-import { assemble, expectSameImage, skipIfNoZmac } from '../roundtrip/zmac.js';
+import { assemble, expectSameImage, withAssembler } from '../roundtrip/zmac.js';
 import { readSample, resolveSample } from './samples.js';
 
 const ROM = 'level2-model1.rom';
@@ -25,7 +25,7 @@ it.skipIf(!present)('decodes code at every documented entry point and reaches at
   expect(code / 0x3000).toBeGreaterThanOrEqual(0.4);
 });
 
-(present ? skipIfNoZmac() : it.skip)('reassembles byte for byte through zmac', () => {
+(present ? withAssembler() : it.skip)('reassembles byte for byte through zmac', () => {
   const { mod, a } = analyzed();
   const { module: back } = assemble(emitZmac(mod.image, a.pass1, a.transfer, { source: ROM, symbols: a.symbols, annotations: a.annotations, space: a.space }));
   expectSameImage(back.image, mod.image);

@@ -11,9 +11,9 @@ import { analyze } from '../../src/pipeline.js';
 import { addressKey, openProgram, renderSession, withHintText } from '../../src/session.js';
 import { loadRaw } from '../../src/raw.js';
 import { CMD_FIXTURES, HINT_FIXTURES } from '../fixtures.js';
-import { assemble, expectSameImage, skipIfNoZmac } from './zmac.js';
+import { assemble, expectSameImage, withAssembler } from './zmac.js';
 
-const test = skipIfNoZmac();
+const test = withAssembler();
 
 test('hint-paths round-trips through zmac with labels, EQU, DW, and comments', () => {
   const mod = loadCmd(CMD_FIXTURES['hint-paths']!());

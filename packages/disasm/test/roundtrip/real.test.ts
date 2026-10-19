@@ -5,7 +5,7 @@ import { loadCmd } from '../../src/cmd.js';
 import { emitZmac } from '../../src/emit/zmac.js';
 import { analyze } from '../../src/pipeline.js';
 import { listSamples, readSample, resolveSample } from '../real/samples.js';
-import { assemble, expectSameImage, skipIfNoZmac } from './zmac.js';
+import { assemble, expectSameImage, withAssembler } from './zmac.js';
 
 const CMD_FILES = [
   'asylum1a.cmd', 'asylum1b.cmd', 'asylum1c.cmd', 'asylum1d.cmd', 'asylum1e.cmd', 'asylum1f.cmd', 'asylum16.cmd',
@@ -22,10 +22,10 @@ const CMD_FILES = [
 /** BASIC programs beyond Valkyrie, none with code in its lines (Star Trek loads its USR routines from startrek.obj); MONSTER names two dumps, and the first found is used. */
 const BAS_FILES = ['startrek.ins', 'startrek.mch', 'MONSTER', 'elimzap.bas', 'elimzap3.bas'];
 
-/** Runs only when both zmac (required under FUGLOY_REQUIRE_ZMAC=1) and the file are present. */
+/** Runs when the file is present: through zmac and @fugloy/asm both, or asm alone without zmac (zmac is required under FUGLOY_REQUIRE_ZMAC=1). */
 const when = (file: string): typeof it | typeof it.skip => {
-  const withZmac = skipIfNoZmac();
-  return resolveSample(file) === null ? it.skip : withZmac;
+  const check = withAssembler();
+  return resolveSample(file) === null ? it.skip : check;
 };
 
 for (const file of CMD_FILES) {

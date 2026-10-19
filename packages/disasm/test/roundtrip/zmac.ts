@@ -2,12 +2,20 @@
  * Round-trip harness: assemble emitted source with the pinned zmac (built by
  * scripts/install-zmac.sh into tools/zmac/, or named by FUGLOY_ZMAC), load
  * the resulting .cmd with our own loader, and compare images, never files.
+ *
+ * zmac is also the referee for @fugloy/asm: every `assemble()` runs both on the
+ * same source, and asm must give zmac's 64K image (bitmap and bytes), runs, and
+ * entry, with no warning and no error. Without zmac, asm alone assembles the
+ * source and its image goes back to the caller, so the image the test already
+ * expects (the program that went in) checks asm on its own.
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assemble as asmAssemble, toCmd } from '../../../asm/src/index.js';
+import type { AsmResult } from '../../../asm/src/index.js';
 import { expect, it } from 'vitest';
 import { loadCmd } from '../../src/cmd.js';
 import type { CmdModule } from '../../src/cmd.js';
@@ -31,15 +39,69 @@ export function skipIfNoZmac(): typeof it | typeof it.skip {
   return it.skip;
 }
 
-export interface Assembled {
-  module: CmdModule;
-  listing: string;
+/**
+ * For round trips, which `assemble()` can check with or without zmac: always `it`, except that
+ * under FUGLOY_REQUIRE_ZMAC=1 (CI) a missing zmac is a failure, as with `skipIfNoZmac`.
+ */
+export function withAssembler(): typeof it {
+  if (findZmac() === null && process.env['FUGLOY_REQUIRE_ZMAC'] === '1') {
+    throw new Error('zmac is required here (FUGLOY_REQUIRE_ZMAC=1) but was not found; run pnpm zmac:install');
+  }
+  return it;
 }
 
-/** Assembles zmac source into a .cmd and loads it with our own loader. */
+export interface Assembled {
+  module: CmdModule;
+  /** zmac's listing; empty when zmac is absent and asm alone assembled the source. */
+  listing: string;
+  /** Which assembler produced `module`: zmac (with asm checked against it) or asm alone. */
+  by: 'zmac' | 'asm';
+}
+
+const describe = (r: AsmResult): string =>
+  r.diagnostics.map((d) => `${d.line}:${d.column}: ${d.severity}: ${d.message}`).join('\n');
+
+/** asm's result for an emitted source: ok, with no warning or error (an info note is fine). */
+function cleanAsm(source: string): AsmResult & { image: MemoryImage } {
+  const result = asmAssemble(source);
+  const loud = result.diagnostics.filter((d) => d.severity !== 'info');
+  if (!result.ok || result.image === null || loud.length > 0) {
+    const lines = source.split('\n');
+    const at = loud.map((d) => `line ${d.line}: ${lines[d.line - 1] ?? ''}`).slice(0, 10).join('\n');
+    throw new Error(`@fugloy/asm did not assemble the source cleanly:\n${describe(result)}\n${at}`);
+  }
+  return result as AsmResult & { image: MemoryImage };
+}
+
+/** Throws unless asm's result matches the program zmac produced: the 64K image, the runs, and the entry. */
+function expectAsmAgrees(asm: AsmResult & { image: MemoryImage }, zmac: CmdModule): void {
+  try {
+    expectSameImage(asm.image, zmac.image);
+  } catch (e) {
+    throw new Error(`@fugloy/asm and zmac disagree: ${(e as Error).message} (zmac is expected, asm is got)`);
+  }
+  // zmac writes a transfer record only for END with an entry; without one loadCmd guesses the lowest address.
+  const entry = zmac.entrySource === 'transfer' ? zmac.entry : null;
+  if (asm.entry !== entry) {
+    const show = (n: number | null): string => (n === null ? 'none' : `$${hex4(n)}`);
+    throw new Error(`@fugloy/asm and zmac disagree on the entry: zmac ${show(entry)}, asm ${show(asm.entry)}`);
+  }
+}
+
+/**
+ * Assembles zmac source into a .cmd and loads it with our own loader, checking @fugloy/asm
+ * against it. Without zmac, asm's own .cmd is loaded instead (by: 'asm').
+ */
 export function assemble(source: string): Assembled {
   const zmac = findZmac();
-  if (zmac === null) throw new Error('zmac not found: run pnpm zmac:install or set FUGLOY_ZMAC');
+  if (zmac === null) {
+    const asm = cleanAsm(source);
+    // Shape the file as zmac's: without an END entry zmac writes no end record at all, so
+    // loadCmd guesses the lowest address, where toCmd's `03 00` would give no entry.
+    let cmd = toCmd(asm);
+    if (asm.entry === null && cmd.at(-2) === 0x03 && cmd.at(-1) === 0x00) cmd = cmd.subarray(0, -2);
+    return { module: loadCmd(cmd), listing: '', by: 'asm' };
+  }
   const dir = mkdtempSync(join(tmpdir(), 'fugloy-zmac-'));
   try {
     const src = join(dir, 'prog.z');
@@ -53,7 +115,8 @@ export function assemble(source: string): Assembled {
     }
     const module = loadCmd(new Uint8Array(readFileSync(join(dir, 'prog.cmd'))));
     const listing = readFileSync(join(dir, 'prog.lst'), 'utf8');
-    return { module, listing };
+    expectAsmAgrees(cleanAsm(source), module);
+    return { module, listing, by: 'zmac' };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -145,6 +145,9 @@ function structure(text: string, line: number, t: readonly Token[], partial: boo
       if (!isKeyword(up)) label(1);
       else if (t.length > 1) return fail(`${up} starts in column 1, where a word is a label. Put a space or tab before it.`, first.col, first.end);
     }
+  } else if (first.kind === 'number' && first.text.startsWith('$')) {
+    // zmac takes `$AB EQU 1` as a name with a "$hex constant interpreted as symbol" warning; asm does not.
+    return fail(`${first.text} is the hex number ${first.text.slice(1).toUpperCase()}H, so it cannot be a name. Rename it, for example ${first.text.slice(1).toUpperCase()}_ or X${first.text.slice(1).toUpperCase()}.`, first.col, first.end);
   } else if (!isOp(first, '=')) {
     return fail(`A line starts with a label or an instruction; ${first.text} is neither.`, first.col, first.end);
   }
