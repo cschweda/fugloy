@@ -1,0 +1,17 @@
+/** The assembled program as a TRS-80 `.CMD` load module. */
+import { writeCmd } from '@fugloy/disasm';
+import type { AsmResult } from './assemble.js';
+
+/**
+ * The image as a `.CMD` through disasm's `writeCmd`: an optional `05` name
+ * (at most 8 characters), the loaded runs as `01` records, then `02` with the
+ * entry or `03 00` without one. loadCmd reads it back to the same image and
+ * entry. Phased code is written where it loads, not where it runs.
+ */
+export function toCmd(result: AsmResult, options: { name?: string } = {}): Uint8Array {
+  if (!result.ok || result.image === null) {
+    const n = result.diagnostics.filter((d) => d.severity === 'error').length;
+    throw new Error(`There is no .CMD to write: the source has ${n} error${n === 1 ? '' : 's'}. Fix ${n === 1 ? 'it' : 'them'} and assemble again.`);
+  }
+  return writeCmd(result.image, options.name === undefined ? { entry: result.entry } : { entry: result.entry, name: options.name });
+}

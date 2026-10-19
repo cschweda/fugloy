@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadCmd } from '../../disasm/src/cmd.js';
+import type { MemoryImage } from '../../disasm/src/memory.js';
 import { findZmac } from '../../disasm/test/roundtrip/zmac.js';
 import { assemble } from '../src/index.js';
 import type { AsmResult } from '../src/index.js';
@@ -42,6 +43,23 @@ export interface ZmacRun {
   output: string;
   /** Loaded bytes in address order, when zmac wrote a .cmd it was clean about. */
   bytes: number[] | null;
+  /** The loaded image and the transfer address, when clean. zmac writes no end record without an END entry, so the entry is null then (loadCmd alone would guess the lowest address). */
+  image: MemoryImage | null;
+  entry: number | null;
+  /** zmac's symbol table from the listing, upper-case names to values. */
+  symbols: Map<string, number>;
+}
+
+/** The listing's symbol table: `NAME   =05   5` (an EQU) or `NAME   6000   24576`. */
+function symbolTable(listing: string): Map<string, number> {
+  const out = new Map<string, number>();
+  const at = listing.indexOf('Symbol Table:');
+  if (at < 0) return out;
+  for (const line of listing.slice(at).split('\n').slice(1)) {
+    const m = /^(\S+)\s+=?([0-9A-Fa-f]+)\s+-?\d+/.exec(line);
+    if (m !== null) out.set(m[1]!.toUpperCase(), parseInt(m[2]!, 16));
+  }
+  return out;
 }
 
 /** Runs the pinned zmac on `source` without throwing, for probes where an error is the expected answer. */
@@ -56,12 +74,18 @@ export function runZmac(source: string): ZmacRun {
     const output = `${run.stdout}${run.stderr}`;
     const clean = run.status === 0 && !/warning|error/i.test(output);
     let bytes: number[] | null = null;
+    let image: MemoryImage | null = null;
+    let entry: number | null = null;
+    let symbols = new Map<string, number>();
     if (clean) {
-      const { image } = loadCmd(new Uint8Array(readFileSync(join(dir, 'probe.cmd'))));
+      const mod = loadCmd(new Uint8Array(readFileSync(join(dir, 'probe.cmd'))));
+      image = mod.image;
+      entry = mod.entrySource === 'transfer' ? mod.entry : null;
       bytes = [];
       for (const r of image.runs()) for (let a = r.start; a <= r.end; a++) bytes.push(image.bytes[a]!);
+      symbols = symbolTable(readFileSync(join(dir, 'probe.lst'), 'utf8'));
     }
-    return { clean, output, bytes };
+    return { clean, output, bytes, image, entry, symbols };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

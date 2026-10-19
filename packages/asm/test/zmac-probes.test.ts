@@ -204,6 +204,121 @@ describe('zmac probe: out-of-range values', () => {
   });
 });
 
+/**
+ * zmac assembles `source` cleanly, and the assembler gives the same image
+ * (bitmap and bytes over all 64K), the same entry, and the same value for
+ * every symbol in zmac's table (Review Focus 4: runtime labels).
+ */
+function sameImage(source: string): void {
+  const z = runZmac(source);
+  expect(z.clean, z.output).toBe(true);
+  const r = assemble(source);
+  expect(errorsOf(r), source).toEqual([]);
+  const mine = r.image!;
+  const theirs = z.image!;
+  for (let a = 0; a < 0x10000; a++) {
+    if (mine.loaded[a] !== theirs.loaded[a]) expect.fail(`loaded differs at ${a.toString(16)}: asm ${mine.loaded[a]}, zmac ${theirs.loaded[a]}`);
+    if (theirs.loaded[a] === 1 && mine.bytes[a] !== theirs.bytes[a]) expect.fail(`byte differs at ${a.toString(16)}: asm ${mine.bytes[a]}, zmac ${theirs.bytes[a]}`);
+  }
+  expect(r.entry).toBe(z.entry);
+  const values = new Map([...r.symbols].map(([k, v]) => [k.toUpperCase(), v.value]));
+  for (const [name, value] of z.symbols) expect(values.get(name), name).toBe(value);
+}
+
+describe('zmac probe: ORG', () => {
+  zit('several ORGs, with gaps, going down as well as up', () => {
+    sameImage(program('\tDB 1', '\tORG 7000H', '\tDB 2', '\tORG 5FFFH', '\tDW 0302H', '\tORG 0FFFEH', '\tDB 1,2,3,4'));
+  });
+  zit('an ORG over bytes already placed: zmac is silent and the later bytes win', () => {
+    sameImage(program('\tDB 1,2,3', '\tORG 6001H', '\tDB 9'));
+    sameImage(program('\tDB 1,2', '\tORG 6000H', '\tDB 3,4'));
+  });
+  zit('a label on an ORG line takes the address before the ORG', () => {
+    sameImage(program('\tNOP', 'LA\tORG 7000H', 'MB:\tORG 7100H', '\tDW LA,MB'));
+  });
+  zit('a label before the first ORG is 0, as zmac starts at 0 when an ORG comes later', () => {
+    sameImage(['X\tEQU 5', 'Y:', '\tORG 6000H', '\tDW Y,X'].join('\n') + '\n');
+  });
+});
+
+describe('zmac probe: EQU, DEFL, and =', () => {
+  zit('an EQU may be repeated with the same value', () => {
+    sameImage(program('K\tEQU 5', 'K\tEQU 5', '\tDB K', 'K\tEQU 2+3'));
+  });
+  zit('an EQU repeated with another value is rejected', () => {
+    bothReject(program('K\tEQU 5', 'K\tEQU 6', '\tDB K'), /^K is defined twice with different values/, 3);
+  });
+  zit('DEFL and = redefine; each use takes the definition above it', () => {
+    sameImage(program('X\tDEFL 1', '\tDB X', 'X\tDEFL X+1', '\tDB X', 'Y\t= 5', '\tDB Y', 'Y\t= 6', '\tDB Y', 'ZZ\tDEFL 9', 'ZZ\t=10', '\tDB ZZ', 'W\tdefl $', '\tDW W'));
+  });
+  zit('a use above every DEFL takes the last one', () => {
+    sameImage(program('\tDB K', 'K\tDEFL 5', '\tDB K', 'K\tDEFL 6'));
+  });
+  zit('EQU and DEFL, or DEFL and a label, cannot share a name', () => {
+    bothReject(program('K\tEQU 5', 'K\tDEFL 6'), /^K is defined twice/, 3);
+    bothReject(program('K\tDEFL 5', 'K\tEQU 6'), /^K is defined twice/, 3);
+    bothReject(program('K\tDEFL 5', 'K:\tNOP'), /^K is defined twice/, 3);
+  });
+});
+
+describe('zmac probe: DB, DW, and DS', () => {
+  zit('strings and expressions mixed', () => {
+    sameImage(program("\tDB 'HI',0DH,'A'+1,\"x\",-1", "\tDEFM 'ok',0", "\tDEFB 1,'''',2", "\tDW 'A',1234H,$", '\tDEFW -1'));
+  });
+  zit('DS leaves a gap, and with a fill byte writes it', () => {
+    sameImage(program('\tDB 1', 'BUF:\tDS 3', '\tDW BUF', 'BUF2\tDS 2,7', "\tDEFS 2,'A'", '\tDS 1,7FH', '\tDS 1,0', '\tDS 0', '\tDW BUF2,$', '\tDS 4'));
+  });
+  zit('in DB and DW, $ is the address of each value', () => {
+    sameImage(program('\tDB 1,LOW $,2,LOW $', '\tDW 5,$,$', "\tDB 'AB',LOW $", "\tDEFM 'AB',LOW $"));
+  });
+  zit('a DS fill outside 0 to 127, a negative count, or a third operand is rejected', () => {
+    bothReject(program('\tDS 2,80H'), /^DS fills with a byte from 0 to 127/);
+    bothReject(program('\tDS 2,0FFH'), /^DS fills with a byte from 0 to 127/);
+    // zmac writes FF for DS 2,-1 but reports a "Phase error".
+    bothReject(program('\tDS 2,-1'), /^DS fills with a byte from 0 to 127/);
+    bothReject(program('\tDS -1'), /^DS reserves 0 to 65535 bytes/);
+    bothReject(program('\tDS 3,1,2'), /^DS takes a count and at most one fill byte/);
+  });
+});
+
+describe('zmac probe: .PHASE and .DEPHASE (Review Focus 4)', () => {
+  zit('phased code: bytes at the load address, labels and $ at the run address', () => {
+    sameImage(program('START:\tLD HL,SRC', '\tJP RUN', 'SRC:', '\t.PHASE 4000H', 'RUN:\tNOP', 'LOOP:\tJR LOOP', '\tDW $', '\tJP RUN', '\t.DEPHASE', 'AFTER:\tDW $,RUN,SRC,AFTER', '\tEND START'));
+  });
+  zit('a label on .PHASE takes the load address; one on .DEPHASE the run address', () => {
+    sameImage(program('\tNOP', 'PL:\t.PHASE 4000H', '\tNOP', 'DP:\t.DEPHASE', '\tDW PL,DP'));
+  });
+  zit('inside .PHASE, DS with no fill writes zeros', () => {
+    sameImage(program('\t.PHASE 4000H', '\tDS 2', '\tDB 1', '\t.DEPHASE', '\tDB 2'));
+  });
+  zit('a .PHASE left open at the end is accepted', () => {
+    sameImage(program('\t.PHASE 4000H', '\tNOP'));
+  });
+  zit('an ORG inside .PHASE, a nested .PHASE, and a stray .DEPHASE are rejected', () => {
+    bothReject(program('\t.PHASE 4000H', '\tNOP', '\tORG 7000H', '\tNOP', '\t.DEPHASE'), /^ORG cannot be used inside \.PHASE/, 4);
+    bothReject(program('\t.PHASE 4000H', '\tNOP', '\t.PHASE 5000H', '\t.DEPHASE'), /^\.PHASE is already in effect since line 2/, 4);
+    bothReject(program('\t.DEPHASE', '\tNOP'), /^\.DEPHASE has no \.PHASE to end/);
+  });
+});
+
+describe('zmac probe: END', () => {
+  zit('END with an entry, an expression, or none', () => {
+    sameImage(program('S:\tNOP', '\tEND S'));
+    sameImage(program('S\tNOP', '\tEND S+1'));
+    sameImage(program('\tNOP', '\tEND'));
+    sameImage(program('\tNOP'));
+  });
+  zit('text after END is ignored, junk included', () => {
+    sameImage(program('S:\tNOP', '\tEND S', '\tDB 1', '\tthis is junk ((', 'S:\tNOP'));
+  });
+  zit('a label on the END line is an ordinary label', () => {
+    sameImage(program('S\tNOP', 'LAB\tEND S'));
+  });
+  zit('END cannot name a label after it, which zmac never reads', () => {
+    bothReject(program('\tNOP', '\tEND LATER', 'LATER\tNOP'), /^LATER is not defined/, 3);
+  });
+});
+
 describe('deliberately stricter than zmac', () => {
   // zmac assembles RST 1 to 7 as RST 8 to 38H (RST 1 is CF), silently. A
   // number that is not a restart address is almost always a slip, so the
@@ -240,8 +355,37 @@ describe('deliberately stricter than zmac', () => {
     expect(runZmac(program('\tDW 4294967297')).bytes).toEqual([0x01, 0x00]);
     expect(errorsOf(assemble(program('\tDW 4294967297')))).toEqual(['2: 4294967297 is too large: numbers have 32 bits, at most 0FFFFFFFFH (4294967295).']);
   });
+  // zmac does not range-check a DB value that comes from an address (a
+  // label or $): DB LAB stores the low byte, though DB 6000H and LD A,LAB are
+  // Value errors. The assembler checks every DB value alike; write LOW LAB.
+  zit('DB of an address', () => {
+    const src = program('LAB:\tDB LAB', '\tDB 2*$');
+    expect(runZmac(src).bytes).toEqual([0x00, 0x02]);
+    expect(errorsOf(assemble(src)).length).toBe(2);
+  });
   zit("DB 'AB'+1", () => {
     expect(runZmac(program("\tDB 'AB'+1")).bytes).toEqual([0x42, 0x42]);
     expect(errorsOf(assemble(program("\tDB 'AB'+1"))).length).toBe(1);
+  });
+  // zmac places code that comes before the first ORG at 0000H, where the
+  // ROM is; that is never meant, so the assembler asks for the ORG first.
+  zit('code before the first ORG', () => {
+    const src = ['\tNOP', '\tORG 6000H', '\tNOP'].join('\n') + '\n';
+    expect(runZmac(src).image!.loaded[0]).toBe(1);
+    expect(errorsOf(assemble(src))).toEqual(['1: This line comes before the first ORG, so zmac would put it at $0000. Put the ORG first.']);
+  });
+  // zmac's extra passes let DS, ORG, and .PHASE use a name defined below
+  // them; here the addresses after the line depend on it, so it must come
+  // first (Review Focus 2), never a silent zero.
+  zit('a forward EQU in DS, ORG, or .PHASE', () => {
+    const ds = program('\tDS N', '\tNOP', 'N\tEQU 2');
+    expect(runZmac(ds).clean).toBe(true);
+    expect(errorsOf(assemble(ds))).toEqual(['2: DS cannot use N before N is defined, because the addresses after this line depend on it. Define N above the DS.']);
+    const org = ['\tORG N', '\tNOP', 'N\tEQU 6000H'].join('\n') + '\n';
+    expect(runZmac(org).clean).toBe(true);
+    expect(errorsOf(assemble(org))).toEqual(['1: ORG cannot use N before N is defined, because the addresses after this line depend on it. Define N above the ORG.']);
+    const phase = program('\t.PHASE X', '\tNOP', '\t.DEPHASE', 'X\tEQU 4000H');
+    expect(runZmac(phase).clean).toBe(true);
+    expect(errorsOf(assemble(phase))).toEqual(['2: .PHASE cannot use X before X is defined, because the addresses after this line depend on it. Define X above the .PHASE.']);
   });
 });

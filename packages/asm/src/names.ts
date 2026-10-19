@@ -17,10 +17,7 @@ export const INDIRECT: ReadonlySet<string> = new Set(['HL', 'BC', 'DE', 'SP', 'C
 /** Words that are operators inside expressions. */
 export const OPERATOR_WORDS: ReadonlySet<string> = new Set(['HIGH', 'LOW', 'MOD', 'SHL', 'SHR']);
 
-/**
- * Every directive the language has, handled or not yet. Task 2 assembles ORG,
- * EQU, DB/DEFB/DEFM, and DW/DEFW; the rest belong to Task 3.
- */
+/** Every directive the language has (see directives.ts for the rules zmac sets for them). */
 export const DIRECTIVES: readonly string[] = ['ORG', 'EQU', 'DEFL', '=', 'DB', 'DEFB', 'DEFM', 'DW', 'DEFW', 'DS', 'DEFS', '.PHASE', '.DEPHASE', 'END'];
 
 const MNEMONICS: ReadonlySet<string> = new Set(mnemonics());

@@ -156,10 +156,10 @@ describe('the result', () => {
   it('lists every line with its address and bytes, and maps addresses to lines', () => {
     const result = assemble(['\tORG 6000H', 'X:\tLD A,1 ; one', '', '\tNOP'].join('\n'));
     expect(result.listing).toEqual([
-      { line: 1, address: null, bytes: [], text: '\tORG 6000H' },
-      { line: 2, address: 0x6000, bytes: [0x3e, 0x01], text: 'X:\tLD A,1 ; one' },
-      { line: 3, address: null, bytes: [], text: '' },
-      { line: 4, address: 0x6002, bytes: [0x00], text: '\tNOP' },
+      { line: 1, address: null, load: null, bytes: [], text: '\tORG 6000H' },
+      { line: 2, address: 0x6000, load: 0x6000, bytes: [0x3e, 0x01], text: 'X:\tLD A,1 ; one' },
+      { line: 3, address: null, load: null, bytes: [], text: '' },
+      { line: 4, address: 0x6002, load: 0x6002, bytes: [0x00], text: '\tNOP' },
     ]);
     expect(result.sourceMap.lineOf(0x6001)).toBe(2);
     expect(result.sourceMap.lineOf(0x6002)).toBe(4);

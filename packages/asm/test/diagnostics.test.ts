@@ -56,7 +56,7 @@ describe('typos get one error with a suggestion (Review Focus 5)', () => {
 
   it('a line with an error has no bytes, and later addresses do not move', () => {
     const result = assemble(lines('\tORG 6000H', '\tLD A,300', 'AFTER:\tNOP'));
-    expect(result.listing[1]).toEqual({ line: 2, address: 0x6000, bytes: [], text: '\tLD A,300' });
+    expect(result.listing[1]).toEqual({ line: 2, address: 0x6000, load: 0x6000, bytes: [], text: '\tLD A,300' });
     expect(result.symbols.get('AFTER')?.value).toBe(0x6002);
   });
 });
