@@ -36,6 +36,16 @@ describe('toCmd', () => {
     expect(Array.from(toCmd(r))).toEqual([0x01, 0x05, 0x00, 0x60, 0xc3, 0x00, 0x40, 0x02, 0x02, 0x00, 0x40]);
     reloadsTo(r);
   });
+  it('throws a sentence for a name longer than 8 characters or outside printable ASCII', () => {
+    const r = assemble('\tORG 6000H\n\tNOP\n');
+    expect(() => toCmd(r, { name: 'TOOLONGNAME' })).toThrow('A .CMD name has at most 8 characters; TOOLONGNAME has 11.');
+    expect(() => toCmd(r, { name: 'CAFÉ' })).toThrow('A .CMD name takes printable ASCII characters only; CAFÉ has É.');
+    expect(Array.from(toCmd(r, { name: 'EIGHTCHR' }).subarray(0, 10))).toEqual([0x05, 0x08, ...Array.from('EIGHTCHR', (c) => c.charCodeAt(0))]);
+  });
+  it('throws a sentence for a program with no bytes', () => {
+    expect(() => toCmd(assemble('K\tEQU 5\n'))).toThrow('There is nothing to write: the program has no bytes.');
+    expect(() => toCmd(assemble('\tORG 6000H\n\tDS 10\n'))).toThrow('There is nothing to write: the program has no bytes.');
+  });
   it('throws a sentence when the source has errors', () => {
     const r = assemble('\tORG 6000H\n\tLDA 5\n\tJMP 0\n');
     expect(() => toCmd(r)).toThrow('There is no .CMD to write: the source has 2 errors. Fix them and assemble again.');

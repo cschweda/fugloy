@@ -21,7 +21,7 @@ import { asSource, encode, lengthOf, show } from './encode.js';
 import type { EncodeOptions } from './encode.js';
 import { evaluate, ExprError, loneSymbol } from './expr.js';
 import type { EvalContext, Expr } from './expr.js';
-import { addressProblem, countProblem, DATA_BYTES, DATA_WORDS, fillProblem, REDEFINERS, RESERVE } from './directives.js';
+import { address, addressProblem, DATA_BYTES, DATA_WORDS, end, endPhase, fillProblem, org, REDEFINERS, registerWords, reserve, RESERVE, spanOf, startPhase } from './directives.js';
 import { CONDITIONS, isKeyword, isMnemonic, OPERATOR_WORDS, REGISTERS } from './names.js';
 import { parseLine } from './parse.js';
 import type { OperandNode, Statement } from './parse.js';
@@ -61,9 +61,27 @@ export interface ListingLine {
   value?: number;
 }
 
-/** Keyed by run address, so the line the PC is on can be found under .PHASE too. */
+/** A line that emitted code at a run address, with the bytes it put there and after it. */
+export interface LineAt {
+  line: number;
+  bytes: number[];
+}
+
+/**
+ * Keyed by run address, so the line the PC is on can be found under .PHASE
+ * too. Several lines can share a run address: a relocating loader's own code
+ * and the block it moves there, or an ORG over earlier bytes.
+ */
 export interface SourceMap {
+  /**
+   * The line that emitted code at `address`, or null. Where several did, this
+   * is the first in source order; to know which is running, use `linesOf` and
+   * pick the candidate whose bytes match current memory.
+   */
   lineOf(address: number): number | null;
+  /** Every line that emitted code at `address`, in source order, each with the bytes it emitted from there on. */
+  linesOf(address: number): LineAt[];
+  /** Every run address the line emitted code at. */
   addressesOf(line: number): number[];
 }
 
@@ -88,7 +106,7 @@ export const DEFAULT_ORIGIN = 0x5200;
 
 const RELATIVE: ReadonlySet<string> = new Set(['JR', 'DJNZ']);
 
-interface Sym {
+export interface Sym {
   name: string;
   line: number;
   kind: SymbolKind;
@@ -104,7 +122,7 @@ interface Sym {
 }
 
 /** One source line as the passes see it. */
-interface Item {
+export interface Item {
   stmt: Statement;
   /** Where it runs; null for a line that takes no space. */
   address: number | null;
@@ -131,9 +149,6 @@ interface Repeat {
 
 type SymNode = Extract<Expr, { k: 'sym' }>;
 
-/** `$3C00`. */
-const address = (value: number): string => `$${(value & 0xffff).toString(16).toUpperCase().padStart(4, '0')}`;
-
 /** The operand's shape for the encoder. */
 function shapeOf(o: OperandNode): Shape {
   switch (o.kind) {
@@ -149,12 +164,6 @@ function shapeOf(o: OperandNode): Shape {
     case 'str':
       return 'nn';
   }
-}
-
-/** `B is a register`, `NZ is a condition`, `(HL) is a register in parentheses`, for an operand that should have been a value. */
-function registerWords(o: OperandNode): string {
-  if (o.kind === 'reg') return `${o.reg} is a ${CONDITIONS.has(o.reg) ? 'condition' : 'register'}`;
-  return `${o.text} is a register`;
 }
 
 /** SUB, AND, OR, XOR, and CP may write A first; ADD, ADC, and SBC may leave A out (zmac accepts both). */
@@ -195,13 +204,6 @@ function loadThroughA(mn: string, ops: readonly OperandNode[]): string | undefin
   return undefined;
 }
 
-/** The span of a statement from its operation to its last operand (or its label, if it has nothing else). */
-function spanOf(stmt: Statement): { col: number; end: number } {
-  const from = stmt.op ?? stmt.label;
-  const last = stmt.operands[stmt.operands.length - 1];
-  return { col: from?.col ?? 1, end: last?.end ?? from?.end ?? Math.max(2, stmt.text.length + 1) };
-}
-
 /** The definition of a DEFL name that a use on `line` sees: the last one above it, or (as zmac's extra passes give) the last of all. */
 function versionAt(sym: Sym, line: number): Sym {
   const versions = sym.versions!;
@@ -210,11 +212,13 @@ function versionAt(sym: Sym, line: number): Sym {
   return seen ?? versions[versions.length - 1]!;
 }
 
-class Assembly {
+export class Assembly {
   readonly diagnostics: Diagnostic[] = [];
   readonly syms = new Map<string, Sym>();
   readonly items: Item[] = [];
   readonly repeats: Repeat[] = [];
+  /** Every statement up to END, for definedLater. */
+  pending: Statement[] = [];
   /** The run address ($). */
   pc = DEFAULT_ORIGIN;
   /** The load address; it moves with pc and differs from it only under .PHASE. */
@@ -264,7 +268,7 @@ class Assembly {
     if (op === undefined || name === undefined) return item;
 
     if (name === 'ORG') {
-      this.org(stmt, item);
+      org(this, stmt, item);
       return item;
     }
     if (name === 'EQU' || REDEFINERS.has(name)) {
@@ -276,19 +280,19 @@ class Assembly {
       return item;
     }
     if (name === '.PHASE') {
-      this.startPhase(stmt, item);
+      startPhase(this, stmt, item);
       return item;
     }
     if (name === '.DEPHASE') {
-      this.endPhase(stmt, item);
+      endPhase(this, stmt, item);
       return item;
     }
     if (name === 'END') {
-      this.end(stmt, item);
+      end(this, stmt, item);
       return item;
     }
     if (RESERVE.has(name)) {
-      this.reserve(stmt, item);
+      reserve(this, stmt, item);
       return item;
     }
     if (DATA_BYTES.has(name) || DATA_WORDS.has(name)) {
@@ -335,7 +339,8 @@ class Assembly {
     if (REGISTERS.has(up)) return this.error(line, label.col, label.end, `${up} is a register name, so it cannot be a label.`);
     if (CONDITIONS.has(up)) return this.error(line, label.col, label.end, `${up} is a condition name, so it cannot be a label.`);
     if (OPERATOR_WORDS.has(up)) return this.error(line, label.col, label.end, `${up} is an operator in expressions, so it cannot be a label.`);
-    if (!this.sawOrg && !this.orgLater) this.usedDefault = true;
+    // Only a label takes the default origin; an EQU or DEFL places nothing.
+    if (kind === 'label' && !this.sawOrg && !this.orgLater) this.usedDefault = true;
     const sym: Sym = { name: label.name, line, kind, col: label.col, end: label.end, here: this.pc, state: 'done' };
     if (kind === 'label') sym.value = this.pc;
     else if (broken) sym.state = 'failed';
@@ -395,89 +400,7 @@ class Assembly {
 
   /** Evaluates during pass 1, where only names defined above `line` count. */
   evaluateNow(expr: Expr, line: number, what: string): number {
-    return evaluate(expr, { here: this.pc, lookup: (n) => this.lookupBefore(n, line, what, new Set(), line) });
-  }
-
-  org(stmt: Statement, item: Item): void {
-    const op = stmt.op!;
-    item.failed = true;
-    // Even a failed ORG counts, so the lines after it raise nothing more.
-    this.sawOrg = true;
-    if (this.phase !== null) return this.error(stmt.line, op.col, op.end, `ORG cannot be used inside .PHASE (line ${this.phase}). End it with .DEPHASE first.`);
-    const value = this.addressOperand(stmt, 'ORG');
-    if (value === undefined) return;
-    item.failed = false;
-    // zmac gives a label on the ORG line the address before the ORG; say so, since the new one is likelier meant.
-    const label = stmt.label;
-    const sym = label === undefined ? undefined : this.syms.get(label.name.toUpperCase());
-    if (label !== undefined && sym !== undefined && sym.line === stmt.line && sym.kind === 'label') {
-      this.report('warning', stmt.line, label.col, label.end, `${sym.name} is ${address(sym.value!)}, the address before this ORG, as in zmac. To name ${address(value)}, put ${sym.name} on the line after the ORG.`);
-    }
-    this.pc = value;
-    this.load = value;
-    this.sawOrg = true;
-  }
-
-  startPhase(stmt: Statement, item: Item): void {
-    const op = stmt.op!;
-    item.failed = true;
-    if (this.phase !== null) return this.error(stmt.line, op.col, op.end, `.PHASE is already in effect since line ${this.phase}. End it with .DEPHASE first.`);
-    // Even a failed .PHASE opens, so its .DEPHASE raises nothing more.
-    this.phase = stmt.line;
-    const value = this.addressOperand(stmt, '.PHASE');
-    if (value === undefined) return;
-    item.failed = false;
-    this.pc = value;
-  }
-
-  endPhase(stmt: Statement, item: Item): void {
-    const op = stmt.op!;
-    item.failed = true;
-    if (this.phase === null) return this.error(stmt.line, op.col, op.end, '.DEPHASE has no .PHASE to end.');
-    if (stmt.operands.length > 0) return this.error(stmt.line, op.col, spanOf(stmt).end, '.DEPHASE takes no operands.');
-    item.failed = false;
-    this.phase = null;
-    this.pc = this.load;
-  }
-
-  end(stmt: Statement, item: Item): void {
-    const [operand, ...rest] = stmt.operands;
-    if (operand === undefined) return;
-    if (rest.length > 0) {
-      item.failed = true;
-      return this.error(stmt.line, stmt.op!.col, spanOf(stmt).end, 'END takes at most one entry address.');
-    }
-    if (operand.kind === 'reg' || operand.kind === 'ind' || operand.kind === 'index') {
-      item.failed = true;
-      return this.error(stmt.line, operand.col, operand.end, `END needs an entry address; ${registerWords(operand)}.`);
-    }
-    this.endItem = item;
-  }
-
-  /** DS/DEFS: the count now (only names above count), the fill in pass 2. */
-  reserve(stmt: Statement, item: Item): void {
-    const op = stmt.op!;
-    const name = op.name;
-    const [count, fill, ...rest] = stmt.operands;
-    item.failed = true;
-    if (count === undefined) return this.error(stmt.line, op.col, op.end, `${name} needs a count after it, as in ${name} 10.`);
-    if (rest.length > 0) return this.error(stmt.line, op.col, spanOf(stmt).end, `${name} takes a count and at most one fill byte, as in ${name} 10 or ${name} 10,0.`);
-    for (const [o, what] of [[count, 'a count'], [fill, 'a fill byte']] as const) {
-      if (o !== undefined && (o.kind === 'reg' || o.kind === 'ind' || o.kind === 'index')) return this.error(stmt.line, o.col, o.end, `${name} needs ${what}; ${registerWords(o)}.`);
-    }
-    let length: number;
-    try {
-      length = this.evaluateNow((count as Exclude<OperandNode, { kind: 'reg' | 'ind' }>).expr, stmt.line, name);
-    } catch (e) {
-      return this.exprError(stmt.line, e);
-    }
-    const problem = countProblem(name, length);
-    if (problem !== undefined) return this.error(stmt.line, count.col, count.end, problem);
-    item.failed = false;
-    item.length = length;
-    if (fill !== undefined) item.fill = fill;
-    // zmac writes zeros for a DS with no fill under .PHASE, and leaves a gap elsewhere.
-    this.place(item, fill !== undefined || this.phase !== null ? 'fill' : 'space');
+    return evaluate(expr, { here: this.pc, lookup: (n) => this.lookupBefore(n, line, what, new Set()) });
   }
 
   /**
@@ -485,19 +408,38 @@ class Assembly {
    * above `line` count, since what follows depends on the answer. `at` is the
    * line whose view of a DEFL name is wanted.
    */
-  lookupBefore(node: SymNode, line: number, what: string, seen: Set<Sym>, at: number): number {
+  lookupBefore(node: SymNode, line: number, what: string, seen: Set<Sym>, via?: Sym): number {
     const first = this.syms.get(node.name.toUpperCase());
     if (first === undefined || first.line >= line) {
       if (first === undefined && !this.definedLater(node.name, line)) throw new ExprError(this.undefinedMessage(node.name), node.col, node.end);
       throw new ExprError(`${what} cannot use ${node.name} before ${node.name} is defined, because the addresses after this line depend on it. Define ${node.name} above the ${what}.`, node.col, node.end);
     }
-    const sym = first.versions === undefined ? first : versionAt(first, Math.min(at, line));
+    let sym = first;
+    if (first.versions !== undefined) {
+      // A DEFL name means the definition above the line that uses it. Used by
+      // an EQU or DEFL above its first definition, it would mean the last one
+      // in the file (zmac's extra passes), which pass 1 has not reached.
+      const at = via?.line ?? line;
+      const above = first.versions.filter((v) => v.line < at);
+      if (above.length === 0) {
+        throw new ExprError(
+          `${what} cannot use ${via!.name} here: ${via!.name} uses ${first.name} on line ${at}, before ${first.name} is defined on line ${first.line}, and the addresses after this line depend on it. Define ${first.name} above line ${at}.`,
+          node.col,
+          node.end,
+        );
+      }
+      sym = above[above.length - 1]!;
+    }
     if (sym.state === 'failed') throw new ExprError(null, node.col, node.end);
     if (sym.value !== undefined) return sym.value;
     if (seen.has(sym)) throw new ExprError(`${sym.name} is defined in terms of itself.`, node.col, node.end);
     seen.add(sym);
     try {
-      return evaluate(sym.expr!, { here: sym.here, lookup: (n) => this.lookupBefore(n, line, what, seen, sym.line) });
+      return evaluate(sym.expr!, { here: sym.here, lookup: (n) => this.lookupBefore(n, line, what, seen, sym) });
+    } catch (e) {
+      // Report it at the name on the asking line, not at a column of the definition's line.
+      if (e instanceof ExprError) throw new ExprError(e.sentence, node.col, node.end);
+      throw e;
     } finally {
       seen.delete(sym);
     }
@@ -508,9 +450,6 @@ class Assembly {
     const up = name.toUpperCase();
     return this.pending.some((s) => s.line > line && s.label !== undefined && s.label.name.toUpperCase() === up);
   }
-
-  /** Every statement up to END, for definedLater. */
-  pending: Statement[] = [];
 
   unknown(stmt: Statement): void {
     const op = stmt.op!;
@@ -568,11 +507,7 @@ class Assembly {
 
   /** Resolves every EQU and DEFL in line order, then checks each repeated EQU against the first. */
   resolveAll(): void {
-    const all: Sym[] = [];
-    for (const sym of this.syms.values()) all.push(...(sym.versions ?? [sym]));
-    all.push(...this.repeats.map((r) => r.sym));
-    all.sort((a, b) => a.line - b.line);
-    for (const sym of all) {
+    for (const sym of this.definitions()) {
       if (sym.state !== 'pending') continue;
       try {
         this.resolve(sym, []);
@@ -676,13 +611,18 @@ class Assembly {
     }
   }
 
+  /** Every definition in line order: each label and EQU, every DEFL version, and every repeated EQU. */
+  definitions(): Sym[] {
+    const all: Sym[] = [];
+    for (const sym of this.syms.values()) all.push(...(sym.versions ?? [sym]));
+    all.push(...this.repeats.map((r) => r.sym));
+    return all.sort((a, b) => a.line - b.line);
+  }
+
   /** The value each EQU, DEFL, and = line defines, by line, for the listing. */
   definedValues(): Map<number, number> {
     const out = new Map<number, number>();
-    const all: Sym[] = [];
-    for (const sym of this.syms.values()) if (sym.kind !== 'label') all.push(...(sym.versions ?? [sym]));
-    all.push(...this.repeats.map((r) => r.sym));
-    for (const sym of all) if (sym.value !== undefined) out.set(sym.line, sym.value & 0xffff);
+    for (const sym of this.definitions()) if (sym.kind !== 'label' && sym.value !== undefined) out.set(sym.line, sym.value & 0xffff);
     return out;
   }
 
@@ -819,8 +759,8 @@ export function assemble(source: string, _options: AsmOptions = {}): AsmResult {
   const diagnostics = asm.diagnostics.map((d, i) => ({ d, i })).sort((a, b) => a.d.line - b.d.line || a.i - b.i).map(({ d }) => d);
   const ok = !diagnostics.some((d) => d.severity === 'error');
 
-  // The source map (by run address) and the listing.
-  const lineAt = new Map<number, number>();
+  // The source map (by run address) and the listing. Bytes are sliced only when asked for.
+  const lineAt = new Map<number, { item: Item; k: number }[]>();
   const byLine = new Map<number, number[]>();
   const valueAt = asm.definedValues();
   const listing: ListingLine[] = asm.items.map((item) => {
@@ -829,7 +769,9 @@ export function assemble(source: string, _options: AsmOptions = {}): AsmResult {
     item.bytes.forEach((_, k) => {
       const a = (item.address! + k) & 0xffff;
       addrs.push(a);
-      lineAt.set(a, line);
+      const here = lineAt.get(a);
+      if (here === undefined) lineAt.set(a, [{ item, k }]);
+      else here.push({ item, k });
     });
     byLine.set(line, addrs);
     const placed = item.emit !== 'none';
@@ -839,7 +781,8 @@ export function assemble(source: string, _options: AsmOptions = {}): AsmResult {
     return entry;
   });
   const sourceMap: SourceMap = {
-    lineOf: (a) => lineAt.get(a & 0xffff) ?? null,
+    lineOf: (a) => lineAt.get(a & 0xffff)?.[0]?.item.stmt.line ?? null,
+    linesOf: (a) => (lineAt.get(a & 0xffff) ?? []).map(({ item, k }) => ({ line: item.stmt.line, bytes: item.bytes.slice(k) })),
     addressesOf: (line) => [...(byLine.get(line) ?? [])],
   };
 
@@ -866,9 +809,9 @@ export function assemble(source: string, _options: AsmOptions = {}): AsmResult {
 
   const symbols = new Map<string, SymbolInfo>();
   for (const sym of asm.syms.values()) {
-    // A DEFL name reports its last value, as zmac's symbol table does.
+    // A DEFL name reports its last value, as zmac's symbol table does, and that definition's line.
     const last = sym.versions === undefined ? sym : sym.versions[sym.versions.length - 1]!;
-    if (last.value !== undefined) symbols.set(sym.name, { value: last.value & 0xffff, line: sym.line, kind: sym.kind });
+    if (last.value !== undefined) symbols.set(sym.name, { value: last.value & 0xffff, line: last.line, kind: sym.kind });
   }
 
   return { ok, image, entry: ok ? asm.entry : null, symbols, sourceMap, listing, diagnostics };

@@ -64,6 +64,12 @@ describe('Ruling 4: where a program starts', () => {
     ]);
     expect(r.image).toBeNull();
   });
+  it('a source that places nothing gets no note', () => {
+    expect(diagnosticsOf(assemble('K\tEQU 5\nX\tDEFL 1\n'))).toEqual([]);
+  });
+  it('a label alone, with no ORG, does get the note', () => {
+    expect(diagnosticsOf(assemble('START:\n'))).toEqual(['1:1-7 info: There is no ORG, so the program starts at $5200.']);
+  });
   it('with an ORG later, a label and an EQU before it are fine; the label is 0, as in zmac', () => {
     const r = assemble('X\tEQU 5\nY:\n\tORG 6000H\n\tDW Y,X\n');
     expect(runsOf(r)).toEqual([[0x6000, [0, 0, 5, 0]]]);
@@ -95,7 +101,8 @@ describe('DEFL and =', () => {
   it('redefine a name; each use takes the definition above it', () => {
     const r = assemble(program('X\tDEFL 1', '\tDB X', 'X\tDEFL X+1', '\tDB X', 'Y\t= 5', '\tDB Y', 'Y\t= 6', '\tDB Y'));
     expect(runsOf(r)).toEqual([[0x6000, [1, 2, 5, 6]]]);
-    expect(r.symbols.get('X')).toEqual({ value: 2, line: 2, kind: 'defl' });
+    // The value and the line come from the same (last) definition.
+    expect(r.symbols.get('X')).toEqual({ value: 2, line: 4, kind: 'defl' });
   });
   it('a use above every definition takes the last one, as zmac does', () => {
     expect(bytesOf(program('\tDB K', 'K\tDEFL 5', 'K\tDEFL 6'))).toEqual([6]);
@@ -151,6 +158,23 @@ describe('DS and DEFS', () => {
       '2: DS cannot use N before N is defined, because the addresses after this line depend on it. Define N above the DS.',
     ]);
     expect(bytesOf(program('\tDS 2,FILL', 'FILL\tEQU 7'))).toEqual([7, 7]);
+  });
+  it('a count that reaches a later name through an EQU or DEFL is an error at the DS operand (Review Focus 2)', () => {
+    expect(diagnosticsOf(assemble(program('N\tEQU LBL', '\tDS N', 'LBL:\tNOP')))).toEqual([
+      '3:5-6 error: DS cannot use LBL before LBL is defined, because the addresses after this line depend on it. Define LBL above the DS.',
+    ]);
+    expect(errorsOf(assemble(program('N\tEQU X', 'X\tDEFL 1', '\tDS N', '\tDB 0AAH', 'X\tDEFL 100', '\tDW N')))).toEqual([
+      '4: DS cannot use N here: N uses X on line 2, before X is defined on line 3, and the addresses after this line depend on it. Define X above line 2.',
+    ]);
+    expect(errorsOf(assemble(program('Y\tDEFL X', 'X\tDEFL 1', '\tDS Y', 'X\tDEFL 100')))).toEqual([
+      '4: DS cannot use Y here: Y uses X on line 2, before X is defined on line 3, and the addresses after this line depend on it. Define X above line 2.',
+    ]);
+    expect(errorsOf(assemble(program('N\tEQU X', 'X\tDEFL 1', '\tORG N')))).toEqual([
+      '4: ORG cannot use N here: N uses X on line 2, before X is defined on line 3, and the addresses after this line depend on it. Define X above line 2.',
+    ]);
+  });
+  it('a DEFL defined above the DS sizes it with the definition above it', () => {
+    expect(runsOf(assemble(program('X\tDEFL 1', '\tDS X', '\tNOP', 'X\tDEFL 100')))).toEqual([[0x6001, [0]]]);
   });
   it('a count from an EQU above works', () => {
     expect(runsOf(assemble(program('N\tEQU 2', '\tDS N', '\tNOP')))).toEqual([[0x6002, [0]]]);
@@ -222,20 +246,53 @@ describe('END', () => {
 });
 
 describe('the source map', () => {
-  it('round-trips every emitted byte', () => {
-    const src = program('START:\tLD A,1', '\tDB 1,2,3', '\tDS 2', '\tDS 2,9', '\tDW 1234H', '\t.PHASE 4000H', 'PP:\tJP PP', '\t.DEPHASE', '\tORG 7000H', '\tLD (IX+1),5', '\tEND START');
-    const r = assemble(src);
+  /**
+   * Every byte a line emitted is found again: addressesOf gives the line's
+   * run addresses, linesOf at each of them names the line with the bytes from
+   * there on, candidates come in source order, and lineOf is the first.
+   */
+  function roundTrips(r: AsmResult): void {
     expect(errorsOf(r)).toEqual([]);
-    let count = 0;
     for (const l of r.listing) {
       const addrs = r.sourceMap.addressesOf(l.line);
       expect(addrs).toEqual(l.bytes.map((_, k) => (l.address! + k) & 0xffff));
-      for (const a of addrs) expect(r.sourceMap.lineOf(a)).toBe(l.line);
-      count += l.bytes.length;
+      addrs.forEach((a, k) => {
+        const lines = r.sourceMap.linesOf(a);
+        expect(lines).toContainEqual({ line: l.line, bytes: l.bytes.slice(k) });
+        expect(lines.map((c) => c.line)).toEqual([...lines.map((c) => c.line)].sort((x, y) => x - y));
+        expect(r.sourceMap.lineOf(a)).toBe(lines[0]!.line);
+      });
     }
-    let loaded = 0;
-    for (let a = 0; a < 0x10000; a++) loaded += r.image!.loaded[a]!;
-    expect(count).toBe(loaded);
+  }
+
+  it('round-trips every emitted byte', () => {
+    const r = assemble(program('START:\tLD A,1', '\tDB 1,2,3', '\tDS 2', '\tDS 2,9', '\tDW 1234H', '\t.PHASE 4000H', 'PP:\tJP PP', '\t.DEPHASE', '\tORG 7000H', '\tLD (IX+1),5', '\tEND START'));
+    roundTrips(r);
     expect(r.sourceMap.lineOf(0x5fff)).toBeNull();
+    expect(r.sourceMap.linesOf(0x5fff)).toEqual([]);
+  });
+  it('round-trips over an ORG overlap, where both lines ran at those addresses', () => {
+    const r = assemble(program('\tDB 1,2,3', '\tORG 6000H', '\tDS 2', '\tDB 9'));
+    roundTrips(r);
+    expect(r.sourceMap.linesOf(0x6002)).toEqual([
+      { line: 2, bytes: [3] },
+      { line: 5, bytes: [9] },
+    ]);
+  });
+  it('a relocating loader: lines that share a run address are all candidates, first in source order', () => {
+    const r = assemble(program('LDR:\tLD HL,BLK', '\tJP 6000H', 'BLK:', '\t.PHASE 6000H', 'RUN:\tNOP', '\tJR RUN', '\t.DEPHASE', '\tEND LDR'));
+    roundTrips(r);
+    expect(r.entry).toBe(0x6000);
+    expect(r.sourceMap.lineOf(0x6000)).toBe(2);
+    expect(r.sourceMap.linesOf(0x6000)).toEqual([
+      { line: 2, bytes: [0x21, 0x06, 0x60] },
+      { line: 6, bytes: [0x00] },
+    ]);
+    expect(r.sourceMap.linesOf(0x6001)).toEqual([
+      { line: 2, bytes: [0x06, 0x60] },
+      { line: 7, bytes: [0x18, 0xfd] },
+    ]);
+    expect(r.sourceMap.addressesOf(2)).toEqual([0x6000, 0x6001, 0x6002]);
+    expect(r.sourceMap.addressesOf(7)).toEqual([0x6001, 0x6002]);
   });
 });

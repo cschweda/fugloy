@@ -388,4 +388,28 @@ describe('deliberately stricter than zmac', () => {
     expect(runZmac(phase).clean).toBe(true);
     expect(errorsOf(assemble(phase))).toEqual(['2: .PHASE cannot use X before X is defined, because the addresses after this line depend on it. Define X above the .PHASE.']);
   });
+  // A DS (or ORG) count that reaches a DEFL through an EQU or another DEFL
+  // defined above its first definition: zmac's extra passes size it with the
+  // last DEFL in the file (DS 100 here). Pass 1 cannot know that value, so the
+  // assembler refuses rather than size it differently (Review Focus 2).
+  zit('a DEFL reached before its first definition sizes a DS', () => {
+    const viaEqu = program('N\tEQU X', 'X\tDEFL 1', '\tDS N', '\tDB 0AAH', 'X\tDEFL 100', '\tDW N');
+    const z = runZmac(viaEqu);
+    expect(z.clean, z.output).toBe(true);
+    expect(z.image!.bytes[0x6064]).toBe(0xaa);
+    expect(z.image!.loaded[0x6001]).toBe(0);
+    expect(errorsOf(assemble(viaEqu))).toEqual(['4: DS cannot use N here: N uses X on line 2, before X is defined on line 3, and the addresses after this line depend on it. Define X above line 2.']);
+    const deflOnly = program('Y\tDEFL X', 'X\tDEFL 1', '\tDS Y', '\tDB 0AAH', 'X\tDEFL 100');
+    const zd = runZmac(deflOnly);
+    expect(zd.clean, zd.output).toBe(true);
+    expect(zd.image!.bytes[0x6064]).toBe(0xaa);
+    expect(errorsOf(assemble(deflOnly))).toEqual(['4: DS cannot use Y here: Y uses X on line 2, before X is defined on line 3, and the addresses after this line depend on it. Define X above line 2.']);
+  });
+  // An EQU that names a label below the DS it sizes: the pinned zmac does not
+  // finish (it crashes), so there is no zmac image to differ from.
+  zit('an EQU of a later label sizing a DS', () => {
+    const src = program('N\tEQU LBL', '\tDS N', 'LBL:\tNOP');
+    expect(runZmac(src).clean).toBe(false);
+    expect(errorsOf(assemble(src))).toEqual(['3: DS cannot use LBL before LBL is defined, because the addresses after this line depend on it. Define LBL above the DS.']);
+  });
 });
