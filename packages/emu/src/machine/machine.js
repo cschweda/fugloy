@@ -114,6 +114,10 @@ export class Machine {
         const f = cpu.registers.F;
         return { s: (f & 0x80) !== 0, z: (f & 0x40) !== 0, h: (f & 0x10) !== 0, pv: (f & 0x04) !== 0, n: (f & 0x02) !== 0, c: (f & 0x01) !== 0 };
       },
+      // True while the CPU sits in a HALT (PC is then just past it), until an interrupt or a reset.
+      get halted() {
+        return cpu.halted;
+      },
     };
     this.mem = {
       read(addr, len) {

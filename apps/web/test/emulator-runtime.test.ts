@@ -463,6 +463,39 @@ describe('pausing at breakpoints (5C)', () => {
     expect(runner.pc).toBe(result.symbol('WAIT')!.value);
   });
 
+  it('continue() after a step runs the instruction at PC even when an interrupt is pending there', () => {
+    // IM 2 with the clock unmasked at E0H: the handler counts nothing, it only acknowledges.
+    const src = program(
+      'START:  DI', '        LD      A,70H', '        LD      I,A', '        IM      2', '        LD      A,4', '        OUT     (0E0H),A', '        LD      HL,0', '        EI',
+      'WAIT:   INC     HL', '        JR      WAIT',
+      'HND:    PUSH    AF', '        IN      A,(0ECH)', '        POP     AF', '        EI', '        RETI',
+      '        ORG     70FEH', '        DW      HND', '        DW      HND',
+    );
+    // Find how many steps in the first interrupt is taken: emu is deterministic, so a second run
+    // stepped one fewer times sits at a boundary with that interrupt pending.
+    const probe = runWith(src);
+    const hnd = probe.result.symbol('HND')!.value;
+    let k = 0;
+    for (; k < 200_000; k++) {
+      probe.machine.step();
+      if (probe.machine.debug.trace.last(1)[0]!.pc === hnd) break;
+    }
+    expect(probe.machine.debug.trace.last(1)[0]!.pc).toBe(hnd);
+    const { clock, machine, runner } = runWith(src);
+    for (let s = 0; s < k; s++) runner.step();
+    const pc = runner.pc;
+    expect(runner.pausedBy?.kind).toBe('step');
+    machine.debug.break(pc);
+    runner.continue();
+    clock.frame();
+    // It paused at PC again, but only after the loop came round: the instruction at PC ran after the handler's RETI.
+    const entries = machine.debug.trace.last(64);
+    const reti = entries.findIndex((e) => e.bytes[0] === 0xed && e.bytes[1] === 0x4d);
+    expect(reti).toBeGreaterThanOrEqual(0);
+    expect(entries.slice(reti + 1).some((e) => e.pc === pc)).toBe(true);
+    expect(runner.pc).toBe(pc);
+  });
+
   it('start() honours a breakpoint on the entry line', () => {
     const { clock, machine, result, runner } = runWith(ONCE);
     machine.debug.break(result.symbol('START')!.value);

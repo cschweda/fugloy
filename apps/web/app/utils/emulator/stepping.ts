@@ -2,18 +2,20 @@
 //
 // - A line's breakpoint is at its first address (`addressesOf(line)[0]`). Where lines share that
 //   address, its `when` compares memory with the line's bytes, so a relocated block stops only on
-//   the right line.
+//   the right line. A line with no code, or with data (DB, DW, DS), is inactive: it has no
+//   instruction to stop at (`inactiveReason` says why).
 // - Step is the runner's step. Step Over decodes the instruction at PC: for a CALL, CALL cc, RST,
 //   or a repeating block instruction (LDIR and its kin) it sets `once` breakpoints after it, gated
 //   on SP being back where it was, and continues; RST 08H gets a second one past its inline byte
 //   (the one RST that takes one). Anything else is a plain step. A user breakpoint hit first wins.
-// - Run to Here sets a `once` breakpoint at each address given, then continues.
+// - Run to Here sets a `once` breakpoint at each address given, then continues; given the target
+//   line, a shared address gets the same byte check as a user breakpoint.
 // - Every temporary breakpoint is removed by `clearTemps`, which a Run calls on any pause or stop.
 // - Step and Step Over while running only pause; the next press steps.
 // - A CPU halted with interrupts off cannot move on: the actions do nothing and return the sentence.
 import type { AsmResult } from '@fugloy/asm';
 import type { Machine } from '@fugloy/emu';
-import { isHalted } from './running';
+import { isDataLine } from './rom-use';
 import type { Runner } from './runner';
 
 export const HALTED_INTERRUPTS_OFF = 'The CPU is halted (HALT) with interrupts off, so it will not move on. Press Stop, then Run.';
@@ -21,6 +23,29 @@ export const HALTED_INTERRUPTS_OFF = 'The CPU is halted (HALT) with interrupts o
 /** The address a breakpoint on `line` stops at, or null for a line with no code. */
 export function breakAddress(result: AsmResult, line: number): number | null {
   return result.sourceMap.addressesOf(line)[0] ?? null;
+}
+
+/** Why a breakpoint on `line` cannot stop, as a sentence; null when it can. */
+export function inactiveReason(result: AsmResult, line: number): string | null {
+  if (breakAddress(result, line) === null) return `Line ${line} has no instruction to stop at.`;
+  const l = result.listing.find((x) => x.line === line);
+  return l !== undefined && isDataLine(l) ? `Line ${line} holds data, not an instruction to stop at.` : null;
+}
+
+/**
+ * A `when` for a breakpoint at `addr` on `line`: where several lines share the address, it holds
+ * only while memory has this line's bytes there. Undefined when no check is needed.
+ */
+function byteGate(result: AsmResult, line: number, addr: number): ((m: Machine) => boolean) | undefined {
+  const at = result.sourceMap.linesOf(addr);
+  const mine = at.find((c) => c.line === line);
+  if (at.length < 2 || mine === undefined) return undefined;
+  const want = mine.bytes;
+  return (mm: Machine) => {
+    const got = mm.mem.read(addr, want.length);
+    for (let k = 0; k < want.length; k++) if (got[k] !== want[k]) return false;
+    return true;
+  };
 }
 
 /** ED-prefixed LDIR, CPIR, INIR, OTIR, LDDR, CPDR, INDR, OTDR. */
@@ -48,7 +73,8 @@ export interface Stepper {
   /** Each action returns null, or a sentence when the CPU cannot move on. */
   step(): string | null;
   stepOver(): string | null;
-  runTo(addrs: readonly number[]): string | null;
+  /** `line`, when known, is the target line: its byte check guards a shared address. */
+  runTo(addrs: readonly number[], line?: number): string | null;
   continue(): string | null;
   /** Removes every temporary breakpoint (call on each pause and stop). */
   clearTemps(): void;
@@ -64,21 +90,7 @@ export function createStepper(runner: Runner): Stepper {
   const user = new Map<number, number>();
   const temps = new Set<number>();
 
-  const stuck = (): string | null => (isHalted(m) && !m.cpu.regs.iff1 ? HALTED_INTERRUPTS_OFF : null);
-
-  function addUser(line: number, addr: number): number {
-    const at = result.sourceMap.linesOf(addr);
-    const mine = at.find((c) => c.line === line);
-    if (at.length < 2 || mine === undefined) return m.debug.break(addr);
-    const want = mine.bytes;
-    return m.debug.break(addr, {
-      when: (mm: Machine) => {
-        const got = mm.mem.read(addr, want.length);
-        for (let k = 0; k < want.length; k++) if (got[k] !== want[k]) return false;
-        return true;
-      },
-    });
-  }
+  const stuck = (): string | null => (m.cpu.halted && !m.cpu.regs.iff1 ? HALTED_INTERRUPTS_OFF : null);
 
   const stepper: Stepper = {
     setBreakpoints(lines) {
@@ -91,8 +103,8 @@ export function createStepper(runner: Runner): Stepper {
       const inactive: number[] = [];
       for (const line of wanted) {
         const addr = breakAddress(result, line);
-        if (addr === null) inactive.push(line);
-        else if (!user.has(line)) user.set(line, addUser(line, addr));
+        if (addr === null || inactiveReason(result, line) !== null) inactive.push(line);
+        else if (!user.has(line)) user.set(line, m.debug.break(addr, { when: byteGate(result, line, addr) }));
       }
       return { inactive: inactive.sort((a, b) => a - b) };
     },
@@ -125,11 +137,11 @@ export function createStepper(runner: Runner): Stepper {
       runner.continue();
       return null;
     },
-    runTo(addrs) {
+    runTo(addrs, line) {
       if (runner.state === 'stopped') return null;
       const why = runner.state === 'paused' ? stuck() : null;
       if (why !== null) return why;
-      for (const addr of addrs) temps.add(m.debug.break(addr, { once: true }));
+      for (const addr of addrs) temps.add(m.debug.break(addr, { once: true, when: line === undefined ? undefined : byteGate(result, line, addr) }));
       if (runner.state === 'paused') runner.continue();
       return null;
     },

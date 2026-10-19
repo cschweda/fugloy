@@ -24,7 +24,7 @@ declare module '@fugloy/emu' {
 
   export class TRS80System {
     constructor(options: { romData: Uint8Array });
-    cpu: { strictMode: boolean; readonly halted: boolean };
+    cpu: { strictMode: boolean };
     memory: { videoRam: Uint8Array };
     keyboard: KeyboardMatrix;
     bootToCassetteBasic(): boolean;
@@ -67,7 +67,11 @@ declare module '@fugloy/emu' {
     readonly cycles: number;
     readonly rom: { bytes: number; sha256: string; recognized: string | null };
     readonly system: TRS80System;
-    readonly cpu: { readonly regs: Regs };
+    readonly cpu: {
+      readonly regs: Regs;
+      /** True while the CPU sits in a HALT (PC just past it), until an interrupt or a reset. */
+      readonly halted: boolean;
+    };
     readonly mem: { read(addr: number, len: number): Uint8Array; write(addr: number, bytes: Uint8Array): void };
     readonly video: {
       readonly raw: Uint8Array;
@@ -85,7 +89,7 @@ declare module '@fugloy/emu' {
       snapshot(): Snapshot;
       restore(snap: Snapshot): void;
       /** Stop before the instruction at `addr`; `once` removes it after its first hit, `when` gates each hit. Returns its id. */
-      break(addr: number, opts?: { once?: boolean; when?: (m: Machine) => boolean }): number;
+      break(addr: number, opts?: { once?: boolean; when?: ((m: Machine) => boolean) | undefined }): number;
       /** False when no breakpoint has that id. */
       unbreak(id: number): boolean;
       /** The breakpoints, in id order. */

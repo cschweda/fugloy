@@ -2,7 +2,7 @@
 // breakpoints, on the stub ROM through runOnce (as a Run does), or on a patched stub for RST 08H.
 import { describe, expect, it, vi } from 'vitest';
 import * as kit from '../app/utils/emulator/kit';
-import { breakAddress, createStepper, HALTED_INTERRUPTS_OFF, stepOverTargets } from '../app/utils/emulator/stepping';
+import { breakAddress, createStepper, HALTED_INTERRUPTS_OFF, inactiveReason, stepOverTargets } from '../app/utils/emulator/stepping';
 import type { Runner } from '../app/utils/emulator/runner';
 import { asm, fakeClock, frames, lineWith, program, runPatched } from './emulator-support';
 
@@ -73,6 +73,47 @@ describe('the stepper', () => {
     expect(onPause).toHaveBeenCalled();
     expect(temps()).toBe(0);
     expect(m.debug.breaks).toEqual([]);
+  });
+
+  it('Step Over on a CALL cc that is not taken stops at the next line', () => {
+    const src = program('START:  XOR     A', '        CALL    NZ,SUB', 'NEXT:   INC     A', 'WAIT:   JR      WAIT', 'SUB:    LD      A,41H', '        RET');
+    const { clock, runner, stepper, m, at, temps } = run(src);
+    stepper.step(); // XOR A: Z set, so CALL NZ is not taken
+    stepper.stepOver();
+    frames(clock, 1);
+    expect(runner.state).toBe('paused');
+    expect(runner.pc).toBe(at('NEXT'));
+    expect(m.cpu.regs.a).toBe(0);
+    expect(temps()).toBe(0);
+  });
+
+  it('Step Over when paused by a step with a user breakpoint on the CALL line runs SUB and stops after it', () => {
+    const { clock, runner, stepper, m, at, temps } = run(SUB, [lineWith(SUB, 'CALL')]);
+    stepper.step();
+    expect(runner.pausedBy?.kind).toBe('step');
+    expect(runner.pc).toBe(at('START') + 2);
+    stepper.stepOver();
+    frames(clock, 1);
+    expect(runner.state).toBe('paused');
+    expect(runner.pc).toBe(at('NEXT'));
+    expect(m.cpu.regs.a).toBe(0x42);
+    expect(temps()).toBe(0);
+    expect(m.debug.breaks).toHaveLength(1); // the user's, still set
+  });
+
+  it('Continue after a finished Step Over does not stop again at that PC', () => {
+    const src = program('START:  CALL    SUB', 'NEXT:   LD      A,1', 'WAIT:   JR      WAIT', 'SUB:    RET');
+    const { clock, runner, stepper, m, at } = run(src);
+    stepper.stepOver();
+    frames(clock, 1);
+    expect(runner.pc).toBe(at('NEXT'));
+    expect(runner.pausedBy?.kind).toBe('break');
+    expect(m.debug.breaks).toEqual([]); // the temp that stopped it has gone
+    stepper.continue();
+    frames(clock, 1);
+    expect(runner.state).toBe('running');
+    expect(runner.pc).toBe(at('WAIT'));
+    expect(m.cpu.regs.a).toBe(1);
   });
 
   it('on recursion, Step Over stops only when SP is back', () => {
@@ -182,6 +223,53 @@ describe('the stepper', () => {
     expect(m.debug.breaks.map((b) => b.addr).sort()).toEqual([at('NEXT'), at('INSUB')].sort());
     stepper.setBreakpoints([]);
     expect(m.debug.breaks).toEqual([]);
+  });
+
+  it('data lines (DB, DW, DS) are inactive, with their own sentence', () => {
+    const src = program('START:  NOP', 'WAIT:   JR      WAIT', 'TBL:    DB      1,2', '        DW      1234H', '        DS      4', 'MSG:    DEFM    "HI"');
+    const { stepper, m, out } = run(src);
+    const lines = ['DB', 'DW', 'DS', 'DEFM'].map((d) => lineWith(src, `${d}  `));
+    expect(stepper.setBreakpoints([...lines, lineWith(src, 'START')]).inactive).toEqual(lines);
+    expect(m.debug.breaks.map((b) => b.addr)).toEqual([out.result.symbol('START')!.value]);
+    expect(inactiveReason(out.result, lines[0]!)).toBe(`Line ${lines[0]} holds data, not an instruction to stop at.`);
+    expect(inactiveReason(out.result, 1)).toBe('Line 1 has no instruction to stop at.');
+    expect(inactiveReason(out.result, lineWith(src, 'START'))).toBeNull();
+  });
+
+  it('Run to Here on a line at a shared address stops only where its bytes are', () => {
+    // OLD runs at $7000 first (CALLed); then NEW is copied over it and run there.
+    const src = [
+      '        ORG     7000H',
+      'OLD:    RET',
+      'START:  CALL    OLD',
+      '        LD      HL,BLK',
+      '        LD      DE,7000H',
+      '        LD      BC,BLKEND-BLK',
+      '        LDIR',
+      '        JP      7000H',
+      'BLK:',
+      '        .PHASE  7000H',
+      'NEW:    INC     A',
+      '        JR      NEW',
+      '        .DEPHASE',
+      'BLKEND:',
+      '        END     START',
+      '',
+    ].join('\n');
+    const { clock, runner, stepper, m, out } = run(src);
+    const line = lineWith(src, 'NEW:');
+    expect(breakAddress(out.result, line)).toBe(0x7000);
+    stepper.runTo([0x7000], line);
+    frames(clock, 1);
+    expect(runner.state).toBe('paused');
+    expect(runner.pc).toBe(0x7000);
+    expect(m.mem.read(0x7000, 1)[0]).toBe(0x3c); // NEW's INC A, not OLD's RET
+    expect(m.debug.breaks).toEqual([]);
+    // Without the line, a plain Run to Here stops at OLD's RET.
+    const plain = run(src);
+    plain.stepper.runTo([0x7000]);
+    frames(plain.clock, 1);
+    expect(plain.m.mem.read(0x7000, 1)[0]).toBe(0xc9);
   });
 
   it('a breakpoint at a shared address stops only on the line whose bytes are there', () => {

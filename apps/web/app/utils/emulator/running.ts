@@ -9,7 +9,7 @@
 //   that loops), the newest program line in the whole trace, searched for once with escalating
 //   windows and then kept, frame after frame, until program lines come back. A search that found
 //   nothing is not repeated either.
-import type { AsmResult } from '@fugloy/asm';
+import type { AsmResult, LineAt } from '@fugloy/asm';
 import type { Machine } from '@fugloy/emu';
 import { TRACE_DEPTH } from './runner';
 
@@ -43,13 +43,31 @@ function matches(want: readonly number[], got: ArrayLike<number>): boolean {
 }
 
 /**
+ * `linesOf` per address, for each Run's result (its source map never changes): the line when one
+ * line emitted code there, null for none, and the candidates when several did. `linesOf` maps and
+ * slices on every call, so a frame's lookups become Map gets, and only shared addresses compare bytes.
+ */
+const linesMemo = new WeakMap<AsmResult, Map<number, number | null | LineAt[]>>();
+
+function candidates(result: AsmResult, addr: number): number | null | LineAt[] {
+  let memo = linesMemo.get(result);
+  if (memo === undefined) linesMemo.set(result, (memo = new Map()));
+  let hit = memo.get(addr);
+  if (hit === undefined) {
+    const at = result.sourceMap.linesOf(addr);
+    hit = at.length === 0 ? null : at.length === 1 ? at[0]!.line : at;
+    memo.set(addr, hit);
+  }
+  return hit;
+}
+
+/**
  * The source line that emitted code at `addr`, or null. With several, the one whose bytes
  * `bytesAt(addr, n)` holds (memory now, or a trace entry's bytes); null when none does.
  */
 export function lineAt(result: AsmResult, addr: number, bytesAt: BytesAt): number | null {
-  const at = result.sourceMap.linesOf(addr);
-  if (at.length === 0) return null;
-  if (at.length === 1) return at[0]!.line;
+  const at = candidates(result, addr);
+  if (at === null || typeof at === 'number') return at;
   for (const c of at) if (matches(c.bytes, bytesAt(addr, c.bytes.length))) return c.line;
   return null;
 }
@@ -60,15 +78,11 @@ const entryLine = (result: AsmResult, e: Entry): number | null => lineAt(result,
 /** Trail states whose deep search found no program line, so the next frame does not search again. */
 const searchedEmpty = new WeakSet<TrailState>();
 
-/** True when the CPU sits in a HALT (emu leaves PC just past it). Read through emu's escape hatch. */
-export function isHalted(m: Machine): boolean {
-  return m.system.cpu.halted === true;
-}
-
 /** The running line and its trail now; `prev` is the last frame's state, for `out`. */
 export function trailOf(m: Machine, result: AsmResult, prev?: TrailState): TrailState {
   const regs = m.cpu.regs;
-  const pc = isHalted(m) ? (regs.pc - 1) & 0xffff : regs.pc;
+  // emu leaves PC just past a HALT it sits in; the HALT is the running line.
+  const pc = m.cpu.halted ? (regs.pc - 1) & 0xffff : regs.pc;
   const now = lineAt(result, pc, (a, n) => m.mem.read(a, n));
   const entries = m.debug.trace.last(TRAIL_WINDOW);
   const trail: number[] = [];

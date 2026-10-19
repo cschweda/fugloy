@@ -80,6 +80,8 @@ function codeOf(text: string): string {
 const DATA = /^(?:[^\s:;]+:?)?\s+(DB|DEFB|DEFM|DW|DEFW|DS|DEFS)\b/i;
 const ORIGIN = /^(?:[^\s:;]+:?)?\s+(ORG|\.PHASE)\b/i;
 const isData = (code: string): boolean => DATA.test(code) || /^(DB|DEFB|DEFM|DW|DEFW|DS|DEFS)\b/i.test(code.trim());
+/** True for a DB, DW, or DS line (and their DEF spellings): its bytes are data. */
+export const isDataLine = (l: ListingLine): boolean => isData(codeOf(l.text));
 
 const escape = (s: string): string => s.replace(/[$.*+?^{}()|[\]\\]/g, '\\$&');
 

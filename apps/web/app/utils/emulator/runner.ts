@@ -19,7 +19,11 @@
 // run before that instruction, sets `pausedBy`, and calls `onPause`; Pause and each step call
 // `onPause` too. `continue()` resumes past a breakpoint at PC: emu skips the
 // check at a run's first boundary only at the PC its last run stopped at for a break, so after any
-// other pause (a manual one, or a step) Continue first steps once.
+// other pause (a manual one, or a step) Continue first steps past PC: until the trace's newest entry
+// is the instruction at PC, since emu's step counts an interrupt response with the instruction
+// after it, so a pending interrupt runs its handler first (bounded by STEP_PAST_LIMIT). A halted
+// CPU is not stepped: emu checks no breakpoint while halted. (The ROM keyboard hook's stand-in RET
+// at $002B and $0049 leaves no trace entry, but a breakpoint is only ever on a program line.)
 import type { AsmResult } from '@fugloy/asm';
 import type { Machine } from '@fugloy/emu';
 import { MODEL_NAMES } from './rom-ids';
@@ -82,6 +86,9 @@ function eiLine(result: AsmResult): number | null {
   for (const l of result.listing) if (l.address !== null && l.bytes.length === 1 && l.bytes[0] === 0xfb && /\bEI\b/i.test(l.text.split(';')[0]!)) return l.line;
   return null;
 }
+
+/** The most steps Continue takes to run the instruction at PC (an interrupt handler may run first). */
+export const STEP_PAST_LIMIT = 1000;
 
 /** How many instructions the trace keeps (every run, 5C Ruling 1). */
 export const TRACE_DEPTH = 65_536;
@@ -227,6 +234,15 @@ export function createRunner(opts: RunnerOptions): Runner {
 
   const hasBreakAt = (pc: number): boolean => m.debug.breaks.some((b) => b.addr === pc);
 
+  /** Steps until the instruction at `pc` has run. False when the run stopped. */
+  const stepPast = (pc: number): boolean => {
+    for (let k = 0; k < STEP_PAST_LIMIT; k++) {
+      if (!stepOnce()) return false;
+      if (m.debug.trace.last(1)[0]?.pc === pc) return true;
+    }
+    return true;
+  };
+
   const go = (): void => {
     state = 'running';
     pausedBy = null;
@@ -268,7 +284,8 @@ export function createRunner(opts: RunnerOptions): Runner {
     continue() {
       if (state !== 'paused') return;
       // emu resumes past a breakpoint only at the PC its last run stopped at for one.
-      if (pausedBy?.kind !== 'break' && hasBreakAt(m.cpu.regs.pc) && !stepOnce()) return;
+      const pc = m.cpu.regs.pc;
+      if (pausedBy?.kind !== 'break' && !m.cpu.halted && hasBreakAt(pc) && !stepPast(pc)) return;
       go();
     },
     step() {

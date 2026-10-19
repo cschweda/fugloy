@@ -215,7 +215,9 @@ and `m.video.inverse`, read-only. They are true on a Model 4 in the
 80-column layout (port `$84` bit 2) and with inverse video (port `$84` bit 3),
 and always false on the Model III and Model I. `Video` already computed both
 privately. The site now reads them instead of reaching into the system's
-memory.
+memory. `m.cpu.halted`, read-only: true while the CPU sits in a HALT (PC
+just past it), until an interrupt or a reset; the workbench's stepping reads
+it instead of the system's CPU.
 
 Workbench, phase 5B (Source and Run), merged to main (2026-10-19), all five
 tasks done (plan `docs/superpowers/plans/2026-10-18-phase5b-source-run.md`).

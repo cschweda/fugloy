@@ -52,6 +52,10 @@ m.run({ cycles: 5 * second })
 console.log(m.video.text().join('\n'))     // the screen, 16 lines
 ```
 
+`m.cpu.regs` and `m.cpu.flags` read the registers and the flags, and
+`m.cpu.halted` is true while the CPU sits in a HALT (PC is then just past it),
+until an interrupt or a reset.
+
 A disk image (JV1, JV3, or DMK, detected from its content) goes in a drive
 with `m.fdc.mount(drive, bytes)`, or through `m.load.dsk(bytes)`, which mounts
 it in drive 0 and resets so the ROM boots from it:

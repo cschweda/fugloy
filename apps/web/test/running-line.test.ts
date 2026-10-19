@@ -34,6 +34,25 @@ describe('the trail', () => {
     expect(t.out).toBeNull();
   });
 
+  it('looks each address up once per Run (linesOf is cached)', () => {
+    const src = program('START:  LD      A,0', 'LP:     INC     A', '        DEC     B', '        JR      LP');
+    const { clock, machine, result, runner } = runStub(src);
+    let calls = 0;
+    const linesOf = result.sourceMap.linesOf.bind(result.sourceMap);
+    result.sourceMap.linesOf = (a: number) => {
+      calls++;
+      return linesOf(a);
+    };
+    runner.start();
+    frames(clock, 1);
+    const t = trailOf(machine, result);
+    expect(calls).toBeLessThanOrEqual(4); // three loop lines and, at most, LD A,0
+    frames(clock, 1);
+    calls = 0;
+    expect(trailOf(machine, result, t).trail).toHaveLength(2);
+    expect(calls).toBe(0);
+  });
+
   it('keeps at most 5 trail lines, newest first', () => {
     const body = ['A', 'B', 'C', 'D', 'E', 'H', 'L'].map((r) => `        INC     ${r}`);
     const src = program('START:  NOP', 'LP:     NOP', ...body, '        JR      LP');

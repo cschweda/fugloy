@@ -95,14 +95,14 @@ A screen-reader text mirror of the TRS-80 screen comes with it. 5C completes pha
    - A line's address is `addressesOf(line)[0]`, so each line has at most one breakpoint.
    - Where lines share a run address, `when` compares memory with that line's bytes, so a relocated block stops only on the right line.
    - They are applied when a Run starts. A toggle while running applies at once, except after the source has changed (Ruling 4), when it waits for the next Run.
-   - A line with no code shows a hollow mark, titled "Line N has no instruction to stop at".
+   - A line with no code shows a hollow mark, titled "Line N has no instruction to stop at.", and so does a data line (DB, DW, DS, and their DEF spellings), titled "Line N holds data, not an instruction to stop at." Neither gets an emu breakpoint (`inactiveReason`; Task 1 fix round 1).
    - Breakpoints are saved on the source as `breakpoints?: number[]`, carried through CodeMirror's change mapping, autosaved with the text, and included in the backup. The backup stays `fugloyBackup: 1`; `isSource` accepts the optional array.
    - In the listing they are shown only (Ruling 5), since a click target there would cost first-screen code. F9 in the listing toggles the source line `lineOf(cursor)`.
 9. **Stepping:**
    - **Step** is `runner.step()`.
    - **Step Over** decodes the instruction at PC. For CALL nn, CALL cc,nn, RST n, and LDIR/LDDR/CPIR/CPDR/INIR/INDR/OTIR/OTDR, it sets `once` breakpoints at `pc + length` with `when: sp ≥ sp0`, and continues. For RST 08H it also sets one at `pc + 2`, for the inline byte (see the CLAUDE.md reference facts). Anything else is a plain Step. If a user breakpoint is hit first, it wins, and the step over is abandoned.
-   - **Run to Here** sets a `once` breakpoint at the target line's address, then continues. The target is the Source cursor line, or the listing cursor if focus was last in the listing.
-   - **Continue** first steps once if a breakpoint sits at PC and the pause was not that breakpoint's, because emu's skip-past only applies after a break stop.
+   - **Run to Here** sets a `once` breakpoint at the target line's address, with the same byte check as a user breakpoint where lines share it (`runTo(addrs, line)`), then continues. The target is the Source cursor line, or the listing cursor if focus was last in the listing.
+   - **Continue** first steps past PC if a breakpoint sits there and the pause was not that breakpoint's, because emu's skip-past only applies after a break stop. It steps until the trace's newest entry is the instruction at PC (at most 1,000 steps), since a pending interrupt's handler runs first; a halted CPU is not stepped.
    - Every temporary breakpoint is removed on any pause or stop.
    - A HALT with IFF1 off gives: "The CPU is halted (HALT) with interrupts off, so it will not move on. Press Stop, then Run."
    - Step or Step Over while running pauses first; the next press steps.

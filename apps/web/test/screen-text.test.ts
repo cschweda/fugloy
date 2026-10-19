@@ -1,6 +1,9 @@
 // 5C Task 1, Ruling 13: the screen as text rows, for the screen-reader mirror.
 import { describe, expect, it } from 'vitest';
+import { Machine } from '@fugloy/emu';
 import { changedRows, screenAnnouncement, screenRows } from '../app/utils/emulator/screen-text';
+import { screenView } from '../app/utils/emulator/screen';
+import { stubRom } from '../app/utils/emulator/stub-rom';
 
 const VIEW = { columns: 64, rows: 16, wide: false, inverse: false };
 const blank = (): Uint8Array => new Uint8Array(1024).fill(0x20);
@@ -36,6 +39,23 @@ describe('screen rows', () => {
     const rows = screenRows(raw, { columns: 80, rows: 24, wide: true, inverse: true });
     expect(rows).toHaveLength(24);
     expect(rows[1]).toBe('AB');
+  });
+});
+
+describe('the Model I without the lowercase option', () => {
+  it("reads lowercase as the screen shows it: emu folds bit 6 as it stores the byte, as m.video.text() reads", () => {
+    const text = 'Hello, world';
+    const bytes = new Uint8Array([...text].map((c) => c.charCodeAt(0)));
+    const plain = new Machine({ model: 1, roms: { level2: stubRom(1) } });
+    plain.mem.write(0x3c00, new Uint8Array(1024).fill(0x20));
+    plain.mem.write(0x3c00, bytes);
+    const row = screenRows(plain.video.raw, screenView(plain))[0]!;
+    expect(row).toBe(plain.video.text()[0]!.trimEnd());
+    expect(row).not.toBe(text);
+    const fitted = new Machine({ model: 1, roms: { level2: stubRom(1) }, lowercase: true });
+    fitted.mem.write(0x3c00, new Uint8Array(1024).fill(0x20));
+    fitted.mem.write(0x3c00, bytes);
+    expect(screenRows(fitted.video.raw, screenView(fitted))[0]).toBe(text);
   });
 });
 

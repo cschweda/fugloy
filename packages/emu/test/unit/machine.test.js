@@ -108,6 +108,21 @@ describe('Machine', () => {
     expect(regs.f & 0xd7).toBe(0x44);
   });
 
+  it('cpu.halted is true in a HALT, with PC just past it, and false before', () => {
+    const m = machine([0x00, 0x76, 0x00]); // NOP / HALT
+    expect(m.cpu.halted).toBe(false);
+    m.step();
+    expect(m.cpu.halted).toBe(false);
+    m.step();
+    expect(m.cpu.halted).toBe(true);
+    expect(m.cpu.regs.pc).toBe(2);
+    m.step(3);
+    expect(m.cpu.halted).toBe(true);
+    expect(m.cpu.regs.pc).toBe(2);
+    m.reset();
+    expect(m.cpu.halted).toBe(false);
+  });
+
   it('mem.read returns a copy; mem.write to RAM reads back; mem.ram is the live 48K', () => {
     const m = machine([0x76]);
     m.mem.write(0x4000, [1, 2, 3]);
