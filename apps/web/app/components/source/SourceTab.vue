@@ -15,20 +15,21 @@
 // screen, so they are right before any Run and after edits. The debug keys (utils/running/
 // debug-keys) are installed here and by Run ▶: F9 toggles the cursor line's breakpoint, and Run to
 // Here runs to the cursor line when focus is, or was last, in this editor.
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
-import { assemble } from '@fugloy/asm';
-import type { AsmResult, Diagnostic } from '@fugloy/asm';
+//
+// 6B: the checking, the problems list (ProblemsList), the breakpoints, the running line and the
+// debug keys are useSourceChecks, shared with the Learn page's program, which works the same way.
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import CodeEditor from './CodeEditor.vue';
+import ProblemsList from './ProblemsList.vue';
+import { useSourceChecks } from './useSourceChecks';
 import ConfirmDialog from '~/components/ConfirmDialog.vue';
 import { useSources } from '~/composables/useSources';
 import { useOpenAsSource } from '~/composables/useOpenAsSource';
 import { useRun } from '~/composables/useRun';
 import { SOURCE_CHANGED } from '~/composables/useDebug';
 import { download } from '~/utils/exports';
-import { RECHECK_DELAY_MS, severityWord } from '~/utils/source/diagnostics';
-import { fixExpected } from '~/utils/source/fix';
-import { inactiveReason } from '~/utils/source/lines';
 import { speakAnnouncements } from '~/utils/running/announce';
+import type { Diagnostic } from '@fugloy/asm';
 import type { AsmFix } from '~/utils/source/diagnostics';
 import type { RunReport } from '~/composables/useRun';
 
@@ -42,9 +43,6 @@ const run = useRun();
 const debug = run.debug;
 const root = ref<HTMLElement | null>(null);
 const editor = ref<InstanceType<typeof CodeEditor> | null>(null);
-const diagnostics = shallowRef<readonly Diagnostic[]>([]);
-/** The text asm read for `diagnostics`, so a fix from a list older than the latest typing is refused. */
-let assembledText = '';
 const ready = ref(false);
 const problem = ref<string | null>(null);
 // Open as source ✎: when the text does not assemble back to the program, one sentence says where.
@@ -62,164 +60,31 @@ onMounted(async () => {
   ready.value = true;
 });
 
-let timer: ReturnType<typeof setTimeout> | null = null;
-function cancelCheck(): void {
-  if (timer !== null) clearTimeout(timer);
-  timer = null;
-}
-onBeforeUnmount(cancelCheck);
+// Checking, the problems list, the breakpoints, the running line and the debug keys (useSourceChecks, shared with the Learn page).
+const checks = useSourceChecks({
+  current,
+  editor,
+  root,
+  run,
+  report: () => props.report,
+  problem: (text) => {
+    problem.value = text;
+  },
+  runNow: () => emit('run'),
+});
+const { diagnostics, summary, check, reveal, applyListFix } = checks;
 
-// The running line (5C).
-/** The marks the editor should show: none once the text is not what the Run assembled. */
-const shownMarks = computed(() => (debug.live.value ? debug.marks.value : []));
 /** The running line is hidden because the source changed since the Run. */
 const runChanged = computed(() => debug.dirty.value && debug.marks.value.length > 0);
-const keyOf = (set: readonly { line: number; class: string }[]): string => set.map((m) => `${m.line}:${m.class}`).join();
-/** The key of the set the editor has, and a line a pause asked to bring into view while hidden. */
-let sentKey = '';
-let pendingShow: number | null = null;
-let followAt = -Infinity;
-const FOLLOW_INTERVAL_MS = 250;
-const shown = (): boolean => root.value !== null && (typeof root.value.checkVisibility !== 'function' || root.value.checkVisibility());
 
-function deliver(): void {
-  const ed = editor.value;
-  if (ed === null || !shown()) return;
-  if (pendingShow !== null && debug.live.value) ed.scrollToLine(pendingShow);
-  pendingShow = null;
-  const set = shownMarks.value;
-  const key = keyOf(set);
-  if (key === sentKey) return;
-  sentKey = key;
-  ed.setLineDecorations(set);
-  // Follow: while running, bring the line back into view once it leaves, at most 4 times a second.
-  const line = set.find((m) => m.class === 'fg-run-now')?.line;
-  if (!debug.follow.value || debug.mode.value !== 'running' || line === undefined) return;
-  const at = performance.now();
-  if (at - followAt < FOLLOW_INTERVAL_MS || ed.lineVisible(line)) return;
-  followAt = at;
-  ed.scrollToLine(line);
-}
-watch(shownMarks, deliver);
-// A scroll waiting for the panel to show is stale once the program moves on.
-watch(debug.mode, (m) => {
-  if (m !== 'paused') pendingShow = null;
-});
-
-/** The last assembly of a text, from check() or from a Run: the hollow breakpoints' source. */
-const asm = shallowRef<{ text: string; result: AsmResult } | null>(null);
-interface Hollow {
-  lines: number[];
-  why: Map<number, string>;
-}
-let lastHollow: Hollow = { lines: [], why: new Map() };
-/** The breakpoints with no instruction to stop at, by the latest assembly of the text on screen (the last known while a new one is pending). */
-const hollow = computed<Hollow>(() => {
-  const a = asm.value;
-  if (a === null || a.text !== current.value?.text) return lastHollow;
-  const why = new Map<number, string>();
-  for (const line of debug.breakpoints.value) {
-    const r = inactiveReason(a.result, line);
-    if (r !== null) why.set(line, r);
-  }
-  lastHollow = { lines: [...why.keys()], why };
-  return lastHollow;
-});
-const noStop = (line: number): string => `Line ${line} has no instruction to stop at.`;
-function showBreakpoints(): void {
-  const h = hollow.value;
-  editor.value?.setBreakpoints(debug.breakpoints.value, h.lines, (line) => h.why.get(line) ?? noStop(line));
-}
-watch([debug.breakpoints, hollow], showBreakpoints);
-
-// A pause or step: its line into view, now or once the panel shows.
-watch(debug.reveal, (r) => {
-  if (r === null || r.line === null || !debug.live.value) return;
-  pendingShow = r.line;
-  deliver();
-});
-
-// Hidden (v-show) and shown again: send what changed meanwhile.
-let observer: IntersectionObserver | null = null;
-onMounted(() => {
-  if (typeof IntersectionObserver !== 'function' || root.value === null) return;
-  observer = new IntersectionObserver((entries) => {
-    if (entries.some((e) => e.isIntersecting)) deliver();
-  });
-  observer.observe(root.value);
-});
-onBeforeUnmount(() => observer?.disconnect());
-
-/** In utils/lazy's loadFailed words (lazy code does not import utils/lazy), naming what is lost. */
-const KEYS_FAILED = 'The debug keys could not be loaded: the connection may have dropped, or the site was updated since this page opened. Reload the page to use F9, F10 and the other debug keys.';
-// The debug keys (they track where focus was last, the editor or the listing, themselves).
-let uninstallKeys: (() => void) | null = null;
 let unspeak: (() => void) | null = null;
-let gone = false;
-const loadKeys = () => import('~/utils/running/debug-keys');
-onMounted(async () => {
+onMounted(() => {
   unspeak = speakAnnouncements(debug);
-  // A chunk of its own, shared with Run ▶; tried twice, then this tab's status line says so.
-  const m = await loadKeys()
-    .catch(() => loadKeys())
-    .catch(() => null);
-  if (gone) return;
-  if (m === null) {
-    problem.value = KEYS_FAILED;
-    return;
-  }
-  uninstallKeys = m.installDebugKeys(debug, {
-    runNow: () => emit('run'),
-    stop: () => run.stop(),
-    // The listing's line comes from the Run itself (debug.listingLine), which debug-keys asks.
-    cursorLine: (where) => (where === 'source' ? (editor.value?.cursorLine() ?? null) : null),
-    say: (text) => {
-      run.message.value = text;
-      run.problem.value = true;
-    },
-  });
 });
-onBeforeUnmount(() => {
-  gone = true;
-  unspeak?.();
-  uninstallKeys?.();
-});
+onBeforeUnmount(() => unspeak?.());
 
 function onBreakpoints(lines: number[]): void {
   debug.setBreakpoints(lines);
-}
-
-/** Assembles the current source now and shows what asm says. */
-function check(): void {
-  cancelCheck();
-  const src = current.value;
-  if (src === null) {
-    diagnostics.value = [];
-    return;
-  }
-  let diags: readonly Diagnostic[];
-  try {
-    const result = assemble(src.text, { model: src.model });
-    asm.value = { text: src.text, result };
-    diags = result.diagnostics;
-  } catch (err) {
-    diags = [];
-    problem.value = err instanceof Error ? err.message : String(err);
-  }
-  show(diags, src.text);
-}
-
-function show(asmDiags: readonly Diagnostic[], text: string): void {
-  const r = props.report;
-  const diags = r != null && r.text === text && r.notes.length > 0 ? [...asmDiags, ...r.notes].sort((a, b) => a.line - b.line) : asmDiags;
-  diagnostics.value = diags;
-  assembledText = text;
-  editor.value?.setDiagnostics(diags, text);
-}
-
-function scheduleCheck(): void {
-  cancelCheck();
-  timer = setTimeout(check, RECHECK_DELAY_MS);
 }
 
 function onText(text: string): void {
@@ -227,10 +92,8 @@ function onText(text: string): void {
   if (src === null) return;
   // The reassembly note describes the text as it was opened: the first edit makes it stale.
   if (opened.note.value?.sourceId === src.id) opened.note.value = null;
-  // A pause's line is in the old text.
-  pendingShow = null;
   sources.update(src.id, { text });
-  scheduleCheck();
+  checks.typed();
 }
 
 function onFix(fix: AsmFix): void {
@@ -246,59 +109,12 @@ watch(
   [() => current.value?.id, () => current.value?.model, () => editor.value !== null],
   ([id, , mounted]) => {
     if (id === undefined || !mounted) return;
-    // A new document (or editor) has no marks yet.
-    sentKey = '';
-    showBreakpoints();
-    deliver();
-    check();
+    checks.documentChanged();
     if (pendingReveal !== null) editor.value?.revealLine(pendingReveal);
     pendingReveal = null;
   },
   { flush: 'post' },
 );
-
-// A Run's findings for the text on screen show at once.
-watch(
-  () => props.report,
-  (r) => {
-    if (r != null && r.text === current.value?.text) {
-      // The Run assembled this text: its result stands in for the check it cancels.
-      const result = run.lastResult.value;
-      if (result !== null) asm.value = { text: r.text, result };
-      cancelCheck();
-      show(r.diagnostics, r.text);
-    }
-  },
-);
-
-const counts = computed(() => {
-  const n = { error: 0, warning: 0, info: 0 };
-  for (const d of diagnostics.value) n[d.severity]++;
-  return n;
-});
-const plural = (k: number, one: string): string => `${k} ${one}${k === 1 ? '' : 's'}`;
-const summary = computed(() => {
-  const { error, warning, info } = counts.value;
-  const parts = [error && plural(error, 'error'), warning && plural(warning, 'warning'), info && plural(info, 'note')].filter((p): p is string => typeof p === 'string');
-  return parts.length === 0 ? 'No problems: the program assembles.' : parts.join(', ');
-});
-
-function reveal(line: number): void {
-  editor.value?.revealLine(line);
-  editor.value?.focus();
-}
-
-function fixLabel(fix: AsmFix): string {
-  return `Fix line ${fix.line}: write ${fix.replacement}`;
-}
-
-/** The list's Fix: applied only if the line still holds what asm saw; either way the editor keeps the focus (the button may be gone). */
-function applyListFix(fix: AsmFix): void {
-  const applied = editor.value?.applyFix(fix, fixExpected(assembledText, fix)) ?? false;
-  // A list older than the latest typing: bring it up to date now.
-  if (!applied) check();
-  editor.value?.focus();
-}
 
 // The toolbar.
 async function pick(e: Event): Promise<void> {
@@ -369,8 +185,8 @@ function downloadSource(): void {
 defineExpose({
   /** Shows asm's diagnostics from a fresh assembly of `text` (Run does one; the current text by default) without waiting. */
   showDiagnostics(diags: readonly Diagnostic[], text?: string): void {
-    cancelCheck();
-    show(diags, text ?? current.value?.text ?? '');
+    checks.cancelCheck();
+    checks.show(diags, text ?? current.value?.text ?? '');
   },
   revealLine: reveal,
   /** Moves the cursor to a line and scrolls it into view, without taking the focus (Run never moves it), once the editor is there. */
@@ -439,20 +255,7 @@ defineExpose({
       @stale-fix="check"
     />
     <p class="fg-source-hint fg-muted">Tab types a tab. To leave the editor, press Esc, then Tab.</p>
-    <div class="fg-source-diags" data-testid="source-diags">
-      <h2 id="source-diags-title" class="sr-only">Problems</h2>
-      <p class="fg-source-count" role="status" aria-live="polite" data-testid="source-diag-count">{{ summary }}</p>
-      <ul v-if="diagnostics.length > 0" aria-labelledby="source-diags-title">
-        <li v-for="(d, i) in diagnostics" :key="i" class="fg-source-diag" :class="`fg-source-${d.severity}`" data-testid="source-diag">
-          <button type="button" class="fg-source-go" data-testid="source-diag-go" @click="reveal(d.line)">
-            <span class="fg-source-sev">{{ severityWord(d.severity) }}</span>
-            <span class="fg-source-line fg-mono">Line {{ d.line }}</span>
-            <span class="fg-source-msg">{{ d.message }}</span>
-          </button>
-          <button v-if="d.fix" type="button" class="fg-button fg-source-fix" data-testid="source-diag-fix" :aria-label="fixLabel(d.fix)" @click="applyListFix(d.fix)">Fix</button>
-        </li>
-      </ul>
-    </div>
+    <ProblemsList class="fg-source-diags" prefix="source" :diagnostics="diagnostics" :summary="summary" @reveal="reveal" @fix="applyListFix" />
     <ConfirmDialog
       testid="source-delete-dialog"
       :open="confirmingDelete"
@@ -474,17 +277,5 @@ defineExpose({
 .fg-source-note { flex: none; margin: 0; padding: 4px 12px; font-size: 12px; border-bottom: 1px solid var(--fg-border); color: var(--fg-string); }
 .fg-source-editor { flex: 1; min-height: 8rem; overflow: hidden; }
 .fg-source-hint { flex: none; margin: 0; padding: 2px 12px; font-size: 11px; border-top: 1px solid var(--fg-border); }
-.fg-source-diags { flex: none; max-height: 30%; overflow: auto; padding: 4px 12px 8px; border-top: 1px solid var(--fg-border); font-size: 12px; }
-.fg-source-count { margin: 0 0 4px; color: var(--fg-muted); }
-.fg-source-diags ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.fg-source-diag { display: flex; align-items: flex-start; gap: 6px; }
-.fg-source-go { display: flex; flex: 1; gap: 8px; text-align: left; padding: 2px 4px; border-radius: 3px; color: var(--fg-text); background: none; border: 0; cursor: pointer; }
-.fg-source-go:hover { background: var(--fg-hover); }
-.fg-source-go:focus-visible { outline: 2px solid var(--fg-accent); outline-offset: 1px; }
-.fg-source-sev { flex: none; width: 4.5em; font-weight: 600; }
-.fg-source-error .fg-source-sev { color: var(--fg-error); }
-.fg-source-warning .fg-source-sev { color: var(--fg-string); }
-.fg-source-info .fg-source-sev { color: var(--fg-register); }
-.fg-source-line { flex: none; width: 5em; color: var(--fg-line); }
-.fg-source-fix { flex: none; padding: 0 8px; }
+.fg-source-diags { flex: none; max-height: 30%; overflow: auto; padding: 4px 12px 8px; border-top: 1px solid var(--fg-border); }
 </style>

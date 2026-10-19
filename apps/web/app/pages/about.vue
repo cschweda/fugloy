@@ -27,6 +27,9 @@ const XTRS_LICENSE = "Copyright (C) 1992 Clarendon Hill Software.\n\nPermission 
       Open a <code>.CMD</code> load module, a tokenized <code>.BAS</code> program, or a raw binary, and read the listing, name what you find, and keep your notes.
     </p>
     <p>It is free, open source (MIT), and a personal project. The command-line tool and this workbench share one library, so they print the same listing.</p>
+    <p>
+      <NuxtLink to="/learn/" class="fg-link">Learn</NuxtLink> is a short course in Z80 assembly for programmers who have never written any: seven lessons, from whiting out the screen to invaders marching, each with a program you can run on a TRS-80 in the page and change.
+    </p>
 
     <h2 id="privacy">Your files stay on your machine</h2>
     <p>
@@ -36,7 +39,7 @@ const XTRS_LICENSE = "Copyright (C) 1992 Clarendon Hill Software.\n\nPermission 
 
     <h2 id="storage">What is saved, and where</h2>
     <p>
-      Your hints (the names, comments, and declarations you add), each program's machine and DOS settings, and the Z80 sources you write in <strong class="fg-strong">Source ✎</strong> are saved in this browser, in its own storage, as you work.
+      Your hints (the names, comments, and declarations you add), each program's machine and DOS settings, and the Z80 sources you write in <strong class="fg-strong">Source ✎</strong>, and your edits and done marks in the <strong class="fg-strong">Learn</strong> lessons, are saved in this browser, in its own storage, as you work.
       Storage belongs to one browser on one computer: another browser, another profile, or a private window starts empty, and clearing the site's data erases it.
       Manuals you add stay there too, and so does a ROM you add in <strong class="fg-strong">Run ▶</strong>: it is stored in this browser only, never put in a backup, and never uploaded. Programs are never stored; you open them again each visit.
     </p>

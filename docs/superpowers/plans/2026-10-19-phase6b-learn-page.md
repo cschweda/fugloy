@@ -14,6 +14,7 @@
 
 - Audience: "a coder for years" who has never built an assembly game. Lessons explain what familiar ideas become on a Z80; they never teach programming itself. Short paragraphs; code first; a JavaScript aside where it helps ("especially javascript").
 - No lesson needs a ROM, and every lesson ends on a program that runs. The Learn page always runs on the stub ROM (`apps/web/app/utils/emulator/stub-rom.z`), even when a ROM is stored.
+- Each lesson is self-contained, builds on the previous, and ends on a runnable program on the Model III (user, 2026-10-19): its `program.z` assembles and runs alone (no `INCLUDE` of another lesson), starts from the previous lesson's program or its pieces where they fit (the text names what is carried over and what is new), and its `models` lists `3` first.
 - No lesson turns interrupts on (no `EI`); timing is a counted delay loop. The screen is memory at `3C00H` (64×16), the keyboard is memory at `3800H`–`3BFFH`.
 - Every lesson program: assembles with `@fugloy/asm` with no warning and no error, matches zmac (image, runs, entry), runs headless on the stub ROM in `@fugloy/emu` without entering the ROM's space, and reaches the screen its lesson describes (its `check.json`, with scripted keys where it reads keys). CI runs this with `FUGLOY_REQUIRE_ZMAC=1`.
 - Everything a lesson says about the hardware is cited with a `sources.json` id and page (`m3-trm`, `m1-trh`, …), in the lesson file's front matter.
@@ -160,7 +161,7 @@
 
 **Interfaces:**
 - Consumes: Task 1's format; Task 1's harness checks them with no code change.
-- Content fixed by the spec (Part 2):
+- Content fixed by the spec (Part 2), each lesson building on the one before (Global Constraints):
   - **2, The registers, and why HL** — A, F (the flags), B–L, the fixed pairs BC/DE/HL (the 3-bit register numbers in the encoding: B=0 C=1 D=2 E=3 H=4 L=5 (HL)=6 A=7, so neighbours pair, and `LD r,r'` is `01 rrr rrr`; cite Zilog's Z80 CPU User Manual only if it is added to `sources.json` with a page, else cite nothing for the encoding and show it from Fugløy's own z80 table), H and L as High and Low (an address's two bytes), the 8008/8080 lineage (the 8008's H and L addressed memory; the 8080 paired B–C and D–E; the Z80 kept both and added IX, IY, the shadow set), SP, PC; a short program that loads and adds and pairs registers and ends in a wait loop, with "Pause, then Step, and watch HL" in Try it. The JavaScript aside: `const hl = (h << 8) | l`.
   - **3, Etch-a-sketch** — reading the keyboard matrix: the arrow keys' row at `3840H` (bit 3 up, 4 down, 5 left, 6 right; cite `m3-trm` and `m1-trh` with pages, after checking the bit order in emu's `src/devices/keyboard.js` and the manuals), `AND` and `BIT` tests, moving a position in video memory with bounds, plotting with a graphics character. `check.json` presses RIGHT for a counted run and checks the plotted cells.
   - **4, Rock, paper, scissors** — printing text from a table, waiting for a key (R, P or S rows of the matrix), a random choice from `LD A,R`, `CP`, the flags and conditional jumps. `check.json` presses a key and checks that one of the three result lines shows (the R register's value at that cycle is fixed in a headless run, so the test may name the exact line it expects, saying so in a comment).
@@ -180,7 +181,7 @@
 
 **Interfaces:**
 - Consumes: Task 1's format and harness; Task 5's keyboard facts (lesson 3) referred to, not repeated.
-- Content fixed by the spec (Part 2):
+- Content fixed by the spec (Part 2), each lesson building on the one before (Global Constraints):
   - **5, A ship along the bottom** — `CALL` and `RET`, the stack (`PUSH`/`POP`, what `SP` does; the stub's stack is at the top of memory), a delay loop (its T-states counted against the 2.03 MHz clock, Model I 1.77 MHz), erasing and redrawing a three-character ship on row 15 moved by the left and right arrows. `check.json`: press LEFT, run, ship moved left by the expected cells; at column 0 it stays.
   - **6, The ship fires** — two things moving at once in one game loop, state kept in memory (`DB`/`DW` variables, `LD A,(SHOT_Y)`), space bar fires, the shot rises and disappears at row 0, one shot at a time. `check.json`: press SPACE, run, a shot character is above the ship; run on, it is gone.
   - **7, Invaders march** — a table of data (`DB` rows), `IX` with an offset (`LD A,(IX+2)`), `DJNZ`; a row of invaders drawn from a table marching left and right. `check.json`: two snapshots a counted run apart show the row moved one cell.

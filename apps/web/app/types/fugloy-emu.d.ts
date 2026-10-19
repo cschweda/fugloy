@@ -17,6 +17,8 @@ declare module '@fugloy/emu' {
   }
 
   export interface KeyboardMatrix {
+    /** The eight matrix rows ($3801-$3880), one bit a key held. */
+    readonly rows: Uint8Array;
     keyDown(key: string, code: string): boolean;
     keyUp(code: string): boolean;
     reset(): void;

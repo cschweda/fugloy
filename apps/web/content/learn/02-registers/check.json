@@ -1,0 +1,15 @@
+{
+  "models": [3, 1],
+  "steps": [
+    { "run": 200000 },
+    { "row": 4, "text": "ABCDEFGHIJKLMNOPQRSTUVWXYZ" },
+    { "row": 5, "text": ".........................." },
+    { "cell": "3D00", "byte": "41" },
+    { "cell": "3D40", "byte": "BF" },
+    { "cell": "3D59", "byte": "BF" },
+    { "cell": "3D5A", "byte": "20" },
+    { "row": 3, "text": "" },
+    { "row": 6, "text": "" },
+    { "pcIn": "WAIT" }
+  ]
+}

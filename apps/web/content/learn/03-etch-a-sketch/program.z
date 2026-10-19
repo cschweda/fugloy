@@ -1,0 +1,58 @@
+; Etch-a-sketch: a pen starts mid-screen and the arrow keys move it, leaving
+; a white trail. The keyboard is memory at 3800H-3BFFH: each row of keys is
+; read at its own address, and 3840H is the row with the four arrows, one bit
+; a key, 1 while the key is down. The pen stops at the screen's edges.
+
+        ORG     7000H           ; the program lives at 7000H, as in lessons 1 and 2
+
+START:  LD      HL,3E20H        ; HL is the pen: row 8, column 32, mid-screen
+        LD      (HL),0BFH       ; plot it with lesson 1's white block
+
+READ:   LD      A,(3840H)       ; the arrows' row: bit 3 up, 4 down, 5 left, 6 right
+        AND     78H             ; keep those four bits (0111 1000) and clear the rest
+        JR      Z,READ          ; no arrow is down: read again
+        LD      C,A             ; keep the keys in C, so A is free
+
+        BIT     3,C             ; up?
+        JR      Z,NOTUP
+        LD      DE,-64          ; up is one row back: 64 cells
+        ADD     HL,DE
+        BIT     2,H             ; on screen, H is 3CH-3FH, all with bit 2 set
+        JR      NZ,NOTUP        ; still on screen
+        LD      DE,64           ; off the top: step back down
+        ADD     HL,DE
+NOTUP:
+        BIT     4,C             ; down?
+        JR      Z,NOTDN
+        LD      DE,64           ; down is one row on
+        ADD     HL,DE
+        BIT     2,H             ; still on screen?
+        JR      NZ,NOTDN
+        LD      DE,-64          ; off the bottom: step back up
+        ADD     HL,DE
+NOTDN:
+        BIT     5,C             ; left?
+        JR      Z,NOTLT
+        LD      A,L
+        AND     3FH             ; the column is L's low six bits
+        JR      Z,NOTLT         ; column 0, the left edge: stay
+        DEC     HL
+NOTLT:
+        BIT     6,C             ; right?
+        JR      Z,NOTRT
+        LD      A,L
+        INC     A
+        AND     3FH             ; the column plus one is 0 only from column 63
+        JR      Z,NOTRT         ; the right edge: stay
+        INC     HL
+NOTRT:
+        LD      (HL),0BFH       ; plot the pen where it is now
+
+        LD      BC,1000H        ; wait a moment, with lesson 1's counted loop,
+DELAY:  DEC     BC              ; so a held key moves the pen about 20 cells a second
+        LD      A,B
+        OR      C
+        JR      NZ,DELAY
+        JR      READ            ; and read the keys again
+
+        END     START           ; the program starts at START

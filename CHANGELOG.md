@@ -39,6 +39,22 @@ creates and pushes the tag.
 
 ### Changed
 
+- Phase 6B, the Learn page and lessons 1-7 (web workbench, merged to main 2026-10-19; plan
+  `docs/superpowers/plans/2026-10-19-phase6b-learn-page.md`). A Learn link sits first in the
+  header's Site nav, to `/learn/` (which opens lesson 1, canonical to it) and each lesson's page, listed in `sitemap.xml`. Each
+  lesson (`apps/web/content/learn/NN-slug/`: `lesson.md` with cited hardware claims, `program.z`,
+  `check.json`) is self-contained, builds on the last, and runs on the Model III (the Model I where
+  its front matter allows): white out the screen, the registers, etch-a-sketch, rock-paper-scissors,
+  a ship, the ship fires, invaders march. The page is lesson | program | TRS-80 in three columns
+  (stacked when narrow), always on the stub ROM, with the learner's edits and done marks kept in the
+  browser (`localStorage`, optional), Explain's voice on the line the cursor is on, and a deep link
+  from lessons 1 and 3-7 to the matching part of Sea Dragon (`/?example=sea-dragon&at=XXXX`). CI
+  assembles every lesson with `@fugloy/asm` and zmac and runs it on the stub ROM through its
+  `check.json` (`packages/asm/test/lessons.test.ts`). The workbench's Explain tab now loads lazily,
+  which took its first screen from 252,257 B to 228,912 B gzip. The Learn page's first screen is
+  measured by `size:first-screen -- --page learn`: 215,206 B gzip against `LEARN_BUDGET`, 221,184 B
+  (215,206 rounded up to the next 1,024 B is 216,064, plus 5,120).
+
 - Phase 6A, the screen's true shape (web workbench, merged to main 2026-10-19). The Model III
   and Model 4 screens are drawn at 4:3 and the Model I at about 0.952:1, from the video timing
   (48k.ca "Beamhacking: Video Timing", MAME `trs80.cpp`, the emulator's `models.js`); the figures

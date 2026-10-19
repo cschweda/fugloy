@@ -1,0 +1,66 @@
+; A ship along the bottom: a three-cell ship sits on row 15, and the left and
+; right arrows move it, a cell at a time, stopping at the screen's edges. To
+; move, the ship is erased (three spaces) and drawn again one cell over, both
+; by one routine, SHOW, called with CALL. WAIT, another routine, is a counted
+; delay that sets the ship's speed. The arrows are bits 5 and 6 of the
+; keyboard row read at 3840H.
+
+        ORG     7000H           ; the program lives at 7000H, as in lessons 1 to 4
+
+START:  LD      DE,3FDEH        ; DE is the ship: its left cell, row 15 (3FC0H), column 30
+        LD      HL,SHIP         ; draw it: SHOW copies the three bytes at HL
+        CALL    SHOW            ; to the screen at DE, and comes back here
+
+LOOP:   CALL    WAIT            ; a moment between moves: this sets the ship's speed
+        LD      A,(3840H)       ; the arrows' row: bit 5 left, 6 right
+        AND     60H             ; keep those two bits (0110 0000)
+        JR      Z,LOOP          ; neither is down: wait and read again
+        LD      C,A             ; keep the keys in C, so A is free
+
+        LD      HL,BLANK        ; erase the ship: three spaces where it is
+        CALL    SHOW
+
+        BIT     5,C             ; left?
+        JR      Z,NOTLT
+        LD      A,E
+        AND     3FH             ; the ship's column is E's low six bits
+        JR      Z,NOTLT         ; column 0, the left edge: stay
+        DEC     DE
+NOTLT:
+        BIT     6,C             ; right?
+        JR      Z,NOTRT
+        LD      A,E
+        AND     3FH
+        CP      61              ; the ship is three cells wide, so column 61 is as far
+        JR      Z,NOTRT         ; right as it goes: stay
+        INC     DE
+NOTRT:
+        LD      HL,SHIP         ; draw the ship where it is now
+        CALL    SHOW
+        JR      LOOP            ; and round again
+
+; SHOW: copy the three bytes HL points at to the screen at DE. LDIR moves DE
+; and counts BC down, so SHOW keeps both on the stack and gives them back.
+SHOW:   PUSH    BC              ; save BC: the keys are in C
+        PUSH    DE              ; save DE: the ship's place
+        LD      BC,3            ; three bytes
+        LDIR                    ; from (HL) to (DE), as in lesson 4
+        POP     DE              ; the last pushed comes off first,
+        POP     BC              ; so the pops are in reverse order
+        RET                     ; back to the line after the CALL
+
+; WAIT: about 66 ms at the Model III's 2.03 MHz. Each pass of DELAY takes
+; 26 T-states (6 + 4 + 4 + 12), and BC counts 5,120 passes: 133,120 T-states.
+WAIT:   PUSH    BC              ; save BC, which the loop uses
+        LD      BC,1400H        ; 1400H is 5,120 passes
+DELAY:  DEC     BC              ; lesson 1's loop, with nothing in it
+        LD      A,B
+        OR      C
+        JR      NZ,DELAY
+        POP     BC              ; BC as the caller left it
+        RET
+
+SHIP:   DB      0BCH,0BFH,0BCH  ; the ship: a wing, a block, a wing
+BLANK:  DB      '   '           ; three spaces, to erase it
+
+        END     START           ; the program starts at START

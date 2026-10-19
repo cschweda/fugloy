@@ -1,7 +1,7 @@
 // SEO of the generated site: every page has its own title, description, canonical URL on
 // app.fugloy.dev (with the trailing slash of the directory each page is generated as, so Netlify
 // serves it without a redirect), an absolute Open Graph image with alt text, and a Twitter summary card;
-// the home page has JSON-LD; sitemap.xml lists the four pages and robots.txt names it.
+// the home page has JSON-LD; sitemap.xml lists every page (the Learn page and each lesson among them) and robots.txt names it.
 // Reads .output/public, so it runs after `pnpm --filter @fugloy/web generate` (`pnpm run test:seo`
 // does both); it is skipped, with a warning, when the site has not been generated, unless
 // FUGLOY_REQUIRE_SEO=1 (set by `test:seo`, for CI) makes that a failure. With that flag the site
@@ -17,8 +17,19 @@ if (!built && process.env.FUGLOY_REQUIRE_SEO === '1') throw new Error('FUGLOY_RE
 if (!built) console.warn('seo.test: .output/public is missing; run `pnpm --filter @fugloy/web generate` first. Skipping.');
 
 const ORIGIN = 'https://app.fugloy.dev';
+// Each lesson's page, from its folder (content/learn/NN-slug) and the title in its front matter.
+const lessonDirs = readdirSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'content', 'learn'), { withFileTypes: true })
+  .filter((d) => d.isDirectory() && /^\d\d-/.test(d.name))
+  .map((d) => d.name)
+  .sort();
+const lessonTitle = (dir: string): string =>
+  /^title: (.+)$/m.exec(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'content', 'learn', dir, 'lesson.md'), 'utf8'))![1]!;
+const LESSON_PAGES = lessonDirs.map((d) => ({ path: `/learn/${d}/`, file: `learn/${d}/index.html`, title: `${lessonTitle(d)} — Learn Z80 assembly · Fugløy` }));
+// /learn/ opens lesson 1 for people (the header links to it); its canonical URL, og:url and sitemap entry are lesson 1's.
+const LEARN_ALIAS: { path: string; file: string; canonical: string; title: string } = { path: '/learn/', file: 'learn/index.html', canonical: LESSON_PAGES[0]!.path, title: LESSON_PAGES[0]!.title };
 const PAGES = [
   { path: '/', file: 'index.html', title: 'Fugløy — TRS-80 disassembler workbench' },
+  ...LESSON_PAGES,
   { path: '/technical-details/', file: 'technical-details/index.html', title: 'Technical details · Fugløy' },
   { path: '/manuals/', file: 'manuals/index.html', title: 'Manuals · Fugløy' },
   { path: '/about/', file: 'about/index.html', title: 'About · Fugløy' },
@@ -49,7 +60,14 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
     expect(new Set(titles).size).toBe(PAGES.length);
   });
 
-  for (const p of PAGES) {
+  it('serves /learn/ as lesson 1 with lesson 1 as its canonical page, og:url and title', () => {
+    const html = read(LEARN_ALIAS.file);
+    expect(/<title>([^<]*)<\/title>/.exec(html)?.[1]).toBe(LEARN_ALIAS.title);
+    expect(html).toContain(`<link rel="canonical" href="${ORIGIN}${LEARN_ALIAS.canonical}"`);
+    expect(meta(html, 'property', 'og:url')).toBe(ORIGIN + LEARN_ALIAS.canonical);
+  });
+
+  for (const p of [...PAGES, LEARN_ALIAS]) {
     describe(p.path, () => {
       const html = (): string => read(p.file);
 
@@ -62,7 +80,7 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
       });
 
       it('has a canonical link and og:url on app.fugloy.dev', () => {
-        const url = ORIGIN + p.path;
+        const url = ORIGIN + ('canonical' in p ? p.canonical : p.path);
         expect(html()).toContain(`<link rel="canonical" href="${url}"`);
         expect(meta(html(), 'property', 'og:url')).toBe(url);
         expect(meta(html(), 'property', 'og:type')).toBe('website');
@@ -99,7 +117,7 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
     expect(ld.url).toBe(`${ORIGIN}/`);
     expect(ld.offers).toMatchObject({ '@type': 'Offer', price: '0', priceCurrency: 'USD' });
     expect(String(ld.license)).toMatch(/MIT/);
-    for (const p of PAGES.slice(1)) expect(read(p.file)).not.toContain('application/ld+json');
+    for (const p of [...PAGES, LEARN_ALIAS].slice(1)) expect(read(p.file)).not.toContain('application/ld+json');
   });
 
   it('self-hosts JetBrains Mono (400 and 700, Latin) with no font CDN on the workbench, and credits its licence', () => {
@@ -114,7 +132,7 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
       expect(src).not.toMatch(/^(https?:)?\/\//);
       expect(existsSync(src!.startsWith('/') ? join(out, src!) : join(out, dirname(f), src!))).toBe(true);
     }
-    for (const p of PAGES.filter((x) => x.path !== '/technical-details/')) expect(read(p.file)).not.toMatch(/fonts\.(googleapis|gstatic)\.com/);
+    for (const p of [...PAGES, LEARN_ALIAS].filter((x) => x.path !== '/technical-details/')) expect(read(p.file)).not.toMatch(/fonts\.(googleapis|gstatic)\.com/);
     expect(read('about/index.html')).toMatch(/JetBrains Mono[\s\S]*SIL Open Font License 1\.1/);
   });
 
@@ -142,14 +160,21 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
   });
 
   it('links between pages with the trailing slash, so a crawler or a new tab takes no redirect', () => {
-    for (const p of PAGES) {
+    for (const p of [...PAGES, LEARN_ALIAS]) {
       const hrefs = [...read(p.file).matchAll(/<a\b[^>]*\bhref="(\/[^"#?]*)/g)].map((m) => m[1]!).filter((h) => !h.startsWith('/pdfjs/'));
       expect(hrefs.length, p.path).toBeGreaterThan(0);
       expect(hrefs.filter((h) => !h.endsWith('/')), p.path).toEqual([]);
     }
   });
 
-  it('lists the four pages in sitemap.xml, and robots.txt allows all and names it', () => {
+  it('links the Learn page first in the header\'s Site nav on every page', () => {
+    for (const p of [...PAGES, LEARN_ALIAS]) {
+      const nav = /<nav[^>]*aria-label="Site"[^>]*>([\s\S]*?)<\/nav>/.exec(read(p.file))?.[1] ?? '';
+      expect(/<a\b[^>]*\bhref="([^"]*)"/.exec(nav)?.[1], p.path).toBe('/learn/');
+    }
+  });
+
+  it('lists every canonical page in sitemap.xml (not the /learn/ alias), and robots.txt allows all and names it', () => {
     const sitemap = read('sitemap.xml');
     const locs = [...sitemap.matchAll(/<loc>([^<]*)<\/loc>/g)].map((m) => m[1]);
     expect(locs).toEqual(PAGES.map((p) => ORIGIN + p.path));
@@ -162,9 +187,11 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
 });
 
 describe.skipIf(!built || process.env.FUGLOY_REQUIRE_SEO !== '1')('the site as Netlify builds it', () => {
-  it('does not contain the browser checks\' window.__fugloyTest hook', () => {
+  it('does not contain the browser checks\' window.__fugloyTest or window.__fugloyLearn hooks', () => {
     const files = walk(out).filter((f) => /\.(m?js|html)$/.test(f));
     expect(files.length).toBeGreaterThan(5);
-    expect(files.filter((f) => readFileSync(join(out, f), 'utf8').includes('__fugloyTest'))).toEqual([]);
+    for (const hook of ['__fugloyTest', '__fugloyLearn']) {
+      expect(files.filter((f) => readFileSync(join(out, f), 'utf8').includes(hook)), hook).toEqual([]);
+    }
   });
 });

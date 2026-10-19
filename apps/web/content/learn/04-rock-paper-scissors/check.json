@@ -1,0 +1,31 @@
+{
+  "note": "The program's move comes from the R register when the key is seen, and a headless run sees it at the same T-state every time, so each round's move and verdict are fixed here: a draw, I win, you win.",
+  "models": [3, 1],
+  "steps": [
+    { "run": 200000 },
+    { "row": 0, "text": "ROCK, PAPER, SCISSORS. PRESS R, P OR S." },
+    { "row": 2, "text": "YOU:" },
+    { "row": 3, "text": "ME:" },
+    { "press": "R" },
+    { "run": 100000 },
+    { "release": "R" },
+    { "run": 100000 },
+    { "row": 2, "text": "YOU: ROCK" },
+    { "row": 3, "text": "ME:  ROCK" },
+    { "row": 5, "text": "A DRAW." },
+    { "press": "P" },
+    { "run": 100000 },
+    { "release": "P" },
+    { "run": 101400 },
+    { "row": 2, "text": "YOU: PAPER" },
+    { "row": 3, "text": "ME:  SCISSORS" },
+    { "row": 5, "text": "I WIN." },
+    { "press": "S" },
+    { "run": 123457 },
+    { "release": "S" },
+    { "run": 100000 },
+    { "row": 2, "text": "YOU: SCISSORS" },
+    { "row": 3, "text": "ME:  PAPER" },
+    { "row": 5, "text": "YOU WIN!" }
+  ]
+}

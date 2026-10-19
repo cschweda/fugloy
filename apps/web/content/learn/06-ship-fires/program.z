@@ -1,0 +1,110 @@
+; The ship fires: lesson 5's ship, and the space bar fires a shot that rises
+; a row at a time and is gone past row 0. One shot at a time: the space bar
+; does nothing while a shot is in the air. The game loop calls one routine
+; for each thing that moves, and what each needs to remember between turns
+; is in memory: SHIPX, the ship's column (a byte), and SHOT, the shot's
+; screen address (a word, 0 when there is none). The arrows are bits 5 and 6
+; and the space bar bit 7 of the keyboard row read at 3840H.
+
+        ORG     7000H           ; the program lives at 7000H, as in lessons 1 to 5
+
+START:  LD      HL,SHIP         ; draw the ship where SHIPX says
+        CALL    SHOW
+
+LOOP:   CALL    WAIT            ; the game loop: one turn each WAIT
+        CALL    MOVESHIP        ; the ship moves if an arrow is down
+        CALL    MOVESHOT        ; the shot, if there is one, rises a row
+        CALL    FIRE            ; the space bar starts a shot, if there is none
+        JR      LOOP
+
+; MOVESHIP: lesson 5's move, with the ship's column kept in SHIPX.
+MOVESHIP:
+        LD      A,(3840H)       ; the arrows' row: bit 5 left, 6 right
+        AND     60H             ; keep those two bits (0110 0000)
+        RET     Z               ; neither is down: nothing to do
+        LD      C,A             ; keep the keys in C, so A is free
+        LD      HL,BLANK        ; erase the ship where it is
+        CALL    SHOW
+        LD      A,(SHIPX)       ; the ship's column, from memory
+        BIT     5,C             ; left?
+        JR      Z,NOTLT
+        CP      0               ; column 0, the left edge: stay
+        JR      Z,NOTLT
+        DEC     A
+NOTLT:
+        BIT     6,C             ; right?
+        JR      Z,NOTRT
+        CP      61              ; column 61, the right edge for three cells: stay
+        JR      Z,NOTRT
+        INC     A
+NOTRT:
+        LD      (SHIPX),A       ; the new column, back to memory
+        LD      HL,SHIP         ; draw the ship there
+        CALL    SHOW
+        RET
+
+; MOVESHOT: the shot, if there is one, moves up a row; past row 0 it is gone.
+MOVESHOT:
+        LD      HL,(SHOT)       ; where the shot is: two bytes from memory into HL
+        LD      A,H             ; 0 is no shot: test HL as lesson 1 tested BC
+        OR      L
+        RET     Z               ; no shot: nothing to do
+        LD      (HL),20H        ; erase the shot where it is
+        LD      DE,-64          ; up a row
+        ADD     HL,DE
+        BIT     2,H             ; still on the screen? (lesson 3)
+        JR      NZ,SHOTUP
+        LD      HL,0            ; off the top: no shot
+SHOTUP: LD      (SHOT),HL       ; keep where it is, or 0
+        LD      A,H
+        OR      L
+        RET     Z               ; gone: nothing to draw
+        LD      (HL),21H        ; the shot is an exclamation mark
+        RET
+
+; FIRE: with the space bar down and no shot in the air, a shot starts on
+; row 14, just above the ship's middle cell.
+FIRE:   LD      A,(3840H)       ; the space bar is bit 7 of the same row
+        BIT     7,A
+        RET     Z               ; not down: nothing to do
+        LD      HL,(SHOT)
+        LD      A,H
+        OR      L
+        RET     NZ              ; a shot is in the air already: one at a time
+        LD      A,(SHIPX)       ; row 14 starts at 3F80H; the ship's middle
+        ADD     A,81H           ; is its column plus one: 3F81H plus SHIPX
+        LD      L,A
+        LD      H,3FH
+        LD      (HL),21H        ; draw the shot
+        LD      (SHOT),HL       ; and remember where it is
+        RET
+
+; SHOW: copy the three bytes HL points at to the ship's place on row 15,
+; 3FC0H plus SHIPX. BC is kept on the stack, as in lesson 5.
+SHOW:   PUSH    BC              ; save BC: the keys are in C
+        LD      A,(SHIPX)       ; the ship's column ...
+        ADD     A,0C0H          ; ... plus 3FC0H, row 15: the ship's left cell
+        LD      E,A
+        LD      D,3FH
+        LD      BC,3            ; three bytes
+        LDIR                    ; from (HL) to (DE), as in lesson 4
+        POP     BC
+        RET
+
+; WAIT: lesson 5's delay, 133,120 T-states, about 66 ms at 2.03 MHz.
+WAIT:   PUSH    BC              ; save BC, which the loop uses
+        LD      BC,1400H        ; 1400H is 5,120 passes of 26 T-states
+DELAY:  DEC     BC
+        LD      A,B
+        OR      C
+        JR      NZ,DELAY
+        POP     BC              ; BC as the caller left it
+        RET
+
+SHIP:   DB      0BCH,0BFH,0BCH  ; the ship: a wing, a block, a wing
+BLANK:  DB      '   '           ; three spaces, to erase it
+
+SHIPX:  DB      30              ; the ship's column, 0 to 61
+SHOT:   DW      0               ; the shot's screen address, or 0 for none
+
+        END     START           ; the program starts at START

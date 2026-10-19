@@ -8,6 +8,7 @@
     <span class="flex-1" />
     <div class="flex items-center gap-2"><slot name="export" /></div>
     <nav class="flex items-center gap-3" aria-label="Site">
+      <NuxtLink to="/learn" class="fg-link">Learn</NuxtLink>
       <NuxtLink to="/technical-details" class="fg-link">Technical details</NuxtLink>
       <NuxtLink to="/manuals" class="fg-link">Manuals</NuxtLink>
       <NuxtLink to="/about" class="fg-link">About</NuxtLink>

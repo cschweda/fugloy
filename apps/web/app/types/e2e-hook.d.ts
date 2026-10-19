@@ -23,7 +23,19 @@ interface FugloyTestHook {
   frameCost: (ms: number) => Promise<{ frames: number; mean: number; p95: number; max: number }>;
 }
 
+/** The Learn page's hook (window.__fugloyLearn), set by app/pages/learn/[[slug]].vue only in an E2E build. */
+interface FugloyLearnHook {
+  /** The running machine's keyboard matrix rows (m.system.keyboard), eight bytes; empty with no machine. */
+  keyboardRows: () => number[];
+  /** The running machine's screen as text rows (m.video.text()); empty with no machine. */
+  screenText: () => string[];
+  runnerState: () => string;
+  debugMode: () => string;
+}
+
 interface Window {
   /** Drives the workbench from the Playwright checks (test/e2e). Takes only bytes it is handed; fetches nothing. */
   __fugloyTest?: FugloyTestHook;
+  /** Reads the Learn page's machine for the Playwright checks (test/e2e/learn.spec.ts). */
+  __fugloyLearn?: FugloyLearnHook;
 }

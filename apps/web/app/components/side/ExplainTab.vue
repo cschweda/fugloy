@@ -9,7 +9,8 @@
 // previews of each address it uses.
 // Every address is a link into the listing (go); every table name opens the
 // Symbol tab (table). The engine is @fugloy/disasm's explain; the cache is
-// utils/explain-view.
+// utils/explain-view. The workbench page loads this component (and with it the engine) by
+// dynamic import once a program is open (6B), so neither is on its first screen.
 import { shallowRef, watch } from 'vue';
 import type { Explanation, Preview, Row, RoutineSummary, Sentence, TableEntry } from '@fugloy/disasm';
 import { hex4 } from '@fugloy/z80';

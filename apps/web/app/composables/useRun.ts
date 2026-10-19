@@ -23,6 +23,12 @@
 // replace whatever runs (one runner), and share the generation counter, so each cancels another
 // still loading, and each is `busy` while it loads. Changing the model while the machine is on turns
 // the new model on.
+//
+// 6B: two options make a Run for the Learn page's lessons. `stubOnly`: every Run uses Fugløy's stub
+// ROM whatever ROM is stored (the ROM store is never loaded or read), and `powerOn`, `reset` and
+// `runExample` only say LESSON_NO_POWER, since there is no BASIC to turn on. `listing: false` (default
+// true): the Run never opens or touches the workbench: `useWorkbench` is not called, the debugger gets
+// no workbench, `showInListing` does nothing and `listable` is false.
 import { computed, effectScope, ref, shallowRef, watch } from 'vue';
 import type { ComputedRef, Ref, ShallowRef } from 'vue';
 import type { AsmResult, Diagnostic } from '@fugloy/asm';
@@ -49,6 +55,7 @@ export const STOPPED = 'Stopped. Press Run to start again.';
  * from this lazy module would make the page's chunk export it, which costs the first screen.
  */
 export const KIT_FAILED = 'The emulator could not be loaded: the connection may have dropped, or the site was updated since this page opened. Press Run again, or reload the page if that fails.';
+export const LESSON_NO_POWER = 'Lessons run on Fugløy\'s stub ROM, so there is no BASIC to turn on. Press Run ▶ to run the lesson\'s program.';
 export const STOPPED_SOURCE = 'The program stopped because you switched to another source. Press Run to run this one.';
 export const STOPPED_MODEL = 'The program stopped because you changed the model. Press Run to run the source on this one.';
 
@@ -122,6 +129,10 @@ export interface RunDeps {
   sources?: Sources;
   roms?: Roms;
   wb?: Workbench;
+  /** Every Run uses the stub ROM and the ROM store is never loaded; power-on, reset and Programs to try only say LESSON_NO_POWER (default false). */
+  stubOnly?: boolean;
+  /** False: the Run never opens or touches the workbench (default true). */
+  listing?: boolean;
   kit?: () => Promise<RunKit>;
   /** The runner's clock, for the tests. */
   runner?: Pick<RunnerOptions, 'schedule' | 'cancel' | 'now'>;
@@ -154,7 +165,8 @@ export function createRun(deps: RunDeps = {}): Run {
 
 function buildRun(deps: RunDeps): Run {
   const sources = deps.sources ?? useSources();
-  const wb = deps.wb ?? useWorkbench();
+  const stubOnly = deps.stubOnly === true;
+  const wb: Workbench | undefined = deps.listing === false ? undefined : (deps.wb ?? useWorkbench());
   const loadKit = deps.kit ?? (() => import('../utils/emulator/kit'));
   const runner = shallowRef<Runner | null>(null);
   const lastResult = shallowRef<AsmResult | null>(null);
@@ -191,7 +203,7 @@ function buildRun(deps: RunDeps): Run {
   }
 
   function showListing(force: boolean): void {
-    if (clean.value === null) return;
+    if (wb === undefined || clean.value === null) return;
     const { source, bytes } = clean.value;
     openSourceListing(wb, bytes, cmdName(source.name), { sourceId: source.id, selection: { machine: source.model, dos: defaultDos(source.model) }, force });
   }
@@ -268,6 +280,7 @@ function buildRun(deps: RunDeps): Run {
 
   /** Turns `model` on (or the current source's, or the Model III's), live from its stored ROM. */
   async function boot(model: Model | null): Promise<void> {
+    if (stubOnly) return say(LESSON_NO_POWER);
     const gen = cancelLoading();
     clearRunner();
     await loading(gen, () => booting(gen, model));
@@ -295,6 +308,7 @@ function buildRun(deps: RunDeps): Run {
   }
 
   async function runExample(id: ExampleId): Promise<void> {
+    if (stubOnly) return say(LESSON_NO_POWER);
     // Armored Patrol never reaches its title on the emulator.
     if (id === 'armored-patrol') throw new Error('Armored Patrol is not offered as a Program to try.');
     const ex = exampleById(id);
@@ -339,11 +353,11 @@ function buildRun(deps: RunDeps): Run {
     if (stale()) return;
     if (sources.current.value === null) return say(NO_SOURCE, true);
     let kit: RunKit;
-    let roms: Roms;
+    let roms: Roms | null;
     try {
-      [kit, roms] = await Promise.all([loadKit(), deps.roms ?? import('./useRoms').then((m) => m.useRoms())]);
+      [kit, roms] = await Promise.all([loadKit(), stubOnly ? Promise.resolve(null) : (deps.roms ?? import('./useRoms').then((m) => m.useRoms()))]);
       // The stored ROMs are read before asking which there are: a first Run before the Run tab was ever opened sees them too.
-      await roms.start();
+      await roms?.start();
     } catch {
       if (stale()) return;
       return say(KIT_FAILED, true);
@@ -356,7 +370,7 @@ function buildRun(deps: RunDeps): Run {
       const now = sources.current.value;
       if (now === null) return say(NO_SOURCE, true);
       source = now;
-      rom = roms.have(source.model) ? await roms.bytes(source.model) : null;
+      rom = roms?.have(source.model) === true ? await roms.bytes(source.model) : null;
       if (stale()) return;
       if (sources.current.value === source) break;
     }
@@ -453,7 +467,7 @@ function buildRun(deps: RunDeps): Run {
     reveal,
     busy,
     debug,
-    listable: computed(() => clean.value !== null),
+    listable: computed(() => wb !== undefined && clean.value !== null),
     async showInListing() {
       showListing(true);
     },

@@ -1,0 +1,29 @@
+{
+  "models": [3, 1],
+  "steps": [
+    { "run": 200000 },
+    { "row": 15, "text": "                              ..." },
+    { "row": 14, "text": "" },
+    { "press": "SPACE" },
+    { "run": 140000 },
+    { "row": 14, "text": "                               !" },
+    { "cell": "3F9F", "byte": "21" },
+    { "press": "LEFT" },
+    { "run": 800000 },
+    { "row": 8, "text": "                               !" },
+    { "row": 9, "text": "" },
+    { "row": 14, "text": "" },
+    { "row": 15, "text": "                        ..." },
+    { "release": "LEFT" },
+    { "release": "SPACE" },
+    { "run": 3060000 },
+    { "row": 0, "text": "" },
+    { "row": 8, "text": "" },
+    { "row": 14, "text": "" },
+    { "row": 15, "text": "                        ..." },
+    { "press": "SPACE" },
+    { "run": 140000 },
+    { "release": "SPACE" },
+    { "row": 14, "text": "                         !" }
+  ]
+}
