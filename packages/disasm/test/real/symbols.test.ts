@@ -21,7 +21,7 @@ import { loadRaw } from '../../src/raw.js';
 import type { RawModule } from '../../src/raw.js';
 import { selectSymbols } from '../../src/symbols/select.js';
 import type { SymbolSelection, SymbolSet } from '../../src/symbols/select.js';
-import { assemble, expectSameImage, skipIfNoZmac } from '../roundtrip/zmac.js';
+import { assemble, expectSameImage, withAssembler } from '../roundtrip/zmac.js';
 import { readSample, resolveSample, skipIfMissing } from './samples.js';
 
 const hex4 = (n: number): string => n.toString(16).toUpperCase().padStart(4, '0');
@@ -105,12 +105,12 @@ const reachedNamed = ({ a, tables }: Listed): number[] => a.pass1.externals.filt
 const shownNames = ({ mod, a }: Listed): { name: string; table: string }[] => buildIr(mod, a.pass1, undefined, a).tableNames ?? [];
 
 /** `it` only when the sample is present and zmac is too (FUGLOY_REQUIRE_ZMAC=1 makes a missing zmac a failure). */
-const withZmac = (file: string): typeof it | typeof it.skip => (resolveSample(file) === null ? it.skip : skipIfNoZmac());
+const withZmac = (file: string): typeof it | typeof it.skip => (resolveSample(file) === null ? it.skip : withAssembler());
 
 /** Assembles the zmac source of a listing, with its table names defined, and compares the image and the entry with the program's. */
-function expectRoundTrip({ mod, a }: Listed, file: string): string {
+function expectRoundTrip({ mod, a, tables }: Listed, file: string): string {
   const source = emitZmac(mod.image, a.pass1, a.transfer, { source: file, symbols: a.symbols, annotations: a.annotations, space: a.space, externals: a.externals, tablesUsed: a.tablesUsed });
-  const { module: back } = assemble(source);
+  const { module: back } = assemble(source, { model: tables.selection.machine, dos: tables.selection.dos });
   expectSameImage(back.image, mod.image);
   expect(back.entry).toBe(mod.entry);
   return source;

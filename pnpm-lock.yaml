@@ -103,8 +103,24 @@ importers:
         specifier: ^3.3.13
         version: 3.3.13(typescript@5.9.3)
 
+  packages/asm:
+    dependencies:
+      '@fugloy/disasm':
+        specifier: workspace:*
+        version: link:../disasm
+      '@fugloy/z80':
+        specifier: workspace:*
+        version: link:../z80
+    devDependencies:
+      '@fugloy/emu':
+        specifier: workspace:*
+        version: link:../emu
+
   packages/cli:
     dependencies:
+      '@fugloy/asm':
+        specifier: workspace:*
+        version: link:../asm
       '@fugloy/disasm':
         specifier: workspace:*
         version: link:../disasm

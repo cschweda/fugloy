@@ -8,5 +8,5 @@
     "types": ["node"]
   },
   "include": ["src"],
-  "references": [{ "path": "../z80" }, { "path": "../disasm" }]
+  "references": [{ "path": "../z80" }, { "path": "../disasm" }, { "path": "../asm" }]
 }

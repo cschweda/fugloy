@@ -11,7 +11,7 @@ later phases follow, in the Roadmap's order. The recompiler and
 bundler stay in Part 2 until the plan's kill criteria have been reviewed. If a
 task seems to need machinery from a later step, stop and say so.
 
-Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.2.0, `@fugloy/emu` 0.4.0, and `@fugloy/mcp` 0.1.2 on npm (2026-10-18); emu phases 5–7 released in emu 0.3.0; the Model 4 (emu phase 6b) done for Model III mode and the native hardware, merged to main (2026-10-18); emu 0.4.0 and mcp 0.1.2 published 2026-10-18; a version 6 DOS boot still needs an LS-DOS 6 / TRSDOS 6 disk.**
+Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.2.0, `@fugloy/emu` 0.4.0, and `@fugloy/mcp` 0.1.2 on npm (2026-10-18); emu phases 5–7 released in emu 0.3.0; the Model 4 (emu phase 6b) done for Model III mode and the native hardware, merged to main (2026-10-18); emu 0.4.0 and mcp 0.1.2 published 2026-10-18; a version 6 DOS boot still needs an LS-DOS 6 / TRSDOS 6 disk. Plan phase 5A, the assembler (`@fugloy/asm` and `fugloy asm`), built on branch `phase5a` (2026-10-18; plan `docs/superpowers/plans/2026-10-18-phase5a-assembler.md`), unreleased, to go out with the next core version; 5B and 5C (the workbench's Source ✎ and Run ▶, the running line) follow.**
 v1 is disassembler phases 1–4: the core decoder and loaders (v0.1.0), Pass 1
 and Pass 2 (v0.2.0), the cited symbol tables (phase 3: eight JSON tables, 634
 entries, in `packages/disasm/data/symbols/`, compiled by `pnpm symbols`), and
@@ -123,7 +123,22 @@ The Model I waits for a Model I reference (MAME or xtrs, ask the user first).
   per-instruction length, operands, cycle count, control-flow effect. No I/O.
 - `packages/disasm` — loaders (.CMD, .BAS, raw), memory image, passes, symbol
   tables, IR, emitters. No DOM, no Node APIs; must run in a browser.
-- `packages/cli` — Node wrapper over disasm. The only package that touches `fs`.
+- `packages/asm` — the Z80 assembler (`@fugloy/asm`, plan phase 5A): an
+  encoder inverted from z80's tables (no opcode named in asm), two passes,
+  zmac's syntax and directives, ROM/hardware/DOS names predefined per
+  `model`/`dos` at the lowest priority (Ruling 5), the Model I/III note
+  (`code: 'rom-difference'`; a warning with no model named, info with one;
+  never for a predefined name or a port), a source map by run address, and `toCmd` (whose
+  transfer address is END's entry or the first assembled byte). No DOM, no
+  Node APIs; runtime dependencies z80 and disasm only (emu is a
+  devDependency, for the starter test). Released with core. zmac is its
+  referee: `packages/disasm/test/roundtrip/zmac.ts`'s `assemble(source,
+  options)` runs both (importing asm by relative path, not as a dependency,
+  to avoid a pnpm workspace cycle), and `pnpm asm:corpus` checks every real
+  program under the Model III and Model I tables. Its stricter-than-zmac list
+  is in `packages/asm/README.md`. The starter is
+  `packages/asm/examples/clear-screen.z`.
+- `packages/cli` — Node wrapper over disasm and asm (`fugloy asm`). The only package that touches `fs`.
 - `apps/web` — Nuxt 4 + Nuxt UI, static generation, no server routes (phase 4).
   The folder is `apps/web` (package `@fugloy/web`); the emu spec's
   `apps/workbench` means the same app. Its tests run with `pnpm test:web`,
@@ -196,7 +211,10 @@ The Model I waits for a Model I reference (MAME or xtrs, ask the user first).
    `@fugloy/mcp` 0.1.1 is on npm (2026-10-18).
 
 The plan's phase 5 (assembler and IDE) is not placed in this sequence: it comes
-after v1 and needs phases 3 and 4 and emu phases 2–3. Phase 6, **Learn assembly
+after v1 and needs phases 3 and 4 and emu phases 2–3. Its design
+(`docs/superpowers/specs/2026-10-18-phase5-assembler-ide-design.md`) splits it
+into 5A, the assembler (built on branch `phase5a`), 5B, the workbench's
+Source ✎ and Run ▶, and 5C, the running line. Phase 6, **Learn assembly
 with Fugløy** (requested 2026-10-17), follows phase 5: an introduction to
 assembly language for non-programmers, not only retro fans, on the small and
 straightforward Z80, with instant feedback (Explain's tutor voice on each line

@@ -7,7 +7,7 @@ import { parseHints, writeHints } from '../../src/hints/format.js';
 import type { HintFile } from '../../src/hints/format.js';
 import { blockIdentities, programHash } from '../../src/hints/identity.js';
 import { analyze } from '../../src/pipeline.js';
-import { assemble, expectSameImage, findZmac } from '../roundtrip/zmac.js';
+import { assemble, expectSameImage } from '../roundtrip/zmac.js';
 import { readSample, resolveSample } from './samples.js';
 
 const BUILDS = ['asylum1b.cmd', 'asylum1c.cmd', 'asylum1d.cmd'];
@@ -44,7 +44,7 @@ it.skipIf(!present)('hints written against asylum1b apply unchanged to asylum1c 
     expect(applied.annotations.overrides, f).toEqual([{ addr: start + 0x100, kind: 'bytes', length: 16 }]);
     const a = analyze(mod, { annotations: applied.annotations });
     expect(a.symbols.get(mod.entry!), f).toMatchObject({ name: 'MAIN_ENTRY', source: 'user' });
-    if (findZmac() !== null) {
+    {
       const { module: back } = assemble(emitZmac(mod.image, a.pass1, a.transfer, { source: f, symbols: a.symbols, annotations: a.annotations }));
       expectSameImage(back.image, mod.image);
       expect(back.entry, f).toBe(mod.entry);
@@ -82,7 +82,7 @@ it.skipIf(resolveSample('asylum16.cmd') === null)('the committed asylum16 hint f
   }
   expect(target).toBe(0x43ae);
   expect(mod.image.isLoaded(0x43ae)).toBe(false);
-  if (findZmac() !== null) {
+  {
     const { module: back } = assemble(emitZmac(mod.image, a.pass1, a.transfer, { source: 'asylum16.cmd', symbols: a.symbols, annotations: a.annotations, space: a.space }));
     expectSameImage(back.image, mod.image);
   }

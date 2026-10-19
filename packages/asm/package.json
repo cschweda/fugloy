@@ -1,0 +1,46 @@
+{
+  "name": "@fugloy/asm",
+  "version": "1.2.0",
+  "description": "Z80 assembler for the TRS-80 that matches zmac byte for byte (no DOM, no Node)",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@fugloy/disasm": "workspace:*",
+    "@fugloy/z80": "workspace:*"
+  },
+  "devDependencies": {
+    "@fugloy/emu": "workspace:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cschweda/fugloy.git",
+    "directory": "packages/asm"
+  },
+  "homepage": "https://github.com/cschweda/fugloy#readme",
+  "bugs": {
+    "url": "https://github.com/cschweda/fugloy/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  }
+}

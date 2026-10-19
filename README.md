@@ -27,7 +27,8 @@ you learn about them. It reads a program the way the machine stored it, a
 code, names what it can, and gives back source that reassembles to the same
 bytes. Around that core sit a web workbench for reading and annotating
 listings, an emulator that runs the program and records what really executed,
-and an MCP server that lets an AI assistant drive the emulator.
+an MCP server that lets an AI assistant drive the emulator, and an assembler
+for writing new programs.
 
 | Part | What it does | Status | Where |
 | --- | --- | --- | --- |
@@ -35,7 +36,8 @@ and an MCP server that lets an AI assistant drive the emulator.
 | **Web workbench** | The disassembler in the browser: facing pages, the four public-domain games one click away, editing by keyboard, the **Explain** tab, block comments, exports | Live | [app.fugloy.dev](https://app.fugloy.dev/), source in `apps/web` |
 | **Emulator** | A headless, deterministic Model III and Model I that passes ZEXDOC and ZEXALL, runs `.CMD`, `.BAS`, and `.CAS` programs and disk images, and has a debugger that writes label and coverage files | 0.4.0 on npm (2026-10-18; the Model 4, emu phase 6b), after 0.3.0 (disks and the Model I, phases 5–7) | `packages/emu` (`@fugloy/emu`) |
 | **MCP server** | Lets an AI assistant such as Claude Code load a program, run it, set breakpoints and watches, read the screen, and name what it finds in the same label file | 0.1.1 on npm (2026-10-18), MCP phases A–F; disk images and the Model I; 0.1.2 (the Model 4) also published 2026-10-18 | `packages/mcp` (`@fugloy/mcp`) |
-| **Ahead** | An assembler and IDE in the workbench, a course in assembly for non-programmers, and, later, recompiling games to TypeScript | Planned | [Roadmap](#whats-ahead) |
+| **Assembler** | Z80 source to a `.CMD`, with errors as sentences on the right line, ROM routines by name per model, a note where the Model I and Model III ROMs differ, and zmac's bytes on every source the disassembler writes | Built on branch `phase5a` (plan phase 5A), unreleased; releases with core | `packages/asm` (`@fugloy/asm`), the `fugloy asm` command |
+| **Ahead** | The assembler's IDE in the workbench (edit, Run, the running line lit), a course in assembly for non-programmers, and, later, recompiling games to TypeScript | Planned | [Roadmap](#whats-ahead) |
 
 Its core libraries have no runtime dependencies and use no Node or browser
 APIs, so the same code runs in the command line, the browser, and the tests.
@@ -139,6 +141,41 @@ a clone), the tools, and those sessions are in its
 [README](packages/mcp/README.md), and the design is in
 [docs/fugloy-mcp-spec.md](docs/fugloy-mcp-spec.md).
 
+### The assembler
+
+`@fugloy/asm` is the first part of plan phase 5. The aim is EDTASM made
+easy: type a program, assemble it, and get either a `.CMD` that runs or
+errors that say what to change, on the line that caused them, never as
+codes. `fugloy asm game.z` writes `game.cmd`. A typo gets a suggestion
+(`Unknown instruction JMP. Did you mean JP?`). A jump that cannot reach says
+by how much and what to use instead (`JR reaches 128 bytes either way; LOOP
+is 303 bytes back. Use JP.`). A spelling other assemblers take gets its exact
+rewrite (`JP HL` → `write JP (HL)`).
+
+ROM routines are callable by name without defining them, from the cited
+tables of the chosen model: `CALL $VDCLS` on either machine, and `CALL
+KBDRIVER` at each ROM's own address. A source's own definition of a name
+always wins. An instruction that uses, as a number, one of the four
+addresses whose code differs between the Model I and Model III ROMs draws a
+note naming both meanings: a warning when no model is named, info when one
+is. A new program can start from
+[`clear-screen.z`](packages/asm/examples/clear-screen.z), which blanks the
+screen and waits, with a plain comment on every line. Its test runs it on
+the emulator and checks that the screen is blank.
+
+zmac is the referee. The disassembler's round-trip harness assembles every
+source it emits with both, and asm must give zmac's image and entry. That
+covers the table of 1,786 encodings, the fixtures, the real programs, and
+the ROMs. `pnpm asm:corpus` does the same for every program on the machine,
+named for the Model III and again for the Model I: 85 programs and 3 hinted
+runs locally, all the same as zmac. asm is stricter than zmac in a listed
+set of places, such as `RST 1` or `DB` of an address that does not fit a
+byte. There it gives an error rather than zmac's guess, and it never gives
+different bytes. The syntax, every message, the stricter list, and the API
+are in its [README](packages/asm/README.md). The editor and Run button in the
+workbench come next (5B and 5C in the
+[phase 5 design](docs/superpowers/specs/2026-10-18-phase5-assembler-ide-design.md)).
+
 ### What's ahead
 
 From the roadmap in [CLAUDE.md](CLAUDE.md) and the
@@ -148,10 +185,10 @@ From the roadmap in [CLAUDE.md](CLAUDE.md) and the
   built the Model 4's hardware and Model III mode; an LS-DOS 6 or TRSDOS 6
   boot waits for a disk), and a Model I differential reference. Disk images
   (phase 5) and the Model I (phase 6) are released in `@fugloy/emu` 0.3.0.
-- **An assembler and IDE** (plan phase 5): write Z80 assembly in the
-  workbench, assemble it to a `.CMD`, and run it on an emulated Model I or
-  Model III beside its listing, an IDE in the way Inform 7 has one for its
-  language.
+- **The assembler's IDE** (plan phase 5B and 5C; the assembler itself,
+  5A, is built): write Z80 assembly in the workbench, press Run, and watch
+  it run on an emulated Model I or Model III beside its source, with the
+  running line lit, an IDE in the way Inform 7 has one for its language.
 - **Learn assembly with Fugløy** (phase 6): an introduction to assembly for
   people who have never programmed, on the small and regular Z80, with
   Explain's tutor voice on each line written and a tutorial that builds a
@@ -350,9 +387,11 @@ memory maps, 128K banking, 80 by 24 video, the 4 MHz clock, with the timer's
 60 Hz at 4 MHz following xtrs, unverified) runs synthetic programs;
 coverage is kept per memory map and page, and MCP `load` takes `model: 4`. A
 version 6 DOS booting waits for an LS-DOS 6 or TRSDOS 6 disk (see the
-roadmap in [CLAUDE.md](CLAUDE.md)). Later,
-phase 5 adds an assembler with an IDE in the workbench: write Z80 code,
-assemble it, and run it on an emulated Model I or Model III. Every change is
+roadmap in [CLAUDE.md](CLAUDE.md)). Phase 5 has begun: its assembler,
+`@fugloy/asm` with the `fugloy asm` command (5A), is built on branch `phase5a`
+and releases with the next core version; the IDE in the workbench, where Z80
+code is written, assembled, and run on an emulated Model I or Model III,
+follows (5B, 5C). Every change is
 recorded in [CHANGELOG.md](CHANGELOG.md); core releases are tagged `vX.Y.Z`
 on `main`, the emulator's `emu-vX.Y.Z`, and the MCP server's `mcp-vX.Y.Z`.
 
@@ -360,7 +399,8 @@ on `main`, the emulator's `emu-vX.Y.Z`, and the MCP server's `mcp-vX.Y.Z`.
 | --- | --- |
 | `packages/z80` | Z80 opcode tables generated from the x/y/z/p/q decomposition (unprefixed, `CB`, `ED`, `DD`/`FD`, `DDCB`/`FDCB`) with length, operands, cycle counts, and control-flow effect; a decoder; an exhaustion test against an independently typed reference. No I/O. |
 | `packages/disasm` | 64K memory image with a load bitmap and block log, `.CMD` and `.BAS` loaders, content-based format detection, raw loader, a Level II BASIC parser and entry-point miner, pass 1 recursive descent, labels, the hint file, string and proposal heuristics, rebasing, relocation, the cited symbol tables (`data/symbols`, compiled by `pnpm symbols`), zmac emitter, JSON IR, linear sweep, plain-text listings. No Node or DOM APIs, so it runs in a browser. |
-| `packages/cli` | `fugloy <file> [--base <hex> \| --rebase <hex>] [--entry <hex>]... [--hints <path> \| --write-hints <path>] [--labels <path>] [--machine 1\|3\|4] [--dos trsdos\|ldos\|none] [--format listing\|zmac\|ir] [--sweep] [--color] [-o <path>]`, the only package that touches the file system. |
+| `packages/asm` | The Z80 assembler (`@fugloy/asm`): an encoder inverted from the z80 tables, two passes with errors as sentences on the right line, the directives zmac has, ROM, hardware, and DOS names per model, the Model I/III note, a source map by run address, and `.CMD` output. No Node or DOM APIs. Usage in its [README](packages/asm/README.md). |
+| `packages/cli` | `fugloy <file> [--base <hex> \| --rebase <hex>] [--entry <hex>]... [--hints <path> \| --write-hints <path>] [--labels <path>] [--machine 1\|3\|4] [--dos trsdos\|ldos\|none] [--format listing\|zmac\|ir] [--sweep] [--color] [-o <path>]` and `fugloy asm <source> [-o <out.cmd>] [--model 1\|3\|4] [--dos trsdos\|ldos\|none] [--listing]`, the only package that touches the file system. |
 | `packages/emu` | The headless, deterministic TRS-80 Model I, Model III, and Model 4 emulator, built on the core of trs80-emulator: a Z80 CPU that passes ZEXALL, the `Machine` facade (`step`, `run`, registers, memory, video text, sound events, keyboard), `.CMD`, `.BAS`, and `.CAS` loaders with manifests, and the debugger `m.debug`, which writes the label and coverage file. No DOM, no Node APIs. Design in [docs/fugloy-emu-spec.md](docs/fugloy-emu-spec.md); usage in its [README](packages/emu/README.md). |
 | `packages/mcp` | The stdio MCP server that lets an AI assistant drive the emulator (`bin/fugloy-mcp.js`, plain JavaScript): MCP phases A–F, 29 tools for loading, running, typing, inspecting, breakpoints and watches, callers and callees, a disassembly with coverage marks, snapshots and diffs, search, labels, coverage, and `suggest`, with the `<program>.fugloy.json` sidecar, plus resources and prompts. Design in [docs/fugloy-mcp-spec.md](docs/fugloy-mcp-spec.md); setup in its [README](packages/mcp/README.md). |
 | `apps/web` | The web workbench (`@fugloy/web`, Nuxt 4 and Nuxt UI, static, deployed to Netlify), running the disassembler in the browser. |
@@ -382,7 +422,8 @@ fugloy GAME.CMD --format zmac -o game.z
 ```
 
 The libraries are `@fugloy/disasm` (loaders, analysis, emitters; runs in a
-browser) and `@fugloy/z80` (the opcode table and decoder). The examples below
+browser) and `@fugloy/z80` (the opcode table and decoder); `@fugloy/asm`, the
+assembler, joins them with the next core release. The examples below
 use `pnpm fugloy` from a clone, which runs the same CLI; with the package
 installed, write `fugloy` instead. The emulator and the MCP server are on npm too: `npm i @fugloy/emu` (its
 [README](packages/emu/README.md) shows the API) and `npx -y @fugloy/mcp` (its
@@ -403,10 +444,11 @@ tests skip; with `FUGLOY_REQUIRE_ZMAC=1`, as in CI, they fail instead.
 pnpm install
 pnpm test          # vitest, all packages
 pnpm typecheck     # tsc project references plus the test sources
-pnpm build         # emits dist for z80, disasm, and cli (run it before pnpm fugloy)
+pnpm build         # emits dist for z80, disasm, asm, and cli (run it before pnpm fugloy)
 pnpm fixtures      # regenerates fixtures/synthetic from the writers
 pnpm symbols       # validates data/symbols/*.json, regenerates the tables module and COMPARISON.md
 pnpm zmac:install  # builds the pinned zmac into tools/ for the round-trip tests
+pnpm asm:corpus    # every real program through the disassembler, @fugloy/asm, and zmac; prints a table
 pnpm zex:install   # downloads ZEXDOC and ZEXALL into tools/zex/ for the emulator's exerciser tests
 pnpm web:dev       # the workbench on a local dev server; pnpm test:web runs its tests
 
@@ -424,9 +466,14 @@ pnpm fugloy game.cmd --color                     # the listing in color on a ter
 pnpm fugloy game.cmd --write-hints game.hints    # a hint-file skeleton to edit by hand
 pnpm fugloy game.cmd --hints game.hints          # apply names, comments, entries, code and data, tables, relocations
 pnpm fugloy game.cmd --labels game.labels.json   # apply the emulator's label and coverage file for this program
+
+pnpm fugloy asm game.z                           # assemble Z80 source into game.cmd (see packages/asm/README.md)
+pnpm fugloy asm game.z --model 1 --listing       # with Model I ROM names, printing the listing
 ```
 
-The exit code is 0 on success, 1 when a file cannot be read or written, and 2
+`fugloy asm` exits 0 when the program assembled, 1 on an error in the source
+or a file it cannot read or write, and 2 for a usage error. For the
+disassembler, the exit code is 0 on success, 1 when a file cannot be read or written, and 2
 for a usage error, a file that is neither a load module nor tokenized BASIC,
 a hint-file error, a label file written for another program, or a relocation
 that cannot apply.
@@ -673,6 +720,8 @@ routine, so what its listing names is its hardware.
   server.
 - [docs/label-format.md](docs/label-format.md): the label and coverage file
   shared by the emulator, the MCP server, and the disassembler.
+- [packages/asm/README.md](packages/asm/README.md): the assembler's syntax,
+  messages, and API.
 - [packages/disasm/data/symbols/COMPARISON.md](packages/disasm/data/symbols/COMPARISON.md):
   the Model I and Model III ROM maps side by side, generated from the tables.
 - [CLAUDE.md](CLAUDE.md): working conventions and the roadmap.
@@ -744,7 +793,7 @@ the packages, installs the tarballs in a scratch project and runs them, and
 stages them in `.release/`. `./publish.sh publish` then publishes those
 exact tarballs with npm's two-factor code: it asks for the code, or takes
 it as `--otp <code>`, and tags the release. `core` is `@fugloy/z80`,
-`@fugloy/disasm`, and `@fugloy/cli` at one version; `emu` is `@fugloy/emu`.
+`@fugloy/disasm`, `@fugloy/asm`, and `@fugloy/cli` at one version; `emu` is `@fugloy/emu`.
 Bump the version and add its `CHANGELOG.md` entry in a commit first.
 
 ## License

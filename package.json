@@ -12,8 +12,8 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -b packages/z80 packages/disasm packages/cli && tsc -p tsconfig.test.json",
-    "build": "tsc -b packages/z80 packages/disasm packages/cli",
+    "typecheck": "tsc -b packages/z80 packages/disasm packages/asm packages/cli && tsc -p tsconfig.test.json",
+    "build": "tsc -b packages/z80 packages/disasm packages/asm packages/cli",
     "clean": "rm -rf packages/*/dist",
     "fixtures": "tsx packages/disasm/scripts/write-fixtures.ts && node packages/emu/scripts/write-label-fixture.mjs && node packages/emu/scripts/write-disk-fixtures.mjs && node packages/emu/scripts/write-model3-state-fixture.mjs",
     "symbols": "tsx packages/disasm/scripts/write-symbols.ts",
@@ -22,6 +22,7 @@
     "web:generate": "pnpm --filter @fugloy/web generate",
     "fugloy": "node packages/cli/bin/fugloy.js",
     "zmac:install": "bash scripts/install-zmac.sh",
+    "asm:corpus": "pnpm build && node packages/asm/scripts/corpus.mjs",
     "zex:install": "bash scripts/install-zex.sh",
     "trsjs:install": "bash scripts/install-trsjs.sh",
     "diff": "node packages/emu/scripts/diff.mjs"

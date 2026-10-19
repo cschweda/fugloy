@@ -1,0 +1,23 @@
+; clear-screen.z: a first TRS-80 program.
+; It fills the screen with spaces, so the screen goes blank, and then it
+; waits forever, so the screen stays blank until you press RESET.
+;
+; Everything after a semicolon is a comment for people; the computer
+; ignores it. Each line below is one instruction for the Z80, the
+; computer's processor.
+
+        ORG     7000H           ; put the program at address 7000H, in free memory
+
+START:  LD      HL,3C00H        ; HL points at the first character of the screen (top left)
+        LD      BC,400H         ; BC counts the characters left: 400H is 1024, 16 rows of 64
+
+FILL:   LD      (HL),20H        ; put a space (character code 20H) where HL points
+        INC     HL              ; move HL along to the next character
+        DEC     BC              ; one character fewer to do
+        LD      A,B             ; is BC zero yet? copy B into A ...
+        OR      C               ; ... and combine it with C: A is zero only if B and C both are
+        JR      NZ,FILL         ; not zero: go back to FILL and blank the next character
+
+WAIT:   JR      WAIT            ; all done: jump to this same line forever
+
+        END     START           ; the program starts running at START

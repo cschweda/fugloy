@@ -6,9 +6,9 @@
 import { expect } from 'vitest';
 import { TABLES, decodeAt } from '@fugloy/z80';
 import { instructionLine } from '../../src/emit/zmac.js';
-import { assemble, skipIfNoZmac } from './zmac.js';
+import { assemble, withAssembler } from './zmac.js';
 
-const test = skipIfNoZmac();
+const test = withAssembler();
 
 const SECTIONS: { prefix: number[]; cb: boolean; table: keyof typeof TABLES }[] = [
   { prefix: [], cb: false, table: 'base' },

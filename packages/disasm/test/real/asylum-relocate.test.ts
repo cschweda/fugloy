@@ -9,7 +9,7 @@ import { applyHints } from '../../src/hints/apply.js';
 import { parseHints } from '../../src/hints/format.js';
 import { programHash } from '../../src/hints/identity.js';
 import { analyze } from '../../src/pipeline.js';
-import { assemble, expectSameImage, skipIfNoZmac } from '../roundtrip/zmac.js';
+import { assemble, expectSameImage, withAssembler } from '../roundtrip/zmac.js';
 import { asylumHintLines } from './asylum-relocations.js';
 import { readSample, resolveSample } from './samples.js';
 
@@ -45,7 +45,7 @@ it.skipIf(!present)('with the fixture applied, the game decodes from $43AE at it
   expect(emitZmac(mod.image, a.pass1, a.transfer, { symbols: a.symbols, annotations: a.annotations, space: a.space }).match(/^\t\.PHASE\t/gm)?.length).toBe(123);
 });
 
-(present ? skipIfNoZmac() : it.skip)('with the fixture applied, zmac reassembles the file image from 123 .PHASE blocks', () => {
+(present ? withAssembler() : it.skip)('with the fixture applied, zmac reassembles the file image from 123 .PHASE blocks', () => {
   const { mod, a } = analyzed();
   const { module: back } = assemble(emitZmac(mod.image, a.pass1, a.transfer, { source: 'asylum16.cmd', symbols: a.symbols, annotations: a.annotations, space: a.space }));
   expectSameImage(back.image, mod.image);
