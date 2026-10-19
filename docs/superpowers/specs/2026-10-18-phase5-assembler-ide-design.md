@@ -73,10 +73,11 @@ TRS-80 beside the code within a moment, with the running line lit.
   pass 1 is exact. `decode(encode(x)) = x` over every form is a test.
 - **Syntax:** what zmac accepts for the constructs below, case-insensitive
   for mnemonics, registers, and directives; labels with a colon anywhere or
-  without one in column 1; numbers `0FFH`, `$FF`, `0xFF`, `%1010`/`1010B`,
-  decimal, `'A'`; strings with `''`; expressions `+ - * / MOD & | ^ ~ << >>`,
+  without one in column 1; numbers `0FFH`, `$FF`, `0xFF`, `1010B`,
+  decimal, `'A'`; strings with `''`; expressions `+ - * / MOD` (or `%`) `& | ^ ~ << >>`,
   `HIGH`/`LOW`, `$`, parentheses (an operand that is entirely parenthesised
-  is memory, zmac's rule); directives `ORG`, `EQU`, `DEFL`/`=`,
+  is memory where the instruction has a memory form there; elsewhere zmac
+  reads it as the plain value, and asm gives the same bytes with a warning); directives `ORG`, `EQU`, `DEFL`/`=`,
   `DB`/`DEFB`/`DEFM`, `DW`/`DEFW`, `DS`/`DEFS`, `.PHASE`/`.DEPHASE`, `END
   [entry]`. Where zmac's rule is unclear (label case, labels inside
   `.PHASE`), a zmac probe decides and becomes a test.
