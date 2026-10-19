@@ -21,6 +21,7 @@
  */
 
 import { fromBase64 } from '../debug/state.js';
+import { MODE_ALTSET_BIT } from '../machine/io.js';
 
 export class Video {
   #system;
@@ -49,6 +50,16 @@ export class Video {
    */
   get inverse() {
     return /** @type {any} */ (this.#system.memory).inverse === true;
+  }
+
+  /**
+   * @returns {boolean} True on the Model III and 4 when the mode register's ENALTSET bit (port $EC
+   * bit 3) selects the alternate character set; always false on the Model I, whose port
+   * $FF latch has no such bit. It only reports the bit: it draws nothing.
+   */
+  get altCharset() {
+    if (this.#system.model.id === 1) return false;
+    return (this.#system.io.modeRegister & MODE_ALTSET_BIT) !== 0;
   }
 
   /** @returns {80 | 64 | 40 | 32} The columns on screen: 64 or 32, and on the Model 4 also 80 or 40. */

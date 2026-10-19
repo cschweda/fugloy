@@ -122,6 +122,7 @@ m.video.columns            // 64 | 32, and on the Model 4 80 | 40
 m.video.rows               // 16, or 24 on the Model 4 in 80-column mode
 m.video.wide               // true on the Model 4 in the 80-column layout (port $84 bit 2: rows of 80 bytes, 24 rows); read-only
 m.video.inverse            // true on the Model 4 with inverse video (port $84 bit 3: bit 7 set is the character inverted); read-only
+m.video.altCharset         // true on the Model III and 4 when port $EC bit 3 (ENALTSET) selects the alternate character set; always false on the Model I; read-only
 
 m.sound.events(sinceCycle = -1)  // [{ cycle, value }] every port $FF write after that cycle, oldest first
 m.sound.overflowed         // events lost to wrap-around of the 65,536-event ring since the last clear

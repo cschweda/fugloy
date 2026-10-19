@@ -37,6 +37,10 @@ creates and pushes the tag.
 
 ## [Unreleased]
 
+Plan phase 5D: `@fugloy/emu` gains `m.video.altCharset`, true when the Model III or
+Model 4 mode register's ENALTSET bit (port `$EC` bit 3) is set; always false on
+the Model I.
+
 Plan phase 5A, the assembler, built on branch `phase5a` (2026-10-18; design
 `docs/superpowers/specs/2026-10-18-phase5-assembler-ide-design.md`, plan
 `docs/superpowers/plans/2026-10-18-phase5a-assembler.md`). It goes out with
