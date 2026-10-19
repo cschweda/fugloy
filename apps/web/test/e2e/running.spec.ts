@@ -37,6 +37,9 @@ test('the listing follows the run: a gutter breakpoint stops it, the row is lit,
   await expect(content).toContainText('ORG');
   await content.click();
   await page.keyboard.press('ControlOrMeta+a');
+  // Clear first and let the editor settle: keys typed into its first edit's reactions can land out of place on a slow runner.
+  await page.keyboard.press('Backspace');
+  await expect(content).toHaveText('');
   await page.keyboard.type(PROGRAM);
 
   // A breakpoint on line 4 with a click in the breakpoint gutter beside it.
@@ -124,6 +127,9 @@ test('a program opened from a file that is not the running one shows no marks, a
   await expect(content).toBeVisible();
   await content.click();
   await page.keyboard.press('ControlOrMeta+a');
+  // Clear first and let the editor settle: keys typed into its first edit's reactions can land out of place on a slow runner.
+  await page.keyboard.press('Backspace');
+  await expect(content).toHaveText('');
   await page.keyboard.type(PROGRAM);
   await page.keyboard.press('ControlOrMeta+Enter');
   await expect.poll(() => page.evaluate(() => window.__fugloyTest!.debugMode())).toBe('running');
@@ -156,6 +162,9 @@ test('a tight loop running for 3 s costs the running line under 1 ms a frame', a
   await expect(content).toContainText('ORG');
   await content.click();
   await page.keyboard.press('ControlOrMeta+a');
+  // Clear first and let the editor settle: keys typed into its first edit's reactions can land out of place on a slow runner.
+  await page.keyboard.press('Backspace');
+  await expect(content).toHaveText('');
   await page.keyboard.type(PROGRAM);
   await page.getByTestId('run-run').click();
   await expect.poll(() => page.evaluate(() => window.__fugloyTest!.debugMode())).toBe('running');
@@ -188,6 +197,9 @@ test('axe is clean over Source ✎ while paused: the gutter ▶, a data line\'s 
   await expect(content).toContainText('ORG');
   await content.click();
   await page.keyboard.press('ControlOrMeta+a');
+  // Clear first and let the editor settle: keys typed into its first edit's reactions can land out of place on a slow runner.
+  await page.keyboard.press('Backspace');
+  await expect(content).toHaveText('');
   // Line 4 DEC A takes a breakpoint; line 6 is data, so its breakpoint is hollow.
   await page.keyboard.type('\tORG\t7000H\nSTART:\tLD\tA,1\nLOOP:\tINC\tA\n\tDEC\tA\n\tJR\tLOOP\n\tDB\t0\n\tEND\tSTART\n');
   await page.locator('.cm-line').nth(3).click();
