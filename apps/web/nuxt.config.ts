@@ -27,7 +27,7 @@ export default defineNuxtConfig({
   css: ['@fontsource/jetbrains-mono/latin-400.css', '@fontsource/jetbrains-mono/latin-700.css', '~/assets/css/main.css'],
   ssr: true,
   // The crawler must not follow the About page's link to /pdfjs/LICENSE: the file is copied in after prerendering.
-  // The Learn page is linked from nowhere yet, so its routes are named: /learn/ and each lesson's folder in content/learn.
+  // The Learn page's lessons are not all linked from the header, so its routes are named: /learn/ and each lesson's folder in content/learn.
   nitro: { preset: 'static', publicAssets: pdfjsAssets, prerender: { ignore: ['/pdfjs/'], routes: ['/learn/', ...lessonRoutes] } },
   hooks: {
     // The lazily loaded parts (Source ✎: CodeMirror and asm, plan 5B) are fetched
