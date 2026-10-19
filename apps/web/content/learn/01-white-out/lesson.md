@@ -6,7 +6,7 @@ cite: m3-trm 14 the Model III's screen is video memory at 3C00H, 1,024 bytes
 cite: m1-trh 12 the Model I's screen is video memory at 3C00H, 16 lines of 64 characters
 cite: m1-trh 33 the Model I's screen is video memory at 3C00H, 16 lines of 64 characters
 ---
-On a TRS-80 the screen is memory. The 1,024 bytes from `3C00H` to `3FFFH` are the 16 rows of 64 cells you see, one byte a cell, top left first. Store a byte there and the video circuit draws it on the next pass. There is no driver and no call to make: drawing is writing to memory.
+On a TRS-80 the screen is memory. The 1,024 bytes from `3C00H` to `3FFFH` are the 16 rows of 64 cells you see, one byte a cell, top left first. Store a byte there and it shows on the screen. There is no driver and no call to make: drawing is writing to memory.
 
 So whiting out the screen is a loop that stores the same byte 1,024 times:
 
@@ -45,13 +45,13 @@ BC is the loop counter, another pair. `400H` is 1,024, the whole screen.
 
 The loop is a test and a jump. There is no `while`: `JR NZ,FILL` jumps back to the label `FILL` when the last result was **not zero**, and falls through when it was. The catch is that `DEC BC` changes no flags, so the jump cannot see BC reach zero by itself. `LD A,B` and `OR C` ask the question by hand: A ends up zero only when both halves of BC are zero, and `OR` sets the zero flag the jump reads.
 
-`0BFH` is a graphics character. The codes `80H` to `BFH` draw a block of six pixels, two across and three down, one bit for each; `0BFH` has all six lit, so every cell turns solid white. `80H` is the same block with none lit.
+`0BFH` is not a letter. Run the program and Fugløy's screen draws it as a solid white block in every cell, so the whole screen turns white. Change it to `80H` and the cells come out empty instead.
 
 When the loop ends, `WAIT: JR WAIT` jumps to itself forever. A program on a bare machine has nowhere to return to, so it parks, and the screen stays white.
 
 ## On the Model I
 
-The Model I's screen is the same memory at `3C00H`, the same 16 rows of 64, and the same block characters, so the program runs on it unchanged. Switch the model and run it again: the picture is narrower, as it was on the real machine.
+The Model I's screen is the same memory at `3C00H`, the same 16 rows of 64, so the program runs on it unchanged. Switch the model and run it again, and compare the two pictures on Fugløy's screen.
 
 ## Try it
 
