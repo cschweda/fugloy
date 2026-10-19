@@ -29,7 +29,7 @@ test('open the site, Write a program, press Run: the screen is blank, with no RO
   await expect(page.locator('.cm-content')).toContainText('ORG');
   await expect(page.getByRole('tab', { name: 'Run ▶' })).toHaveAttribute('aria-selected', 'true');
   await page.getByTestId('run-run').click();
-  await expect(page.getByTestId('run-message')).toHaveText("Running on Fugløy's stub ROM (no ROM needed for this program)");
+  await expect(page.getByTestId('run-message')).toHaveText("Running on Fugløy's stub ROM (no ROM needed for this program).");
   await expect.poll(() => page.evaluate(() => window.__fugloyTest!.runnerState())).toBe('running');
   const text = await page.evaluate(() => window.__fugloyTest!.screenText());
   expect(text).toHaveLength(16);
@@ -37,7 +37,7 @@ test('open the site, Write a program, press Run: the screen is blank, with no RO
   await expect.poll(() => centre(page)).toEqual(BG);
   // Run doesn't move the focus; the screen says how to type to it.
   await expect(page.getByTestId('run-run')).toBeFocused();
-  await expect(page.getByTestId('trs-screen')).toContainText('Click the screen to type to the TRS-80');
+  await expect(page.getByTestId('trs-screen')).toContainText('Click the screen to type to the TRS-80.');
   // The listing refreshed quietly: the program is open, and Source ✎ is still the left tab.
   await expect(page.getByTestId('file-name')).toHaveText('clear-screen.cmd');
   await expect(page.getByRole('tab', { name: 'Source ✎' })).toHaveAttribute('aria-selected', 'true');
@@ -48,6 +48,37 @@ test('open the site, Write a program, press Run: the screen is blank, with no RO
   expect(r.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
 });
 
+test('the whole loop: Write, Run, type an error, Run marks it, Fix, Run again, and the screen is blank', async ({ page }) => {
+  await ready(page);
+  await page.getByTestId('write-program').click();
+  const content = page.locator('.cm-content');
+  await expect(content).toContainText('ORG');
+  await page.getByTestId('run-run').click();
+  await expect.poll(() => page.evaluate(() => window.__fugloyTest!.runnerState())).toBe('running');
+
+  // An 8080 spelling: Run refuses it, marks its line, lists it with its Fix, and runs nothing.
+  await content.click();
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.type('\tORG\t7000H\nSTART:\tPUSH\tA\n\tPOP\tAF\n\tLD\tHL,3C00H\n\tLD\tDE,3C01H\n\tLD\tBC,03FFH\n\tLD\t(HL),20H\n\tLDIR\nWAIT:\tJR\tWAIT\n\tEND\tSTART\n');
+  await page.getByTestId('run-run').click();
+  await expect(page.getByTestId('run-message')).toContainText('The program has 1 error, so it did not run. The first is on line 2');
+  await expect(page.locator('.cm-lintRange-error')).toHaveCount(1);
+  await expect(page.getByTestId('source-diag')).toContainText('PUSH works on register pairs');
+  expect(await page.evaluate(() => window.__fugloyTest!.runnerState())).toBe('idle');
+
+  const fix = page.getByTestId('source-diag-fix');
+  await expect(fix).toHaveAccessibleName('Fix line 2: write PUSH AF');
+  await fix.click();
+  await expect(content).toContainText('PUSH AF');
+  await expect(page.getByTestId('source-diag')).toHaveCount(0);
+
+  await page.getByTestId('run-run').click();
+  await expect(page.getByTestId('run-message')).toHaveText("Running on Fugløy's stub ROM (no ROM needed for this program).");
+  await expect.poll(() => page.evaluate(() => window.__fugloyTest!.runnerState())).toBe('running');
+  await expect.poll(async () => (await page.evaluate(() => window.__fugloyTest!.screenText())).every((row) => /^ {64}$/.test(row))).toBe(true);
+  await expect.poll(() => centre(page)).toEqual(BG);
+});
+
 test('Ctrl/⌘+Enter in the editor runs; an error goes to Source ✎ and runs nothing; a ROM call is refused with its line', async ({ page }) => {
   await ready(page);
   await page.getByTestId('write-program').click();
@@ -56,7 +87,7 @@ test('Ctrl/⌘+Enter in the editor runs; an error goes to Source ✎ and runs no
   await content.click();
   const lines = await page.locator('.cm-line').count();
   await page.keyboard.press('ControlOrMeta+Enter');
-  await expect(page.getByTestId('run-message')).toHaveText("Running on Fugløy's stub ROM (no ROM needed for this program)");
+  await expect(page.getByTestId('run-message')).toHaveText("Running on Fugløy's stub ROM (no ROM needed for this program).");
   // No line was inserted.
   expect(await page.locator('.cm-line').count()).toBe(lines);
 

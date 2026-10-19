@@ -4,10 +4,9 @@
 import { computed, ref } from 'vue';
 import { casWarnings, download, exportFile, exportKinds } from '~/utils/exports';
 import type { ExportKind } from '~/utils/exports';
-import { useOpenAsSource } from '~/composables/useOpenAsSource';
+import { canOpenAsSource, openAsSourceAsks } from '~/utils/open-as-source';
 
 const wb = useWorkbench();
-const opener = useOpenAsSource();
 const menu = ref<HTMLDetailsElement | null>(null);
 const failure = ref<string | null>(null);
 
@@ -39,17 +38,12 @@ function run(kind: ExportKind): void {
   }
 }
 
-/** Open as source ✎: the zmac text as a new source in Source ✎ (the page shows the tab). */
-async function openSource(): Promise<void> {
-  const s = wb.session.value;
-  if (s === null) return;
+/** Open as source ✎: the zmac text as a new source in Source ✎. The page does it, and says so if it cannot. */
+function openSource(): void {
+  if (wb.session.value === null) return;
   failure.value = null;
-  try {
-    await opener.open(s);
-    if (menu.value !== null) menu.value.open = false;
-  } catch (err) {
-    failure.value = err instanceof Error ? err.message : String(err);
-  }
+  openAsSourceAsks.value++;
+  if (menu.value !== null) menu.value.open = false;
 }
 </script>
 
@@ -65,7 +59,7 @@ async function openSource(): Promise<void> {
           <p v-if="noEntry" class="text-xs" role="note" data-testid="export-warning">No entry point: a .CAS needs one, so this cannot be exported.</p>
         </template>
       </template>
-      <template v-if="wb.session.value !== null && opener.can(wb.session.value)">
+      <template v-if="wb.session.value !== null && canOpenAsSource(wb.session.value)">
         <button type="button" class="fg-button" data-testid="export-open-source" @click="openSource">Open as source ✎</button>
         <p class="fg-muted text-xs">Edit it and run it in Source ✎.</p>
       </template>

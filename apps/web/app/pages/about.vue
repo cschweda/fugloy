@@ -54,7 +54,8 @@ const byline = (s: Source): string => (s.author === s.publisher ? s.author : `${
     <p data-testid="stub-rom">
       A program that never calls the ROM runs without one, on Fugløy's <strong class="fg-strong">stub ROM</strong>: a few lines of Fugløy's own Z80 source (<code>stub-rom.z</code>), assembled in your browser when you press Run.
       It turns off interrupts, sets up a stack, blanks the screen, and halts, and the rest of the ROM's space is filled with HALT, so it holds no Tandy code.
-      A program that calls a ROM routine, or reaches into the ROM's space, is stopped with a sentence naming its line, before it runs or the moment it gets there.
+      A program that calls or jumps into the ROM is stopped with a sentence naming its line, before it runs or the moment it gets there.
+      One that only reads the ROM's bytes (through a pointer, say) is not stopped: on the stub it reads HALT instructions, not Tandy's code.
     </p>
 
     <h2 id="credits">Credits</h2>

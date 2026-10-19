@@ -6,10 +6,12 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
+import { nextTick } from 'vue';
 import starter from '@fugloy/asm-examples/clear-screen.z?raw';
 import * as realKit from '../app/utils/emulator/kit';
 import type { RunKit } from '../app/composables/useRun';
-import { createRun } from '../app/composables/useRun';
+import { createRun, KIT_FAILED, STOPPED, STOPPED_MODEL, STOPPED_SOURCE } from '../app/composables/useRun';
+import { loadFailed } from '../app/utils/lazy';
 import { STUB_RUNNING } from '../app/utils/emulator/kit';
 import { createSources } from '../app/composables/useSources';
 import { createWorkbench } from '../app/composables/useWorkbench';
@@ -59,7 +61,14 @@ function fakeRoms(stored: Partial<Record<ModelId, Uint8Array>> = {}): Roms {
 const examplesDir = (path: string): string => fileURLToPath(new URL(`../../../examples/${path}`, import.meta.url));
 const readExample = async (path: string): Promise<Uint8Array | null> => new Uint8Array(readFileSync(examplesDir(path)));
 
-async function setup(text: string | null, opts: { roms?: Roms; kit?: RunKit } = {}) {
+/** A kit that arrives only when `arrive()` is called, as a first Run's chunk does. */
+function slowKit() {
+  let arrive!: () => void;
+  const ready = new Promise<void>((r) => (arrive = r));
+  return { kit: async (): Promise<RunKit> => (await ready, realKit), arrive };
+}
+
+async function setup(text: string | null, opts: { roms?: Roms; kit?: RunKit; loadKit?: () => Promise<RunKit> } = {}) {
   const sources = createSources({ open: async () => null, starter: async () => starter });
   await sources.start();
   if (text === null) await sources.create();
@@ -67,7 +76,7 @@ async function setup(text: string | null, opts: { roms?: Roms; kit?: RunKit } = 
   const wb = createWorkbench({ readExample });
   const clock = fakeClock();
   const kit = opts.kit ?? realKit;
-  const run = createRun({ sources, roms: opts.roms ?? fakeRoms(), wb, kit: async () => kit, runner: clock });
+  const run = createRun({ sources, roms: opts.roms ?? fakeRoms(), wb, kit: opts.loadKit ?? (async () => kit), runner: clock });
   return { sources, wb, clock, run };
 }
 
@@ -91,7 +100,7 @@ describe('Run ▶', () => {
     const { run, clock, wb } = await setup(null);
     await run.run();
     expect(run.message.value).toBe(STUB_RUNNING);
-    expect(STUB_RUNNING).toBe("Running on Fugløy's stub ROM (no ROM needed for this program)");
+    expect(STUB_RUNNING).toBe("Running on Fugløy's stub ROM (no ROM needed for this program).");
     expect(run.state.value).toBe('running');
     // Dirty the screen, then let the program blank it.
     const m = run.runner.value!.machine;
@@ -212,5 +221,68 @@ describe('Run ▶', () => {
     });
     await run2.run();
     expect(run2.message.value).toBe(said);
+  });
+
+  it('Stop while a Run is still loading cancels it: nothing starts, no listing opens, and Run works again', async () => {
+    const slow = slowKit();
+    const { run, wb } = await setup(null, { loadKit: slow.kit });
+    const pending = run.run();
+    await Promise.resolve();
+    expect(run.busy.value).toBe(true);
+    run.stop();
+    expect(run.busy.value).toBe(false);
+    expect(run.message.value).toBe(STOPPED);
+    slow.arrive();
+    await pending;
+    expect(run.runner.value).toBeNull();
+    expect(run.state.value).toBe('idle');
+    expect(wb.session.value).toBeNull();
+    expect(run.report.value).toBeNull();
+    // Closing the workbench (or leaving the page) stops the same way, and the next press runs.
+    await run.run();
+    expect(run.state.value).toBe('running');
+    expect(wb.session.value?.name).toBe('clear-screen.cmd');
+  });
+
+  it('a Run runs the source as it is once its parts have loaded, and reveals a line of that text', async () => {
+    const slow = slowKit();
+    const { run, sources } = await setup(null, { loadKit: slow.kit });
+    const pending = run.run();
+    await Promise.resolve();
+    // Typed while the emulator was loading: the broken text is what runs, and its line is revealed.
+    sources.update(sources.current.value!.id, { text: BROKEN });
+    slow.arrive();
+    await pending;
+    expect(run.report.value?.text).toBe(BROKEN);
+    expect(run.reveal.value?.line).toBe(2);
+    expect(run.runner.value).toBeNull();
+  });
+
+  it('changing the model or switching source stops the running program, saying why', async () => {
+    const { run, sources } = await setup(null);
+    await run.run();
+    const first = run.runner.value!;
+    sources.update(sources.current.value!.id, { model: 1 });
+    await nextTick();
+    expect(first.state).toBe('stopped');
+    expect(run.state.value).toBe('stopped');
+    expect(run.message.value).toBe(STOPPED_MODEL);
+    expect(run.problem.value).toBe(false);
+
+    await run.run();
+    const second = run.runner.value!;
+    expect(second.state).toBe('running');
+    await sources.create({ name: 'other.z', text: program('START:  JR      START') });
+    await nextTick();
+    expect(second.state).toBe('stopped');
+    expect(run.message.value).toBe(STOPPED_SOURCE);
+  });
+
+  it('says the emulator could not load, in the sentence every lazy part uses, with Run as the next step', async () => {
+    expect(KIT_FAILED).toBe(loadFailed('The emulator', 'Press Run again'));
+    const { run } = await setup(null, { loadKit: async () => Promise.reject(new Error('offline')) });
+    await run.run();
+    expect(run.message.value).toBe(KIT_FAILED);
+    expect(run.problem.value).toBe(true);
   });
 });

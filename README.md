@@ -106,7 +106,9 @@ calls the ROM is stopped with a sentence naming its line. **Open as source
 Sea Dragon opened that way reassembles byte for byte and, on your Model III
 ROM, runs to its title screen. The editor, the assembler, and the emulator
 load only when Source ✎ or Run ▶ is first opened, so the first screen's
-JavaScript grows by under 5 KB. The screen's characters are drawn from X.Org's
+JavaScript grows by 4,577 bytes gzip (247,655 before, 252,232 after: the
+generated page's module script and modulepreloads with their static imports,
+each gzipped at level 9). The screen's characters are drawn from X.Org's
 public-domain misc-misc fonts, not from a TRS-80 character ROM.
 
 ### The emulator

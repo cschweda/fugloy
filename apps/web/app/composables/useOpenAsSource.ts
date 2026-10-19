@@ -1,11 +1,12 @@
-// Open as source ✎ (plan 5B, Task 5), from the Program tab or Export ▾: the open program becomes a
-// new source (useSources.fromSession) and the page shows it in Source ✎ (it watches `requests`).
+// Open as source ✎ (plan 5B, Task 5), from the Program tab or Export ▾ (the workbench page loads
+// this on first use; utils/open-as-source holds what the top bar needs): the open program becomes a new source (useSources.fromSession) and the page shows it in Source ✎ (it watches `requests`).
 // Then, off the first screen, asm checks that the text assembles back to the program; when it does
 // not, `note` holds one sentence for Source ✎ to show above that source. The disassembly stays open:
 // a Run of the new source never replaces it (Ruling 10).
 import { ref } from 'vue';
 import type { Ref } from 'vue';
 import type { Session } from '@fugloy/disasm';
+import { canOpenAsSource, openAsSourceRequests } from '../utils/open-as-source';
 import { useSources } from './useSources';
 import type { Source, Sources } from './useSources';
 
@@ -24,12 +25,14 @@ export interface OpenAsSourceDeps {
   sources?: Sources;
   /** The source text (tests); the zmac rendering otherwise, which is what the source gets. */
   render?: (s: Session) => string;
+  /** The count to bump on each open; the page's (utils/open-as-source) for the shared opener. */
+  requests?: Ref<number>;
 }
 
 export function createOpenAsSource(deps: OpenAsSourceDeps = {}): OpenAsSource {
-  const requests = ref(0);
+  const requests = deps.requests ?? ref(0);
   const note = ref<{ sourceId: string; text: string } | null>(null);
-  const can = (s: Session): boolean => s.module.format !== 'bas';
+  const can = canOpenAsSource;
 
   async function open(s: Session): Promise<Source> {
     if (!can(s)) throw new Error(`${s.name} is a BASIC program, so it has no Z80 source to open. Open a .CMD program instead.`);
@@ -54,6 +57,6 @@ let shared: OpenAsSource | null = null;
 
 /** The page's opener (one per app). */
 export function useOpenAsSource(): OpenAsSource {
-  shared ??= createOpenAsSource();
+  shared ??= createOpenAsSource({ requests: openAsSourceRequests });
   return shared;
 }

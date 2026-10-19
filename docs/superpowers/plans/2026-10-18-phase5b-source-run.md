@@ -87,7 +87,8 @@
    - The default is the Model III. A source opened from a disassembly takes `session.selection.machine`.
    - The Run tab's model select sets it. It goes to both `assemble(text, { model })` and `new Machine({ model })`, so ROM names and the machine agree.
    - The top bar's MachinePicker stays the listing's.
-8. **Run key: Ctrl+Enter / ⌘+Enter**, everywhere in the workbench, including inside the editor. It is a CM6 keymap entry plus a workbench binding with `anywhere: true`, which bypasses `isTyping`. Run doesn't move focus. While a program runs unfocused, the screen says "Click the screen to type to the TRS-80".
+8. **Run key: Ctrl+Enter / ⌘+Enter**, everywhere in the workbench, including inside the editor. It is a CM6 keymap entry plus a workbench binding with `anywhere: true`, which bypasses `isTyping`. Run doesn't move focus. While a program runs unfocused, the screen says "Click the screen to type to the TRS-80.".
+   - (Final review, findings 3–5.) A Run waits for its parts, then reads the current source again and runs that: what runs, and the line an error reveals, is the text on screen when it starts. Stop, Close and leaving the page cancel a Run still loading. Changing the model or the source stops a running program with a sentence.
 9. **Focus model.**
    - The screen is a `tabindex="0"` element with `role="application"` and an aria-label saying that keys go to the TRS-80 and Tab leaves.
    - It maps keys through the matrix's own browser mapping: `m.system.keyboard.keyDown(e.key, e.code)` and `keyUp(e.code)`. It calls `preventDefault` only for mapped keys.
@@ -216,7 +217,7 @@
 - [ ] Steps: write the failing tests:
   - **Running:**
     - Run with errors marks them, shows Source, reveals the first, and starts no Machine;
-    - Run of the starter with no ROM shows a blank canvas and "Running on Fugløy's stub ROM (no ROM needed for this program)";
+    - Run of the starter with no ROM shows a blank canvas and "Running on Fugløy's stub ROM (no ROM needed for this program).";
     - a ROM-calling program with no ROM shows the sentence and the listing, and runs nothing;
     - with a stored ROM, it runs from the booted snapshot;
     - dropping a ROM on the tab stores it;

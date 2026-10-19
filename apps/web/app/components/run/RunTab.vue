@@ -105,7 +105,7 @@ defineExpose({
         <option v-for="m in MODELS" :key="m" :value="m">{{ MODEL_NAMES[m] }}</option>
       </select>
       <button type="button" class="fg-button fg-button-primary" data-testid="run-run" :aria-busy="run.busy.value" :title="`Assemble and run (${runKey})`" @click="run.run()">Run ▶</button>
-      <button type="button" class="fg-button" data-testid="run-stop" :disabled="!running" @click="run.stop()">Stop</button>
+      <button type="button" class="fg-button" data-testid="run-stop" :disabled="!running && !run.busy.value" @click="run.stop()">Stop</button>
       <button type="button" class="fg-button" data-testid="run-show-listing" :disabled="!run.listable.value" @click="run.showInListing()">Show in Listing</button>
     </div>
     <p class="fg-run-message" :class="{ 'fg-run-problem': run.problem.value }" role="status" aria-live="polite" data-testid="run-message">

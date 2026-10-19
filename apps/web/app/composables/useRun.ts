@@ -3,14 +3,19 @@
 // refreshes its own listing quietly (Ruling 10); code in the ROM's space is refused on any ROM;
 // with no ROM stored a program that needs one is refused, and the rest run on the stub ROM. The
 // ROM-copy notes go to Source's list as warnings. The work itself (utils/emulator/run-once), asm,
-// emu and the ROM store load with the kit on the first Run, so this file is all the first screen
-// carries. `lastResult` and `runner` are kept for 5C.
-import { computed, ref, shallowRef } from 'vue';
+// emu and the ROM store load with the kit on the first Run; the page loads this file itself on
+// the first Run, so none of it is on the first screen. `lastResult` and `runner` are kept for 5C.
+//
+// A Run waits for its parts (the kit, the ROM store, the ROM's bytes). Stop, Close and leaving the
+// page cancel a Run still waiting: it never starts afterwards. After the wait it reads the current
+// source again and runs that, so what runs, and the line an error reveals, is the text on screen
+// when it starts, not when Run was pressed. Switching source or model stops a running program.
+import { computed, ref, shallowRef, watch } from 'vue';
 import type { ComputedRef, Ref, ShallowRef } from 'vue';
 import type { AsmResult, Diagnostic } from '@fugloy/asm';
 import { defaultDos } from '@fugloy/disasm';
+import type { SymbolSelection } from '@fugloy/disasm';
 import type { RunKit } from '../utils/emulator/kit';
-import { loadFailed } from '../utils/lazy';
 import type { Runner, RunnerOptions, RunnerState } from '../utils/emulator/runner';
 import type { Roms } from './useRoms';
 import { useSources } from './useSources';
@@ -20,6 +25,14 @@ import type { Workbench } from './useWorkbench';
 
 export type { RunKit };
 export const NO_SOURCE = 'There is no source to run. Open Source ✎ to write a program, then press Run.';
+export const STOPPED = 'Stopped. Press Run to start again.';
+/**
+ * utils/lazy's loadFailed('The emulator', 'Press Run again'), written out: importing utils/lazy
+ * from this lazy module would make the page's chunk export it, which costs the first screen.
+ */
+export const KIT_FAILED = 'The emulator could not be loaded: the connection may have dropped, or the site was updated since this page opened. Press Run again, or reload the page if that fails.';
+export const STOPPED_SOURCE = 'The program stopped because you switched to another source. Press Run to run this one.';
+export const STOPPED_MODEL = 'The program stopped because you changed the model. Press Run to run the source on this one.';
 
 /** What the last Run found, for Source's list: asm's diagnostics, and the ROM notes as warnings, for `text`. */
 export interface RunReport {
@@ -30,6 +43,7 @@ export interface RunReport {
 
 export interface Run {
   run(): Promise<void>;
+  /** Stops the program, or cancels a Run still loading its parts (Stop, Close, leaving the page). */
   stop(): void;
   runner: ShallowRef<Runner | null>;
   lastResult: ShallowRef<AsmResult | null>;
@@ -57,6 +71,19 @@ export interface RunDeps {
   kit?: () => Promise<RunKit>;
   /** The runner's clock, for the tests. */
   runner?: Pick<RunnerOptions, 'schedule' | 'cancel' | 'now'>;
+}
+
+/**
+ * Shows a Source ✎ program's .CMD in the listing (Ruling 10), quietly. Unless `force` (the Run
+ * tab's "Show in Listing"), only when no program is open or the open one is this source's own;
+ * returns whether it opened. Here, not in useWorkbench, so it loads with Run, off the first screen.
+ */
+export function openSourceListing(wb: Workbench, bytes: Uint8Array, name: string, opts: { sourceId: string; selection: SymbolSelection; force?: boolean }): boolean {
+  const own = wb.session.value === null || wb.origin.value?.sourceId === opts.sourceId;
+  if (!own && opts.force !== true) return false;
+  const opened = wb.openCount.value;
+  wb.openBytes(bytes, name, { selection: opts.selection, origin: 'source', sourceId: opts.sourceId, keepView: own });
+  return wb.openCount.value !== opened;
 }
 
 const cmdName = (name: string): string => `${name.replace(/\.[^.]*$/, '') || 'program'}.cmd`;
@@ -88,33 +115,51 @@ export function createRun(deps: RunDeps = {}): Run {
   function showListing(force: boolean): void {
     if (clean.value === null) return;
     const { source, bytes } = clean.value;
-    wb.openSource(bytes, cmdName(source.name), { sourceId: source.id, selection: { machine: source.model, dos: defaultDos(source.model) }, force });
+    openSourceListing(wb, bytes, cmdName(source.name), { sourceId: source.id, selection: { machine: source.model, dos: defaultDos(source.model) }, force });
   }
 
   function onStop(r: Runner): void {
     if (runner.value !== r) return;
     state.value = 'stopped';
     if (r.stopReason !== null) say(r.stopReason, true);
-    else if (!problem.value) say('Stopped. Press Run to start again.');
+    else if (!problem.value) say(STOPPED);
   }
 
-  async function go(): Promise<void> {
+  /** Bumped by every stop: a Run that began under an older one is cancelled. */
+  let generation = 0;
+
+  async function go(gen: number): Promise<void> {
+    const stale = (): boolean => gen !== generation;
     await sources.start();
-    const source = sources.current.value;
-    if (source === null) return say(NO_SOURCE, true);
+    if (stale()) return;
+    if (sources.current.value === null) return say(NO_SOURCE, true);
     let kit: RunKit;
     let roms: Roms;
     try {
       [kit, roms] = await Promise.all([loadKit(), deps.roms ?? import('./useRoms').then((m) => m.useRoms())]);
+      // The stored ROMs are read before asking which there are: a first Run before the Run tab was ever opened sees them too.
+      await roms.start();
     } catch {
-      return say(loadFailed('The emulator', 'Press Run again'), true);
+      if (stale()) return;
+      return say(KIT_FAILED, true);
+    }
+    if (stale()) return;
+    // Read after the wait, and again if it changed while the ROM was read: what runs is the source on screen now.
+    let source: Source;
+    let rom: Uint8Array | null;
+    for (;;) {
+      const now = sources.current.value;
+      if (now === null) return say(NO_SOURCE, true);
+      source = now;
+      rom = roms.have(source.model) ? await roms.bytes(source.model) : null;
+      if (stale()) return;
+      if (sources.current.value === source) break;
     }
     runner.value?.stop();
     runner.value = null;
     clean.value = null;
     state.value = 'idle';
     const { model, text } = source;
-    const rom = roms.have(model) ? await roms.bytes(model) : null;
     const out = kit.runOnce(kit, { text, model, rom, runner: { ...deps.runner, onFrame: frame, onStop } });
     lastResult.value = out.result;
     report.value = { text, diagnostics: out.diagnostics, notes: out.notes };
@@ -131,17 +176,38 @@ export function createRun(deps: RunDeps = {}): Run {
     frame(out.runner);
   }
 
+  /** Stops the running program with `why` in place of the usual sentence. */
+  function halt(why: string): void {
+    const r = runner.value;
+    if (r === null || r.state === 'stopped') return;
+    r.stop();
+    say(why);
+  }
+
+  // Switching source or model leaves nothing on screen that describes the running program: stop it, saying why.
+  watch(
+    [() => sources.current.value?.id, () => sources.current.value?.model],
+    ([id], [oldId]) => halt(id !== oldId ? STOPPED_SOURCE : STOPPED_MODEL),
+  );
+
   return {
     async run() {
       if (busy.value) return;
       busy.value = true;
+      const gen = generation;
       try {
-        await go();
+        await go(gen);
       } finally {
-        busy.value = false;
+        if (gen === generation) busy.value = false;
       }
     },
-    stop: () => runner.value?.stop(),
+    stop() {
+      generation++;
+      const loading = busy.value;
+      busy.value = false;
+      runner.value?.stop();
+      if (loading) say(STOPPED);
+    },
     runner,
     lastResult,
     message,

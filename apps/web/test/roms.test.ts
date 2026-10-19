@@ -68,10 +68,25 @@ describe('useRoms', () => {
     expect(!m1.ok && m1.reason).toMatch(/odd\.bin is 14,336 bytes, but a Model I ROM is 12,288 bytes/);
   });
 
+  it('hands every Run the same bytes for a model, read once, until the ROM is replaced or removed', async () => {
+    await createRoms({ open, hash }).add(file('a.rom', M3, 0x3800));
+    const r = createRoms({ open, hash });
+    await r.start();
+    const first = await r.bytes(3);
+    expect(first).not.toBeNull();
+    expect(await r.bytes(3)).toBe(first);
+    await r.add(file('b.rom', 'unknown', 0x3800), 3);
+    const replaced = await r.bytes(3);
+    expect(replaced).not.toBe(first);
+    expect(new TextDecoder().decode(replaced!.subarray(0, 7))).toBe('unknown');
+    await r.remove(3);
+    expect(await r.bytes(3)).toBeNull();
+  });
+
   it('an unrecognised file of the right size needs a model, then is kept as not recognised', async () => {
     const r = createRoms({ open, hash });
     const ask = await r.add(file('mine.rom', 'unknown', 0x4000));
-    expect(!ask.ok && ask.reason).toMatch(/Fugløy does not recognise mine\.rom.*Which model/);
+    expect(!ask.ok && ask.reason).toMatch(/^Fugløy does not recognise mine\.rom, though its size suits the Model III or Model 4\. Choose its model in the Run tab’s Model select, then add the file again\.$/);
     expect(await r.add(file('mine.rom', 'unknown', 0x4000), 4)).toEqual({ ok: true, model: 4 });
     expect(r.info(4)).toEqual({ name: 'mine.rom', sha256: 'unknown', recognized: null });
   });
@@ -81,7 +96,7 @@ describe('useRoms', () => {
     expect(await r.add(file('mine.rom', 'unknown', 0x3000), undefined, 1)).toEqual({ ok: true, model: 1 });
     // The wrong size for the fallback: it still asks.
     const ask = await r.add(file('other.rom', 'unknown', 0x3800), undefined, 1);
-    expect(!ask.ok && ask.reason).toMatch(/Which model/);
+    expect(!ask.ok && ask.reason).toMatch(/Choose its model in the Run tab’s Model select/);
     // A recognised ROM goes to its own model whatever the fallback.
     expect(await r.add(file('model3.rom', M3, 0x3800), undefined, 1)).toEqual({ ok: true, model: 3 });
   });

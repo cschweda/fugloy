@@ -182,7 +182,7 @@ describe("the TRS-80 screen's keys", () => {
     expect(el.getAttribute('role')).toBe('application');
     expect(el.getAttribute('tabindex')).toBe('0');
     expect(el.getAttribute('aria-label')).toMatch(/keys you type go to the TRS-80; press Tab to leave/);
-    expect(el.textContent).toContain('Click the screen to type to the TRS-80');
+    expect(el.textContent).toContain('Click the screen to type to the TRS-80.');
     el.focus();
     await flushPromises();
     expect(el.textContent).not.toContain('Click the screen');

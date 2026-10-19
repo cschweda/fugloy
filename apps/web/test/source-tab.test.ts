@@ -209,6 +209,18 @@ describe('the Source toolbar', () => {
     useOpenAsSource().note.value = null;
   });
 
+  it("drops Open as source's reassembly note on the first edit to its source", async () => {
+    const { useOpenAsSource } = await import('../app/composables/useOpenAsSource');
+    const { w, view } = await open();
+    useOpenAsSource().note.value = { sourceId: sources.current.value!.id, text: 'This source assembles to different bytes, first at $7000.' };
+    await flushPromises();
+    expect(w.find('[data-testid="source-open-note"]').exists()).toBe(true);
+    typeAll(view(), `; edited\n${STARTER}`);
+    await flushPromises();
+    expect(w.find('[data-testid="source-open-note"]').exists()).toBe(false);
+    expect(useOpenAsSource().note.value).toBeNull();
+  });
+
   it('downloads the source as a .z file', async () => {
     const { w, view } = await open();
     typeAll(view(), '; mine\n');

@@ -5,6 +5,7 @@
 // they added, keyed by model. Nothing here leaves the machine. When IndexedDB is missing or refuses (a private
 // window), openStore() gives null and the workbench carries on without saving.
 import type { SymbolSelection } from '@fugloy/disasm';
+import type { Sources } from '../composables/useSources';
 
 export type Machine = SymbolSelection['machine'];
 export type Dos = SymbolSelection['dos'];
@@ -188,25 +189,11 @@ function make(db: IDBDatabase): Store {
       await done(tx);
     },
     manualIds: async () => (await wrap(t('manuals').objectStore('manuals').getAllKeys())).map(String),
-    allSources() {
-      // One cursor, so each key stays with its value.
-      return new Promise<StoredSource[]>((resolve, reject) => {
-        let req: IDBRequest<IDBCursorWithValue | null>;
-        try {
-          req = t('sources').objectStore('sources').openCursor();
-        } catch (err) {
-          reject(err);
-          return;
-        }
-        const out: StoredSource[] = [];
-        req.onsuccess = () => {
-          const c = req.result;
-          if (c === null) return resolve(out);
-          if (c.key !== CURRENT) out.push(c.value as StoredSource);
-          c.continue();
-        };
-        req.onerror = () => reject(req.error ?? new Error('IndexedDB request failed'));
-      });
+    async allSources() {
+      // Keys and values in one transaction, in the same order; the current source's id is kept under its own key.
+      const os = t('sources').objectStore('sources');
+      const [keys, values] = await Promise.all([wrap(os.getAllKeys()), wrap<StoredSource[]>(os.getAll())]);
+      return values.filter((_, i) => keys[i] !== CURRENT);
     },
     putSource: (source) => put('sources', { id: source.id, name: source.name, text: source.text, model: source.model, savedAt: source.savedAt } satisfies StoredSource, source.id),
     deleteSource: (id) => del('sources', id),
@@ -294,3 +281,14 @@ export function requestPersistence(): Promise<boolean> {
   })();
   return asked;
 }
+
+/**
+ * The Source tab's sources once loaded (composables/useSources sets this; they load on first use,
+ * off the first screen). The layout's flush on leave and a backup reach them through
+ * `loadedSources`; before they load nothing can be unsaved, so there is nothing to reach. It lives
+ * here because both sides already import this module, so it costs the first screen no file.
+ */
+export const sourcesSlot: { value: Sources | null } = { value: null };
+
+/** The page's sources if they are loaded, without loading them. */
+export const loadedSources = (): Sources | null => sourcesSlot.value;

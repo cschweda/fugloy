@@ -126,6 +126,9 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
     expect(about).toMatch(/never bundled, fetched, committed, or put in a backup/);
     expect(about).toMatch(/stub ROM/);
     expect(about).toMatch(/holds no Tandy code/);
+    // Only calls and jumps into the ROM are caught; a read through a pointer is not (the plan's stated gap).
+    expect(about).toMatch(/calls or jumps into the ROM is stopped/);
+    expect(about).not.toMatch(/reaches into the ROM/);
     expect(about).toMatch(/CodeMirror[^.]*MIT/);
   });
 

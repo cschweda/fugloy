@@ -86,7 +86,7 @@ defineExpose({
     @mousedown="box?.focus()"
   >
     <canvas ref="canvas" class="fg-trs-canvas" width="384" height="192" data-testid="trs-canvas" />
-    <p v-if="running && !focused" class="fg-trs-hint" aria-hidden="true">Click the screen to type to the TRS-80</p>
+    <p v-if="running && !focused" class="fg-trs-hint" aria-hidden="true">Click the screen to type to the TRS-80.</p>
   </div>
 </template>
 

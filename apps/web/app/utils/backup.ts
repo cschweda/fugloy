@@ -3,7 +3,7 @@
 // written in the Source tab), to carry between machines. Never manuals, ROMs or
 // programs. The logic lives here so the top bar menu and the
 // Manuals page share it.
-import { parseHints } from '@fugloy/disasm';
+import type { parseHints } from '@fugloy/disasm';
 import { freeName, newSourceId } from './source-names';
 import type { Prefs, Store, StoredSource } from './store';
 
@@ -39,7 +39,9 @@ export async function makeBackup(store: Store): Promise<string> {
   return `${JSON.stringify(backup, null, 2)}\n`;
 }
 
-export class BackupError extends Error {}
+export class BackupError extends Error {
+  override name = 'BackupError';
+}
 
 const isPrefs = (v: unknown): v is Prefs => typeof v === 'object' && v !== null && 'machine' in v && 'dos' in v && typeof (v as Prefs).dos === 'string';
 
@@ -105,13 +107,15 @@ async function restoreSources(store: Store, sources: readonly StoredSource[]): P
  * is replaced only if `confirm` (given the program's name) says yes; identical work is skipped.
  * A program counts once: rejected, else declined, else replaced, else added, else skipped.
  * Hint text that does not parse is never stored: it is listed in `rejected` and the rest restores.
+ * `parse` is disasm's parseHints, passed in: the caller has it loaded already, and this module,
+ * loaded on first use, then carries no part of the disassembler (plan 5B's first-screen budget).
  */
-export async function restoreBackup(store: Store, json: string, confirm: (name: string) => Promise<boolean>): Promise<RestoreResult> {
+export async function restoreBackup(store: Store, json: string, confirm: (name: string) => Promise<boolean>, parse: typeof parseHints): Promise<RestoreResult> {
   const backup = parseBackup(json);
   const result: RestoreResult = { added: 0, replaced: 0, skipped: 0, rejected: [] };
   for (const p of backup.programs) {
     if (p.hints !== undefined) {
-      const bad = parseHints(p.hints).errors[0];
+      const bad = parse(p.hints).errors[0];
       if (bad !== undefined) {
         result.rejected.push({ name: p.name, reason: `line ${bad.line}: ${bad.message}` });
         continue;

@@ -17,12 +17,12 @@ vi.mock('../app/composables/usePersistence', () => ({
     refresh: async () => void order.push('refresh'),
   }),
 }));
-vi.mock('../app/composables/useSources', () => ({
-  useSources: () => ({
-    flush: async () => void order.push('flush sources'),
-    refresh: async () => void order.push('refresh sources'),
-  }),
-}));
+// The sources are loaded (the Source tab was opened); the last test unloads them.
+let loaded: { flush(): Promise<void>; refresh(): Promise<void> } | null = {
+  flush: async () => void order.push('flush sources'),
+  refresh: async () => void order.push('refresh sources'),
+};
+vi.mock('../app/utils/store', async (orig) => ({ ...(await orig<typeof import('../app/utils/store')>()), loadedSources: () => loaded }));
 const { useBackup } = await import('../app/composables/useBackup');
 
 describe('useBackup restore', () => {
@@ -48,5 +48,22 @@ describe('useBackup restore', () => {
     await b.restore({ text: async () => json } as File);
     expect(order).toEqual(['flush', 'flush sources', 'write a source', 'refresh', 'refresh sources']);
     expect(b.message.value).toBe('Restored: 0 added, 0 replaced, 0 left as they were. Sources: 1 added, 0 already here.');
+  });
+
+  it('with the sources never loaded, restores them to the store without loading them', async () => {
+    order.length = 0;
+    loaded = null;
+    const json = JSON.stringify({ fugloyBackup: 1, exportedAt: '', programs: [], sources: [{ id: 's2', name: 'b.z', text: ' NOP\n', model: 3, savedAt: 1 }] });
+    const b = useBackup();
+    await b.restore({ text: async () => json } as File);
+    expect(order).toEqual(['flush', 'write a source', 'refresh']);
+    expect(b.message.value).toBe('Restored: 0 added, 0 replaced, 0 left as they were. Sources: 1 added, 0 already here.');
+  });
+
+  it('says a damaged backup is damaged, though utils/backup loads only on the press', async () => {
+    const b = useBackup();
+    await b.restore({ text: async () => JSON.stringify({ fugloyBackup: 1, exportedAt: '', programs: [], sources: [{ id: 1 }] }) } as File);
+    expect(b.message.value).toMatch(/source entry is malformed/);
+    expect(b.message.value).not.toMatch(/could not be restored/);
   });
 });

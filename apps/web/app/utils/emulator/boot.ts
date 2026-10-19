@@ -20,8 +20,15 @@ export class SentenceError extends Error {
   override name = 'SentenceError';
 }
 
-const snapshots = new Map<string, Snapshot>();
-/** Each ROM array's SHA-256, so a Run with the same bytes does not hash them again. */
+/**
+ * The booted snapshots: one for each model's stub and one for the ROM last run on each model, with
+ * that ROM's SHA-256. A replaced ROM's snapshot is dropped when the new one boots.
+ */
+const snapshots = new Map<string, { hash: string; snap: Snapshot }>();
+/**
+ * Each ROM array's SHA-256, so a Run with the same array does not hash it again. useRoms hands every
+ * Run the same array for a model, and stubRom the same array for its model, so this hits.
+ */
 const hashes = new WeakMap<Uint8Array, string>();
 
 function hashOf(rom: Uint8Array): string {
@@ -62,28 +69,36 @@ function bootToReady(m: Machine, model: Model): void {
 
 /** The machine just booted from `rom`: at READY for a real ROM, halted with a blank screen for the stub. Cached by model and the ROM's SHA-256. */
 export function bootedSnapshot(model: Model, rom: Uint8Array): Snapshot {
-  const key = `${model}:${hashOf(rom)}`;
+  const stub = isStub(model, rom);
+  const key = `${model}:${stub ? 'stub' : 'rom'}`;
+  const hash = hashOf(rom);
   const hit = snapshots.get(key);
-  if (hit !== undefined) return hit;
+  if (hit !== undefined && hit.hash === hash) return hit.snap;
   const m = new Machine({ model, roms: { level2: rom } });
-  if (isStub(model, rom)) {
+  if (stub) {
     const r = m.run({ until: 'halt', cycles: m.clockHz });
     if (r.reason !== 'halt') throw new SentenceError("Fugløy's stand-in ROM did not finish starting. Reload the page and run the program again.");
   } else bootToReady(m, model);
   const snap = m.debug.snapshot();
-  snapshots.set(key, snap);
+  snapshots.set(key, { hash, snap });
   return snap;
+}
+
+/** How many booted snapshots are kept (tests). */
+export function snapshotCount(): number {
+  return snapshots.size;
 }
 
 /**
  * A new machine for one Run: booted (from the cached snapshot), then `before` (a test's hook), then
- * the program's .CMD loaded, which leaves PC at its entry.
+ * the program's .CMD loaded, which leaves PC at its entry. `cmd` is that .CMD when the caller has
+ * already written it (a Run has, for the listing); otherwise it is written from `result`.
  */
-export function prepareMachine(opts: { model: Model; rom: Uint8Array; result: AsmResult; before?: ((m: Machine) => void) | undefined }): Machine {
+export function prepareMachine(opts: { model: Model; rom: Uint8Array; result: AsmResult; cmd?: Uint8Array; before?: ((m: Machine) => void) | undefined }): Machine {
   const snap = bootedSnapshot(opts.model, opts.rom);
   const m = new Machine({ model: opts.model, roms: { level2: opts.rom } });
   m.debug.restore(snap);
   opts.before?.(m);
-  m.load.cmd(toCmd(opts.result));
+  m.load.cmd(opts.cmd ?? toCmd(opts.result));
   return m;
 }

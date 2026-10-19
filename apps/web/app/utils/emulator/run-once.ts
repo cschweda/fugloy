@@ -9,7 +9,7 @@ import type { Model } from '@fugloy/emu';
 import type { RunKit } from './kit';
 import type { Runner, RunnerOptions } from './runner';
 
-export const STUB_RUNNING = "Running on Fugløy's stub ROM (no ROM needed for this program)";
+export const STUB_RUNNING = "Running on Fugløy's stub ROM (no ROM needed for this program).";
 
 export interface RunInput {
   text: string;
@@ -58,7 +58,7 @@ export function runOnce(kit: RunKit, input: RunInput): RunOutcome {
   const refused = kit.romSpaceCode(result, model) ?? (rom === null ? kit.romUse(result, model) : null);
   if (refused !== null) return { ...base, notes, bytes, message: refused.text };
   try {
-    const machine = kit.prepareMachine({ model, rom: rom ?? kit.stubRom(model), result });
+    const machine = kit.prepareMachine({ model, rom: rom ?? kit.stubRom(model), result, cmd: bytes });
     const runner = kit.createRunner({ ...input.runner, machine, result, stub: rom === null });
     return { ...base, notes, bytes, runner, problem: false, message: rom === null ? STUB_RUNNING : `Running on your ${kit.MODEL_NAMES[model]} ROM.` };
   } catch (err) {

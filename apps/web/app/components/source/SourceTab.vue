@@ -86,6 +86,8 @@ function scheduleCheck(): void {
 function onText(text: string): void {
   const src = current.value;
   if (src === null) return;
+  // The reassembly note describes the text as it was opened: the first edit makes it stale.
+  if (opened.note.value?.sourceId === src.id) opened.note.value = null;
   sources.update(src.id, { text });
   scheduleCheck();
 }

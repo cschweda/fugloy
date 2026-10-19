@@ -15,5 +15,5 @@
       "@fugloy/asm": ["../../packages/asm/src/index.ts"]
     }
   },
-  "include": ["test/**/*.ts", "app/types/**/*.d.ts", "scripts/**/*.ts", "vitest.config.ts", "aliases.ts", "lazy-chunks.ts", "playwright.config.ts"]
+  "include": ["test/**/*.ts", "app/types/**/*.d.ts", "scripts/**/*.ts", "vitest.config.ts", "aliases.ts", "lazy-chunks.ts", "preload-deps.ts", "playwright.config.ts"]
 }

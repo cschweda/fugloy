@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { formatRow } from '@fugloy/disasm';
 import { createWorkbench, emptyMessage, notAProgramMessage, tooBigForRawMessage } from '../app/composables/useWorkbench';
+import { openSourceListing } from '../app/composables/useRun';
 
 const examplesDir = (path: string): string => fileURLToPath(new URL(`../../../examples/${path}`, import.meta.url));
 /** The composable's file reader, over the repo's examples/ instead of fetch. */
@@ -184,18 +185,18 @@ describe('useWorkbench', () => {
 
     it('opens with no program open, then refreshes its own listing quietly, keeping the cursor where its address still exists', () => {
       const wb = createWorkbench({ readExample });
-      expect(wb.openSource(cmd(), 'mine.cmd', { sourceId: 's-1', selection: sel })).toBe(true);
+      expect(openSourceListing(wb, cmd(), 'mine.cmd', { sourceId: 's-1', selection: sel })).toBe(true);
       expect(wb.origin.value).toEqual({ kind: 'source', sourceId: 's-1' });
       expect(wb.keptView.value).toBe(true);
       wb.cursor.value = 0x7002;
       const [opens, key] = [wb.openCount.value, wb.viewKey.value];
-      expect(wb.openSource(cmd(1), 'mine.cmd', { sourceId: 's-1', selection: sel })).toBe(true);
+      expect(openSourceListing(wb, cmd(1), 'mine.cmd', { sourceId: 's-1', selection: sel })).toBe(true);
       expect(wb.cursor.value).toBe(0x7002);
       // Swapped in place: the listing keeps its key (and its focus), while history and saved state start over.
       expect(wb.viewKey.value).toBe(key);
       expect(wb.openCount.value).toBe(opens + 1);
       // Another source's Run does not replace this one's listing.
-      expect(wb.openSource(cmd(), 'other.cmd', { sourceId: 's-2', selection: sel })).toBe(false);
+      expect(openSourceListing(wb, cmd(), 'other.cmd', { sourceId: 's-2', selection: sel })).toBe(false);
       expect(wb.session.value?.name).toBe('mine.cmd');
     });
 
@@ -204,11 +205,11 @@ describe('useWorkbench', () => {
       await wb.openExample('sea-dragon');
       expect(wb.origin.value).toBeNull();
       const count = wb.openCount.value;
-      expect(wb.openSource(cmd(), 'mine.cmd', { sourceId: 's-1', selection: sel })).toBe(false);
+      expect(openSourceListing(wb, cmd(), 'mine.cmd', { sourceId: 's-1', selection: sel })).toBe(false);
       expect(wb.session.value?.name).toBe('seadrg01.cmd');
       expect(wb.openCount.value).toBe(count);
       const key = wb.viewKey.value;
-      expect(wb.openSource(cmd(), 'mine.cmd', { sourceId: 's-1', selection: sel, force: true })).toBe(true);
+      expect(openSourceListing(wb, cmd(), 'mine.cmd', { sourceId: 's-1', selection: sel, force: true })).toBe(true);
       expect(wb.session.value?.name).toBe('mine.cmd');
       expect(wb.viewKey.value).toBe(key + 1);
       expect(wb.keptView.value).toBe(false);
@@ -221,7 +222,7 @@ describe('useWorkbench', () => {
     it('close leaves the writing mode too', () => {
       const wb = createWorkbench({ readExample });
       wb.writing.value = true;
-      wb.openSource(cmd(), 'mine.cmd', { sourceId: 's-1', selection: sel });
+      openSourceListing(wb, cmd(), 'mine.cmd', { sourceId: 's-1', selection: sel });
       wb.close();
       expect(wb.writing.value).toBe(false);
       expect(wb.origin.value).toBeNull();

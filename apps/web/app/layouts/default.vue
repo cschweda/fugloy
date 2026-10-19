@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import MachinePicker from '~/components/MachinePicker.vue';
 import { flushOnLeave } from '~/composables/usePersistence';
-import { useSources } from '~/composables/useSources';
+import { loadedSources } from '~/utils/store';
 
 const route = useRoute();
 const wb = useWorkbench();
@@ -16,14 +16,13 @@ function stopFileDrop(e: DragEvent): void {
   if (hasFiles(e)) e.preventDefault();
 }
 const persistence = usePersistence();
-const sources = useSources();
 let stopFlushing: (() => void) | null = null;
 onMounted(() => {
   void persistence.start();
-  // Hints and settings, and the Source tab's sources (each waits 500 ms after typing before it saves).
+  // Hints and settings, and the Source tab's sources once loaded (each waits 500 ms after typing before it saves).
   stopFlushing = flushOnLeave(window, document, () => {
     void persistence.flush();
-    void sources.flush();
+    void loadedSources()?.flush();
   });
   document.addEventListener('dragover', stopFileDrop);
   document.addEventListener('drop', stopFileDrop);

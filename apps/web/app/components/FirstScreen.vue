@@ -3,18 +3,27 @@
 // binary), and beside it one-click buttons for the four public-domain games.
 // The format is detected from the bytes, never the file name. A drop anywhere
 // on the page is handled by the page (index.vue); the zone only highlights.
-import { computed, onMounted, ref } from 'vue';
+import { onMounted, ref, shallowRef } from 'vue';
 import { EXAMPLES } from '~/data/examples';
+import { loadSources } from '~/utils/load-sources';
 import type { Example } from '~/data/examples';
 import OpenProblem from '~/components/OpenProblem.vue';
 
 defineProps<{ reading: boolean }>();
 const emit = defineEmits<{ file: [file: File]; write: [id?: string] }>();
 const wb = useWorkbench();
-// Write your own (plan 5B, Ruling 12): a new program, or the one you were writing.
-const sources = useSources();
-const last = computed(() => sources.current.value ?? sources.list.value[0] ?? null);
-onMounted(() => void sources.start());
+// Write your own (plan 5B, Ruling 12): a new program, or the one you were writing. The sources
+// load after the first screen shows, so "Continue" appears a moment later when there is one.
+const last = shallowRef<{ id: string; name: string } | null>(null);
+// Without them there is nothing to continue; "Write a program" says why if it cannot load them either.
+onMounted(() =>
+  loadSources()
+    .then(async (sources) => {
+      await sources.start();
+      last.value = sources.current.value ?? sources.list.value[0] ?? null;
+    })
+    .catch(() => {}),
+);
 /** dragenter/dragleave fire for every child crossed; count them so the highlight does not flicker. */
 const depth = ref(0);
 const picker = ref<HTMLInputElement | null>(null);

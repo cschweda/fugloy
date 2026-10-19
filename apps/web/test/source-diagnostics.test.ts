@@ -32,12 +32,13 @@ describe('asm diagnostics as CodeMirror ranges', () => {
 
   it('counts columns in UTF-16 code units, as asm does, and never splits an astral character', () => {
     // asm's columns are string indices: after an astral character (two code units) they run one ahead of the characters seen.
+    // asm marks the whole character (both code units).
     const src = "\tORG\t7000H\n\tDB\t'\u{1F600}'\n";
     const asmDiag = assemble(src).diagnostics[0]!;
-    expect({ line: asmDiag.line, column: asmDiag.column, endColumn: asmDiag.endColumn }).toEqual({ line: 2, column: 6, endColumn: 7 });
+    expect({ line: asmDiag.line, column: asmDiag.column, endColumn: asmDiag.endColumn }).toEqual({ line: 2, column: 6, endColumn: 8 });
     const doc = EditorState.create({ doc: src }).doc;
     const r = columnsToRange(doc, asmDiag);
-    // asm names only the high surrogate; the mark takes the whole character.
+    expect(asmDiag.message).toContain('\u{1F600}');
     expect(doc.sliceString(r.from, r.to)).toBe('\u{1F600}');
     const line = EditorState.create({ doc: "\tDB '\u{1F600}',ZZZ" }).doc;
     const z = columnsToRange(line, { line: 1, column: 10, endColumn: 13 });

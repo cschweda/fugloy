@@ -75,6 +75,8 @@ export function createRoms(deps: RomsDeps = {}): Roms {
   const blocked = ref(false);
   /** What is stored, without the bytes, by model. */
   const stored = ref<Partial<Record<ModelId, RomInfo>>>({});
+  /** Each model's bytes once read: every Run gets the same array, so the boot cache knows it by identity without hashing it again. */
+  const loaded = new Map<ModelId, Uint8Array>();
   let starting: Promise<Store | null> | null = null;
 
   function start(): Promise<Store | null> {
@@ -123,7 +125,7 @@ export function createRoms(deps: RomsDeps = {}): Roms {
       if (model === undefined) {
         const fits = ([1, 3, 4] as const).filter((m) => ROM_SIZES[m].includes(size));
         if (fits.length === 0) return { ok: false, reason: wrongSize(file.name, size, ROM_SIZES) };
-        return { ok: false, reason: `Fugløy does not recognise ${file.name}, though its size suits the ${fits.map((m) => MODEL_NAMES[m]).join(' or ')}. Which model is it for?` };
+        return { ok: false, reason: `Fugløy does not recognise ${file.name}, though its size suits the ${fits.map((m) => MODEL_NAMES[m]).join(' or ')}. Choose its model in the Run tab’s Model select, then add the file again.` };
       }
       if (!ROM_SIZES[model].includes(size)) {
         return { ok: false, reason: `${file.name} is ${n(size)} bytes, but a ${MODEL_NAMES[model]} ROM is ${bytesText(ROM_SIZES[model])}. Pick the ${MODEL_NAMES[model]}’s ROM image.` };
@@ -139,6 +141,7 @@ export function createRoms(deps: RomsDeps = {}): Roms {
       return { ok: false, reason: storeError(err, 'add') };
     }
     void requestPersistence();
+    loaded.set(target, bytes);
     stored.value = { ...stored.value, [target]: { name: record.name, sha256: record.sha256, recognized: record.recognized } };
     return { ok: true, model: target };
   }
@@ -152,14 +155,19 @@ export function createRoms(deps: RomsDeps = {}): Roms {
         throw new Error(storeError(err, 'remove'));
       }
     }
+    loaded.delete(model);
     const { [model]: _gone, ...rest } = stored.value;
     stored.value = rest;
   }
 
   async function bytes(model: ModelId): Promise<Uint8Array | null> {
+    const have = loaded.get(model);
+    if (have !== undefined) return have;
     const s = await start();
     if (s === null) return null;
-    return (await s.getRom(model))?.bytes ?? null;
+    const b = (await s.getRom(model))?.bytes ?? null;
+    if (b !== null && stored.value[model] !== undefined) loaded.set(model, b);
+    return b;
   }
 
   return {

@@ -85,12 +85,6 @@ export interface Workbench {
   keptView: Ref<boolean>;
   /** The workbench is open on Source ✎ and Run ▶ with no program (Ruling 12: "Write a program", "Continue"). */
   writing: Ref<boolean>;
-  /**
-   * Shows a Source ✎ program's .CMD in the listing, quietly. Unless `force` (the Run tab's
-   * "Show in Listing"), only when no program is open or the open one is this source's own;
-   * returns whether it opened.
-   */
-  openSource(bytes: Uint8Array, name: string, opts: { sourceId: string; selection: SymbolSelection; force?: boolean }): boolean;
   openBytes(bytes: Uint8Array, name: string, opts?: OpenOpts): void;
   openRaw(base: number): void;
   /** Ignored while an example is loading. */
@@ -201,16 +195,6 @@ export function createWorkbench(deps: { readExample: ExampleReader }): Workbench
     if (s !== null) commit(s, null, opts);
   }
 
-  function openSource(bytes: Uint8Array, name: string, opts: { sourceId: string; selection: SymbolSelection; force?: boolean }): boolean {
-    const o = origin.value;
-    const own = session.value === null || (o !== null && o.sourceId === opts.sourceId);
-    if (!own && opts.force !== true) return false;
-    const s = open(bytes, name, { selection: opts.selection });
-    if (s === null) return false;
-    commit(s, null, { origin: 'source', sourceId: opts.sourceId, keepView: own });
-    return true;
-  }
-
   function openRaw(base: number): void {
     const c = rawCandidate.value;
     if (c === null) return;
@@ -283,7 +267,7 @@ export function createWorkbench(deps: { readExample: ExampleReader }): Workbench
     viewKey.value++;
   }
 
-  return { session, rows, facts, example, cursor, selection, symbolFocus, error, errorDetails, rawCandidate, suggestManuals, openCount, viewKey, busy, origin, keptView, writing, openSource, openBytes, openRaw, openExample, report, wouldReplace, setSelection, close };
+  return { session, rows, facts, example, cursor, selection, symbolFocus, error, errorDetails, rawCandidate, suggestManuals, openCount, viewKey, busy, origin, keptView, writing, openBytes, openRaw, openExample, report, wouldReplace, setSelection, close };
 }
 
 let shared: Workbench | null = null;

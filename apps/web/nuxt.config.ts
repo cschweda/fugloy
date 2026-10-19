@@ -3,6 +3,9 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fugloyAliases } from './aliases';
 import { unflagLazy } from './lazy-chunks';
+import { preloadDeps } from './preload-deps';
+
+const preload = preloadDeps();
 
 // pdf.js's decoders (JBIG2 and JPEG 2000 in wasm, which archive.org scans use),
 // standard fonts, CMaps and ICC profiles, served from the site's own assets at
@@ -43,7 +46,12 @@ export default defineNuxtConfig({
   alias: fugloyAliases,
   // The Playwright checks' window.__fugloyTest hook (pages/index.vue) is compiled in only when
   // NUXT_PUBLIC_E2E=1, which only playwright.config's web server sets; the site never ships it.
-  vite: { define: { __FUGLOY_E2E__: JSON.stringify(process.env.NUXT_PUBLIC_E2E === '1') } },
+  vite: {
+    define: { __FUGLOY_E2E__: JSON.stringify(process.env.NUXT_PUBLIC_E2E === '1') },
+    // A dynamic import's preload list leaves out what its importer has already loaded (preload-deps.ts).
+    plugins: [preload.plugin],
+    build: { modulePreload: { resolveDependencies: preload.resolveDependencies } },
+  },
   app: {
     head: {
       htmlAttrs: { lang: 'en' },

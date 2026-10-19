@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createEditing } from '../app/composables/useEditing';
 import { createPersistence, SAVE_DELAY_MS } from '../app/composables/usePersistence';
 import { createWorkbench } from '../app/composables/useWorkbench';
-import { writeHints } from '@fugloy/disasm';
+import { parseHints, writeHints } from '@fugloy/disasm';
 import { restoreBackup } from '../app/utils/backup';
 import { openStore, openStoreDetailed, StoreClosedError } from '../app/utils/store';
 import type { Store } from '../app/utils/store';
@@ -261,7 +261,7 @@ describe('saved hints that no longer apply', () => {
     await sleep(100);
     const bad = `${writeHints(s.hintFile)}block 1:$0000 relocate $8100 $0100\n`;
     const json = JSON.stringify({ fugloyBackup: 1, exportedAt: '', programs: [{ hash: s.hash, name: 'mine.hints', hints: bad }] });
-    expect((await restoreBackup(opened!, json, async () => true)).added).toBe(1);
+    expect((await restoreBackup(opened!, json, async () => true, parseHints)).added).toBe(1);
     await a.p.refresh();
     await sleep(SAVE_DELAY_MS + 150);
     expect((await opened!.getHints(s.hash))!.text).toBe(bad);

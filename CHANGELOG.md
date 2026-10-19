@@ -123,6 +123,10 @@ Core, `@fugloy/asm` (new package; runtime dependencies `@fugloy/z80` and
     editor's one-click fix: the rewrites above, `JP (nn)`, the
     parentheses-only-group warning, `FFH`, `$FFH`, `%1010`, `0b101`, `MOV`,
     and an instruction in column 1.
+  - A string is read by whole code points: a character outside the BMP (an
+    emoji, two UTF-16 units) is named whole in "This string holds 😀, which
+    is not plain ASCII", and the mark spans both units; so does "has no
+    meaning here" outside a string.
 - **Shifts.** `>>` and `SHR` are logical shifts on 32 bits, as in zmac
   (`-1>>31` is 1), and a shift count outside 0 to 31 is an error (zmac's
   result there is C's undefined behaviour). The other operators were probed
@@ -284,14 +288,12 @@ Fugløy's stub ROM; a disassembly opens as such a source:
   tab, and Esc then Tab leaves the editor. The workbench's keys (G, N, ;,
   Ctrl+Z...) never fire inside the Source panel, which is marked
   `data-own-keys`, a rule any panel can opt into. Sources are flushed on
-  leave with the hints. The tab, CodeMirror and asm load in one lazy chunk
-  when the tab first opens (120.4 KB gzip, 373 KB raw, plus 0.6 KB of CSS),
-  with a loading line, and a sentence and Retry if the chunk cannot be
+  leave with the hints. The tab, CodeMirror and asm load when the tab first
+  opens, with a loading line, and a sentence and Retry if a chunk cannot be
   fetched. The build prefetches nothing a lazy root (`apps/web/lazy-chunks.ts`)
   reaches, and `pnpm --filter @fugloy/web check:prefetch` checks every
-  generated page for it. The first screen's JavaScript grew by 1.5 KB gzip
-  (250,399 to 251,976 bytes: the module script, its modulepreloads and
-  their static imports).
+  generated page for it. Open as source's reassembly note goes away at the
+  first edit to that source, since it describes the text as it was opened.
 - **Run ▶** is live: one press (the Run button, or Ctrl+Enter / ⌘+Enter
   anywhere in the workbench, the editor and the TRS-80 screen included)
   assembles the current source and runs it on a fresh `@fugloy/emu`
@@ -303,25 +305,20 @@ Fugløy's stub ROM; a disassembly opens as such a source:
   refused on any ROM; with no ROM stored, a program that needs one is
   refused with a sentence naming its line, and every other program runs on
   Fugløy's stub ROM ("Running on Fugløy's stub ROM (no ROM needed for this
-  program)"). The ROM-copy notes join Source's list as warnings. A ROM is
+  program)."). The ROM-copy notes join Source's list as warnings. A ROM is
   added from a file or dropped on the tab (an unrecognised one of the right
   size goes to the tab's model) and kept in this browser only, never in a
   backup, never uploaded; the About page says so. The screen is a canvas
   (768x576, or 640x480 for 80x24, pixelated), the only element whose keys
   reach the TRS-80; Tab leaves it, blur releases every key, and while a
-  program runs unfocused it says "Click the screen to type to the TRS-80".
+  program runs unfocused it says "Click the screen to type to the TRS-80.".
   The tab's model select sets the source's model. The first screen gains
   **Write a program** and **Continue <name>**, and the workbench opens on
   Source ✎ and Run ▶ with no program; the listing-bound tabs then say "Run
-  the source to see its listing here." Sizes (gzip): the Run tab 4.6 KB
-  plus 0.6 KB of CSS and a 1.7 KB screen chunk, emu 36.5 KB, all fetched
-  when the tab first opens; the first Run adds the kit (5.5 KB) and asm
-  (16.2 KB, now its own chunk shared with Source ✎, whose chunk is 104.5
-  KB). The first screen's JavaScript is 254,075 bytes, +3,676 over the
-  250,399-byte baseline before 5B (+2,099 in this step), within the 5 KB
-  budget. The Run tab is handed its Run and sources by the page so its chunk
-  imports none of the first screen's modules, which otherwise split the
-  shared chunks into smaller pieces that compress worse. The prefetch rule
+  the source to see its listing here." The Run tab is handed its Run and
+  sources by the page so its chunk imports none of the first screen's
+  modules, which otherwise split the shared chunks into smaller pieces that
+  compress worse. The prefetch rule
   (`lazy-chunks.ts`) now covers `components/run/` and `utils/emulator/`, and
   never walks into a page or layout: the Run tab imports the page's chunk,
   and the page's own preload must stay (`check:prefetch` checks it). CI runs
@@ -332,6 +329,22 @@ Fugløy's stub ROM; a disassembly opens as such a source:
   page (the Run tab says so). The quiet refresh swaps the program into the
   open listing in place, so focus and Explain stay put; Ctrl/⌘+Enter inside
   the listing's inline editor, notes or row menu runs nothing.
+  A Run waits for its parts (the kit, the ROM store, the ROM's bytes), and
+  reads the stored ROMs itself, so the first Run of a visit, pressed in the
+  editor before the Run tab was ever opened, uses the ROM kept on an earlier
+  visit. Stop (enabled while a Run loads), Close and leaving the page cancel
+  a Run still loading: it never starts afterwards, and never reopens the
+  workbench. After the wait, Run reads the current source again and runs
+  that, so what runs, and the line an error reveals, is the text on screen
+  when it starts. Changing the model or switching source stops a running
+  program, saying why ("The program stopped because you changed the model.
+  Press Run to run the source on this one."). Each model's ROM bytes are
+  read once and handed to every Run as the same array, so the boot cache
+  knows it without hashing it again; the cache keeps one snapshot per
+  model's ROM, so a replaced ROM's is dropped, and a Run writes its `.CMD`
+  once. A file of a size two models take, dropped with a third model
+  selected, says "Choose its model in the Run tab’s Model select, then add
+  the file again."
 - **Open as source ✎**, in the Program tab (a Source section) and in Export
   ▾, turns the open disassembly into a new source and shows it in Source ✎,
   beside the listing. The source is the zmac text Export ▾ writes
@@ -364,18 +377,28 @@ Fugløy's stub ROM; a disassembly opens as such a source:
   terminal emulator font. Share and enjoy."), name the pinned release
   (font-misc-misc 1.1.3) and say that the Model III's special and katakana
   characters are not drawn, since their only source is the character ROM;
-  CodeMirror 6 is credited under the MIT License.
-- **Final sizes** (gzip level 9, measured on a plain `nuxt generate` of this
-  branch): the first screen's JavaScript (the module script, its
-  modulepreloads and their static imports, 16 files) is **254,707 bytes**,
-  +4,308 over the 250,399-byte baseline before 5B, within the 5 KB budget
-  (+567 in this last step, for the Open as source button, menu item and
-  opener). Lazy, fetched when Source ✎ first opens: the Source chunk
-  (CodeMirror and the tab) 104.5 KB plus 0.6 KB of CSS, and asm 16.1 KB.
-  When Run ▶ first opens: the Run tab and screen 4.7 KB plus 0.6 KB of CSS,
-  and emu 36.4 KB. On the first Run: the kit 5.6 KB. After Open as source:
-  the reassembly check 0.6 KB. Together, about 169 KB of JavaScript that a
-  visitor who only reads listings never downloads.
+  CodeMirror 6 is credited under the MIT License. A program that calls or
+  jumps into the ROM is stopped; one that only reads the ROM's bytes is not,
+  and the page says so.
+- **First-screen size.** The budget is +5,120 bytes gzip over main before
+  5B (a6b7831). Method: a plain `nuxt generate`, then the module script and
+  modulepreloads in the generated `index.html` and their static-import
+  closure, each file gzipped at level 9 and summed. Main is **247,655
+  bytes** (13 files); this branch is **252,232 bytes** (18 files), **+4,577**.
+  What keeps it there: Run (`useRun`), the sources (`useSources`), Open as
+  source's work (`useOpenAsSource`) and the backup code (`utils/backup`)
+  load on first use; only the workbench page imports them, by dynamic
+  import, so the top bar, on every page, carries no route to them, and the
+  layout reaches loaded sources through `utils/store`; the first screen's
+  "Continue" looks its source up after the page shows; `restoreBackup` is
+  handed disasm's `parseHints` rather than importing it; and a dynamic
+  import's preload list leaves out the files its importer has already loaded
+  (`apps/web/preload-deps.ts`; what is fetched, and when, is unchanged). A
+  lazy module that imports a small first-screen module splits the shared
+  chunks into pieces that compress worse, so the lazy modules avoid that.
+  Lazy, fetched when Source ✎ first opens: CodeMirror and the tab, with asm.
+  When Run ▶ first opens: the Run tab and screen, and emu. On the first Run:
+  the kit. After Open as source: the reassembly check.
 
 ### Testing
 

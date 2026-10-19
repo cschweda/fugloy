@@ -1,8 +1,12 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { BackupError, makeBackup, restoreBackup } from '../app/utils/backup';
+import { parseHints } from '@fugloy/disasm';
+import { BackupError, makeBackup, restoreBackup as restore } from '../app/utils/backup';
 import { openStore } from '../app/utils/store';
 import type { Store } from '../app/utils/store';
+
+/** restoreBackup with disasm's parseHints, as useBackup passes it. */
+const restoreBackup = (s: Store, json: string, confirm: (name: string) => Promise<boolean>) => restore(s, json, confirm, parseHints);
 
 const open: Store[] = [];
 const wipe = (): Promise<unknown> => new Promise((r) => (indexedDB.deleteDatabase('fugloy').onsuccess = r));

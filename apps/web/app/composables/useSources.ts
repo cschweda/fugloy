@@ -13,7 +13,7 @@ import { renderSession } from '@fugloy/disasm';
 import type { Session } from '@fugloy/disasm';
 import { stemOf } from '../utils/exports';
 import { freeName, newSourceId } from '../utils/source-names';
-import { openStoreDetailed, requestPersistence, STORE_BLOCKED } from '../utils/store';
+import { openStoreDetailed, requestPersistence, sourcesSlot, STORE_BLOCKED } from '../utils/store';
 import type { ModelId, Store, StoredSource } from '../utils/store';
 
 export type Source = StoredSource;
@@ -272,8 +272,9 @@ export function createSources(deps: SourcesDeps = {}): Sources {
 
 let shared: Sources | null = null;
 
-/** The page's sources (one per app). */
+/** The page's sources (one per app). The first screen reaches them through utils/store's loadedSources. */
 export function useSources(): Sources {
   shared ??= createSources();
+  sourcesSlot.value = shared;
   return shared;
 }
