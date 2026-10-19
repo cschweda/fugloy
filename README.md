@@ -33,7 +33,7 @@ for writing new programs.
 | Part | What it does | Status | Where |
 | --- | --- | --- | --- |
 | **Disassembler** | Loads `.CMD`, `.BAS`, and raw files by content; recursive descent; labels; cited ROM, hardware, and DOS names; hint files; hidden code in BASIC; rebasing and relocation; zmac source that reassembles byte for byte; JSON IR; reads the emulator's label files | Released, 1.2.0 on npm | `@fugloy/disasm`, the `fugloy` command in `@fugloy/cli`, opcode tables in `@fugloy/z80` |
-| **Web workbench** | The disassembler in the browser: facing pages, the four public-domain games one click away, editing by keyboard, the **Explain** tab, block comments, exports; and **Source ✎** and **Run ▶**, where Z80 source you type (or a disassembly opened as source) runs on an emulated TRS-80 with one press | Live; Source ✎ and Run ▶ built on branch `phase5b` (plan phase 5B), not yet deployed | [app.fugloy.dev](https://app.fugloy.dev/), source in `apps/web` |
+| **Web workbench** | The disassembler in the browser: facing pages, the four public-domain games one click away, editing by keyboard, the **Explain** tab, block comments, exports; and **Source ✎** and **Run ▶**, where Z80 source you type (or a disassembly opened as source) runs on an emulated TRS-80 with one press | Live; Source ✎ and Run ▶ merged to main and live (plan phase 5B) | [app.fugloy.dev](https://app.fugloy.dev/), source in `apps/web` |
 | **Emulator** | A headless, deterministic Model III and Model I that passes ZEXDOC and ZEXALL, runs `.CMD`, `.BAS`, and `.CAS` programs and disk images, and has a debugger that writes label and coverage files | 0.4.0 on npm (2026-10-18; the Model 4, emu phase 6b), after 0.3.0 (disks and the Model I, phases 5–7) | `packages/emu` (`@fugloy/emu`) |
 | **MCP server** | Lets an AI assistant such as Claude Code load a program, run it, set breakpoints and watches, read the screen, and name what it finds in the same label file | 0.1.1 on npm (2026-10-18), MCP phases A–F; disk images and the Model I; 0.1.2 (the Model 4) also published 2026-10-18 | `packages/mcp` (`@fugloy/mcp`) |
 | **Assembler** | Z80 source to a `.CMD`, with errors as sentences on the right line, ROM routines by name per model, a note where the Model I and Model III ROMs differ, and zmac's bytes on every source the disassembler writes | Merged to main (plan phase 5A), unreleased; releases with core | `packages/asm` (`@fugloy/asm`), the `fugloy asm` command |
@@ -90,7 +90,7 @@ hint file's `note`, the **:** key) sit above any line. The workbench opens
 Sea Dragon already annotated, from
 [`seadrg01.hints`](examples/sea-dragon/seadrg01.hints).
 
-**Source ✎** and **Run ▶** (plan phase 5B, built on branch `phase5b`) turn
+**Source ✎** and **Run ▶** (plan phase 5B, merged to main 2026-10-19) turn
 the workbench into a place to write programs too. Source ✎ is a CodeMirror
 editor for your own Z80 sources, kept in your browser and carried by a
 backup; it re-assembles as you pause typing, marks each error on its line as
@@ -413,7 +413,7 @@ roadmap in [CLAUDE.md](CLAUDE.md)). Phase 5 has begun: its assembler,
 `@fugloy/asm` with the `fugloy asm` command (5A), is merged to main and
 releases with the next core version; the workbench's Source ✎ and Run ▶
 (5B), where Z80 code is written, assembled, and run on an emulated Model I,
-III, or 4 with one press, are built on branch `phase5b`; the running line
+III, or 4 with one press, are merged to main (2026-10-19); the running line
 (5C) follows. Every change is
 recorded in [CHANGELOG.md](CHANGELOG.md); core releases are tagged `vX.Y.Z`
 on `main`, the emulator's `emu-vX.Y.Z`, and the MCP server's `mcp-vX.Y.Z`.

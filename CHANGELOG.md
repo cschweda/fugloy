@@ -217,7 +217,7 @@ and always false on the Model III and Model I. `Video` already computed both
 privately. The site now reads them instead of reaching into the system's
 memory.
 
-Workbench, phase 5B (Source and Run), built on branch `phase5b`, all five
+Workbench, phase 5B (Source and Run), merged to main (2026-10-19), all five
 tasks done (plan `docs/superpowers/plans/2026-10-18-phase5b-source-run.md`).
 A program typed in **Source ✎** runs on an emulated TRS-80 in **Run ▶** with
 one press, on the user's ROM or, for a program that never calls the ROM, on
