@@ -315,8 +315,11 @@ test("the generated /learn/invaders/ carries chapter 1's title and text, and nam
 test('chapter 1 marks every line of its program new, and Run ▶ blanks the screen while the game loop goes round', async ({ page }) => {
   await openChapter(page);
   await expect(page.getByTestId('lesson-title')).toHaveText('A blank screen and a game loop that does nothing yet');
+  // Every line but the editor's empty one after END's line break, which is not a line of the program.
   const lines = await page.locator('.cm-line').count();
-  await expect(page.locator('.cm-line.fg-chg-new')).toHaveCount(lines);
+  await expect(page.locator('.cm-line.fg-chg-new')).toHaveCount(lines - 1);
+  await expect(page.locator('.cm-line').last()).not.toHaveClass(/fg-chg-new/);
+  await expect(page.getByTestId('lesson-marks-summary')).toHaveText(`Marked since the blank page: ${lines - 1} new lines (+), 0 changed lines (~), 0 lines taken out.`);
   await expect(page.locator('.cm-line.fg-chg-changed')).toHaveCount(0);
   expect(await page.getByTestId('change-mark').count()).toBeGreaterThanOrEqual(16);
   await expect(page.getByTestId('change-mark').first()).toHaveText('+');

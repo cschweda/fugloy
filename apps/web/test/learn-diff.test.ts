@@ -79,17 +79,21 @@ describe('lineDiff', () => {
     expect(d.removed).toEqual([]);
   });
 
-  it('marks every line new against the empty text, as for chapter 1', () => {
-    const t = text('a', '', 'b');
-    const d = lineDiff('', t);
-    // "a\n\nb\n" is four lines as the editor counts them: a, an empty line, b, and the empty last one.
+  it('marks every line new against the empty text, as for chapter 1, but not the empty line after the last line break', () => {
+    const d = lineDiff('', text('a', '', 'b'));
+    // "a\n\nb\n": a, an empty line, and b; the editor's empty fourth line after the final break is not marked.
     expect(marksOf(d.marks)).toEqual([
       [1, 'new'],
       [2, 'new'],
       [3, 'new'],
-      [4, 'new'],
     ]);
     expect(d.removed).toEqual([]);
+    expect(lineDiff('', 'a\nb').marks.size).toBe(2);
+  });
+
+  it('sees adding or dropping the final line break as no change', () => {
+    expect(lineDiff('a\nb', 'a\nb\n')).toEqual({ marks: new Map(), removed: [] });
+    expect(lineDiff('a\nb\n', 'a\nb')).toEqual({ marks: new Map(), removed: [] });
   });
 
   it('lists every old line as removed against an empty new text', () => {

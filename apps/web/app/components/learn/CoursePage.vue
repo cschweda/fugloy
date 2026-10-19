@@ -1,9 +1,9 @@
 <script setup lang="ts">
 // Learn Z80 assembly (phase 6B Task 4), as a course (phase 6C Task 1): one item, a lesson or a Space
 // Invaders chapter, in three columns, item | program | TRS-80, a CSS grid from 1200 px wide, stacked
-// in that order below it. The pages are thin: pages/learn/[[slug]].vue gives it the lessons
-// (/learn/ and /learn/<slug>/), pages/learn/invaders/[[slug]].vue the chapters (/learn/invaders/ and
-// /learn/invaders/<slug>/); nuxt.config prerenders them all from content/learn's folders.
+// in that order below it. The page is thin: pages/learn/[...path].vue gives it the lessons (/learn/
+// and /learn/<slug>/) or the chapters (/learn/invaders/ and /learn/invaders/<slug>/); nuxt.config
+// prerenders them all from content/learn's folders.
 //
 // The item column (its text, Try it, In a real game, ◀ ▶, and the list with its done marks from its
 // header) renders on the server. The program column (components/source/LessonEditor) and the TRS-80
@@ -20,26 +20,30 @@
 // the saved edit or the item's program. A clean Run marks the item done. Open in the workbench copies
 // the program into a workbench source (made current), marks the workbench as writing, and shows
 // Source ✎ once the workbench page has finished loading. A chapter's program is marked against
-// `previous`'s (the blank page for chapter 1) in the editor.
+// `marksAgainst`, the previous chapter's program (the blank page, '', for chapter 1), in the editor.
+//
+// The page gives it the course's index (slug, number, title, idea, models: learn-index.generated.ts)
+// and the one item in full, which it loads on its own (utils/learn/lessons' loadPageItem, through
+// useAsyncData), so the page carries no other item's text.
 import { computed, defineAsyncComponent, h, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import LessonText from '~/components/learn/LessonText.vue';
-import type { Lesson } from '~/utils/learn/lesson-format';
+import type { Lesson, LessonEntry } from '~/utils/learn/lesson-format';
 import { gameLink, itemPath, lessonNeighbours, progressId } from '~/utils/learn/page';
 import type { Course, CourseBase } from '~/utils/learn/page';
-import { learnProgress, loadedLearn, loadLearn } from '~/utils/learn/learn-run';
+import { knowProgram, learnProgress, loadedLearn, loadLearn } from '~/utils/learn/learn-run';
 import type { LearnParts } from '~/utils/learn/learn-run';
 import { loadFailed } from '~/utils/lazy';
 import { openAsSourceRequests } from '~/utils/open-as-source';
 
 const props = defineProps<{
-  /** The course's lessons or chapters, in order. */
-  items: readonly Lesson[];
-  /** The one shown. */
+  /** The course's index of lessons or chapters, in order. */
+  items: readonly LessonEntry[];
+  /** The one shown, in full. */
   item: Lesson;
   basePath: CourseBase;
   course: Course;
-  /** The chapter before, whose program the item's is marked against (null for chapter 1 and for lessons). */
-  previous: Lesson | null;
+  /** The program the item's is marked against: the previous chapter's, '' for chapter 1; null on a lesson. */
+  marksAgainst: string | null;
 }>();
 
 // The props of a page instance never change: Nuxt makes a new one for each path.
@@ -49,8 +53,7 @@ const isChapter = props.course === 'invaders';
 const id = progressId(props.course, lesson.slug);
 const { prev, next } = lessonNeighbours(items, lesson.slug);
 const pathOf = (slug: string): string => itemPath(props.basePath, slug);
-/** The previous chapter's program, the blank page for chapter 1; null on a lesson, which has no marks. */
-const marksAgainst = isChapter ? (props.previous?.program ?? '') : null;
+const marksAgainst = props.marksAgainst;
 const word = isChapter ? 'Chapter' : 'Lesson';
 const courseName = isChapter ? 'Build Space Invaders' : 'Learn Z80 assembly';
 
@@ -94,6 +97,7 @@ async function start(): Promise<void> {
     return;
   }
   if (gone) return;
+  knowProgram(id, lesson.program);
   const known = p.ids.get(id);
   if (known !== undefined) await p.sources.select(known);
   else {
@@ -159,7 +163,7 @@ onBeforeUnmount(() => {
 });
 
 const doneCount = computed(() => items.filter((l) => done.value.has(progressId(props.course, l.slug))).length);
-const isDone = (l: Lesson): boolean => done.value.has(progressId(props.course, l.slug));
+const isDone = (l: LessonEntry): boolean => done.value.has(progressId(props.course, l.slug));
 </script>
 
 <template>

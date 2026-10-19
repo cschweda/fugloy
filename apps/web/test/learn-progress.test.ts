@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createProgress } from '../app/utils/learn/progress';
-import { itemByProgressId } from '../app/utils/learn/lessons';
+import { CHAPTERS, LESSONS } from './learn-items';
 import { progressId } from '../app/utils/learn/page';
 
 function fake(): Storage & { data: Map<string, string> } {
@@ -105,8 +105,11 @@ describe('lesson progress', () => {
     const lesson = progressId('lessons', '01-white-out');
     expect(chapter).toBe('invaders/01-blank-loop');
     expect(lesson).toBe('01-white-out');
-    const own = (id: string): string => itemByProgressId(id)?.program ?? '';
-    const p = createProgress(own, () => s);
+    const programs = new Map([
+      [chapter, CHAPTERS[0]!.program],
+      [lesson, LESSONS[0]!.program],
+    ]);
+    const p = createProgress((id) => programs.get(id) ?? '', () => s);
     p.markDone(chapter);
     expect(p.done().has(chapter)).toBe(true);
     expect(p.done().has(lesson)).toBe(false);
@@ -114,11 +117,10 @@ describe('lesson progress', () => {
     p.saveEdit(chapter, '; mine');
     expect(s.data.get('fugloy:learn:edit:invaders/01-blank-loop')).toBe('; mine');
     expect(p.edit(lesson)).toBeNull();
-    // Saving the chapter's own text removes its edit: the lookup finds the chapter, not the lesson.
-    p.saveEdit(chapter, itemByProgressId(chapter)!.program);
+    // Saving the chapter's own text removes its edit: the chapter's program, not the lesson's.
+    p.saveEdit(chapter, CHAPTERS[0]!.program);
     expect(p.edit(chapter)).toBeNull();
-    expect(itemByProgressId(lesson)?.title).toBe('White out the screen');
-    expect(itemByProgressId('invaders/01-white-out')).toBeNull();
-    expect(itemByProgressId('01-blank-loop')).toBeNull();
+    p.saveEdit(lesson, CHAPTERS[0]!.program);
+    expect(p.edit(lesson)).toBe(CHAPTERS[0]!.program);
   });
 });

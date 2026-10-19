@@ -4,8 +4,9 @@
 // lines between two kept ones are a hunk: its removed and added lines pair up in order as changed
 // (the new line takes the old one's place); the added lines left over are new, and the removed lines
 // left over are listed as removed, before the line that follows the hunk in the new text. Lines are
-// counted as the editor counts them (a text ending in a line break has an empty last line); the empty
-// text has no lines, so against it every line is new. No DOM, no Vue.
+// numbered as the editor numbers them, but the empty line after a text's last line break is not a
+// line of the program, so it is never marked (fix round 1); the empty text has no lines, so against it
+// every line is new. No DOM, no Vue.
 
 export type LineMark = 'new' | 'changed';
 
@@ -16,7 +17,12 @@ export interface LineDiff {
   removed: { before: number; text: string }[];
 }
 
-const linesOf = (text: string): string[] => (text === '' ? [] : text.split(/\r\n|\r|\n/));
+/** The text's lines, without the empty one after a final line break. */
+function linesOf(text: string): string[] {
+  const lines = text.split(/\r\n|\r|\n/);
+  if (lines.at(-1) === '') lines.pop();
+  return lines;
+}
 
 export function lineDiff(oldText: string, newText: string): LineDiff {
   const a = linesOf(oldText);

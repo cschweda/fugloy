@@ -13,7 +13,7 @@ import { explainSourceLine } from '../app/utils/learn/explain-line';
 import { EXPLAIN_PROMPT, lessonMessage, lessonNeighbours, lessonPath, modelOptions } from '../app/utils/learn/page';
 import { parseLesson } from '../app/utils/learn/lesson-format';
 import type { Lesson } from '../app/utils/learn/lesson-format';
-import { lessonBySlug, LESSONS } from '../app/utils/learn/lessons';
+import { lessonBySlug, LESSONS } from './learn-items';
 import LessonEditor from '../app/components/source/LessonEditor.vue';
 import * as realKit from '../app/utils/emulator/kit';
 import { createRun } from '../app/composables/useRun';

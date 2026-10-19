@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createWorkbench } from '../app/composables/useWorkbench';
 import { openDeepLink } from '../app/utils/deep-link';
-import { LESSONS } from '../app/utils/learn/lessons';
+import { LESSONS } from './learn-items';
 import { gameLink } from '../app/utils/learn/page';
 
 // A path, not new URL(): under happy-dom, URL is the DOM's, which fileURLToPath refuses.

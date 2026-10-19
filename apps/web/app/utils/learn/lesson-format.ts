@@ -51,6 +51,9 @@ export interface Lesson {
   program: string;
 }
 
+/** What the Learn page's index keeps of a lesson or chapter (learn-index.generated.ts): enough for the lists, ◀ ▶, the kicker and the SEO. */
+export type LessonEntry = Pick<Lesson, 'slug' | 'number' | 'title' | 'idea' | 'models'>;
+
 const TRY_IT = 'Try it';
 const REAL_GAME = 'In a real game';
 const KEYS: ReadonlySet<string> = new Set(['title', 'idea', 'models', 'game', 'cite']);
