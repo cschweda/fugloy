@@ -10,7 +10,7 @@ export { clockHz } from './machine/models.js';
 export { TRS80System, CPU_CLOCK_HZ, RTC_HZ, RTC_INTERVAL_TSTATES } from './machine/trs80-system.js';
 export { Z80CPU } from './cpu/z80cpu.js';
 export { MemorySystem } from './machine/memory.js';
-export { IOSystem, RTC_IRQ_BIT, CASSETTE_RISE_IRQ_BIT, CASSETTE_FALL_IRQ_BIT, NMI_INTRQ_BIT, MODE_32COL_BIT } from './machine/io.js';
+export { IOSystem, RTC_IRQ_BIT, CASSETTE_RISE_IRQ_BIT, CASSETTE_FALL_IRQ_BIT, NMI_INTRQ_BIT, MODE_32COL_BIT, MODE_ALTSET_BIT } from './machine/io.js';
 export { KeyboardMatrix } from './devices/keyboard.js';
 export { CassetteSystem } from './devices/cassette.js';
 export { casToPulses, pulsesToBytes, ensureLeader } from './devices/cassette-tape.js';

@@ -72,6 +72,7 @@ export const NMI_INTRQ_BIT = 0x80;
 
 // Mode register (port 0xEC write) bits
 export const MODE_32COL_BIT = 0x04; // 32-character display mode
+export const MODE_ALTSET_BIT = 0x08; // ENALTSET: the alternate character set (Model III and 4)
 export const MODE_FAST_BIT = 0x40; // the Model 4's 4 MHz clock (above)
 
 // The Model I's port 0xFF output latch (Z59), D0-D3: "D0 and D1 ... are used

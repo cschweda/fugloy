@@ -11,7 +11,7 @@ later phases follow, in the Roadmap's order. The recompiler and
 bundler stay in Part 2 until the plan's kill criteria have been reviewed. If a
 task seems to need machinery from a later step, stop and say so.
 
-Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.2.0, `@fugloy/emu` 0.4.0, and `@fugloy/mcp` 0.1.2 on npm (2026-10-18); emu phases 5–7 released in emu 0.3.0; the Model 4 (emu phase 6b) done for Model III mode and the native hardware, merged to main (2026-10-18); emu 0.4.0 and mcp 0.1.2 published 2026-10-18; a version 6 DOS boot still needs an LS-DOS 6 / TRSDOS 6 disk. Plan phase 5A, the assembler (`@fugloy/asm` and `fugloy asm`), merged to main (2026-10-18; plan `docs/superpowers/plans/2026-10-18-phase5a-assembler.md`), unreleased, to go out with the next core version. 5B, the workbench's Source ✎ and Run ▶ (CodeMirror 6 editor with inline errors and one-click fixes; one press assembles and runs on a fresh machine, on the user's ROM, stored per model in the browser, or on Fugløy's stub ROM; Open as source ✎ turns a disassembly into a source that reassembles byte for byte), merged to main (2026-10-19), all five tasks done (plan `docs/superpowers/plans/2026-10-18-phase5b-source-run.md`). 5C, the running line (the line a program is on lit live in Source ✎ and in a listing of the same program, with a fading trail; breakpoints by gutter click or F9, saved with the source; Continue, Step, Step Over and Run to Here; the registers and flags; debug keys F5–F11; a screen-text mirror), merged to main (2026-10-19), all five tasks done (plan `docs/superpowers/plans/2026-10-19-phase5c-running-line.md`), not yet merged; with it phase 5's deliverable is met.**
+Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.2.0, `@fugloy/emu` 0.4.0, and `@fugloy/mcp` 0.1.2 on npm (2026-10-18); emu phases 5–7 released in emu 0.3.0; the Model 4 (emu phase 6b) done for Model III mode and the native hardware, merged to main (2026-10-18); emu 0.4.0 and mcp 0.1.2 published 2026-10-18; a version 6 DOS boot still needs an LS-DOS 6 / TRSDOS 6 disk. Plan phase 5A, the assembler (`@fugloy/asm` and `fugloy asm`), merged to main (2026-10-18; plan `docs/superpowers/plans/2026-10-18-phase5a-assembler.md`), unreleased, to go out with the next core version. 5B, the workbench's Source ✎ and Run ▶ (CodeMirror 6 editor with inline errors and one-click fixes; one press assembles and runs on a fresh machine, on the user's ROM, stored per model in the browser, or on Fugløy's stub ROM; Open as source ✎ turns a disassembly into a source that reassembles byte for byte), merged to main (2026-10-19), all five tasks done (plan `docs/superpowers/plans/2026-10-18-phase5b-source-run.md`). 5C, the running line (the line a program is on lit live in Source ✎ and in a listing of the same program, with a fading trail; breakpoints by gutter click or F9, saved with the source; Continue, Step, Step Over and Run to Here; the registers and flags; debug keys F5–F11; a screen-text mirror), merged to main (2026-10-19), all five tasks done (plan `docs/superpowers/plans/2026-10-19-phase5c-running-line.md`); with it phase 5's deliverable is met. 5D, the TRS-80 on screen (the screen's glyphs from xtrs's character generators on a black tube; a TRS-80 that powers on when Run ▶ opens with a ROM, with Power, Reset and Pause; Programs to try: Sea Dragon, Rear Guard, Eliminator; the debugger in a disclosure; `m.video.altCharset` in emu), merged to main (2026-10-19), all five tasks done (plan `docs/superpowers/plans/2026-10-19-phase5d-real-machine.md`). The NVDA and VoiceOver hand checks wait for the project's final phase.**
 v1 is disassembler phases 1–4: the core decoder and loaders (v0.1.0), Pass 1
 and Pass 2 (v0.2.0), the cited symbol tables (phase 3: eight JSON tables, 634
 entries, in `packages/disasm/data/symbols/`, compiled by `pnpm symbols`), and
@@ -150,14 +150,20 @@ The Model I waits for a Model I reference (MAME or xtrs, ask the user first).
   check:prefetch` proves the first screen never preloads them. Sources and
   ROMs live in IndexedDB (`useSources`, `useRoms`); ROM bytes are never
   bundled, fetched, committed, or backed up. The screen's glyphs come from
-  X.Org's public-domain misc-misc fonts (`scripts/build-glyphs.ts` writes
-  `glyphs.generated.ts`, never hand-edited). From 5C the running line's
+  xtrs's `trs_chars.c` (the TRS-80 character generators;
+  `scripts/build-glyphs.ts` writes `glyphs.generated.ts`, never hand-edited;
+  the licence is in `apps/web/NOTICE.md`). From 5C the running line's
   DOM-free logic (trail, stepping, registers, screen text) is in
   `utils/emulator/`, the coordinator in `composables/useDebug.ts`, and the
   DOM helpers in the lazy root `utils/running/` (the listing's `<style>`, the
   debug keys F5–F11 and Ctrl/⌘+F10, the announcer). `pnpm --filter
   @fugloy/web size:first-screen` measures the first screen against its
   252,775 B gzip budget, on a plain `generate`.
+  From 5D, Run ▶ opens as a TRS-80: with a ROM stored for the model it powers
+  on (stopping at Cass? and Memory Size? for the user), with Power, Reset and
+  Pause under the screen and Programs to try (`run/ProgramsToTry.vue`); the
+  stepping buttons, registers, breakpoints and Screen text sit in a Debugger
+  disclosure that a source Run or a pause opens; with no ROM the tube says so.
 - `packages/emu` — headless, deterministic TRS-80 emulator core (the Model III
   and, from emu phase 6, the Model I; from emu phase 6b, the Model 4), plain JavaScript ESM, no DOM, no Node APIs. Spec: `docs/fugloy-emu-spec.md`.
   Extracted from `cschweda/trs80-emulator` in its phase 0 (`NOTICE.md`); tests
@@ -230,7 +236,7 @@ after v1 and needs phases 3 and 4 and emu phases 2–3. Its design
 (`docs/superpowers/specs/2026-10-18-phase5-assembler-ide-design.md`) splits it
 into 5A, the assembler (merged to main), 5B, the workbench's
 Source ✎ and Run ▶ (merged to main (2026-10-19)), and 5C, the running line
-(merged to main 2026-10-19; it completes phase 5's deliverable). Phase 6, **Learn assembly
+(merged to main 2026-10-19; it completes phase 5's deliverable), and 5D, the TRS-80 on screen (merged to main 2026-10-19). Phase 6, **Learn assembly
 with Fugløy** (requested 2026-10-17), follows phase 5: an introduction to
 assembly language for non-programmers, not only retro fans, on the small and
 straightforward Z80, with instant feedback (Explain's tutor voice on each line

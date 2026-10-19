@@ -3,7 +3,7 @@
 // components import the screen and keyboard modules directly; they are lazy too. 5C's running
 // line, stepping, registers, and screen text come with it.
 export { assemble, toCmd } from '@fugloy/asm';
-export { prepareMachine, SentenceError } from './boot';
+export { powerOnMachine, prepareMachine, SentenceError } from './boot';
 export { createRunner } from './runner';
 export { romEnd, stubRom } from './stub-rom';
 export { romNameAt, romNotes, romSpaceCode, romUse } from './rom-use';

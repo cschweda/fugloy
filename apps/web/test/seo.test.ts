@@ -118,10 +118,12 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
     expect(read('about/index.html')).toMatch(/JetBrains Mono[\s\S]*SIL Open Font License 1\.1/);
   });
 
-  it('About credits the screen font with its public-domain statement, gives the ROM statement, and describes the stub ROM', () => {
+  it("About credits the screen's character generators to xtrs with its licence, gives the ROM statement, and describes the stub ROM", () => {
     const about = read('about/index.html').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
-    expect(about).toMatch(/misc-misc[^.]*public domain/);
-    expect(about).toContain('Public domain terminal emulator font. Share and enjoy.');
+    expect(about).toMatch(/character generators, from trs_chars\.c in xtrs , Timothy P\. Mann(?:'|&#39;)s TRS-80 emulator/);
+    expect(about).toContain('Copyright (C) 1992 Clarendon Hill Software. Permission is granted');
+    expect(about).toContain('Copyright (c) 1996-2020, Timothy P. Mann Permission is hereby granted');
+    expect(about).toContain('The above copyright notice and this permission notice shall be included in all copies');
     expect(about).toMatch(/Fugløy ships no ROM/);
     expect(about).toMatch(/never bundled, fetched, committed, or put in a backup/);
     expect(about).toMatch(/stub ROM/);

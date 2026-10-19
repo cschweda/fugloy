@@ -15,6 +15,8 @@ const games = EXAMPLES[0]!;
 const sources: readonly Source[] = SYMBOL_SOURCES;
 const year = (s: Source): string => (s.circa === true ? `c. ${s.year}` : s.year);
 const byline = (s: Source): string => (s.author === s.publisher ? s.author : `${s.author}, ${s.publisher}`);
+// xtrs's LICENSE at the commit the screen's glyphs come from (scripts/build-glyphs.ts checks its SHA-256).
+const XTRS_LICENSE = "Copyright (C) 1992 Clarendon Hill Software.\n\nPermission is granted to any individual or institution to use, copy,\nor redistribute this software, provided this copyright notice is retained. \n\nThis software is provided \"as is\" without any expressed or implied\nwarranty.  If this software brings on any sort of damage -- physical,\nmonetary, emotional, or brain -- too bad.  You've got no one to blame\nbut yourself. \n\nThe software may be modified for your own purposes, but modified versions\nmust retain this notice.\n\n***\n\nCopyright (c) 1996-2020, Timothy P. Mann\n\nPermission is hereby granted, free of charge, to any person\nobtaining a copy of this software and associated documentation\nfiles (the \"Software\"), to deal in the Software without\nrestriction, including without limitation the rights to use, copy,\nmodify, merge, publish, distribute, sublicense, and/or sell copies\nof the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be\nincluded in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND\nNONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS\nBE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN\nACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN\nCONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.";
 </script>
 
 <template>
@@ -119,10 +121,14 @@ const byline = (s: Source): string => (s.author === s.publisher ? s.author : `${
         It is served from this site, from the <a href="https://fontsource.org/fonts/jetbrains-mono" rel="noopener noreferrer" target="_blank">Fontsource</a> package.
       </li>
       <li data-testid="credit-glyphs">
-        The emulated TRS-80 screen's characters come from the X.Org
-        <a href="https://gitlab.freedesktop.org/xorg/font/misc-misc" rel="noopener noreferrer" target="_blank">misc-misc</a> fonts (<code>6x12</code> and <code>6x10</code>), which are in the public domain.
-        Their headers say: “Public domain terminal emulator font.  Share and enjoy.” Fugløy converts its pinned copy (font-misc-misc 1.1.3) once, recording each file's SHA-256.
-        Nothing is copied from a TRS-80's character ROM, so the Model III's special and katakana characters are not drawn.
+        The emulated TRS-80 screen's characters are the TRS-80's own character generators, from <code>trs_chars.c</code> in
+        <a href="https://github.com/TimothyPMann/xtrs" rel="noopener noreferrer" target="_blank">xtrs</a>, Timothy P. Mann's TRS-80 emulator; its Model III sets were read from real character generator ROMs by Todd P. Cromwell III.
+        Fugløy uses the Model I's (stock, and with the lowercase kit), the Model III's (with its katakana), and the Model 4's (with its international characters), converted once from a pinned copy whose SHA-256 it records.
+        They are under xtrs's licence, Copyright (C) 1992 Clarendon Hill Software and Copyright (c) 1996-2020, Timothy P. Mann:
+        <details class="mt-1">
+          <summary>xtrs's licence</summary>
+          <pre class="mt-1 text-xs whitespace-pre-wrap" data-testid="xtrs-license">{{ XTRS_LICENSE }}</pre>
+        </details>
       </li>
       <li data-testid="credit-codemirror">
         <a href="https://codemirror.net/" rel="noopener noreferrer" target="_blank">CodeMirror 6</a> by Marijn Haverbeke and others, the editor in <strong class="fg-strong">Source ✎</strong>, under the MIT License.

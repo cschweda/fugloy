@@ -11,10 +11,25 @@
 // :checked and @change, not v-model: vModelCheckbox would join Vue's shared chunk on the first screen.
 // The listing follows the run through utils/running/listing-style (one <style>, keyed on data-addr),
 // installed here; `scrollListing` is the page's scrollTo, which moves neither the cursor nor focus.
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+//
+// 5D: the TRS-80 first. Top to bottom: the bar (Model, Run ▶, Stop, Show in Listing), the message,
+// the screen, the machine row (Power, Reset, Pause/Continue), Programs to try, the Debugger
+// disclosure (the step controls, Follow, the registers, the breakpoints, Screen text), the ROM.
+// The Debugger opens by itself when a source Run attaches the debugger and when a run pauses; the
+// user's toggle otherwise stands, and the debug keys work with it closed. The first time the tab
+// shows, with a ROM for the model and nothing run or said yet, the machine is turned on; the screen
+// takes the focus then only if the focus has not moved meanwhile and is not on a tab or in Source ✎
+// (a keyboard user arrowing through the tabs, or one already typing, keeps it). The screen takes the
+// focus after Power on and Reset while the tab shows, and when this tab's Run ▶ or a Program to try
+// starts a program (Ctrl/⌘+Enter elsewhere leaves it). With no ROM for the model and
+// no machine, the tube says so in its own font.
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import TrsScreen from './TrsScreen.vue';
+import ScreenText from './ScreenText.vue';
 import RegistersPanel from './RegistersPanel.vue';
 import BreakpointList from './BreakpointList.vue';
+import ProgramsToTry from './ProgramsToTry.vue';
+import type { ExampleId } from '~/data/examples';
 import type { DebugKeyOptions } from '~/utils/running/debug-keys';
 import { announcing, speakAnnouncements } from '~/utils/running/announce';
 import { installListingFollow } from '~/utils/running/listing-style';
@@ -25,12 +40,20 @@ import { MODEL_NAMES } from '~/utils/emulator/rom-ids';
 import type { ModelId } from '~/utils/store';
 
 // The page hands over its Run and sources, so this lazy chunk imports none of the first screen's modules.
-const props = defineProps<{ run: Run; sources: Sources; /** Brings a listing row into view (the page's scrollTo). */ scrollListing?: (addr: number) => void }>();
+const props = defineProps<{
+  run: Run;
+  sources: Sources;
+  /** Brings a listing row into view (the page's scrollTo). */
+  scrollListing?: (addr: number) => void;
+  /** Run ▶ is the right tab showing. */
+  shown?: boolean;
+}>();
 const run = props.run;
 const sources = props.sources;
 const debug = run.debug;
 const roms = useRoms();
 const screen = ref<InstanceType<typeof TrsScreen> | null>(null);
+const screenText = ref<InstanceType<typeof ScreenText> | null>(null);
 const picker = ref<HTMLInputElement | null>(null);
 const romMessage = ref<string | null>(null);
 const romProblem = ref(false);
@@ -43,10 +66,24 @@ const machine = computed(() => run.runner.value?.machine ?? null);
 /** A program is under way: running, or paused (5C) at a breakpoint, a step, or Pause. Stop ends either. */
 const running = computed(() => run.state.value === 'running' || run.state.value === 'paused');
 const rom = computed(() => roms.info(model.value));
+/** No machine and no ROM for the model: the tube says so (the stub ROM has no BASIC to turn on). */
+const notice = computed(() => (machine.value === null && rom.value === null ? ['NO ROM FOR THE ' + MODEL_NAMES[model.value].toUpperCase(), '', 'ADD YOUR ROM BELOW TO TURN IT ON.'] : null));
+/** The Debugger disclosure: its own open state is the user's, which a source Run and a pause set open. */
+const debuggerBox = ref<HTMLDetailsElement | null>(null);
+function openDebugger(): void {
+  if (debuggerBox.value !== null) debuggerBox.value.open = true;
+}
+/** The runner pauses by itself: the machine on with no program, or a Program to try (neither has the debugger). */
+const programless = computed(() => run.power.value !== 'off' && debug.mode.value === 'idle');
 const runKey = computed(() => (isMac.value ? '⌘+Enter' : 'Ctrl+Enter'));
 /** Stepping needs a program running or paused. */
 const underWay = computed(() => debug.mode.value === 'running' || debug.mode.value === 'paused');
 const paused = computed(() => debug.mode.value === 'paused');
+/** Pause/Continue, in the machine row: the debugger's for a source Run, the runner's otherwise. */
+const canPause = computed(() => underWay.value || programless.value);
+const machinePaused = computed(() => (programless.value ? run.state.value === 'paused' : paused.value));
+/** The debug keys F5 and F6 drive a source Run only; the machine on its own has the button alone. */
+const pauseTitle = computed(() => (programless.value ? (machinePaused.value ? 'Continue the TRS-80' : 'Pause the TRS-80') : machinePaused.value ? 'Continue running (F5)' : 'Pause the program (F6)'));
 const hereKey = computed(() => (isMac.value ? '⌘+F10' : 'Ctrl+F10'));
 /** The run message says what the announcer, while it is listening, already says: not a second live region for it. */
 const quiet = computed(() => announcing.value && run.message.value !== null && debug.announcement.value?.text === run.message.value);
@@ -60,9 +97,67 @@ function sayProblem(text: string): void {
   run.problem.value = true;
 }
 function pauseOrContinue(): void {
-  if (paused.value) debug.continue();
+  if (programless.value) {
+    if (run.state.value === 'paused') run.continueMachine();
+    else run.pauseMachine();
+  } else if (paused.value) debug.continue();
   else debug.pause();
 }
+
+function focusScreen(): void {
+  screen.value?.focus();
+}
+/** Power on (or Reset): the screen takes the focus once the machine is on, if the tab still shows (and `mayFocus` agrees). */
+async function turnOn(how: 'on' | 'reset', mayFocus: () => boolean = () => true): Promise<void> {
+  await (how === 'on' ? run.powerOn() : run.reset());
+  if (props.shown !== false && run.power.value === 'on' && mayFocus()) focusScreen();
+}
+/** The focus is where it was (`from`), and not on a tab or in the editor. */
+function focusStayed(from: Element | null): boolean {
+  const now = document.activeElement;
+  return now === from && now?.closest('[role="tab"], .cm-editor') == null;
+}
+function togglePower(): void {
+  if (run.power.value === 'off') void turnOn('on');
+  else run.powerOff();
+}
+/** This tab's Run ▶: the screen takes the focus when the program starts. */
+async function runHere(): Promise<void> {
+  await run.run();
+  if (run.power.value === 'program') focusScreen();
+}
+async function tryProgram(id: ExampleId): Promise<void> {
+  await run.runExample(id);
+  if (run.power.value === 'program') focusScreen();
+}
+
+// A source Run attaching the debugger (a new runner, or the text back to the one it ran) opens the Debugger, and so does a pause.
+watch([() => run.runner.value, () => debug.live.value] as const, ([r, live], [oldR, oldLive]) => {
+  if (live && debug.mode.value !== 'idle' && (r !== oldR || !oldLive)) openDebugger();
+});
+watch(
+  () => debug.mode.value,
+  (m) => {
+    if (m === 'paused') openDebugger();
+  },
+);
+
+/** The first time the tab shows, the machine is turned on: with a ROM for the model, and nothing run, loading or said yet. */
+let firstShow = true;
+async function onShown(): Promise<void> {
+  if (!firstShow) return;
+  firstShow = false;
+  const from = document.activeElement;
+  await Promise.all([roms.start(), sources.start()]);
+  if (gone || !props.shown || run.busy.value || run.power.value !== 'off' || run.message.value !== null || !roms.have(model.value)) return;
+  await turnOn('on', () => focusStayed(from));
+}
+watch(
+  () => props.shown,
+  (s) => {
+    if (s) void onShown();
+  },
+);
 
 function setModel(e: Event): void {
   const src = sources.current.value;
@@ -74,7 +169,7 @@ async function addRom(file: File): Promise<void> {
   romMessage.value = null;
   const r = await roms.add(file, undefined, model.value);
   romProblem.value = !r.ok;
-  romMessage.value = r.ok ? `${file.name} is kept in this browser as the ${MODEL_NAMES[r.model]} ROM. Press Run to use it.` : r.reason;
+  romMessage.value = r.ok ? `${file.name} is kept in this browser as the ${MODEL_NAMES[r.model]} ROM. Press Power on to turn it on, or Run ▶ to run your source on it.` : r.reason;
 }
 
 function onPick(e: Event): void {
@@ -132,7 +227,13 @@ onMounted(() => {
   isMac.value = /Mac|iPhone|iPad/.test(navigator.platform);
   void roms.start();
   void sources.start();
-  unsubscribe = run.onFrame(() => screen.value?.draw());
+  unsubscribe = run.onFrame(() => {
+    screen.value?.draw();
+    screenText.value?.refresh();
+  });
+  // A Run started before this tab first mounted (Ctrl/⌘+Enter from Source ✎) opens it too.
+  if (debug.live.value && debug.mode.value !== 'idle') openDebugger();
+  if (props.shown) void onShown();
   // The announcer is in this chunk: pauses are spoken even if the keys' chunk never arrives.
   unspeak = speakAnnouncements(debug);
   unfollow = installListingFollow(debug, (addr) => props.scrollListing?.(addr));
@@ -158,11 +259,7 @@ onBeforeUnmount(() => {
   unfollow?.();
 });
 
-defineExpose({
-  focusScreen(): void {
-    screen.value?.focus();
-  },
-});
+defineExpose({ focusScreen });
 </script>
 
 <template>
@@ -172,11 +269,23 @@ defineExpose({
       <select id="run-model" class="fg-input" data-testid="run-model" :value="model" :disabled="sources.current.value === null" @change="setModel">
         <option v-for="m in MODELS" :key="m" :value="m">{{ MODEL_NAMES[m] }}</option>
       </select>
-      <button type="button" class="fg-button fg-button-primary" data-testid="run-run" :aria-busy="run.busy.value" :title="`Assemble and run (${runKey})`" @click="run.run()">Run ▶</button>
+      <button type="button" class="fg-button fg-button-primary" data-testid="run-run" :aria-busy="run.busy.value" :title="`Assemble and run (${runKey})`" @click="runHere">Run ▶</button>
       <button type="button" class="fg-button" data-testid="run-stop" :disabled="!running && !run.busy.value" @click="run.stop()">Stop</button>
       <button type="button" class="fg-button" data-testid="run-show-listing" :disabled="!run.listable.value" @click="run.showInListing()">Show in Listing</button>
-      <span class="fg-run-debug" role="group" aria-label="Debugger controls">
-        <button type="button" class="fg-button" data-testid="run-pause" :disabled="!underWay" :title="paused ? 'Continue running (F5)' : 'Pause the program (F6)'" @click="pauseOrContinue">{{ paused ? 'Continue' : 'Pause' }}</button>
+    </div>
+    <p class="fg-run-message" :class="{ 'fg-run-problem': run.problem.value }" role="status" :aria-live="quiet ? 'off' : 'polite'" data-testid="run-message">
+      {{ run.message.value ?? `Press Run ▶ or ${runKey} to assemble the source and run it on a fresh ${MODEL_NAMES[model]}.` }}
+    </p>
+    <div class="fg-run-screen"><TrsScreen ref="screen" :machine="machine" :running="running" :notice="notice" :model="model" /></div>
+    <div class="fg-run-machine-row" role="group" aria-label="TRS-80" data-testid="machine-row">
+      <button type="button" class="fg-button" data-testid="machine-power" @click="togglePower">{{ run.power.value === 'off' ? 'Power on' : 'Power off' }}</button>
+      <button type="button" class="fg-button" data-testid="machine-reset" title="Turn the TRS-80 off and on again: a cold start from its ROM" @click="turnOn('reset')">Reset</button>
+      <button type="button" class="fg-button" data-testid="run-pause" :disabled="!canPause" :title="pauseTitle" @click="pauseOrContinue">{{ machinePaused ? 'Continue' : 'Pause' }}</button>
+    </div>
+    <ProgramsToTry @run="tryProgram" />
+    <details class="fg-run-debugger" data-testid="debugger" ref="debuggerBox">
+      <summary data-testid="debugger-summary">Debugger</summary>
+      <div class="fg-run-debug" role="group" aria-label="Debugger controls">
         <button type="button" class="fg-button" data-testid="run-step" :disabled="!underWay" title="Step: run one instruction (F11 or F7)" @click="debug.step()">Step</button>
         <button type="button" class="fg-button" data-testid="run-step-over" :disabled="!underWay" title="Step Over: run one instruction, or a whole CALL, RST or block instruction (F10)" @click="debug.stepOver()">Step Over</button>
         <button type="button" class="fg-button" data-testid="run-to-here" :disabled="!underWay" :title="`Run to Here: run to the line under the cursor in Source ✎ (${hereKey})`" @click="runToHere">Run to Here</button>
@@ -184,16 +293,11 @@ defineExpose({
           <input type="checkbox" data-testid="run-follow" :checked="debug.follow.value" @change="debug.follow.value = ($event.target as HTMLInputElement).checked" />
           Follow
         </label>
-      </span>
-    </div>
-    <p class="fg-run-message" :class="{ 'fg-run-problem': run.problem.value }" role="status" :aria-live="quiet ? 'off' : 'polite'" data-testid="run-message">
-      {{ run.message.value ?? `Press Run ▶ or ${runKey} to assemble the source and run it on a fresh ${MODEL_NAMES[model]}.` }}
-    </p>
-    <div class="fg-run-machine">
-      <div class="fg-run-screen"><TrsScreen ref="screen" :machine="machine" :running="running" /></div>
+      </div>
       <RegistersPanel :debug="debug" />
-    </div>
-    <BreakpointList class="fg-run-bps" :run="run" :sources="sources" />
+      <BreakpointList class="fg-run-bps" :run="run" :sources="sources" />
+      <ScreenText ref="screenText" :machine="machine" />
+    </details>
     <div class="fg-run-rom" data-testid="run-rom">
       <h2 class="fg-strong">{{ MODEL_NAMES[model] }} ROM</h2>
       <p v-if="rom !== null" data-testid="run-rom-have">
@@ -223,11 +327,14 @@ defineExpose({
 .fg-run-bar { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 12px; border-bottom: 1px solid var(--fg-border); font-size: 12px; }
 .fg-run-message { margin: 0 12px; min-height: 1.5em; }
 .fg-run-problem { color: var(--fg-error); }
-.fg-run-debug { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.fg-run-debug { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0; }
 .fg-run-follow { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; }
-.fg-run-machine { display: flex; flex: none; flex-wrap: wrap; align-items: flex-start; gap: 12px; padding: 0 12px; }
-.fg-run-screen { flex: 1 1 24rem; min-width: 0; max-width: 768px; }
-.fg-run-bps { margin: 0 12px; }
+.fg-run-screen { flex: none; min-width: 0; padding: 0 12px; }
+.fg-run-machine-row { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 12px; }
+.fg-run-debugger { margin: 0 12px; }
+.fg-run-debugger > summary { cursor: pointer; width: fit-content; font-weight: 700; }
+.fg-run-debugger > summary:focus-visible { outline: 2px solid var(--fg-accent); outline-offset: 2px; }
+.fg-run-bps { margin: 6px 0 0; }
 .fg-run-rom { margin: 0 12px; display: flex; flex-direction: column; gap: 4px; }
 .fg-run-rom h2 { margin: 6px 0 0; font-size: 13px; font-weight: 700; }
 .fg-run-rom p { margin: 0; }

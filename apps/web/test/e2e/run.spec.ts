@@ -7,7 +7,7 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
 const ORIGIN = 'http://localhost:4173';
-const BG = [0x10, 0x12, 0x10, 0xff];
+const BG = [0, 0, 0, 0xff]; // the black tube
 
 const ready = async (page: Page): Promise<void> => {
   await page.goto('/');
@@ -35,8 +35,11 @@ test('open the site, Write a program, press Run: the screen is blank, with no RO
   expect(text).toHaveLength(16);
   for (const row of text) expect(row).toMatch(/^ {64}$/);
   await expect.poll(() => centre(page)).toEqual(BG);
-  // Run doesn't move the focus; the screen says how to type to it.
-  await expect(page.getByTestId('run-run')).toBeFocused();
+  // The Model III's raster: 64x16 cells of 8x12 from its own character generator.
+  expect(await page.getByTestId('trs-canvas').evaluate((c: HTMLCanvasElement) => [c.width, c.height])).toEqual([512, 192]);
+  // 5D: this tab's Run ▶ gives the screen the focus; without it, the screen says how to type to it.
+  await expect(page.getByTestId('trs-screen')).toBeFocused();
+  await page.getByTestId('run-run').focus();
   await expect(page.getByTestId('trs-screen')).toContainText('Click the screen to type to the TRS-80.');
   // The listing refreshed quietly: the program is open, and Source ✎ is still the left tab.
   await expect(page.getByTestId('file-name')).toHaveText('clear-screen.cmd');
@@ -284,9 +287,11 @@ test('the screen-text mirror lists the screen, closed until opened, and every de
   // Tab from Run ▶ reaches each control in turn.
   await page.getByTestId('run-run').focus();
   const order: string[] = [];
-  for (let k = 0; k < 12; k++) {
+  for (let k = 0; k < 40; k++) {
     await page.keyboard.press('Tab');
     order.push(await page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.testid ?? document.activeElement?.tagName ?? ''));
   }
   for (const id of ['run-stop', 'run-pause', 'run-step', 'run-step-over', 'run-to-here', 'run-follow', 'trs-screen', 'screen-text-summary', 'screen-text-speak']) expect(order).toContain(id);
+  // 5D: the machine row, each Program to try, and the Debugger's summary.
+  for (const id of ['machine-power', 'machine-reset', 'program-run-sea-dragon', 'program-run-rear-guard', 'program-run-eliminator', 'debugger-summary']) expect(order).toContain(id);
 });

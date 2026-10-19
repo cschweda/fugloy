@@ -13,11 +13,24 @@
 //
 // 5C: `debug` (composables/useDebug) is the running line's coordinator. Each Run hands it the
 // runner and its Stepper, after applying the source's saved breakpoints before the first frame.
+//
+// 5D: the TRS-80 is simply on. `powerOn` boots the model's stored ROM live, with no program: a
+// programless runner (`result: null`), never attached to `debug`, running the ROM's own start-up in
+// the frame loop. `reset` does it again, `powerOff` turns it off: the runner is forgotten, so the tube
+// goes dark, and Stop on the machine with no program does the same (Stop on a program keeps 5B's last
+// frame and STOPPED). `runExample` runs a bundled game's main
+// build, also programless, on the booted snapshot. A Run, a power-on and a Program to try each
+// replace whatever runs (one runner), and share the generation counter, so each cancels another
+// still loading, and each is `busy` while it loads. Changing the model while the machine is on turns
+// the new model on.
 import { computed, effectScope, ref, shallowRef, watch } from 'vue';
 import type { ComputedRef, Ref, ShallowRef } from 'vue';
 import type { AsmResult, Diagnostic } from '@fugloy/asm';
+import type { Model } from '@fugloy/emu';
 import { defaultDos } from '@fugloy/disasm';
 import type { SymbolSelection } from '@fugloy/disasm';
+import { exampleById } from '../data/examples';
+import type { ExampleId } from '../data/examples';
 import type { RunKit } from '../utils/emulator/kit';
 import type { Runner, RunnerOptions, RunnerState } from '../utils/emulator/runner';
 import type { Roms } from './useRoms';
@@ -38,6 +51,24 @@ export const STOPPED = 'Stopped. Press Run to start again.';
 export const KIT_FAILED = 'The emulator could not be loaded: the connection may have dropped, or the site was updated since this page opened. Press Run again, or reload the page if that fails.';
 export const STOPPED_SOURCE = 'The program stopped because you switched to another source. Press Run to run this one.';
 export const STOPPED_MODEL = 'The program stopped because you changed the model. Press Run to run the source on this one.';
+
+/**
+ * utils/emulator/rom-ids's MODEL_NAMES, written out: importing rom-ids here would bring emu's hash
+ * table into this chunk, out of the kit's (test/run-machine.test.ts checks they agree).
+ */
+const MODEL_NAMES: Readonly<Record<Model, string>> = { 1: 'Model I', 3: 'Model III', 4: 'Model 4' };
+
+export const NO_ROM_POWER = (m: Model): string => `There is no ${MODEL_NAMES[m]} ROM in this browser, so the ${MODEL_NAMES[m]} cannot be turned on. Add your ROM below.`;
+export const EXAMPLE_NEEDS_ROM = (title: string, m: Model): string => `${title} needs the ${MODEL_NAMES[m]} ROM, which is not in this browser yet. Add your ROM below, then press Run again.`;
+export const POWERED_ON = (m: Model): string => `The ${MODEL_NAMES[m]} is on. Type to it on the screen.`;
+export const POWERED_OFF = (m: Model): string => `The ${MODEL_NAMES[m]} is off. Press Power on to turn it on again.`;
+const EXAMPLE_RUNNING = (title: string, m: Model): string => `${title} is running on your ${MODEL_NAMES[m]} ROM.`;
+const EXAMPLE_FAILED = (title: string): string => `${title} could not be loaded: the connection may have dropped, or the site was updated since this page opened. Press Run again, or reload the page if that fails.`;
+const POWER_FAILED = (m: Model, err: unknown): string =>
+  `The ${MODEL_NAMES[m]} could not be turned on (${err instanceof Error ? err.message.replace(/\.$/, '') : String(err)}). Check the ROM below, or reload the page if it happens again.`;
+
+/** What the runner is: none, the machine on with no program, or a program (a Run's or a Program to try's). */
+export type Power = 'off' | 'on' | 'program';
 
 /** What the last Run found, for Source's list: asm's diagnostics, and the ROM notes as warnings, for `text`. */
 export interface RunReport {
@@ -69,6 +100,22 @@ export interface Run {
   busy: Ref<boolean>;
   /** The running line, breakpoints and stepping (5C). */
   debug: Debug;
+  /** 'on' while the machine runs (or is paused) with no program, 'program' while a Run or a Program to try does, else 'off'. */
+  power: ComputedRef<Power>;
+  /** Stops anything running, then turns on the current source's model (the Model III with no source) from its stored ROM. */
+  powerOn(): Promise<void>;
+  /** Turns the machine's model on again from the start. */
+  reset(): Promise<void>;
+  /** Stops anything running or loading and forgets the runner: the tube goes dark, and the machine says it is off. */
+  powerOff(): void;
+  /** Pauses the runner itself (the machine, or a Program to try: neither has the debugger). */
+  pauseMachine(): void;
+  /** Continues a runner paused by `pauseMachine`. */
+  continueMachine(): void;
+  /** Runs a bundled game's main build on its model's stored ROM, programless. Armored Patrol is not offered (it throws). */
+  runExample(id: ExampleId): Promise<void>;
+  /** The model the current machine runs, of any kind; null with none. */
+  machineModel: Ref<Model | null>;
 }
 
 export interface RunDeps {
@@ -78,6 +125,8 @@ export interface RunDeps {
   kit?: () => Promise<RunKit>;
   /** The runner's clock, for the tests. */
   runner?: Pick<RunnerOptions, 'schedule' | 'cancel' | 'now'>;
+  /** Fetches a Program to try's bytes (default globalThis.fetch); the tests pass their own. */
+  fetch?: typeof fetch | undefined;
 }
 
 /**
@@ -115,6 +164,9 @@ function buildRun(deps: RunDeps): Run {
   const report = shallowRef<RunReport | null>(null);
   const reveal = shallowRef<{ line: number } | null>(null);
   const busy = ref(false);
+  const machineModel = ref<Model | null>(null);
+  /** What the current runner is, while there is one. */
+  const kind = ref<'on' | 'program'>('program');
   const frameListeners = new Set<(r: Runner) => void>();
   const debug = createDebug({
     sources,
@@ -152,8 +204,134 @@ function buildRun(deps: RunDeps): Run {
     else if (!problem.value) say(STOPPED);
   }
 
-  /** Bumped by every stop: a Run that began under an older one is cancelled. */
+  /** Bumped by every stop, Run, power-on and Program to try: one that began under an older one is cancelled. */
   let generation = 0;
+  /** The generation of the Run loading now, if one is: a second press of Run waits on it, not a power-on or a Program to try. */
+  let runLoading = -1;
+
+  /** `work` with `busy` set while it loads, cleared after unless something newer began meanwhile. */
+  async function loading(gen: number, work: () => Promise<void>): Promise<void> {
+    busy.value = true;
+    try {
+      await work();
+    } finally {
+      if (gen === generation) busy.value = false;
+    }
+  }
+
+  /** Cancels whatever is still loading (a Run, a power-on, a Program to try); returns the new generation. */
+  function cancelLoading(): number {
+    generation++;
+    busy.value = false;
+    return generation;
+  }
+
+  /** Stops and forgets the current runner, and the debugger's hold on it. */
+  function clearRunner(): void {
+    runner.value?.stop();
+    runner.value = null;
+    machineModel.value = null;
+    debug.detach();
+    state.value = 'idle';
+  }
+
+  /** Starts `r` as the current runner. */
+  function startRunner(r: Runner, what: 'on' | 'program', model: Model): void {
+    kind.value = what;
+    machineModel.value = model;
+    runner.value = r;
+    r.start();
+    state.value = r.state;
+  }
+
+  /** The kit and the ROM store, loaded; null (said) when they could not be, or the wait went stale. */
+  async function parts(stale: () => boolean): Promise<{ kit: RunKit; roms: Roms } | null> {
+    try {
+      const [kit, roms] = await Promise.all([loadKit(), deps.roms ?? import('./useRoms').then((m) => m.useRoms())]);
+      await roms.start();
+      return stale() ? null : { kit, roms };
+    } catch {
+      if (!stale()) say(KIT_FAILED, true);
+      return null;
+    }
+  }
+
+  /** A programless runner's options: no debugger, its pauses and stops kept in `state`. */
+  const machineOptions = (): Omit<RunnerOptions, 'machine' | 'result' | 'stub'> => ({
+    ...deps.runner,
+    onFrame: frame,
+    onStop,
+    onPause: (r) => {
+      if (runner.value === r) state.value = r.state;
+    },
+  });
+
+  /** Turns `model` on (or the current source's, or the Model III's), live from its stored ROM. */
+  async function boot(model: Model | null): Promise<void> {
+    const gen = cancelLoading();
+    clearRunner();
+    await loading(gen, () => booting(gen, model));
+  }
+
+  async function booting(gen: number, model: Model | null): Promise<void> {
+    const stale = (): boolean => gen !== generation;
+    await sources.start();
+    if (stale()) return;
+    const got = await parts(stale);
+    if (got === null) return;
+    const m: Model = model ?? sources.current.value?.model ?? 3;
+    const rom = got.roms.have(m) ? await got.roms.bytes(m) : null;
+    if (stale()) return;
+    if (rom === null) return say(NO_ROM_POWER(m));
+    let r: Runner;
+    try {
+      r = got.kit.createRunner({ ...machineOptions(), machine: got.kit.powerOnMachine(m, rom), result: null, stub: false });
+    } catch (err) {
+      return say(POWER_FAILED(m, err), true);
+    }
+    say(POWERED_ON(m));
+    startRunner(r, 'on', m);
+    frame(r);
+  }
+
+  async function runExample(id: ExampleId): Promise<void> {
+    // Armored Patrol never reaches its title on the emulator.
+    if (id === 'armored-patrol') throw new Error('Armored Patrol is not offered as a Program to try.');
+    const ex = exampleById(id);
+    const model = ex.machine as Model;
+    const gen = cancelLoading();
+    await loading(gen, () => trying(gen, id, ex, model));
+  }
+
+  async function trying(gen: number, id: ExampleId, ex: { title: string; mainBuild: string }, model: Model): Promise<void> {
+    const stale = (): boolean => gen !== generation;
+    const got = await parts(stale);
+    if (got === null) return;
+    const rom = got.roms.have(model) ? await got.roms.bytes(model) : null;
+    if (stale()) return;
+    if (rom === null) return say(EXAMPLE_NEEDS_ROM(ex.title, model), true);
+    let cmd: Uint8Array;
+    try {
+      const res = await (deps.fetch ?? globalThis.fetch)(`/examples/${id}/${ex.mainBuild}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      cmd = new Uint8Array(await res.arrayBuffer());
+    } catch {
+      if (!stale()) say(EXAMPLE_FAILED(ex.title), true);
+      return;
+    }
+    if (stale()) return;
+    clearRunner();
+    let r: Runner;
+    try {
+      const machine = got.kit.prepareMachine({ model, rom, cmd });
+      r = got.kit.createRunner({ ...machineOptions(), machine, result: null, stub: false });
+    } catch (err) {
+      return say(err instanceof got.kit.SentenceError ? err.message : POWER_FAILED(model, err), true);
+    }
+    say(EXAMPLE_RUNNING(ex.title, model));
+    startRunner(r, 'program', model);
+    frame(r);
+  }
 
   async function go(gen: number): Promise<void> {
     const stale = (): boolean => gen !== generation;
@@ -182,11 +360,8 @@ function buildRun(deps: RunDeps): Run {
       if (stale()) return;
       if (sources.current.value === source) break;
     }
-    runner.value?.stop();
-    runner.value = null;
-    debug.detach();
+    clearRunner();
     clean.value = null;
-    state.value = 'idle';
     const { model, text } = source;
     const out = kit.runOnce(kit, { text, model, rom, breakpoints: source.breakpoints ?? [], runner: { ...deps.runner, onFrame: frame, onStop, onPause: (r) => debug.paused(r) } });
     lastResult.value = out.result;
@@ -198,11 +373,26 @@ function buildRun(deps: RunDeps): Run {
     }
     say(out.message, out.problem);
     if (out.runner === null) return;
-    runner.value = out.runner;
-    out.runner.start();
-    state.value = out.runner.state;
+    startRunner(out.runner, 'program', model);
     if (out.stepper !== null) debug.attach({ kit, runner: out.runner, stepper: out.stepper, result: out.result, inactive: out.inactive, sourceId: source.id, text });
     frame(out.runner);
+  }
+
+  function stop(): void {
+    // The machine on with no program has nothing to keep on the tube: Stop turns it off.
+    const r = runner.value;
+    if (r !== null && kind.value === 'on' && r.state !== 'stopped') return powerOff();
+    const wasLoading = busy.value;
+    cancelLoading();
+    runner.value?.stop();
+    if (wasLoading) say(STOPPED);
+  }
+
+  function powerOff(): void {
+    const m = machineModel.value ?? sources.current.value?.model ?? 3;
+    cancelLoading();
+    clearRunner();
+    say(POWERED_OFF(m));
   }
 
   /** Stops the running program with `why` in place of the usual sentence. */
@@ -213,30 +403,47 @@ function buildRun(deps: RunDeps): Run {
     say(why);
   }
 
+  const power = computed<Power>(() => {
+    if (runner.value === null || state.value === 'idle' || state.value === 'stopped') return 'off';
+    return kind.value;
+  });
+
   // Switching source or model leaves nothing on screen that describes the running program: stop it, saying why.
+  // The machine on with no program follows the model instead: the new model is turned on.
   watch(
     [() => sources.current.value?.id, () => sources.current.value?.model],
-    ([id], [oldId]) => halt(id !== oldId ? STOPPED_SOURCE : STOPPED_MODEL),
+    ([id, model], [oldId]) => {
+      if (power.value === 'on') {
+        if (model !== undefined && model !== machineModel.value) void boot(model);
+        return;
+      }
+      halt(id !== oldId ? STOPPED_SOURCE : STOPPED_MODEL);
+    },
   );
 
   return {
     async run() {
-      if (busy.value) return;
-      busy.value = true;
-      const gen = generation;
-      try {
-        await go(gen);
-      } finally {
-        if (gen === generation) busy.value = false;
-      }
+      if (busy.value && runLoading === generation) return;
+      const gen = cancelLoading();
+      runLoading = gen;
+      await loading(gen, () => go(gen));
     },
-    stop() {
-      generation++;
-      const loading = busy.value;
-      busy.value = false;
-      runner.value?.stop();
-      if (loading) say(STOPPED);
+    stop,
+    power,
+    powerOn: () => boot(null),
+    reset: () => boot(machineModel.value),
+    powerOff,
+    pauseMachine() {
+      runner.value?.pause();
     },
+    continueMachine() {
+      const r = runner.value;
+      if (r === null || r.state !== 'paused') return;
+      r.continue();
+      state.value = r.state;
+    },
+    runExample,
+    machineModel,
     runner,
     lastResult,
     message,

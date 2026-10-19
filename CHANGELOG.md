@@ -37,6 +37,40 @@ creates and pushes the tag.
 
 ## [Unreleased]
 
+Plan phase 5D: `@fugloy/emu` gains `m.video.altCharset`, true when the Model III or
+Model 4 mode register's ENALTSET bit (port `$EC` bit 3) is set; always false on
+the Model I.
+
+Plan phase 5D, the TRS-80 on screen, on the web workbench (design
+`docs/superpowers/specs/2026-10-19-phase5d-real-machine-design.md`, plan
+`docs/superpowers/plans/2026-10-19-phase5d-real-machine.md`; merged to main
+2026-10-19). Run ▶ now shows a TRS-80 rather than a debugger:
+
+- **The screen's glyphs** come from xtrs's `trs_chars.c` (commit
+  `3a2180c`, licence in `apps/web/NOTICE.md`): CG 1 for the Model I, CG 2 for
+  its lowercase kit, CG 4 for the Model III and CG 8 for the Model 4, with the
+  alternate set drawn when `m.video.altCharset` is true. They replace the
+  X.Org misc-misc fonts. The tube is black and scales by whole rows.
+- **Power on.** With a ROM stored for the model, opening Run ▶ powers on a
+  TRS-80 that stops at Cass? and Memory Size? for the user to answer, and
+  BASIC is usable at READY. Power, Reset and Pause sit under the screen. With
+  no ROM the tube says NO ROM FOR THE MODEL III (or the model chosen).
+- **Programs to try**: Sea Dragon, Rear Guard and Eliminator, run on the
+  user's ROM. Armored Patrol is left out because it never reaches its title.
+- **The Debugger disclosure** holds the stepping buttons, registers,
+  breakpoints and Screen text. It opens when a source Run attaches the
+  debugger or a run pauses; powering on and Programs to try leave it alone.
+- The first screen's JavaScript is 252,259 bytes gzipped against the
+  252,775-byte budget.
+- The hand checks with VoiceOver and NVDA (5C's list above, and the new
+  controls) wait for the project's final phase, by the user's decision
+  (2026-10-19).
+
+Fixed, on main (225cabe): Source ✎'s editor registers a capture-phase scroll
+listener so CodeMirror reads pending typing and the cursor together before its
+own scroll flush; on Linux the flush left the cursor before a just-typed
+character.
+
 Plan phase 5A, the assembler, built on branch `phase5a` (2026-10-18; design
 `docs/superpowers/specs/2026-10-18-phase5-assembler-ide-design.md`, plan
 `docs/superpowers/plans/2026-10-18-phase5a-assembler.md`). It goes out with
@@ -596,7 +630,7 @@ Step, Step Over and Run to Here, breakpoints, and the registers:
   `app/types/e2e-hook.d.ts`).
 - **Hand checks before release** (Playwright's synthetic keys cannot show
   them):
-  - **Screen readers (VoiceOver and NVDA):** a pause is spoken once, from
+  - **Screen readers (VoiceOver and NVDA)** (these wait for the project's final phase, by the user's decision of 2026-10-19): a pause is spoken once, from
     the announcer; after it, the next run message (for example "Run to Here
     runs to the line under the cursor…") is spoken too. Run ▶'s message
     turns `aria-live` off while it repeats the announcer's sentence and back
