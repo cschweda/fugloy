@@ -11,6 +11,7 @@ export default defineConfig({
       '@fugloy/z80': src('z80'),
       '@fugloy/disasm': src('disasm'),
       '@fugloy/cli': src('cli'),
+      '@fugloy/asm': src('asm'),
     },
   },
   test: {

@@ -12,8 +12,8 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -b packages/z80 packages/disasm packages/cli && tsc -p tsconfig.test.json",
-    "build": "tsc -b packages/z80 packages/disasm packages/cli",
+    "typecheck": "tsc -b packages/z80 packages/disasm packages/cli packages/asm && tsc -p tsconfig.test.json",
+    "build": "tsc -b packages/z80 packages/disasm packages/cli packages/asm",
     "clean": "rm -rf packages/*/dist",
     "fixtures": "tsx packages/disasm/scripts/write-fixtures.ts && node packages/emu/scripts/write-label-fixture.mjs && node packages/emu/scripts/write-disk-fixtures.mjs && node packages/emu/scripts/write-model3-state-fixture.mjs",
     "symbols": "tsx packages/disasm/scripts/write-symbols.ts",
