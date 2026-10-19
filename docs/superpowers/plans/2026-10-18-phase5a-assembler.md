@@ -68,7 +68,7 @@
 
 ### Task 4: zmac as referee across the corpus
 
-**Files:** `packages/disasm/test/roundtrip/zmac.ts` (make `assemble()` also run `@fugloy/asm` and assert the same 64K image, loaded bitmap, runs, and entry — `@fugloy/asm` becomes a disasm devDependency; mind the cycle: asm depends on disasm at runtime, disasm on asm only in tests), a corpus script `packages/asm/scripts/corpus.mjs` (`pnpm asm:corpus`: every real program in `examples/`, `fixtures/real/`, `sample/` disassembled, emitted, assembled by both, compared; prints a table); tests `packages/asm/test/negative.test.ts` (sources zmac rejects are rejected too, zmac-gated).
+**Files:** `packages/disasm/test/roundtrip/zmac.ts` (make `assemble()` also run `@fugloy/asm` and assert the same 64K image, loaded bitmap, runs, and entry — the harness imports asm's source by relative path rather than as a devDependency, because the test-only cycle makes pnpm warn on every install), a corpus script `packages/asm/scripts/corpus.mjs` (`pnpm asm:corpus`: every real program in `examples/`, `fixtures/real/`, `sample/` disassembled, emitted, assembled by both, compared; prints a table); tests `packages/asm/test/negative.test.ts` (sources zmac rejects are rejected too, zmac-gated).
 
 - [ ] Steps: wire the hook so `table.test.ts` (1,786 encodings), `fixtures.test.ts`, `hints.test.ts`, `symbols-roundtrip.test.ts`, `real.test.ts`, `rom.test.ts`, and every other `assemble(` caller check both; fix every mismatch in asm (never by special-casing a test); run `pnpm asm:corpus` locally over all 83 real programs: zero mismatches, counts recorded; verify in a ROM- and sample-free worktree that CI-visible tests pass; commit `p5: check @fugloy/asm against zmac on every round-trip source`.
 
