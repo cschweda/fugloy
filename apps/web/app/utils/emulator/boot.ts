@@ -92,13 +92,23 @@ export function snapshotCount(): number {
 /**
  * A new machine for one Run: booted (from the cached snapshot), then `before` (a test's hook), then
  * the program's .CMD loaded, which leaves PC at its entry. `cmd` is that .CMD when the caller has
- * already written it (a Run has, for the listing); otherwise it is written from `result`.
+ * already written it (a Run has, for the listing, and a Program to try is one); otherwise it is
+ * written from `result`. One of the two is required.
  */
-export function prepareMachine(opts: { model: Model; rom: Uint8Array; result: AsmResult; cmd?: Uint8Array; before?: ((m: Machine) => void) | undefined }): Machine {
+export function prepareMachine(opts: { model: Model; rom: Uint8Array; result?: AsmResult; cmd?: Uint8Array; before?: ((m: Machine) => void) | undefined }): Machine {
+  if (opts.cmd === undefined && opts.result === undefined) throw new Error('prepareMachine needs a program: a result or a .CMD.');
   const snap = bootedSnapshot(opts.model, opts.rom);
   const m = new Machine({ model: opts.model, roms: { level2: opts.rom } });
   m.debug.restore(snap);
   opts.before?.(m);
-  m.load.cmd(opts.cmd ?? toCmd(opts.result));
+  m.load.cmd(opts.cmd ?? toCmd(opts.result!));
   return m;
+}
+
+/**
+ * The TRS-80 just switched on (phase 5D): a fresh machine on `rom`, nothing run and nothing typed.
+ * The frame loop runs its boot live, so a ROM that never reaches READY cannot hang the page.
+ */
+export function powerOnMachine(model: Model, rom: Uint8Array): Machine {
+  return new Machine({ model, roms: { level2: rom } });
 }

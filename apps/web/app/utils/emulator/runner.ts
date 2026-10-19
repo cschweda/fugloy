@@ -26,6 +26,10 @@
 // repeats at the same PC; the stepper's breakpoints do not stop between its iterations
 // (stepping.ts), so after stepping past one iteration the run goes on to the block's end. (The ROM keyboard hook's stand-in RET
 // at $002B and $0049 leaves no trace entry, but a breakpoint is only ever on a program line.)
+//
+// A programless runner (`result: null`, phase 5D) is the TRS-80 simply on, or a bundled game: it
+// runs on the user's ROM only (never the stub, whose trap needs a program to name), checks no
+// trap, and stops only when told to or on an emulator error.
 import type { AsmResult } from '@fugloy/asm';
 import type { Machine } from '@fugloy/emu';
 import { MODEL_NAMES } from './rom-ids';
@@ -42,7 +46,8 @@ export interface Runner {
   /** The program counter now. */
   readonly pc: number;
   readonly machine: Machine;
-  readonly result: AsmResult;
+  /** The program the run is of; null for a programless runner (the machine on, or a bundled game). */
+  readonly result: AsmResult | null;
   /** Why the run stopped, as a sentence; null while it has not, or when stopped without one. */
   readonly stopReason: string | null;
   /** The source line the stop is about (1-based), when there is one. */
@@ -63,7 +68,8 @@ export interface Runner {
 
 export interface RunnerOptions {
   machine: Machine;
-  result: AsmResult;
+  /** Null for a programless runner, which `stub` must not be. */
+  result: AsmResult | null;
   /** True on the stub ROM: a PC inside the ROM stops the run with a sentence. */
   stub: boolean;
   schedule?: (cb: () => void) => number;
@@ -154,6 +160,7 @@ function trapStop(m: Machine, result: AsmResult): { reason: string; line: number
 
 export function createRunner(opts: RunnerOptions): Runner {
   const { machine: m, result, stub } = opts;
+  if (result === null && stub) throw new Error('A programless runner cannot run on the stub ROM: its trap needs a program.');
   const schedule = opts.schedule ?? ((cb: () => void) => requestAnimationFrame(cb));
   const cancel = opts.cancel ?? ((id: number) => cancelAnimationFrame(id));
   const now = opts.now ?? (() => performance.now());
@@ -176,7 +183,7 @@ export function createRunner(opts: RunnerOptions): Runner {
 
   /** After a slice or a step: stop at the stub's trap. True when stopped. */
   const checkTrap = (): boolean => {
-    if (!stub || m.cpu.regs.pc >= end) return false;
+    if (!stub || result === null || m.cpu.regs.pc >= end) return false;
     const t = trapStop(m, result);
     runner.stop(t.reason, t.line);
     return true;

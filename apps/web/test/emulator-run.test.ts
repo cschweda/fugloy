@@ -9,8 +9,11 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
-import { fastLoadCmd, fastLoadSystem, parseCas, parseCmd, TRS80System } from '@fugloy/emu';
+import { describe, expect, it, vi } from 'vitest';
+import { fastLoadCmd, fastLoadSystem, Machine, parseCas, parseCmd, TRS80System } from '@fugloy/emu';
+import { createRunner } from '../app/utils/emulator/runner';
+import { stubRom } from '../app/utils/emulator/stub-rom';
+import { fakeClock, frames } from './emulator-support';
 import { openProgram, withHintText } from '@fugloy/disasm';
 import { exportFile } from '../app/utils/exports';
 
@@ -95,5 +98,29 @@ describe.skipIf(rom === null)('the exported Sea Dragon runs in the headless Mode
     fastLoadSystem(system, parsed);
     const title = playsSeaDragon(system, ready);
     expect(differs(title, original())).toBe(0);
+  });
+});
+
+// Phase 5D: a programless runner (the TRS-80 simply on). It runs on any ROM, checks no trap, and
+// stops only when told; on the stub, where a PC in the ROM is a trap, it is refused.
+describe('a programless runner', () => {
+  it('is refused on the stub ROM', () => {
+    const machine = new Machine({ model: 3, roms: { level2: stubRom(3) } });
+    expect(() => createRunner({ machine, result: null, stub: true })).toThrow(Error);
+  });
+
+  it('runs frames on a ROM, with no result, and never stops on its own', () => {
+    const machine = new Machine({ model: 3, roms: { level2: stubRom(3) } });
+    const clock = fakeClock();
+    const onStop = vi.fn();
+    const runner = createRunner({ machine, result: null, stub: false, ...clock, onStop });
+    expect(runner.result).toBeNull();
+    runner.start();
+    frames(clock, 30);
+    expect(machine.cycles).toBeGreaterThan(0);
+    expect(runner.state).toBe('running');
+    expect(onStop).not.toHaveBeenCalled();
+    runner.stop();
+    expect(onStop).toHaveBeenCalledTimes(1);
   });
 });

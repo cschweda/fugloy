@@ -102,6 +102,8 @@ const stackBack = (sp: number, sp0: number): boolean => ((sp - sp0) & 0xffff) < 
 export function createStepper(runner: Runner): Stepper {
   const m = runner.machine;
   const { result } = runner;
+  // Breakpoints and stepping are by source line: a programless runner (5D) has none.
+  if (result === null) throw new Error('A programless runner has no source lines to step or break on.');
   /** Source line → emu breakpoint id. */
   const user = new Map<number, number>();
   const temps = new Set<number>();

@@ -54,6 +54,14 @@ const fakeRun: Run = {
   listable: computed(() => false),
   onFrame: () => () => {},
   busy: ref(false),
+  power: computed(() => 'off' as const),
+  powerOn: vi.fn(async () => {}),
+  reset: vi.fn(async () => {}),
+  powerOff: vi.fn(),
+  pauseMachine: vi.fn(),
+  continueMachine: vi.fn(),
+  runExample: vi.fn(async () => {}),
+  machineModel: ref(null),
   debug: createDebug({ sources: { current: computed(() => null) } as unknown as Sources, say: () => {}, state: () => {} }),
 };
 // Source ✎ reads the running line from the page's Run.
