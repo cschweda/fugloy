@@ -1,0 +1,33 @@
+; Build Space Invaders, chapter 1: a blank screen and a game loop that does
+; nothing yet. The program clears the screen, all 1,024 cells of video memory
+; at 3C00H-3FFFH, to spaces, then goes round its game loop for ever: each turn
+; waits a counted 66 ms and goes round again. The chapters that follow give
+; the loop its work, one piece at a time, until it is a game.
+
+        ORG     7000H           ; the program lives at 7000H, in free memory
+
+START:  LD      HL,3C00H        ; HL points at the top-left cell
+        LD      BC,400H         ; BC counts the cells: 400H is 1024
+CLEAR:  LD      (HL),20H        ; a space: the cell is blank
+        INC     HL              ; on to the next cell
+        DEC     BC              ; one cell fewer to go (DEC BC sets no flags ...)
+        LD      A,B             ; ... so test BC by hand: copy B into A
+        OR      C               ; and OR in C: zero only when B and C both are
+        JR      NZ,CLEAR        ; not zero yet: clear the next cell
+
+; The game loop: one turn of the game, then round again. A game's turn
+; reads the keys, moves things and draws them; this one only waits.
+LOOP:   CALL    WAIT            ; the turn's pause, so the game runs at a steady speed
+        JR      LOOP            ; and round again, for ever
+
+; WAIT: a counted delay, 133,120 T-states, about 66 ms at 2.03 MHz.
+WAIT:   PUSH    BC              ; save BC, which the loop uses
+        LD      BC,1400H        ; 1400H is 5,120 passes of 26 T-states
+DELAY:  DEC     BC
+        LD      A,B
+        OR      C
+        JR      NZ,DELAY
+        POP     BC              ; BC as the caller left it
+        RET
+
+        END     START           ; the program starts at START

@@ -5,9 +5,10 @@
 // gzip each file at level 9, and print the files and the sum.
 //
 //   pnpm --filter @fugloy/web generate
-//   pnpm --filter @fugloy/web size:first-screen [-- [--page learn] [<public dir>]]
+//   pnpm --filter @fugloy/web size:first-screen [-- [--page learn|invaders] [<public dir>]]
 //
-// `--page learn` measures learn/index.html the same way, against LEARN_BUDGET.
+// `--page learn` measures learn/index.html the same way, against LEARN_BUDGET; `--page invaders` (6C)
+// measures learn/invaders/index.html, the Space Invaders course's chapter 1, against the same budget.
 
 // The budget is 252,775 B (main a6b7831's 247,655 + 5,120). The script exits 1
 // over it, and refuses an E2E build (NUXT_PUBLIC_E2E=1 compiles in the test hook,
@@ -26,13 +27,13 @@ const LEARN_BUDGET = Math.ceil(LEARN_MEASURED / 1024) * 1024 + 5120;
 const args = process.argv.slice(2).filter((a) => a !== '--');
 const pageAt = args.indexOf('--page');
 const pageName = pageAt === -1 ? 'workbench' : args[pageAt + 1];
-if (pageName !== 'workbench' && pageName !== 'learn') {
-  console.error('--page takes `learn` (or nothing, for the workbench). Run it again with one of those.');
+if (pageName !== 'workbench' && pageName !== 'learn' && pageName !== 'invaders') {
+  console.error('--page takes `learn` or `invaders` (or nothing, for the workbench). Run it again with one of those.');
   process.exit(2);
 }
 const positional = args.filter((a, i) => a !== '--page' && i !== pageAt + 1);
-const BUDGET = pageName === 'learn' ? LEARN_BUDGET : WORKBENCH_BUDGET;
-const entry = pageName === 'learn' ? join('learn', 'index.html') : 'index.html';
+const BUDGET = pageName === 'workbench' ? WORKBENCH_BUDGET : LEARN_BUDGET;
+const entry = { workbench: 'index.html', learn: join('learn', 'index.html'), invaders: join('learn', 'invaders', 'index.html') }[pageName];
 const web = join(dirname(fileURLToPath(import.meta.url)), '..');
 const pub = resolve(positional[0] ?? join(web, '.output', 'public'));
 const LAZY_ENTRIES = ['components/source/SourceTab.vue', 'components/run/RunTab.vue', 'utils/running/debug-keys.ts', 'utils/emulator/kit.ts'];
@@ -75,7 +76,7 @@ if (e2e) {
 rows.sort((a, b) => b[2] - a[2]);
 console.log('file\traw B\tgzip B');
 for (const r of rows) console.log(r.join('\t'));
-console.log(`${pageName === 'learn' ? 'Learn page' : 'Workbench'} first screen: ${start.size} listed in ${entry}, ${seen.size} files with their static imports; raw ${raw} B; gzip -9 ${total} B (budget ${BUDGET} B, ${BUDGET - total} B left).`);
+console.log(`${{ workbench: 'Workbench', learn: 'Learn page', invaders: 'Build Space Invaders page' }[pageName]} first screen: ${start.size} listed in ${entry}, ${seen.size} files with their static imports; raw ${raw} B; gzip -9 ${total} B (budget ${BUDGET} B, ${BUDGET - total} B left).`);
 
 // The lazy chunks, when this build's client manifest is at hand (the one Nuxt left last).
 const manifestPath = ['node_modules/.cache/nuxt/.nuxt/dist/server/client.manifest.mjs', '.nuxt/dist/server/client.manifest.mjs']

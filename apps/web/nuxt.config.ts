@@ -9,10 +9,14 @@ import { preloadDeps } from './preload-deps';
 
 const preload = preloadDeps();
 
-// Each lesson's page, from its folder name (content/learn/NN-slug), with the slash its directory is served with.
-const lessonRoutes = readdirSync(join(dirname(fileURLToPath(import.meta.url)), 'content', 'learn'), { withFileTypes: true })
-  .filter((d) => d.isDirectory() && /^\d\d-/.test(d.name))
-  .map((d) => `/learn/${d.name}/`);
+// Each lesson's page, from its folder name (content/learn/NN-slug), and (6C) each Space Invaders chapter's
+// (content/learn/invaders/NN-slug), with the slash its directory is served with.
+const learnDir = join(dirname(fileURLToPath(import.meta.url)), 'content', 'learn');
+const itemRoutes = (sub: string): string[] =>
+  readdirSync(join(learnDir, sub), { withFileTypes: true })
+    .filter((d) => d.isDirectory() && /^\d\d-/.test(d.name))
+    .map((d) => `/learn/${sub === '' ? '' : `${sub}/`}${d.name}/`);
+const lessonRoutes = [...itemRoutes(''), '/learn/invaders/', ...itemRoutes('invaders')];
 
 // pdf.js's decoders (JBIG2 and JPEG 2000 in wasm, which archive.org scans use),
 // standard fonts, CMaps and ICC profiles, served from the site's own assets at
@@ -27,7 +31,8 @@ export default defineNuxtConfig({
   css: ['@fontsource/jetbrains-mono/latin-400.css', '@fontsource/jetbrains-mono/latin-700.css', '~/assets/css/main.css'],
   ssr: true,
   // The crawler must not follow the About page's link to /pdfjs/LICENSE: the file is copied in after prerendering.
-  // The Learn page's lessons are not all linked from the header, so its routes are named: /learn/ and each lesson's folder in content/learn.
+  // The Learn page's lessons are not all linked from the header, so its routes are named: /learn/ and each lesson's folder in content/learn,
+  // and /learn/invaders/ and each chapter's folder in content/learn/invaders.
   nitro: { preset: 'static', publicAssets: pdfjsAssets, prerender: { ignore: ['/pdfjs/'], routes: ['/learn/', ...lessonRoutes] } },
   hooks: {
     // The lazily loaded parts (Source ✎: CodeMirror and asm, plan 5B) are fetched

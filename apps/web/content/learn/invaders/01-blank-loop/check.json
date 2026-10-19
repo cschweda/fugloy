@@ -1,0 +1,16 @@
+{
+  "models": [3, 1],
+  "steps": [
+    { "run": 100000 },
+    { "row": 0, "text": "" },
+    { "row": 7, "text": "" },
+    { "row": 15, "text": "" },
+    { "cell": "3C00", "byte": "20" },
+    { "cell": "3FFF", "byte": "20" },
+    { "pcIn": "DELAY" },
+    { "run": 2000000 },
+    { "pcIn": "DELAY" },
+    { "row": 0, "text": "" },
+    { "row": 15, "text": "" }
+  ]
+}

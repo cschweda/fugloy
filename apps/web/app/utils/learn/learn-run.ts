@@ -8,12 +8,12 @@ import type { Run } from '../../composables/useRun';
 import type { Sources } from '../../composables/useSources';
 import { createProgress } from './progress';
 import type { Progress } from './progress';
-import { lessonBySlug } from './lessons';
+import { itemByProgressId } from './lessons';
 
 export interface LearnParts {
   run: Run;
   sources: Sources;
-  /** Each lesson's source id, by slug, once it has one. */
+  /** Each lesson's and chapter's source id, by progress id (utils/learn/page's progressId), once it has one. */
   ids: Map<string, string>;
 }
 
@@ -41,8 +41,8 @@ export function loadLearn(): Promise<LearnParts> {
 
 let progress: Progress | null = null;
 
-/** The learner's edits and done marks (utils/learn/progress), in this browser; call it in the browser only. */
+/** The learner's edits and done marks (utils/learn/progress), in this browser, by progress id; call it in the browser only. */
 export function learnProgress(): Progress {
-  progress ??= createProgress((slug) => lessonBySlug(slug)?.program ?? '');
+  progress ??= createProgress((id) => itemByProgressId(id)?.program ?? '');
   return progress;
 }

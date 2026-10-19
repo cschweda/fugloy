@@ -155,3 +155,70 @@ describe("the lesson editor's problems list", () => {
     window.removeEventListener('selectionchange', stop, true);
   });
 });
+
+// Phase 6C: a chapter's program in the lesson editor, marked against the chapter before. Review Focus 1
+// (a removal earlier in the text leaves the later marks on the right lines, and the removed line is
+// named by the line it stood before) and 2 (an edit hides the marks with a note; Reset brings them back).
+describe("the lesson editor's change marks on a chapter", () => {
+  const stop = (e: Event): void => e.stopImmediatePropagation();
+  const before = '\tORG\t7000H\nSTART:\tLD\tA,1\n\tLD\tB,2\n\tLD\tC,3\nLOOP:\tJR\tLOOP\n\tEND\tSTART\n';
+  // LD B,2 is taken out (before line 3, LD C,3, now), LOOP's line is changed (line 4, not 5 as before), and WAIT is new (line 5).
+  const after = '\tORG\t7000H\nSTART:\tLD\tA,1\n\tLD\tC,3\nLOOP:\tCALL\tWAIT\nWAIT:\tRET\n\tEND\tSTART\n';
+  const chapter = parseLesson('02-test', md(['A chapter.']), after);
+
+  async function mountChapter(): Promise<{ sources: ReturnType<typeof createSources>; run: ReturnType<typeof createRun> }> {
+    window.addEventListener('selectionchange', stop, true);
+    const sources = createSources({ open: async () => null, starter: async () => after });
+    await sources.start();
+    await sources.create({ name: '02-test.z', text: after });
+    const run = createRun({ sources, stubOnly: true, listing: false, kit: async () => realKit, runner: fakeClock() });
+    const host = document.createElement('div');
+    document.body.append(host);
+    w = mount(LessonEditor, { props: { run, sources, lesson: chapter, course: 'invaders', marksAgainst: before }, attachTo: host });
+    await flushPromises();
+    return { sources, run };
+  }
+  const lineClasses = (): string[] => w!.findAll('.cm-line').map((l) => (l.classes('fg-chg-new') ? 'new' : l.classes('fg-chg-changed') ? 'changed' : ''));
+
+  afterEach(() => window.removeEventListener('selectionchange', stop, true));
+
+  it('marks the new and changed lines, and lists the line taken out with the line it stood before', async () => {
+    await mountChapter();
+    expect(lineClasses()).toEqual(['', '', '', 'changed', 'new', '', '']);
+    expect(w!.findAll('[data-testid="change-mark"]').map((m) => m.text())).toEqual(['~', '+']);
+    expect(w!.get('[data-testid="lesson-marks-summary"]').text()).toBe('Marked since chapter 1: 1 new line (+), 1 changed line (~), 1 line taken out.');
+    const removed = w!.findAll('[data-testid="lesson-removed-line"]');
+    expect(removed).toHaveLength(1);
+    expect(removed[0]!.get('.sr-only').text()).toBe('Removed before line 3:');
+    expect(removed[0]!.get('del').element.textContent).toBe('\tLD\tB,2');
+    expect(w!.find('[data-testid="lesson-marks-hidden"]').exists()).toBe(false);
+  });
+
+  it("hides the marks once the text is not the chapter's own, saying so, and Reset to the lesson brings them back", async () => {
+    const { sources } = await mountChapter();
+    sources.update(sources.current.value!.id, { text: after.replace('WAIT:\tRET', 'WAIT:\tNOP\n\tRET') });
+    await flushPromises();
+    expect(w!.get('[data-testid="lesson-marks-hidden"]').text()).toBe("Your edits hide the chapter's marks. Reset to the lesson brings them back.");
+    expect(w!.findAll('[data-testid="change-mark"]')).toHaveLength(0);
+    expect(lineClasses().every((c) => c === '')).toBe(true);
+    expect(w!.find('[data-testid="lesson-removed"]').exists()).toBe(false);
+    await w!.get('[data-testid="lesson-reset"]').trigger('click');
+    await flushPromises();
+    expect(w!.find('[data-testid="lesson-marks-hidden"]').exists()).toBe(false);
+    expect(lineClasses()).toEqual(['', '', '', 'changed', 'new', '', '']);
+    expect(w!.findAll('[data-testid="change-mark"]')).toHaveLength(2);
+  });
+
+  it('shows no marks, gutter or list on a lesson', async () => {
+    window.addEventListener('selectionchange', stop, true);
+    const sources = createSources({ open: async () => null, starter: async () => after });
+    await sources.start();
+    await sources.create({ name: '01-white-out.z', text: LESSONS[0]!.program });
+    const run = createRun({ sources, stubOnly: true, listing: false, kit: async () => realKit, runner: fakeClock() });
+    w = mount(LessonEditor, { props: { run, sources, lesson: LESSONS[0]! }, attachTo: document.body });
+    await flushPromises();
+    expect(w.find('.fg-chg-gutter').exists()).toBe(false);
+    expect(w.find('[data-testid="lesson-marks-summary"]').exists()).toBe(false);
+    expect(w.find('[data-testid="lesson-marks-hidden"]').exists()).toBe(false);
+  });
+});

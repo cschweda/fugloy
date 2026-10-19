@@ -5,6 +5,10 @@
  * headless on Fugløy's stub ROM it reaches the screen its lesson describes, step by step.
  *
  * A lesson folder holds lesson.md, program.z, and check.json; adding one adds its checks here.
+ *
+ * Phase 6C: the Space Invaders chapters (apps/web/content/learn/invaders/NN-slug/) are checked the same
+ * way, and each chapter's program differs from the one before it (chapter 1's from the blank page).
+ * Only NN-slug folders are lessons or chapters, so invaders/ itself is neither.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { Machine } from '@fugloy/emu';
@@ -31,10 +35,15 @@ interface Check {
 }
 
 const learn = new URL('../../../apps/web/content/learn/', import.meta.url);
-const folders = readdirSync(learn, { withFileTypes: true })
-  .filter((d) => d.isDirectory())
-  .map((d) => d.name)
-  .sort();
+/** The NN-slug folders under `sub` of content/learn, as paths from it. */
+const itemsIn = (sub: string): string[] =>
+  readdirSync(new URL(sub, learn), { withFileTypes: true })
+    .filter((d) => d.isDirectory() && /^\d\d-/.test(d.name))
+    .map((d) => sub + d.name)
+    .sort();
+const lessonFolders = itemsIn('');
+const chapterFolders = itemsIn('invaders/');
+const folders = [...lessonFolders, ...chapterFolders];
 const zit = skipIfNoZmac();
 
 const HALT = 0x76;
@@ -119,19 +128,34 @@ function runSteps(slug: string, model: LessonModel, r: AsmResult, check: Check):
 }
 
 describe('the lessons', () => {
-  it('finds lesson 1 among them', () => {
-    expect(folders).toContain('01-white-out');
+  it('finds lesson 1 among them, and chapter 1 of the invaders course', () => {
+    expect(lessonFolders).toContain('01-white-out');
+    expect(chapterFolders[0]).toBe('invaders/01-blank-loop');
+    expect(folders).not.toContain('invaders');
+  });
+});
+
+describe('the invaders chapters', () => {
+  /** A program's lines with trailing blanks trimmed, as the page's change marks compare them. */
+  const linesOf = (text: string): string => text.split(/\r\n|\r|\n/).map((l) => l.trimEnd()).join('\n');
+  chapterFolders.forEach((folder, i) => {
+    it(`${folder} differs from ${i === 0 ? 'the blank page' : chapterFolders[i - 1]}`, () => {
+      const program = readFileSync(new URL(`${folder}/program.z`, learn), 'utf8');
+      const before = i === 0 ? '' : readFileSync(new URL(`${chapterFolders[i - 1]}/program.z`, learn), 'utf8');
+      expect(linesOf(program).trim()).not.toBe('');
+      expect(linesOf(program)).not.toBe(linesOf(before));
+    });
   });
 });
 
 for (const slug of folders) {
-  describe(`lesson ${slug}`, () => {
+  describe(`${slug.startsWith('invaders/') ? 'chapter' : 'lesson'} ${slug}`, () => {
     const md = readFileSync(new URL(`${slug}/lesson.md`, learn), 'utf8');
     const program = readFileSync(new URL(`${slug}/program.z`, learn), 'utf8');
     const check = readCheck(slug);
 
     it("has the models its check.json runs it on in its front matter, the lesson's own first", () => {
-      expect(parseLesson(slug, md, program).models).toEqual(check.models);
+      expect(parseLesson(slug.replace(/^invaders\//, ''), md, program).models).toEqual(check.models);
     });
 
     for (const model of check.models) {

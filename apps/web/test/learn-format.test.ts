@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseLesson } from '../app/utils/learn/lesson-format';
 import type { Lesson } from '../app/utils/learn/lesson-format';
-import { LESSONS, lessonBySlug } from '../app/utils/learn/lessons';
+import { CHAPTERS, chapterBySlug, LESSONS, lessonBySlug } from '../app/utils/learn/lessons';
 
 const PROGRAM = '\tORG 7000H\nSTART:\tJR START\n\tEND START\n';
 
@@ -251,6 +251,35 @@ describe('LESSONS', () => {
   it('carries each lesson its program', () => {
     for (const lesson of LESSONS) expect(lesson.program).toMatch(/\bEND\b/);
   });
+
+  it('reads only the NN-slug folders, so the invaders course is not a lesson', () => {
+    expect(LESSONS.map((l) => l.slug).filter((s) => !/^\d\d-/.test(s))).toEqual([]);
+    expect(LESSONS.some((l) => l.slug.includes('invaders') && l.slug !== '07-invaders-march')).toBe(false);
+    expect(lessonBySlug('invaders')).toBeNull();
+  });
+});
+
+describe('CHAPTERS', () => {
+  it('starts with chapter 1, A blank screen and a game loop that does nothing yet', () => {
+    expect(CHAPTERS[0]?.slug).toBe('01-blank-loop');
+    expect(CHAPTERS[0]?.title).toBe('A blank screen and a game loop that does nothing yet');
+    expect(chapterBySlug('01-blank-loop')).toBe(CHAPTERS[0]);
+    expect(chapterBySlug('01-white-out')).toBeNull();
+    expect(lessonBySlug('01-blank-loop')).toBeNull();
+  });
+
+  it("numbers every chapter by its folder's NN, in order from 1, and runs each on the Model III first", () => {
+    CHAPTERS.forEach((chapter, i) => {
+      expect(chapter.number).toBe(i + 1);
+      expect(chapter.number).toBe(Number(chapter.slug.slice(0, 2)));
+      expect(chapter.models[0]).toBe(3);
+      expect(chapter.program).toMatch(/\bEND\b/);
+    });
+  });
+
+  it("names what changed in each chapter's text", () => {
+    for (const chapter of CHAPTERS) expect(chapter.body.some((b) => b.kind === 'h2' && b.text === 'What changed'), chapter.slug).toBe(true);
+  });
 });
 
 // A lesson's z80 snippets are quoted from its program.z, so they cannot drift from the program that runs.
@@ -314,7 +343,20 @@ describe('the lessons\' z80 snippets', () => {
     expect(codeOf("        DB 'A;B' ; x")).toBe("DB 'A;B'");
   });
 
-  for (const slug of readdirSync(dir).sort()) {
+  // The lessons' folders (NN-slug) and the chapters' (invaders/NN-slug).
+  const items = (sub: string): string[] =>
+    readdirSync(join(dir, sub), { withFileTypes: true })
+      .filter((d) => d.isDirectory() && /^\d\d-/.test(d.name))
+      .map((d) => (sub === '' ? d.name : `${sub}/${d.name}`))
+      .sort();
+  const folders = [...items(''), ...items('invaders')];
+
+  it('checks the chapters too', () => {
+    expect(folders).toContain('invaders/01-blank-loop');
+    expect(folders).not.toContain('invaders');
+  });
+
+  for (const slug of folders) {
     it(`${slug}: every z80 snippet is lines of program.z`, () => {
       const program = readFileSync(join(dir, slug, 'program.z'), 'utf8');
       const blocks = snippets(readFileSync(join(dir, slug, 'lesson.md'), 'utf8'));

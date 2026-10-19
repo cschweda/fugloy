@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createProgress } from '../app/utils/learn/progress';
+import { itemByProgressId } from '../app/utils/learn/lessons';
+import { progressId } from '../app/utils/learn/page';
 
 function fake(): Storage & { data: Map<string, string> } {
   const data = new Map<string, string>();
@@ -94,5 +96,29 @@ describe('lesson progress', () => {
     p.saveEdit('a', 'again');
     p.saveEdit('a', 'original a');
     expect(p.edit('a')).toBeNull();
+  });
+
+  // Review Focus 5: chapter 1 (01-blank-loop) and lesson 1 (01-white-out) never share a key.
+  it('keys a chapter apart from a lesson: a chapter done or edited leaves the lesson as it was', () => {
+    const s = fake();
+    const chapter = progressId('invaders', '01-blank-loop');
+    const lesson = progressId('lessons', '01-white-out');
+    expect(chapter).toBe('invaders/01-blank-loop');
+    expect(lesson).toBe('01-white-out');
+    const own = (id: string): string => itemByProgressId(id)?.program ?? '';
+    const p = createProgress(own, () => s);
+    p.markDone(chapter);
+    expect(p.done().has(chapter)).toBe(true);
+    expect(p.done().has(lesson)).toBe(false);
+    expect(p.done().has('01-blank-loop')).toBe(false);
+    p.saveEdit(chapter, '; mine');
+    expect(s.data.get('fugloy:learn:edit:invaders/01-blank-loop')).toBe('; mine');
+    expect(p.edit(lesson)).toBeNull();
+    // Saving the chapter's own text removes its edit: the lookup finds the chapter, not the lesson.
+    p.saveEdit(chapter, itemByProgressId(chapter)!.program);
+    expect(p.edit(chapter)).toBeNull();
+    expect(itemByProgressId(lesson)?.title).toBe('White out the screen');
+    expect(itemByProgressId('invaders/01-white-out')).toBeNull();
+    expect(itemByProgressId('01-blank-loop')).toBeNull();
   });
 });
