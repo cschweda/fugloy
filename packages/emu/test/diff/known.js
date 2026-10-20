@@ -97,8 +97,34 @@ const isIndexedCb = (/** @type {Uint8Array} */ bytes) => (bytes[0] === 0xdd || b
 /** CPI, CPD, CPIR, CPDR (ED A1, A9, B1, B9). */
 const isBlockCompare = (/** @type {Uint8Array} */ bytes) => bytes[0] === 0xed && (bytes[1] & 0xe7) === 0xa1;
 
+/** EX (SP),HL (E3) or EX (SP),IX / EX (SP),IY (DD/FD E3). */
+const isExSp = (/** @type {Uint8Array} */ bytes) => bytes[0] === 0xe3 || ((bytes[0] === 0xdd || bytes[0] === 0xfd) && bytes[1] === 0xe3);
+
 /** @type {StepClass[]} */
 export const STEP_CLASSES = [
+  {
+    id: 'ex-sp-order',
+    name: 'EX (SP),rr: the reference writes (SP) before (SP+1)',
+    // The Z80 writes (SP+1) <- H, then (SP) <- L (EX (SP),HL's (4, 3, 4, 3, 5) T-states, Zilog
+    // UM0080 p. 127; MAME 0.289 z80.lst `macro ex_sp`, `@wm16_sp`; floooh/chips z80.h, cycle-stepped,
+    // commit 9e88298), as our core does. xtrs writes the word low byte first (z80.c `case 0xE3: /* ex
+    // (sp), hl */` and the DD/FD forms call mem_write_word, trs_memory.c: `mem_write(address++, value
+    // & 0xff); mem_write(address, value >> 8);`), and so does trsjs (trsemu-1.6.js ex_memsp ->
+    // store16: putbyte(mem, low) then putbyte(mem + 1, high)). Same bytes, same addresses. Explained
+    // only when the step's last two writes are ours (SP+1, SP) and the reference's the same two
+    // swapped, every write before them equal.
+    evidence: 'The Z80 writes (SP+1) before (SP): Zilog UM0080 p. 127 (4, 3, 4, 3, 5); MAME 0.289 z80.lst ex_sp; floooh/chips z80.h. xtrs (trs_memory.c mem_write_word) and trsjs (store16) write the low byte first.',
+    explains(ctx, diff) {
+      if (!diff.has('writes') || !isExSp(ctx.bytes)) return null;
+      const a = ctx.ours.writes;
+      const b = ctx.theirs.writes;
+      const n = a.length;
+      if (n < 2 || b.length !== n || !sameWrites(a.slice(0, n - 2), b.slice(0, n - 2))) return null;
+      const [h, l] = a.slice(n - 2);
+      if (h.addr !== ((l.addr + 1) & 0xffff)) return null;
+      return sameWrites([l, h], b.slice(n - 2)) ? ['writes'] : null;
+    },
+  },
   {
     id: 'xy',
     name: 'flags 3 and 5 (X/Y)',

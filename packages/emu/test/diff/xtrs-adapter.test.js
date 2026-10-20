@@ -146,14 +146,15 @@ describe.skipIf(xtrsSkip !== null)(`xtrs adapter against @fugloy/emu's Model I${
     expect(ref.peek(0x0000, 0x3000)).toEqual(rom().subarray(0, 0x3000));
   });
 
-  it('boots the ROM 100,000 instructions in step with our Model I, with no difference at all once synced', () => {
+  it('boots the ROM 100,000 instructions in step with our Model I, once synced, with only xtrs\'s EX (SP),HL write order differing', () => {
     const m = newMachine();
     const ref = newRef();
     // compareRun syncs the power-on state first (our AF 0000 and video RAM of spaces: Ruling 4
     // revised), then compares PC, every register, the T-states, and the writes at every step.
     const r = compareRun({ machine: m, reference: ref, instructions: 100_000 });
     expect(r.divergence).toBeNull();
-    expect(r.known).toEqual({});
+    // The one EX (SP),HL of the boot (instruction 13,603, $287D): xtrs writes (SP) first (known.js).
+    expect(r.known).toEqual({ 'EX (SP),rr: the reference writes (SP) before (SP+1)': 1 });
     expect(ref.cycles).toBe(m.cycles);
     expect(ref.peek(0x3c00, 0xc400)).toEqual(m.mem.read(0x3c00, 0xc400));
     // The boot reached MEM SIZE? on both.

@@ -54,14 +54,14 @@ const SESSIONS = [
     file: 'eliminator/elimin8c.cmd',
     keys: [press(2, 'ENTER'), press(5, '1')],
     screens: ['Press <ENTER> to Start', '1 or 2 Players?'],
-    known: { 'flags 3 and 5 (X/Y)': 64_175 },
+    known: { 'EX (SP),rr: the reference writes (SP) before (SP+1)': 1_658, 'flags 3 and 5 (X/Y)': 64_175 },
   },
   {
     // The same game in place: ENTER, 1 player, then play.
     file: 'eliminator/elimin8e.cmd',
     keys: [press(6, 'ENTER'), press(9, '1'), press(12, 'SPACE', 1), press(14, 'LEFT', 1), press(16, 'RIGHT', 1)],
     screens: ['Press <ENTER> to Start', '1 or 2 Players?', 'SHIPS: 4 BOMBS: 3'],
-    known: { 'BIT: S and P/V': 34_993, 'DDCB/FDCB: R counted three times': 523, 'flags 3 and 5 (X/Y)': 634_716, 'interrupt held while DI: trsjs drops it': 1, 'interrupt response: R not counted': 295 },
+    known: { 'BIT: S and P/V': 34_993, 'DDCB/FDCB: R counted three times': 523, 'EX (SP),rr: the reference writes (SP) before (SP+1)': 6_196, 'flags 3 and 5 (X/Y)': 634_716, 'interrupt held while DI: trsjs drops it': 1, 'interrupt response: R not counted': 295 },
   },
   {
     // The phase 2 build, to "1 or 2 Players?" (the plan's Review Focus 4: the ENTER reaches both

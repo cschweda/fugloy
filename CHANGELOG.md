@@ -85,6 +85,14 @@ creates and pushes the tag.
   its dots across where space allows, so in a typical panel the Model I is taller than the
   Model III.
 
+### Fixed
+
+- `@fugloy/emu`: EX (SP),HL, EX (SP),IX and EX (SP),IY write (SP+1) before (SP), as the Z80 does
+  (UM0080's (4, 3, 4, 3, 5) T-states; MAME's `ex_sp`; floooh/chips's cycle-stepped core); they
+  wrote L first. Same bytes, same addresses: only the bus order changes. Found by the Model I
+  differential against MAME (emu phase 7, Model I, Task 4); xtrs and trsjs write the low byte
+  first, a known class in `test/diff/known.js`.
+
 ### Added
 
 - A Full screen button in Run ▶'s machine row; Esc leaves it (and the browser's own exit); keys keep

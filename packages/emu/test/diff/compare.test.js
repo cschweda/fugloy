@@ -57,6 +57,32 @@ describe('the known classes', () => {
     for (const c of ALL) expect(c.evidence).toMatch(/Young|ZEXALL|Zilog/);
     expect(new Set(CLASS_NAMES).size).toBe(CLASS_NAMES.length);
   });
+
+  /** A step context for a step class's predicate. */
+  const stepCtx = (bytes, ours, theirs) => {
+    const regs = { pc: 0x4001, f: 0 };
+    return {
+      bytes: Uint8Array.from([...bytes, 0, 0, 0, 0].slice(0, 4)),
+      execPc: 0x4000,
+      ours: { regs, cycles: 19, irq: false, writes: ours, wasHalted: false, fBefore: 0 },
+      theirs: { regs, cycles: 19, irq: false, writes: theirs },
+    };
+  };
+  const explains = (id, ctx) => STEP_CLASSES.find((c) => c.id === id).explains(ctx, new Set(['writes']));
+
+  it('EX (SP),rr\'s write order: only the two bytes swapped, only for EX (SP),rr', () => {
+    const h = { addr: 0x7001, value: 0x12 };
+    const l = { addr: 0x7000, value: 0x34 };
+    for (const op of [[0xe3], [0xdd, 0xe3], [0xfd, 0xe3]]) expect(explains('ex-sp-order', stepCtx(op, [h, l], [l, h]))).toEqual(['writes']);
+    // Another instruction, another value, the same order, or our order the reference's: not explained.
+    expect(explains('ex-sp-order', stepCtx([0xe5], [h, l], [l, h]))).toBeNull();
+    expect(explains('ex-sp-order', stepCtx([0xe3], [h, l], [l, { ...h, value: 0x13 }]))).toBeNull();
+    expect(explains('ex-sp-order', stepCtx([0xe3], [l, h], [h, l]))).toBeNull();
+    // An interrupt response's push before it must agree too.
+    const push = [{ addr: 0x7003, value: 0x40 }, { addr: 0x7002, value: 0x00 }];
+    expect(explains('ex-sp-order', stepCtx([0xe3], [...push, h, l], [...push, l, h]))).toEqual(['writes']);
+    expect(explains('ex-sp-order', stepCtx([0xe3], [...push, h, l], [push[1], push[0], l, h]))).toBeNull();
+  });
 });
 
 describe.skipIf(trsjsSkip !== null)(`compareRun against trsjs${trsjsSkip === null ? '' : ` (skipped: ${trsjsSkip})`}`, () => {
@@ -122,6 +148,12 @@ describe.skipIf(trsjsSkip !== null)(`compareRun against trsjs${trsjsSkip === nul
       program: [0xaf, 0x21, 0x00, 0x50, 0x01, 0x03, 0x00, 0x3e, 0x99, 0xed, 0xb1, 0x00], // XOR A / LD HL,$5000 / LD BC,3 / LD A,$99 / CPIR / NOP
       n: 7,
       known: { [name('cpi-c')]: 3, [name('xy')]: 1 },
+    },
+    {
+      what: 'EX (SP),HL and EX (SP),IX: trsjs writes (SP) before (SP+1)',
+      program: [0x21, 0x34, 0x12, 0xe3, 0xdd, 0xe3, 0x00], // LD HL,$1234 / EX (SP),HL / EX (SP),IX / NOP
+      n: 3,
+      known: { [name('ex-sp-order')]: 2 },
     },
     {
       what: 'a HALT idling with no interrupt: R counts on every step, as on trsjs',

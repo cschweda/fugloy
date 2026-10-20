@@ -317,26 +317,6 @@ describe.skipIf(mameSkip !== null)(`MAME's Model I as a trace${mameSkip === null
   });
 
   /**
-   * Our machine with EX (SP),HL writing H to SP+1 before L to SP, as MAME's does (ours writes L
-   * first, as xtrs's mem_write_word does). Which order the Z80 uses is Task 4's to decide and cite
-   * (Ruling 6); until then the MAME sessions run with this test-only patch, and the test below
-   * pins the one difference it hides.
-   */
-  const mameOrder = () => {
-    const m = newMachine();
-    const cpu = /** @type {any} */ (m.system.cpu);
-    cpu.opcodeHandlers[0xe3] = () => {
-      const sp = cpu.registers.SP;
-      const temp = (cpu.readMemory((sp + 1) & 0xffff) << 8) | cpu.readMemory(sp);
-      cpu.writeMemory((sp + 1) & 0xffff, cpu.registers.H);
-      cpu.writeMemory(sp, cpu.registers.L);
-      cpu.HL = temp;
-      cpu.wz = temp;
-      return 19;
-    };
-    return m;
-  };
-  /**
    * The end-of-run video comparison: MAME stores the byte the CPU wrote, ours applies the Model I's
    * bit-6 gate (bit 6 = NOT bit 5, no lowercase), so the bytes differ in bit 6 only. Task 4 compares
    * video RAM through the gate (the plan's Files list); until then this pins that it is the only
@@ -368,15 +348,14 @@ describe.skipIf(mameSkip !== null)(`MAME's Model I as a trace${mameSkip === null
     return boot;
   };
 
-  it('finds one difference no class explains in the boot: EX (SP),HL writes H first in MAME, L first in ours (for Task 4)', async () => {
-    const r = compareRun({ machine: newMachine(), reference: openTrace(await bootTrace()), instructions: 100_000 });
-    const d = /** @type {import('./compare.js').Divergence} */ (r.divergence);
-    expect([d.index, d.pc, d.fields]).toEqual([13_603, 0x287d, ['writes']]);
-    expect(d.context.find((l) => l.index === d.index)?.text).toBe('EX (SP),HL');
-    expect(d.writes).toEqual({ ours: [{ addr: 0x4344, value: 0x0d }, { addr: 0x4345, value: 0x01 }], theirs: [{ addr: 0x4345, value: 0x01 }, { addr: 0x4344, value: 0x0d }] });
+  it('EX (SP),HL at instruction 13,603 writes H to SP+1, then L to SP, in MAME and in ours', async () => {
+    const ref = openTrace(await bootTrace());
+    const r = compareRun({ machine: newMachine(), reference: ref, instructions: 13_604 });
+    expect(r.divergence).toBeNull();
+    expect(ref.writes()).toEqual([{ addr: 0x4345, value: 0x01 }, { addr: 0x4344, value: 0x0d }]);
   });
 
-  it('a recorded boot of 100,000 instructions replays against our Model I with only Task 1\'s classes (EX (SP),HL in MAME\'s order)', async () => {
+  it('a recorded boot of 100,000 instructions replays against our Model I with only Task 1\'s classes', async () => {
     const out = await bootTrace();
     const ref = openTrace(out);
     expect(ref.header).toMatchObject({ complete: true, verified: true, bios: 'rsl2', mame: MAME_VERSION, records: 100_001 });
@@ -397,7 +376,7 @@ describe.skipIf(mameSkip !== null)(`MAME's Model I as a trace${mameSkip === null
       return t;
     };
     let r;
-    const m = mameOrder();
+    const m = newMachine();
     try {
       r = compareRun({ machine: m, reference: ref, instructions: 100_000 });
     } finally {
@@ -419,7 +398,7 @@ describe.skipIf(mameSkip !== null)(`MAME's Model I as a trace${mameSkip === null
     const out = join(dir, 'enter.fmt');
     await recordMameTrace({ instructions: 700_000, keys: [{ at: 400_000, text: '\r' }], out });
     const ref = openTrace(out);
-    const m = mameOrder();
+    const m = newMachine();
     const r = compareRun({ machine: m, reference: ref, instructions: 700_000 });
     expect(r.instructions).toBe(700_000);
     onlyGate(r, m, ref);
@@ -438,13 +417,12 @@ describe.skipIf(mameSkip !== null)(`MAME's Model I as a trace${mameSkip === null
     expect(rec.instructions).toBeLessThan(5_000_000);
     const ref = openTrace(out);
     expect(ref.header).toMatchObject({ complete: false, verified: false, reason: 'MAME exited on SIGALRM' });
-    const r = compareRun({ machine: mameOrder(), reference: ref, instructions: 5_000_000 });
+    const r = compareRun({ machine: newMachine(), reference: ref, instructions: 5_000_000 });
     expect(r.instructions).toBe(rec.instructions);
     expect(r.ended).toBe(`MAME's trace ends after ${rec.instructions} of 5000000 instructions (MAME exited on SIGALRM), so the run proves nothing past that point.`);
     expect(formatReport(r)).toContain(/** @type {string} */ (r.ended));
     ref.close?.();
-    // The CLI (our core's own EX (SP),HL order, so it stops at that divergence first) never
-    // reports a killed recording as passing: a divergence (1) or the sentence (3).
+    // The CLI never reports a killed recording as passing: a divergence (1) or the sentence (3).
     const run = spawnSync(process.execPath, [CLI, 'compare', out, '--instructions', '5000000'], { encoding: 'utf8' });
     expect([1, 3]).toContain(run.status);
     expect(run.stdout).not.toContain('divergence: none');

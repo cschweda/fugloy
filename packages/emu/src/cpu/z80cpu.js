@@ -1521,13 +1521,15 @@ export class Z80CPU {
       return 4;
     };
 
-    // EX (SP), HL (0xE3)
+    // EX (SP), HL (0xE3); DD/FD E3 run it with HL swapped for IX/IY. 19 T-states as (4, 3, 4, 3,
+    // 5) (Zilog UM0080 p. 127): read (SP), read (SP+1), then write (SP+1) <- H before (SP) <- L
+    // (MAME's z80.lst `ex_sp`; floooh/chips z80.h's cycle-stepped EX (SP),HL).
     this.opcodeHandlers[0xe3] = () => {
       const low = this.readMemory(this.registers.SP);
       const high = this.readMemory((this.registers.SP + 1) & 0xffff);
       const temp = (high << 8) | low;
-      this.writeMemory(this.registers.SP, this.registers.L);
       this.writeMemory((this.registers.SP + 1) & 0xffff, this.registers.H);
+      this.writeMemory(this.registers.SP, this.registers.L);
       this.HL = temp;
       this.wz = temp;
       return 19;
