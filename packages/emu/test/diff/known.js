@@ -97,11 +97,33 @@ const isIndexedCb = (/** @type {Uint8Array} */ bytes) => (bytes[0] === 0xdd || b
 /** CPI, CPD, CPIR, CPDR (ED A1, A9, B1, B9). */
 const isBlockCompare = (/** @type {Uint8Array} */ bytes) => bytes[0] === 0xed && (bytes[1] & 0xe7) === 0xa1;
 
+/** LDIR, LDDR, CPIR, CPDR (ED B0, B8, B1, B9). */
+const isBlockRepeat = (/** @type {Uint8Array} */ bytes) => bytes[0] === 0xed && (bytes[1] & 0xf6) === 0xb0;
+
 /** EX (SP),HL (E3) or EX (SP),IX / EX (SP),IY (DD/FD E3). */
 const isExSp = (/** @type {Uint8Array} */ bytes) => bytes[0] === 0xe3 || ((bytes[0] === 0xdd || bytes[0] === 0xfd) && bytes[1] === 0xe3);
 
 /** @type {StepClass[]} */
 export const STEP_CLASSES = [
+  {
+    id: 'block-xy',
+    name: 'repeating LDIR/LDDR/CPIR/CPDR: flags 3 and 5 from PC',
+    // An iteration that repeats leaves Y = PC bit 13 and X = PC bit 11 (PC the ED's address): David
+    // Banks, Z80Decoder wiki "Undocumented Flags", "LDxR / CPxR interrupted"; Peter Helcmanovsky's
+    // Z80 Block Flags Test, run on real Z80s; MAME 0.289 z80.lst `macro ldir` (`m_f.yx_val = PC >> 8`
+    // after `PC -= 2`), as our core does (z80cpu.js _xyRepeat). Young §4.2 (2005) gives the finished
+    // iteration's rule "at every iteration", which xtrs keeps (z80.c do_ldir: do_ldi's flags, then
+    // PC -= 2); trsjs's oped_b0 (trsemu-1.6.js) leaves bits 3 and 5 as they were. Explained only
+    // when our instruction repeated (our PC is back on the ED) and our F bits 3 and 5 are PC's bits
+    // 13 and 11; it takes these bits before the general class below.
+    evidence: 'Banks, Z80Decoder wiki, "LDxR / CPxR interrupted": YF = PC.13, XF = PC.11; Helcmanovsky\'s Z80 Block Flags Test on real Z80s; MAME 0.289 z80.lst `ldir`. Young §4.2 (2005) predates it; xtrs follows Young, trsjs leaves the bits alone.',
+    explains(ctx, diff) {
+      if (!isBlockRepeat(ctx.bytes) || ctx.ours.irq || ctx.ours.regs.pc !== ctx.execPc) return null;
+      if ((ctx.ours.regs.f & 0x28) !== ((ctx.execPc >> 8) & 0x28)) return null;
+      const t = ['f.5', 'f.3'].filter((k) => diff.has(k));
+      return t.length > 0 ? t : null;
+    },
+  },
   {
     id: 'ex-sp-order',
     name: 'EX (SP),rr: the reference writes (SP) before (SP+1)',
@@ -309,7 +331,9 @@ export function explainStep(ctx, diff) {
   /** @type {string[]} */
   const classes = [];
   for (const c of STEP_CLASSES) {
-    const t = c.explains(ctx, diff);
+    // Each class sees what the ones before it left, so a field is counted under one class only.
+    if (left.size === 0) break;
+    const t = c.explains(ctx, left);
     if (t === null) continue;
     classes.push(c.name);
     for (const k of t) left.delete(k);

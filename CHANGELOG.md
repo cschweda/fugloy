@@ -93,6 +93,14 @@ creates and pushes the tag.
   differential against MAME (emu phase 7, Model I, Task 4); xtrs and trsjs write the low byte
   first, a known class in `test/diff/known.js`.
 
+- `@fugloy/emu`: an LDIR, LDDR, CPIR or CPDR iteration that repeats leaves F bits 5 and 3 from
+  bits 13 and 11 of PC (its ED's address), not from the iteration's n (David Banks's Z80Decoder
+  research, "LDxR / CPxR interrupted", checked on real Z80s by Peter Helcmanovsky's Z80 Block Flags
+  Test; MAME does the same). The iteration that ends keeps Young's rule. Found as the 5,112 flag
+  rows of the Model I boot against MAME; xtrs keeps Young's rule, a known class. INIR, INDR, OTIR
+  and OTDR also change H and P/V while they repeat; that is not modelled yet. ZEXDOC and ZEXALL
+  still pass all 67 groups.
+
 ### Added
 
 - A Full screen button in Run ▶'s machine row; Esc leaves it (and the browser's own exit); keys keep

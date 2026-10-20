@@ -264,3 +264,61 @@ describe("X/Y on block and register-transfer ops", () => {
     expect(xy(c)).toBe(0x28);
   });
 });
+
+/*
+ * A repeating LDIR/LDDR/CPIR/CPDR (BC != 0 after the iteration, and for CPxR no match) leaves
+ * F bits 3 and 5 from the high byte of PC, the address of its ED (Y = PC bit 13, X = PC bit 11),
+ * not from n as Young §4.2 has it "at every iteration": David Banks's Z80Decoder research
+ * ("LDxR / CPxR interrupted", github.com/hoglet67/Z80Decoder/wiki/Undocumented-Flags), checked on
+ * real Z80s by Peter Helcmanovsky's Z80 Block Flags Test (github.com/redcode/Z80/wiki/Z80-Block-
+ * Flags-Test), and MAME 0.289's z80.lst (`macro ldir` etc.: `m_f.yx_val = PC >> 8` after
+ * `PC -= 2`). The iteration that ends the instruction keeps Young's rule.
+ */
+describe("X/Y after a repeating block iteration come from PC's high byte", () => {
+  /** The instruction at `pc` with HL 4000H holding `byte`, DE 5000H, BC `bc`, A `a`. */
+  function block(op, pc, { bc = 3, a = 0, byte = 0 } = {}) {
+    const c = cpuWithMemory();
+    c.mem.set([0xed, op], pc);
+    c.mem[0x4000] = byte;
+    c.registers.PC = pc;
+    c.HL = 0x4000;
+    c.DE = 0x5000;
+    c.BC = bc;
+    c.registers.A = a;
+    c.registers.F = 0;
+    c.executeInstruction();
+    return c;
+  }
+
+  it("LDIR and LDDR that repeat: Y = PC bit 13, X = PC bit 11", () => {
+    for (const op of [0xb0, 0xb8]) {
+      // n = 0 + 0 would give X/Y 0; PC 2800H gives Y (bit 13) and X (bit 11).
+      const c = block(op, 0x2800);
+      expect(c.registers.PC, op.toString(16)).toBe(0x2800);
+      expect(xy(c), op.toString(16)).toBe(0x28);
+      // n = 0x0a (bits 1 and 3) would give X/Y 28H; PC 4000H gives 0.
+      expect(xy(block(op, 0x4000, { a: 0x0a })), op.toString(16)).toBe(0x00);
+      expect(xy(block(op, 0x0800)), op.toString(16)).toBe(0x08);
+      expect(xy(block(op, 0x2000)), op.toString(16)).toBe(0x20);
+    }
+  });
+
+  it("LDIR's last iteration keeps n's rule", () => {
+    const c = block(0xb0, 0x2800, { bc: 1, a: 0x0a });
+    expect(c.registers.PC).toBe(0x2802);
+    expect(xy(c)).toBe(0x28);
+    expect(xy(block(0xb0, 0x2800, { bc: 1 }))).toBe(0x00);
+  });
+
+  it("CPIR and CPDR that repeat (no match, BC != 0): from PC; on a match, from n", () => {
+    for (const op of [0xb1, 0xb9]) {
+      // A 10H - 0BH = 05H with H set: n = 04H, which would give X/Y 0.
+      const c = block(op, 0x2800, { a: 0x10, byte: 0x0b });
+      expect(c.registers.PC, op.toString(16)).toBe(0x2800);
+      expect(xy(c), op.toString(16)).toBe(0x28);
+      const hit = block(op, 0x2800, { a: 0x05, byte: 0x05 });
+      expect(hit.registers.PC, op.toString(16)).toBe(0x2802);
+      expect(xy(hit), op.toString(16)).toBe(0x00);
+    }
+  });
+});

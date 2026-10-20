@@ -44,7 +44,7 @@ const SESSIONS = [
     file: 'sea-dragon/seadrg01.cmd',
     keys: [press(6, 'ENTER'), press(9, '1'), press(12, '0'), press(15, 'SPACE', 2), press(18, 'UP', 1), press(20, 'DOWN', 1), press(22, 'RIGHT', 2)],
     screens: ['BY: Wayne Westmoreland & Terry Gilman', '1 or 2 Players?', 'Player 1: Skill level', 'SHIPS 4'],
-    known: { 'BIT: S and P/V': 364_967, 'DDCB/FDCB: R counted three times': 6_245, 'flags 3 and 5 (X/Y)': 1_390_426 },
+    known: { 'BIT: S and P/V': 364_967, 'DDCB/FDCB: R counted three times': 6_245, 'flags 3 and 5 (X/Y)': 1_354_958, 'repeating LDIR/LDDR/CPIR/CPDR: flags 3 and 5 from PC': 4_231 },
   },
   {
     // The phase 2 build: title at once, ENTER to the high scores. It never takes the 1, on trsjs
@@ -54,14 +54,14 @@ const SESSIONS = [
     file: 'eliminator/elimin8c.cmd',
     keys: [press(2, 'ENTER'), press(5, '1')],
     screens: ['Press <ENTER> to Start', '1 or 2 Players?'],
-    known: { 'EX (SP),rr: the reference writes (SP) before (SP+1)': 1_658, 'flags 3 and 5 (X/Y)': 64_175 },
+    known: { 'EX (SP),rr: the reference writes (SP) before (SP+1)': 1_658, 'flags 3 and 5 (X/Y)': 46_772, 'repeating LDIR/LDDR/CPIR/CPDR: flags 3 and 5 from PC': 36 },
   },
   {
     // The same game in place: ENTER, 1 player, then play.
     file: 'eliminator/elimin8e.cmd',
     keys: [press(6, 'ENTER'), press(9, '1'), press(12, 'SPACE', 1), press(14, 'LEFT', 1), press(16, 'RIGHT', 1)],
     screens: ['Press <ENTER> to Start', '1 or 2 Players?', 'SHIPS: 4 BOMBS: 3'],
-    known: { 'BIT: S and P/V': 34_993, 'DDCB/FDCB: R counted three times': 523, 'EX (SP),rr: the reference writes (SP) before (SP+1)': 6_196, 'flags 3 and 5 (X/Y)': 634_716, 'interrupt held while DI: trsjs drops it': 1, 'interrupt response: R not counted': 295 },
+    known: { 'BIT: S and P/V': 34_993, 'DDCB/FDCB: R counted three times': 523, 'EX (SP),rr: the reference writes (SP) before (SP+1)': 6_196, 'flags 3 and 5 (X/Y)': 541_465, 'interrupt held while DI: trsjs drops it': 1, 'interrupt response: R not counted': 295, 'repeating LDIR/LDDR/CPIR/CPDR: flags 3 and 5 from PC': 5_901 },
   },
   {
     // The phase 2 build, to "1 or 2 Players?" (the plan's Review Focus 4: the ENTER reaches both
@@ -70,21 +70,21 @@ const SESSIONS = [
     file: 'rear-guard/reargrd5.cmd',
     keys: [press(4, 'ENTER'), press(7, '1')],
     screens: ['Hit <ENTER> to begin', 'HIGH SCORES', '1 or 2 Players?'],
-    known: { 'BIT: S and P/V': 25, 'flags 3 and 5 (X/Y)': 48_716 },
+    known: { 'BIT: S and P/V': 25, 'flags 3 and 5 (X/Y)': 25_985, 'repeating LDIR/LDDR/CPIR/CPDR: flags 3 and 5 from PC': 2_080 },
   },
   {
     // The build closest to the original disk: ENTER, 1 player, then play.
     file: 'rear-guard/reargrd4.cmd',
     keys: [press(6, 'ENTER'), press(9, '1'), press(12, 'SPACE', 1), press(14, 'UP', 1), press(16, 'DOWN', 1)],
     screens: ['Hit <ENTER> to begin', '1 or 2 Players?', 'Ships:4 Shield:'],
-    known: { 'BIT: S and P/V': 101_061, 'DDCB/FDCB: R counted three times': 12_363, 'flags 3 and 5 (X/Y)': 1_213_502 },
+    known: { 'BIT: S and P/V': 101_061, 'DDCB/FDCB: R counted three times': 12_363, 'flags 3 and 5 (X/Y)': 1_023_990, 'repeating LDIR/LDDR/CPIR/CPDR: flags 3 and 5 from PC': 19_078 },
   },
   {
     // "1 or 2 Players?" at once; 1 player, then play ("A" right, "Z" left, space fires).
     file: 'armored-patrol/ARMOUR.III',
     keys: [press(1, '1'), press(4, 'SPACE', 1), press(6, 'A', 1), press(8, 'Z', 1), press(10, 'SPACE', 1)],
     screens: ['1 or 2 Players?', 'ENERGY:'],
-    known: { 'BIT: S and P/V': 90_087, 'flags 3 and 5 (X/Y)': 1_662_093 },
+    known: { 'BIT: S and P/V': 90_087, 'flags 3 and 5 (X/Y)': 1_600_685, 'repeating LDIR/LDDR/CPIR/CPDR: flags 3 and 5 from PC': 10_807 },
   },
 ];
 

@@ -14,7 +14,6 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { Machine } from '../../src/index.js';
 import { compareRun, formatReport } from './compare.js';
 import { mameSkip, requireRom } from './gate.js';
-import { STEP_CLASSES } from './known.js';
 import { checkMame, checkRomSet, IRQ, MAME_ROMS, MAME_VERSION, openTrace, recordMameTrace, writeTrace } from './mame-trace.js';
 
 const dir = mkdtempSync(join(tmpdir(), 'fugloy-mame-test-'));
@@ -355,43 +354,21 @@ describe.skipIf(mameSkip !== null)(`MAME's Model I as a trace${mameSkip === null
     expect(ref.writes()).toEqual([{ addr: 0x4345, value: 0x01 }, { addr: 0x4344, value: 0x0d }]);
   });
 
-  it('a recorded boot of 100,000 instructions replays against our Model I with only Task 1\'s classes', async () => {
+  it('a recorded boot of 100,000 instructions replays against our Model I with no known class (the repeating LDIR\'s flags now agree)', async () => {
     const out = await bootTrace();
     const ref = openTrace(out);
     expect(ref.header).toMatchObject({ complete: true, verified: true, bios: 'rsl2', mame: MAME_VERSION, records: 100_001 });
     // MAME's reset state (the spike note): AF 0040, SP 0000, IX and IY FFFF.
     const r0 = ref.regs();
     expect([(r0.a << 8) | r0.f, r0.sp, r0.ix, r0.iy, r0.pc]).toEqual([0x0040, 0, 0xffff, 0xffff, 0]);
-    // Every flag 3/5 difference is the MAME-only one Task 1 found: a repeating LDIR (Task 4 decides it).
-    const xy = /** @type {import('./known.js').StepClass} */ (STEP_CLASSES.find((c) => c.id === 'xy'));
-    const explains = xy.explains;
-    /** @type {{ pc: number, xor: number, bc: number }[]} */
-    const seen = [];
-    xy.explains = (ctx, diff) => {
-      const t = explains.call(xy, ctx, diff);
-      if (t !== null) {
-        expect([ctx.bytes[0], ctx.bytes[1]]).toEqual([0xed, 0xb0]);
-        seen.push({ pc: ctx.execPc, xor: ctx.ours.regs.f ^ ctx.theirs.regs.f, bc: (ctx.ours.regs.b << 8) | ctx.ours.regs.c });
-      }
-      return t;
-    };
-    let r;
+    // Task 1's 5,112 flag rows (LDIR at $067F and $007E while it repeats) took bits 3 and 5 from
+    // PC in MAME; our core does too now (z80cpu.js _xyRepeat), so nothing is left to count.
     const m = newMachine();
-    try {
-      r = compareRun({ machine: m, reference: ref, instructions: 100_000 });
-    } finally {
-      xy.explains = explains;
-    }
+    const r = compareRun({ machine: m, reference: ref, instructions: 100_000 });
     expect(r.instructions).toBe(100_000);
     onlyGate(r, m, ref);
     expect(r.ended).toBeUndefined();
-    expect(Object.keys(r.known)).toEqual([xy.name]);
-    expect(seen.length).toBe(r.known[xy.name]);
-    for (const s of seen) {
-      expect([0x067f, 0x007e]).toContain(s.pc);
-      expect(s.xor & ~0x28).toBe(0);
-      expect(s.bc).not.toBe(0); // it repeats
-    }
+    expect(r.known).toEqual({});
   });
 
   it('keyboard bytes MAME read reach our matrix at the recorded reads: ENTER at MEM SIZE? gives READY on both', async () => {
@@ -402,7 +379,7 @@ describe.skipIf(mameSkip !== null)(`MAME's Model I as a trace${mameSkip === null
     const r = compareRun({ machine: m, reference: ref, instructions: 700_000 });
     expect(r.instructions).toBe(700_000);
     onlyGate(r, m, ref);
-    expect(Object.keys(r.known)).toEqual(['flags 3 and 5 (X/Y)']);
+    expect(r.known).toEqual({});
     expect(m.video.text().slice(0, 3).map((l) => l.trim())).toEqual(['MEM SIZE?', 'R/S L2 BASIC', 'READY']);
     expect([...m.system.keyboard.rows].every((x) => x === 0)).toBe(true);
   });

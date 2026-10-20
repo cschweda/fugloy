@@ -173,6 +173,19 @@ export class Z80CPU {
       (this.registers.F & ~0x28) | ((n & 0x02) << 4) | (n & 0x08);
   }
 
+  /**
+   * F bits 3 and 5 after an LDIR, LDDR, CPIR or CPDR iteration that repeats (PC already back on
+   * its ED): Y = PC bit 13, X = PC bit 11, the high byte's bits 5 and 3, in place of the
+   * iteration's n (Young §4.2 gives n "at every iteration"; the repeat's extra 5 T-states put PC's
+   * high byte there instead). David Banks, Z80Decoder wiki, "Undocumented Flags", "LDxR / CPxR
+   * interrupted"; confirmed on real Z80s by Peter Helcmanovsky's Z80 Block Flags Test; MAME
+   * 0.289's z80.lst (`m_f.yx_val = PC >> 8`). INIR/INDR/OTIR/OTDR also change H and P/V when they
+   * repeat (the same research; MAME's block_io_interrupted_flags); not modelled here.
+   */
+  _xyRepeat() {
+    this.registers.F = (this.registers.F & ~0x28) | ((this.registers.PC >> 8) & 0x28);
+  }
+
   setFlag(flag, value) {
     if (value) {
       this.registers.F |= 1 << flag;
@@ -2814,6 +2827,7 @@ export class Z80CPU {
       // Repeat: decrement PC by 2 to re-execute instruction
       this.registers.PC = (this.registers.PC - 2) & 0xffff;
       this.wz = (this.registers.PC + 1) & 0xffff;
+      this._xyRepeat();
       return cycles + 5; // Extra cycles for repeat
     }
     return cycles;
@@ -2848,6 +2862,7 @@ export class Z80CPU {
     if (this.BC !== 0) {
       this.registers.PC = (this.registers.PC - 2) & 0xffff;
       this.wz = (this.registers.PC + 1) & 0xffff;
+      this._xyRepeat();
       return cycles + 5;
     }
     return cycles;
@@ -2888,6 +2903,7 @@ export class Z80CPU {
     if (this.BC !== 0 && !this.flagZ) {
       this.registers.PC = (this.registers.PC - 2) & 0xffff;
       this.wz = (this.registers.PC + 1) & 0xffff;
+      this._xyRepeat();
       return cycles + 5;
     }
     return cycles;
@@ -2926,6 +2942,7 @@ export class Z80CPU {
     if (this.BC !== 0 && !this.flagZ) {
       this.registers.PC = (this.registers.PC - 2) & 0xffff;
       this.wz = (this.registers.PC + 1) & 0xffff;
+      this._xyRepeat();
       return cycles + 5;
     }
     return cycles;

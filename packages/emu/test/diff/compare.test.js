@@ -11,7 +11,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { Machine } from '../../src/index.js';
 import { compareRun, formatReport, keyEvents } from './compare.js';
-import { CLASS_NAMES, INTERRUPT_CLASSES, REFERENCE_FIXES, STEP_CLASSES } from './known.js';
+import { CLASS_NAMES, explainStep, INTERRUPT_CLASSES, REFERENCE_FIXES, STEP_CLASSES } from './known.js';
 import { trsjsSkip } from './gate.js';
 import { loadTrsjs } from './trsjs-adapter.js';
 
@@ -69,6 +69,26 @@ describe('the known classes', () => {
     };
   };
   const explains = (id, ctx) => STEP_CLASSES.find((c) => c.id === id).explains(ctx, new Set(['writes']));
+
+  it('a repeating block instruction\'s flags 3 and 5: only while it repeats, only from PC, and before the general class', () => {
+    const at = (bytes, pc, f, execPc = 0x4000) => {
+      const ctx = stepCtx(bytes, [], []);
+      ctx.execPc = execPc;
+      ctx.ours.regs = { ...ctx.ours.regs, pc, f };
+      return ctx;
+    };
+    const f35 = new Set(['f.5', 'f.3']);
+    const block = (ctx) => STEP_CLASSES.find((c) => c.id === 'block-xy').explains(ctx, f35);
+    for (const op of [0xb0, 0xb8, 0xb1, 0xb9]) expect(block(at([0xed, op], 0x2800, 0x28, 0x2800))).toEqual(['f.5', 'f.3']);
+    expect(block(at([0xed, 0xb0], 0x4002, 0x00))).toBeNull(); // it ended
+    expect(block(at([0xed, 0xb0], 0x2800, 0x08, 0x2800))).toBeNull(); // not PC's bits
+    expect(block(at([0xed, 0xa0], 0x4000, 0x00))).toBeNull(); // LDI
+    expect(block(at([0xed, 0xb2], 0x4000, 0x00))).toBeNull(); // INIR: not this class
+    // Counted under this class, not also under flags 3 and 5.
+    const ctx = at([0xed, 0xb0], 0x4000, 0x00);
+    ctx.theirs.regs = { ...ctx.theirs.regs, pc: 0x4000, f: 0x28 };
+    expect(explainStep(ctx, new Set(['f.5', 'f.3']))).toEqual({ classes: [name('block-xy')], unexplained: [] });
+  });
 
   it('EX (SP),rr\'s write order: only the two bytes swapped, only for EX (SP),rr', () => {
     const h = { addr: 0x7001, value: 0x12 };
@@ -154,6 +174,16 @@ describe.skipIf(trsjsSkip !== null)(`compareRun against trsjs${trsjsSkip === nul
       program: [0x21, 0x34, 0x12, 0xe3, 0xdd, 0xe3, 0x00], // LD HL,$1234 / EX (SP),HL / EX (SP),IX / NOP
       n: 3,
       known: { [name('ex-sp-order')]: 2 },
+    },
+    {
+      what: 'LDIR that repeats: flags 3 and 5 from PC in ours, kept in trsjs',
+      // LD A,$28 / OR A (ours sets F bits 3 and 5 from the result, trsjs not: xy, then resynced) /
+      // LD HL,$5000 / LD DE,$5100 / LD BC,3 / LDIR / NOP: the first iteration leaves PC $40's bits
+      // (0) in ours and $28 in trsjs (block-xy, resynced); the second 0 on both; the last n = A + 0
+      // = $28's bit 3 in ours, trsjs the 0 it was given (xy).
+      program: [0x3e, 0x28, 0xb7, 0x21, 0x00, 0x50, 0x11, 0x00, 0x51, 0x01, 0x03, 0x00, 0xed, 0xb0, 0x00],
+      n: 9,
+      known: { [name('block-xy')]: 1, [name('xy')]: 2 },
     },
     {
       what: 'a HALT idling with no interrupt: R counts on every step, as on trsjs',
