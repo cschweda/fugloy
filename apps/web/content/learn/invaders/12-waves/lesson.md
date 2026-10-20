@@ -8,7 +8,7 @@ cite: m1-trh 12 the Model I's keyboard is memory from 3800H, and its screen at 3
 cite: decker 64 the keyboard's rows are read at 3801H to 3840H, one address a row
 cite: paay 26 the keyboard's rows are read at 3801H to 3840H, one address a row
 ---
-The last chapter. Shoot down all 24 invaders and a new wave appears at the top, where the first began, and it marches faster: the first wave steps every 4 turns, the second every 3, the third every 2, and every wave after that on every turn. The score and the lives carry on from wave to wave, and the game goes on until a bomb takes the last life. That is the whole game.
+The last chapter. Shoot down all 24 invaders and a new wave appears at the top, where the first began, and it marches faster: the first wave steps every 4 turns, the second every 3, the third every 2, and every wave after that on every turn. The score and the lives carry on from wave to wave, and the game goes on until a bomb takes the last life or the invaders land. That is the whole game.
 
 ## What changed
 
@@ -17,13 +17,13 @@ Chapter 11's program, with these changes:
 - **~** The comment at the top, lines 1 to 5, now describes chapter 12.
 - **+** Three lines in `HIT`, lines 92 to 94, after `CALL ADDSCORE`: one invader fewer in the wave, and with none left, `CALL Z,NEWWAVE`.
 - **~** `MARCH`'s comment, line 143: the row steps every `SPEED` turns.
-- **~** In `MARCH`, `LD (HL),4` becomes two lines: line 149 is changed and line 150 is new; `TICK` starts again from `SPEED`, not from 4.
-- **+** `NEWWAVE` and `PLACE`, new routines with their comments, after `DROP`, lines 342 to 364: the next wave is faster, and starts where the first did.
-- **+** At the end of `START`, line 376: `CALL PLACE`, for the first wave.
-- **~** The comment on the loop's `CALL MARCH`, line 384: every `SPEED` turns.
-- **~** The comment above the table, lines 404 and 405, and its label, line 407: the starting places are now `HOME`.
-- **+** `INVS`, after `HOME`, lines 413 to 415: a comment, and room for the wave's places.
-- **+** `SPEED` and `LEFT`, after `TICK`, lines 420 and 421: the turns between steps, and the invaders left in the wave.
+- **~** In `MARCH`, `LD (HL),4` becomes two lines: line 150 is changed and line 151 is new; `TICK` starts again from `SPEED`, not from 4.
+- **+** `NEWWAVE` and `PLACE`, new routines with their comments, after `LANDED`, lines 359 to 380: the next wave is faster, and starts where the first did.
+- **+** In `START`, line 391: `CALL PLACE`, for the first wave, before the invaders are drawn.
+- **~** The comment on the loop's `CALL MARCH`, line 416: every `SPEED` turns.
+- **~** The comment above the table, lines 440 and 441, and its label, line 443: the starting places are now `HOME`.
+- **+** `INVS`, after `HOME`, lines 449 to 451: a comment, and room for the wave's places.
+- **+** `SPEED` and `LEFT`, after `TICK`, lines 456 and 457: the turns between steps, and the invaders left in the wave.
 
 Nothing is taken out.
 
@@ -44,7 +44,7 @@ PLACE:  LD      HL,HOME         ; copy the starting places ...
         LDIR
 ```
 
-In JavaScript that is `invs = home.slice()`, a fresh copy to play with. `PLACE` then puts back everything else a wave starts with: the top row on row 2, `STEP` marching right, `TICK` at `SPEED` turns to the first step, and `LEFT` at 24. `START` calls it once, for the first wave, so `TICK`, `STEP` and `INVROW` keep their `DB` and `DW` values only as what the program file holds; `PLACE` sets each before the loop reads it.
+In JavaScript that is `invs = home.slice()`, a fresh copy to play with. `PLACE` then puts back everything else a wave starts with: `STEP` marching right, `TICK` at `SPEED` turns to the first step, and `LEFT` at 24. `START` calls it once, for the first wave, before it draws the invaders, so `TICK` and `STEP` keep their `DB` and `DW` values only as what the program file holds; `PLACE` sets each before the loop reads it.
 
 ## Counting what is left
 
@@ -67,7 +67,7 @@ The invaders step when `TICK` counts down to 0, and `MARCH` now starts it again 
         LD      (HL),A
 ```
 
-`LD (HL),4` stores a number straight into memory, but there is no `LD (HL),(SPEED)`: a byte from one address reaches another through a register, so it goes through A. `NEWWAVE` makes `SPEED` one smaller each wave, unless it is 1 already, then runs on into `PLACE`:
+`LD (HL),4` stores a number straight into memory, but `LD` has no form with memory on both sides; for one byte, A carries it. `NEWWAVE` makes `SPEED` one smaller each wave, unless it is 1 already, then runs on into `PLACE`:
 
 ```z80
         CP      1               ; every turn already: as fast as they go
@@ -75,13 +75,13 @@ The invaders step when `TICK` counts down to 0, and `MARCH` now starts it again 
         DEC     (HL)            ; one turn fewer
 ```
 
-With a turn of about 137,400 T-states, and about 146,900 when the invaders step, the waves step about every 275, 208, 140 and 72 ms. `PLACE` sets `TICK` in the turn that cleared the wave, and `MARCH` counts that turn too, so the new wave's first step comes `SPEED` turns after the last hit, counting its own.
+With a turn of about 137,400 T-states, and about 146,900 when the invaders step, the waves step about every 275, 208, 140 and 72 ms on the Model III. `PLACE` sets `TICK` in the turn that cleared the wave, and `MARCH` counts that turn too, so the new wave's first step comes `SPEED` turns after the last hit, counting its own.
 
 ## What you built
 
-A game of 434 lines, comments and all, built in twelve chapters from a blank screen and a loop that did nothing. The screen is memory, so drawing is storing a byte (chapter 2). The keyboard is memory too, read a row at a time and tested a bit at a time (chapter 3). A shot is a screen address that moves 64 back each turn (chapter 4). The invaders are a table of addresses, walked with IX and counted with `DJNZ` (chapter 6), moved together by adding one step to each (chapters 7 and 8), and shot down by reading the screen and writing a 0 (chapter 9). The score is BCD, put right by `DAA` (chapter 10). The bombs come from R, and the game ends at a loop that jumps to itself (chapter 11). And every turn is one pass of `LOOP`, timed by a counted delay, with no interrupts at all.
+A game of 470 lines, comments and all, built in twelve chapters from a blank screen and a loop that did nothing. The screen is memory, so drawing is storing a byte (chapter 2). The keyboard is memory too, read a row at a time and tested a bit at a time (chapter 3). A shot is a screen address that moves 64 back each turn (chapter 4). The invaders are a table of addresses, walked with IX and counted with `DJNZ` (chapter 6), moved together by adding one step to each (chapters 7 and 8), and shot down by reading the screen and writing a 0 (chapter 9). The score is BCD, put right by `DAA` (chapter 10). The bombs come from R, the invaders land by reading their own addresses, and the game ends at a loop that jumps to itself (chapter 11). And every turn is one pass of `LOOP`, timed by a counted delay, with no interrupts at all.
 
-It is a small game, and it leaves things out: there is no sound; there is one shot and one bomb at a time, and they cannot hit each other; a hit on the base costs a life and leaves the base where it is; there are no shields, no saucer, and invaders that reach row 13 march along it instead of ending the game; the score goes back to 0000 after 9990; and to play again, press Run ▶. Each of those is a chapter you could write.
+It is a small game, and it leaves things out: there is no sound; there is one shot and one bomb at a time, and they cannot hit each other; a hit on the base costs a life and leaves the base where it is; there are no shields and no saucer; the score goes back to 0000 after 9990; and to play again, press Run ▶. Each of those is a chapter you could write.
 
 Then look at a real one. [Sea Dragon in the workbench](/?example=sea-dragon&at=497F) opens Wayne Westmoreland and Terry Gilman's game, from 1982, at its first instruction, with its annotated listing. Its `MAIN_LOOP` is your `LOOP` at full size; its objects are records read through IX, as `INVS` is read; its score is BCD with `DAA`; and its ships are a count with a game over at 0. You know every one of those now.
 
@@ -95,7 +95,7 @@ The Model I has the same keyboard row and the same screen, so the program runs u
 
 ## Try it
 
-Press Run ▶, click the screen, and play, moving at once: the first two bombs fall straight at the base, and standing still costs two lives in the first second and a half. Shoot down the whole wave, dodging the bombs: when the last invader goes, all 24 appear again where the first wave started, on rows 2, 4 and 6, and they step every 3 turns instead of 4. Keep going, and lose your lives, until the top line says `GAME OVER`.
+Press Run ▶, click the screen, and press the space bar to start. Shoot down the whole wave, dodging the bombs: when the last invader goes, all 24 appear again where the first wave started, on rows 2, 4 and 6, and they step every 3 turns instead of 4. Keep going until the top line says `GAME OVER`: lose your lives, or let a wave land.
 
 Then change `SPEED`'s `DB 4` to `DB 1`: the first wave steps every turn, as fast as the invaders go, and the waves after it are no faster.
 

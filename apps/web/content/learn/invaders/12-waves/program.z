@@ -142,7 +142,8 @@ DRAWNEXT:
 
 ; MARCH: every SPEED turns, erase the row and move it a column, the way STEP
 ; says. At the edge the row is marching to, it turns round, and that step
-; goes down a row instead, until the lowest row is on row 13.
+; goes down a row instead. An invader that comes down to row 13 has landed,
+; and the game is over.
 MARCH:  LD      HL,TICK         ; one turn fewer to the row's next step
         DEC     (HL)
         RET     NZ              ; not 0 yet: not this turn
@@ -157,14 +158,9 @@ MARCH:  LD      HL,TICK         ; one turn fewer to the row's next step
         OR      A               ; clear the carry flag, which SBC takes off too
         SBC     HL,DE
         LD      (STEP),HL
-        EX      DE,HL           ; and the new step into DE
-        LD      A,(INVROW)      ; the top row's row: the lowest is 4 below
-        CP      9               ; row 9, so the lowest is on row 13?
-        JR      Z,SIDE          ; then they only turn, and step sideways
-        INC     A               ; one row lower
-        LD      (INVROW),A
         LD      DE,64           ; a row is 64 cells: this step goes down
 SIDE:   CALL    MOVEROW         ; every invader moves by DE
+        CALL    LANDED          ; one on row 13 ends the game
         RET
 
 ; EDGE: is an invader at the edge the row is marching to? E is the step's
@@ -321,6 +317,7 @@ BASEHIT:
         DEC     (HL)
         RET     NZ              ; lives left: play on
         JP      OVER            ; none: the game is over
+
 ; DROP: pick an invader with the R register, and drop a bomb from the cell
 ; under its left cell. If the invader is shot down, no bomb this turn.
 DROP:   LD      A,R             ; R counts instruction fetches: 0 to 127 here
@@ -339,6 +336,26 @@ PICKED: ADD     A,A             ; times 2: a word a place
         OR      L
         RET     Z
         JR      FALL            ; the bomb starts a row below the invader
+
+; LANDED: has an invader come down to row 13? Then the game is over. Rows 12
+; to 15 are 3F00H to 3FFFH, and row 13 starts at 3F40H, so an address with
+; the high byte 3FH and the low byte 40H or more is on row 13 or below. A
+; place that is 0, shot down, has the high byte 0, and never has.
+LANDED: LD      IX,INVS
+        LD      B,NINV
+LANDONE:
+        LD      A,(IX+1)        ; the high byte: 3FH is rows 12 to 15
+        CP      3FH
+        JR      NZ,LANDNEXT
+        LD      A,(IX+0)        ; the low byte: 40H or more is row 13 or lower
+        CP      40H
+        JP      NC,OVER         ; landed: the game is over
+LANDNEXT:
+        INC     IX
+        INC     IX
+        DJNZ    LANDONE
+        RET
+
 ; NEWWAVE: the last invader is shot down. The next wave steps one turn
 ; sooner than this one did, down to every turn, and PLACE sets it up.
 NEWWAVE:
@@ -347,14 +364,12 @@ NEWWAVE:
         CP      1               ; every turn already: as fast as they go
         JR      Z,PLACE
         DEC     (HL)            ; one turn fewer
-; PLACE: a wave, as it starts: every invader in its place from HOME, the
-; top row on row 2, marching right, and NINV left to shoot down.
+; PLACE: a wave, as it starts: every invader in its place from HOME,
+; marching right, and NINV left to shoot down.
 PLACE:  LD      HL,HOME         ; copy the starting places ...
         LD      DE,INVS         ; ... into the table
         LD      BC,2*NINV       ; two bytes a place
         LDIR
-        LD      A,2             ; the top row on row 2
-        LD      (INVROW),A
         LD      HL,1            ; marching right
         LD      (STEP),HL
         LD      A,(SPEED)       ; the first step in SPEED turns
@@ -374,9 +389,26 @@ CLEAR:  LD      (HL),20H        ; a space: the cell is blank
         LD      HL,BASE         ; draw the base where BASEX says
         CALL    DRAWBASE
         CALL    PLACE           ; the first wave
+        CALL    SHOWSCORE       ; the top line,
+        LD      DE,INVADER      ; and the invaders where they start
+        CALL    DRAWROW
+        LD      HL,GOTXT        ; PRESS SPACE TO START
+        LD      DE,3E96H        ; to row 10, column 22
+        LD      BC,20
+        LDIR
+GO:     CALL    WAIT            ; a turn's pause, then look at the space bar
+        LD      A,(3840H)       ; the space bar is bit 7 of the arrows' row
+        BIT     7,A
+        JR      Z,GO            ; not down: wait another turn
+        LD      HL,3E96H        ; down: erase the words
+        LD      B,20
+UNSAY:  LD      (HL),20H
+        INC     HL
+        DJNZ    UNSAY
 
 ; The game loop: one turn of the game, then round again. A game's turn
-; reads the keys, moves things and draws them: the base, the shot, the invaders.
+; reads the keys, moves things and draws them: the base, the shot, the
+; invaders, the bomb, and the top line.
 LOOP:   CALL    WAIT            ; the turn's pause, so the game runs at a steady speed
         CALL    MOVEBASE        ; the base moves if an arrow is down
         CALL    MOVESHOT        ; the shot, if there is one, rises a row
@@ -385,17 +417,21 @@ LOOP:   CALL    WAIT            ; the turn's pause, so the game runs at a steady
         LD      DE,INVADER      ; the row, drawn every turn: a shot passing
         CALL    DRAWROW         ; through an invader erases a cell, and this mends it
         CALL    MOVEBOMB        ; the bomb falls, or a new one drops
-        CALL    SHOWSCORE       ; the score, on row 0
+        CALL    SHOWSCORE       ; the lives and the score, on row 0
         JR      LOOP            ; and round again, until the game is over
 
-; OVER: no lives left. The top line once more, to show LIVES 0, then the
-; words, and the program stops here: Run starts a new game.
+; OVER: no lives left, or an invader has landed. The top line and the
+; invaders once more, then the words, and the program stops here: Run
+; starts a new game.
 OVER:   CALL    SHOWSCORE
+        LD      DE,INVADER      ; MARCH may have erased the invaders: draw them
+        CALL    DRAWROW
         LD      HL,OVERTXT      ; GAME OVER
         LD      DE,3C1BH        ; to row 0, column 27, between the two
         LD      BC,9
         LDIR
 STOP:   JR      STOP            ; the game is over: wait here for good
+
 ; The game's data: below the loop, where the processor never runs into it.
 BASE:   DB      0BCH,0BFH,0BCH  ; the base: a wing, a block, a wing
 BLANK:  DB      '   '           ; three spaces, to erase it
@@ -419,7 +455,6 @@ STEP:   DW      1               ; the row's step: 1 right, or -1 (0FFFFH) left
 TICK:   DB      4               ; turns to the row's next step
 SPEED:  DB      4               ; turns between steps: 4, then 3, 2, and 1
 LEFT:   DB      NINV            ; invaders left to shoot down in this wave
-INVROW: DB      2               ; the top row's row, 2 to 9
 SCORETXT:
         DB      'SCORE '        ; the score's word, and a space
 SCORE:  DB      0,0             ; in BCD: the last two digits, then the first two
@@ -430,5 +465,6 @@ BOMBCH: EQU     99H             ; the bomb: a zigzag, three blocks
 BOMB:   DW      0               ; the bomb's screen address, or 0 for none
 OVERTXT:
         DB      'GAME OVER'
+GOTXT:  DB      'PRESS SPACE TO START'
 
         END     START           ; the program starts at START

@@ -61,7 +61,7 @@ Adding in BCD needs one more instruction. `ADD A,10H` adds 1 to the tens digit, 
         DAA
 ```
 
-`LD` sets no flags, and nor does `INC HL`, since 16-bit `INC` never does, so C is still the carry from the last two digits when `ADC A,0` adds it to the first two. The second `DAA` puts those right too. After `DAA` the carry out of the high byte is dropped, so the score goes from 9990 back to 0000. `DAA` works after `ADD` and `ADC`; after `SUB` and `SBC` it subtracts its 6 and `60H` instead, which it knows from the flag N that those set.
+These `LD`s set no flags, and nor does `INC HL`, since 16-bit `INC` never does, so C is still the carry from the last two digits when `ADC A,0` adds it to the first two. The second `DAA` puts those right too. After `DAA` the carry out of the high byte is dropped, so the score goes from 9990 back to 0000. `DAA` works after `ADD` and `ADC`; after `SUB` and `SBC` it subtracts its 6 and `60H` instead, which it knows from the flag N that those set.
 
 ## Printing the digits
 
@@ -84,7 +84,7 @@ TWODIG: LD      A,(HL)          ; the byte: two digits
 
 ## The cost
 
-Drawing 16 more invaders every turn costs 132 T-states each in `DRAWROW`, 2,112 in all, and `SHOWSCORE` with its `CALL` costs 389, so a turn with no key down is now 137,014 T-states. The rows step every fourth turn, about every 275 ms.
+Drawing 16 more invaders every turn costs 132 T-states each in `DRAWROW`, 2,112 in all, and `SHOWSCORE` with its `CALL` costs 389, so a turn with no key down is now 137,014 T-states. The rows step every fourth turn, about every 275 ms on the Model III.
 
 ## Keys go to the screen, not the editor
 

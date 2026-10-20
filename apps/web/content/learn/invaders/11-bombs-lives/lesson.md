@@ -8,22 +8,24 @@ cite: m1-trh 12 the Model I's keyboard is memory from 3800H, and its screen at 3
 cite: decker 64 the keyboard's rows are read at 3801H to 3840H, one address a row
 cite: paay 26 the keyboard's rows are read at 3801H to 3840H, one address a row
 ---
-Now the invaders fight back. One of them, picked with the R register as lesson 4 picked a move, drops a bomb, a zigzag that falls a row every turn. A bomb that falls into the base costs a life; the lives, 3 to begin with, are at the top right, `LIVES 3`. With none left, `GAME OVER` appears in the top line and the program stops. There is one bomb at a time, as there is one shot, and the next drops as soon as the last is gone.
+Now the invaders fight back. One of them, picked with the R register as lesson 4 picked a move, drops a bomb, a zigzag that falls a row every turn. A bomb that falls into the base costs a life; the lives, 3 to begin with, are at the top right, `LIVES 3`. With none left, `GAME OVER` appears in the top line and the program stops. There is one bomb at a time, as there is one shot, and the next drops as soon as the last is gone. The invaders no longer stop above the base: one that comes down to row 13 has landed, and that ends the game too, as in the arcade game. And now that the game can be lost, it waits for you: `PRESS SPACE TO START`.
 
 ## What changed
 
 Chapter 10's program, with these changes:
 
 - **~** The comment at the top, lines 1 to 5, now describes chapter 11.
-- **~** `SHOWSCORE`'s comment: lines 244 and 245 are changed and line 246 is new; it now prints the lives too.
-- **+** Seven lines at the start of `SHOWSCORE`, lines 248 to 254: they print `LIVES ` and the lives at the end of row 0.
-- **+** `MOVEBOMB` and `DROP`, new routines with their comments, after `TWODIG`, lines 280 to 338: the bomb falls, hits the base, or a new one drops.
-- **+** In the game loop, line 359: `CALL MOVEBOMB`, after the rows are drawn.
-- **~** The comment on the loop's `JR LOOP`, line 361: the loop now goes round until the game is over.
-- **+** `OVER` and `STOP`, with their comment, after the loop, lines 363 to 370: the end of the game.
-- **+** `LIVESTXT`, `LIVES`, `BOMBCH`, `BOMB` and `OVERTXT`, after `SCORE`, lines 393 to 399: the lives' word, the lives, the bomb's character, where the bomb is, and the words `GAME OVER`.
-
-Nothing is taken out.
+- **~** `MARCH`'s comment: line 142 is changed and line 143 is new; an invader that comes down to row 13 ends the game.
+- **−** Six lines of `MARCH`, from `EX DE,HL` to `LD (INVROW),A`, are taken out: the invaders no longer stop at a floor. Below the program, under *lines taken out*, they show struck through, before line 157.
+- **+** In `MARCH`, line 159: `CALL LANDED`, after `CALL MOVEROW`.
+- **~** `SHOWSCORE`'s comment: lines 240 and 241 are changed and line 242 is new; it now prints the lives too.
+- **+** Seven lines at the start of `SHOWSCORE`, lines 244 to 250: they print `LIVES ` and the lives at the end of row 0.
+- **+** `MOVEBOMB`, `DROP` and `LANDED`, new routines with their comments, after `TWODIG`, lines 276 to 354: the bomb falls, hits the base, or a new one drops; and an invader on row 13 ends the game.
+- **+** At the end of `START`, lines 365 to 380: the top line and the invaders are drawn, and the program waits for the space bar under `PRESS SPACE TO START`, then erases the words.
+- **~** The game loop's comment: line 383 is changed and line 384 is new; a turn now moves the bomb and draws the top line too.
+- **~** At the loop's end, lines 392 and 393 are changed and 394 to 406 are new: `CALL MOVEBOMB` comes in before `CALL SHOWSCORE`, whose comment now names the lives, `JR LOOP`'s comment says the loop goes round until the game is over, and after the loop come `OVER` and `STOP`, the end of the game.
+- **−** `INVROW` is taken out, with the floor; it shows struck through before line 426.
+- **+** `LIVESTXT`, `LIVES`, `BOMBCH`, `BOMB`, `OVERTXT` and `GOTXT`, after `SCORE`, lines 429 to 436: the lives' word, the lives, the bomb's character, where the bomb is, and the words `GAME OVER` and `PRESS SPACE TO START`.
 
 ## A bomb falls as the shot rises
 
@@ -86,21 +88,49 @@ PICKED: ADD     A,A             ; times 2: a word a place
 
 `ADD IX,DE` adds a pair to IX as `ADD HL,DE` adds one to HL. If that place is 0, the invader is shot down and there is no bomb this turn; R will be different the next. Otherwise HL is the invader's address, and `JR FALL` jumps into `MOVEBOMB` to move it down a row and draw the bomb there, so a new bomb starts under the invader's left cell. As the invaders are shot down, more picks find a 0, and bombs come less often.
 
-None of this is random. With no key down, the program runs the same instructions every turn, so press Run ▶ and touch nothing, and the bombs fall in the same places every time; the checks Fugløy runs on this chapter see the same game. The keys you press change how many instructions run, and so which invader R picks next.
+None of this is random: R is a count. What makes it change from game to game is you. Before the game starts, `START` waits for the space bar a turn at a time, so how many turns you take to press it changes R when the first bomb drops; after that, every key you press changes how many instructions run, and so which invader R picks next. Fugløy's checks on this chapter press the space bar at the same moment every time, and see the same game every time.
+
+## Waiting for the space bar
+
+Before the first turn, `START` draws the top line and the invaders, prints `PRESS SPACE TO START` on row 10, and waits:
+
+```z80
+GO:     CALL    WAIT            ; a turn's pause, then look at the space bar
+        LD      A,(3840H)       ; the space bar is bit 7 of the arrows' row
+        BIT     7,A
+        JR      Z,GO            ; not down: wait another turn
+```
+
+It is lesson 4's wait for a key, with `CALL WAIT` in it, so it looks once a turn. Then a `DJNZ` loop writes 20 spaces over the words, and the game starts. The space bar is still down on the first turn, so `FIRE` fires a shot at once.
+
+## Landing
+
+Chapter 10's invaders stopped coming down when the top row reached row 9, and marched along there for ever. Now there is no floor: `MARCH` loses the six lines that kept `INVROW`, and `INVROW` goes too, so every step at an edge goes down a row. After every step, `LANDED` walks the table and looks for an invader on row 13:
+
+```z80
+        LD      A,(IX+1)        ; the high byte: 3FH is rows 12 to 15
+        CP      3FH
+        JR      NZ,LANDNEXT
+        LD      A,(IX+0)        ; the low byte: 40H or more is row 13 or lower
+        CP      40H
+        JP      NC,OVER         ; landed: the game is over
+```
+
+Rows 12 to 15 are `3F00H` to `3FFFH`, and row 13 starts at `3F40H`, so an address on row 13 has the high byte `3FH` and the low byte `40H` or more. `CP 40H` sets the carry when A is less than `40H`, so `JP NC` jumps when it is not. A place that is 0 has the high byte 0 and is never on row 13, so the shot-down invaders need no test of their own. It is the lowest invader still standing that lands: shoot the bottom row away and the two above it have further to come.
 
 ## The end of the game
 
-`OVER` prints the top line once more, so that it shows `LIVES 0`, then copies `GAME OVER` into the middle of row 0, and stops:
+The game ends two ways: `BASEHIT` with no lives left, and `LANDED`. Both jump to `OVER`, which prints the top line once more, so that it shows the lives, draws the invaders, because `MARCH` erases them before it moves them and `LANDED` runs before they are drawn again, then copies `GAME OVER` into the middle of row 0, and stops:
 
 ```z80
 STOP:   JR      STOP            ; the game is over: wait here for good
 ```
 
-`JR STOP` jumps to itself, for ever, as lesson 1's program parked at its end. `MOVEBOMB` was called from the loop and jumps to `OVER` with `JP`, not `CALL`, so its return address is left on the stack; nothing will ever return, so it does no harm. To play again, press Run ▶.
+`JR STOP` jumps to itself, for ever, as lesson 1's program parked at its end. `MOVEBOMB` and `LANDED` are called, and jump to `OVER` with `JP`, not `CALL`, so return addresses are left on the stack; nothing will ever return, so they do no harm. To play again, press Run ▶: after `GAME OVER` the program stays where it stopped.
 
 ## The cost
 
-A falling bomb adds about 200 T-states to a turn, and printing the lives 178, so a turn with no key down is about 137,400 T-states.
+A falling bomb adds about 200 T-states to a turn, and printing the lives 178, so a turn with no key down is about 137,400 T-states. `LANDED` runs only when the invaders step.
 
 ## Keys go to the screen, not the editor
 
@@ -112,9 +142,9 @@ The Model I has the same keyboard row and the same screen, so the program runs u
 
 ## Try it
 
-Press Run ▶ and touch nothing. The first bomb drops from under the invader on row 2 at column 42, vanishes for a turn behind the invader below it, and lands on the bottom row, to the right of the base. About five and a half seconds in, a bomb falls into the base and the top line shows `LIVES 2`; about nine seconds in, with no lives left, it shows `GAME OVER` and the program stops. Run it again, and the same bombs fall. Then run it and play: dodge with the arrows, and the bombs fall somewhere else.
+Press Run ▶, click the screen, and press the space bar: the words go, a shot fires, and the first bomb drops. Stand still and the bombs find the base sooner or later, three times: `LIVES 2`, `LIVES 1`, and `GAME OVER`. When that happens depends on when you pressed the space bar, so run it again and press it a little later, and the bombs fall somewhere else. Then play: dodge with the arrows.
 
-Then change `LIVES`'s `DB 3` to `DB 1`, and run it touching nothing: the first bomb in the base, about five and a half seconds in, ends the game.
+Then take out the line `CALL MOVEBOMB` in the loop, and run it standing still: no bombs fall, and about 64 seconds after the space bar, on the Model III, the lowest row lands on row 13 and the top line says `GAME OVER`, with `LIVES 3`.
 
 ## In a real game
 
