@@ -70,8 +70,12 @@ function stubRom(model: LessonModel): Uint8Array {
   return rom;
 }
 
-/** A lesson's scripted run is tens of millions of T-states: about 6 s on a CI runner for lesson 7, past Vitest's 5 s default. */
-const RUN_TIMEOUT_MS = 60_000;
+/**
+ * A lesson's scripted run is tens of millions of T-states, and chapter 8's (its floor at row 13) about
+ * 236 million. Lesson 7 takes about 6 s on a CI runner against 1.6 s locally, about 3.8 times as long;
+ * chapter 8 takes about 9 s locally, so about 35 s on CI. 180 s leaves room for that under parallel load.
+ */
+const RUN_TIMEOUT_MS = 180_000;
 
 const hex = (n: number, width: number): string => n.toString(16).toUpperCase().padStart(width, '0');
 
