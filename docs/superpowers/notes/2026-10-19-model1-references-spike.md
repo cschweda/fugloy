@@ -9,13 +9,35 @@ Every number below comes from a run made for this note.
 Both references work headless and give a per-instruction record. Booting the
 user's Level II ROM (`fixtures/real/level2-model1.rom`, SHA-256 `5515d95d…6776`,
 recognised by `models.js` as `model1-level2-1.3`) to its `MEM SIZE?` prompt
-(Level II 1.3 prints `MEM SIZE?`, not `MEMORY SIZE?`), all three machines (xtrs,
+(Level II 1.3's wording; the plan's `MEMORY SIZE?` is wrong for this ROM, and
+this note says `MEM SIZE?` throughout), all three machines (xtrs,
 MAME, and our Model I) agree on PC and on the cumulative T-state count at
 **every one of the first 3,000,000 instructions** (22,553,071 T-states), so
 the first 1,000 agree too. The `?` lands at `$3C08` at instruction 14,525
 (T 204,057) and the ROM reaches its wait-for-key at `$0049` at instruction
 14,726 (T 206,114) on all three. The only differences in the registers are the
 reset state, the power-on video RAM, and one flag class in MAME (below).
+
+## The spike's files
+
+Committed in `packages/emu/scripts/spike-model1/` (no xtrs source, no ROM
+bytes, no traces):
+
+- `build.sh`: builds xtrs's core headless with our driver. It refuses a
+  `tools/xtrs/src` that is not at the pinned commit.
+- `fugloy-step.c`: the xtrs driver (our code; its header records xtrs's two
+  copyright notices, which stay in `tools/xtrs/src/LICENSE`).
+- `ours.mjs`: our Model I in the same line format (`mame` argument: MAME's reset
+  state).
+- `boot.lua`: MAME's autoboot script (power-on fill, the trace with its
+  `tracelog` line, the `wpset` W/K/L logging, the screen at stop; trace path
+  from `FUGLOY_MAME_TRACE`).
+- `key.lua`: answers `MEM SIZE?` through `natkeyboard:post`.
+- `mame-to-lines.sh`: MAME trace → the common line format.
+- `fielddiff.py`: the field-by-field comparison.
+
+The ROM, the MAME ROM set, the built binaries and the traces stay in the
+gitignored `tools/` and `fixtures/real/`.
 
 ## Step 1: the user's answer
 
@@ -37,12 +59,12 @@ X11, readline or XQuartz.
   ROM is not part of xtrs, so it is still never committed.
 - **Build (headless, no X11):**
   `git clone https://github.com/TimothyPMann/xtrs.git tools/xtrs/src && git -C tools/xtrs/src checkout 3a2180c…`,
-  then the spike's `tools/xtrs/build.sh`, which builds out of tree into
+  then `sh packages/emu/scripts/spike-model1/build.sh`, which builds out of tree into
   `tools/xtrs/build/`. It assembles the three built-in ROM stand-ins
   (`fakerom`, `esfrom`, `xtrsrom4p`) with our `tools/zmac/zmac -P`, runs
   `compile_rom`, and compiles every object except `main.o`, `trs_xinterface.o`
   and the GTK files with `cc -O2 -D_DARWIN_C_SOURCE`. It does **not** define
-  `KBWAIT`; the Makefile does. It also builds a driver, `tools/xtrs/driver/fugloy-step.c`.
+  `KBWAIT`; the Makefile does. It also builds the driver, `packages/emu/scripts/spike-model1/fugloy-step.c`.
   **No xtrs source file is modified:** the driver holds the stubs that
   `trs_xinterface.c` and `main.c` would have given (screen, mouse, grafyx, HRG,
   `trs_get_event`, `trs_model`, `trs_paused`, `trs_autodelay`, `program_name`),
@@ -79,8 +101,10 @@ X11, readline or XQuartz.
   `change_keystate` are `static` in `trs_keyboard.c`, and the public
   `queue_key` path adds a 4,000 T-state "stretch" (`STRETCH_AMOUNT`) and a
   heartbeat. Exact-T-state key bits (`key <row> <bit>`) therefore need **one
-  small patch**, an exported setter for `keystate[]`. The licence allows
-  committing it.
+  small patch**, an exported setter for `keystate[]`. **Decision:** Task 2
+  commits it as a patch file beside the driver (the licence allows it, with
+  both notices kept), and `pnpm xtrs:install` applies it with `git apply` to the
+  pinned checkout. Task 2 does not use `queue_key` and its 4,000 T-state stretch.
 - **Speed:** 3,000,000 instructions in 0.884 s (3,393,450 instructions/s), and
   in 0.928 s on a second run (3,234,125/s). Both runs print one text line per
   instruction to a file.
@@ -113,9 +137,9 @@ X11, readline or XQuartz.
   `tools/mame/roms/trs80l2/` (gitignored; `git check-ignore` confirms
   `/tools/`). `trs80l2` lists no `ramoption`; its RAM is fixed.
 - **Headless run:**
-  `mame trs80l2 -rompath tools/mame/roms -bios rsl2 -video none -sound none -nothrottle -debug -debugger none -autoboot_script boot.lua -autoboot_delay 0 -seconds_to_run N -skip_gameinfo -nvram_directory … -cfg_directory …`
+  `mame trs80l2 -rompath tools/mame/roms -bios rsl2 -video none -sound none -nothrottle -debug -debugger none -autoboot_script packages/emu/scripts/spike-model1/boot.lua -autoboot_delay 0 -seconds_to_run N -skip_gameinfo -nvram_directory … -cfg_directory …`
 - **Per-instruction record: the debugger's `trace` command does it, issued from Lua.**
-  `-debugscript` with `-debugger none` produced no trace. The Lua autoboot
+  `-debugscript` with `-debugger none` produced no trace. The Lua autoboot (`boot.lua`)
   script did: `manager.machine.debugger:command('trace <file>,maincpu,noloop,{tracelog "%04X %04X %04X %04X %04X %04X %04X %04X %d %d\n",pc,af,bc,de,hl,ix,iy,sp,iff1,totalcycles}')`
   then `command('go')`. `noloop` keeps every repeat of a loop. The trace starts
   at PC `0000`, `totalcycles` 0, with the state before each instruction. MAME
@@ -143,15 +167,16 @@ X11, readline or XQuartz.
   3,072,080 instructions, about 104,000 instructions/s. The trace file is
   203,766,687 bytes, about 66 bytes per instruction with the disassembly lines.
   A 10-million-instruction session is therefore about 1.6 minutes and about
-  660 MB of text. Untraced, the same run takes 1.31 s wall.
+  660 MB of text. These are **extrapolated** from the 3,072,080-instruction
+  run; no 10-million run was made. Untraced, the same run takes 1.31 s wall.
 - **Determinism:** a second traced run gave a byte-identical record.
 
 ## Comparison with our Model I
 
-Scratch tools (not committed): `fugloy-step` for xtrs, a Node script that steps
+Tools: `fugloy-step` for xtrs, and `ours.mjs`, which steps
 `new Machine({ model: 1 })` and prints the same line (index, PC, AF, BC, DE,
-HL, IX, IY, SP, IFF1, cycles before the instruction), and a Python script that
-compares the records field by field. Our power-on: RAM `00`, video RAM `20`
+HL, IX, IY, SP, IFF1, cycles before the instruction), and `fielddiff.py`, which
+compares the records field by field (all in `packages/emu/scripts/spike-model1/`). Our power-on: RAM `00`, video RAM `20`
 (`clearVideoRAM`), and AF `0000`, SP `FFFF`, IX `0000`, IY `0000`. Our machine
 also applies the bit-6 gate on the write.
 
@@ -169,9 +194,10 @@ What the differences are:
 
 1. **Reset register state.** It differs on all three machines (above). The Z80
    leaves most registers undefined at reset. The harness should copy one
-   machine's state into the other at instruction 0. Young's "The Undocumented
-   Z80 Documented" reports AF and SP as `FFFF` after reset, as xtrs has (to be
-   quoted exactly in Task 4); we start AF at `0000`. That is a Task 4 question (Ruling 6), not fixed here.
+   machine's state into the other at instruction 0. It is **unverified** that
+   Young's "The Undocumented Z80 Documented" gives AF and SP as `FFFF` after
+   reset, as xtrs has. Task 4 must quote it before anything rests on it. We
+   start AF at `0000`. That is a Task 4 question (Ruling 6), not fixed here.
 2. **Power-on video RAM** (`D` at instruction 8272, `LD D,(HL)` at `$0486` with
    HL `$3C00`, the character under the cursor). xtrs and MAME read `00`; we read
    `20` because we fill video RAM with spaces. Real video RAM powers on random,
@@ -205,7 +231,8 @@ instructions/s.
   one instruction per `z80_run(0)` call under a small driver we own. That driver
   holds the stubs, the timer driven by T-states, the write logger, and the
   pipe protocol Task 2 adds. One patch is needed: an exported `keystate[]`
-  setter, for keys at exact T-states. A second, optional patch is a read hook in
+  setter, for keys at exact T-states. It is committed as a patch file, and
+  `pnpm xtrs:install` applies it. A second, optional patch is a read hook in
   `trs_memory.c` for keyboard reads and latch reads (or the same `-D` rename on
   `mem_read`). The licence lets us commit them with both notices kept. The
   install script should still check the pinned commit and the SHA-256 of the
@@ -214,7 +241,7 @@ instructions/s.
   the adapter must shift. MAME stays the trace reference. Its debugger `trace`
   + `wpset` actions, started from a Lua autoboot script, give PC, registers,
   `totalcycles`, writes and keyboard reads at about 104,000 instructions/s.
-  That is fast enough (about 1.6 minutes per 10 million instructions). Task 3
+  That is fast enough (about 1.6 minutes per 10 million instructions, extrapolated from the 3M run). Task 3
   should stream or compact the text (66 bytes per instruction with disassembly).
   It must also derive interrupt boundaries from the trace (a PC jump to `$0038`
   with the push), since MAME writes no explicit record for them.
