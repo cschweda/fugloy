@@ -168,35 +168,35 @@ The Model I waits for a Model I reference (MAME or xtrs, ask the user first).
   the Model I (`MODEL1_ASPECT`, `tubeAspect`, `tubeFit`, `panelFit` in
   `utils/emulator/screen.ts`), and Run ▶ has a Full screen button
   (`screen-fullscreen`).
-  From 6B the Learn page (`/learn/`, `pages/learn/[...path].vue` drawing
-  `components/learn/CoursePage.vue`; lessons in `content/learn/NN-slug/`: `lesson.md`, `program.z`,
-  `check.json`) runs on the stub ROM only, with edits and done marks in the browser (`Progress`).
-  From 6C it serves a second course, the Space Invaders chapters in `content/learn/invaders/NN-slug/`
-  at `/learn/invaders/<slug>/` (`/learn/invaders/` is canonical to chapter 1; progress ids
-  `invaders/<slug>`), from a generated index (`utils/learn/learn-index.generated.ts`,
-  `pnpm --filter @fugloy/web learn-index`, with a staleness test); `utils/learn/diff.ts` marks each
-  chapter's changes against the one before. `packages/asm/test/lessons.test.ts` assembles every
-  lesson and chapter with asm and zmac and runs it through its `check.json`. `size:first-screen --
-  --page learn|invaders` measures them against `LEARN_BUDGET` (221,184 B): the workbench 229,039 B
-  against 252,775 B, the Learn and chapter pages 202,885 B.
-  From 6B the Learn page (`pages/learn/[[slug]].vue`, linked first in the header,
-  prerendered at `/learn/` and each lesson's folder) shows one lesson at a time,
-  lesson | program | TRS-80. The lessons are `apps/web/content/learn/<NN-slug>/`
-  (`lesson.md` with front matter and cited hardware claims, `program.z`,
-  `check.json`); the format and parser are `utils/learn/lesson-format.ts` and
-  `lessons.ts`, progress (`localStorage`, every access in try/catch) is
-  `utils/learn/progress.ts`, and the columns are `components/learn/LessonText.vue`,
-  `components/source/LessonEditor.vue` and `components/run/LessonMachine.vue`
-  (lazy; `createRun`'s `stubOnly` keeps the Learn page on the stub ROM even when a
-  ROM is stored). Source ✎ and the Learn page share `components/source/useSourceChecks.ts`
-  and `ProblemsList.vue`. The lesson checks are `packages/asm/test/lessons.test.ts`:
-  every `program.z` assembles with asm and zmac to the same image, runs headless on
-  the stub ROM without entering the ROM's space, and reaches its `check.json`
-  screen (`FUGLOY_REQUIRE_ZMAC=1` in CI). Lessons 1 and 3–7 link to Sea Dragon
-  through `/?example=sea-dragon&at=XXXX` (`utils/deep-link.ts`). The Explain tab
-  loads lazily, which took the workbench's first screen to about 228,9xx B; the Learn
-  page has its own measurement, `pnpm --filter @fugloy/web size:first-screen -- --page learn`,
-  against `LEARN_BUDGET` (221,184 B gzip).
+  From 6B the Learn page (linked first in the header) shows one item at a time,
+  lesson | program | TRS-80, on the stub ROM only (`createRun`'s `stubOnly` keeps it
+  there even when a ROM is stored). From 6C one catch-all page,
+  `pages/learn/[...path].vue`, draws `components/learn/CoursePage.vue` for both
+  courses: the lessons in `apps/web/content/learn/<NN-slug>/` at `/learn/<slug>/`
+  (`/learn/` opens lesson 1) and the Space Invaders chapters in
+  `apps/web/content/learn/invaders/<NN-slug>/` at `/learn/invaders/<slug>/`
+  (`/learn/invaders/` opens chapter 1; both aliases are canonical to their first
+  item). Each folder holds `lesson.md` (front matter and cited hardware claims),
+  `program.z` and `check.json`; the format and parser are
+  `utils/learn/lesson-format.ts` and `lessons.ts`. The course indexes are generated
+  (`utils/learn/learn-index.generated.ts`, `pnpm --filter @fugloy/web learn-index`,
+  with a staleness test), and each item's text and program load on their own per
+  page (`useAsyncData`), so a page carries no other item's text. Progress
+  (`localStorage`, every access in try/catch) is `utils/learn/progress.ts`, keyed by
+  the lesson's slug or `invaders/<slug>`, so edits and done marks never collide;
+  `utils/learn/diff.ts` marks each chapter's changes against the one before. The
+  columns are `components/learn/LessonText.vue`, `components/source/LessonEditor.vue`
+  and `components/run/LessonMachine.vue` (lazy). Source ✎ and the Learn page share
+  `components/source/useSourceChecks.ts` and `ProblemsList.vue`. The checks are
+  `packages/asm/test/lessons.test.ts`: every lesson and chapter `program.z`
+  assembles with asm and zmac to the same image, runs headless on the stub ROM
+  without entering the ROM's space, and reaches its `check.json` screen
+  (`FUGLOY_REQUIRE_ZMAC=1` in CI). Lessons 1 and 3–7 and chapters 10–12 link to Sea
+  Dragon through `/?example=sea-dragon&at=XXXX` (`utils/deep-link.ts`). The Explain
+  tab loads lazily, which took the workbench's first screen from 252,257 B to about
+  228,9xx B; it is 229,039 B now against 252,775 B. `pnpm --filter @fugloy/web
+  size:first-screen -- --page learn|invaders` measures the Learn and chapter pages
+  (202,885 B) against `LEARN_BUDGET` (221,184 B gzip).
 - `packages/emu` — headless, deterministic TRS-80 emulator core (the Model III
   and, from emu phase 6, the Model I; from emu phase 6b, the Model 4), plain JavaScript ESM, no DOM, no Node APIs. Spec: `docs/fugloy-emu-spec.md`.
   Extracted from `cschweda/trs80-emulator` in its phase 0 (`NOTICE.md`); tests
