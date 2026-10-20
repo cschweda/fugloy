@@ -48,31 +48,13 @@ const CPDR_REPEAT = '		if ( z.reg.BC == 0 || z.reg.fZ ) { cy(z,  16 ) \n return 
 const IXY_ADDR = 'return signed_char(z.mem[z.reg.PC++ & 0xffff]) + z.reg.IQ';
 
 /**
- * @typedef {import('../../src/machine/machine.js').Regs} Regs
- * @typedef {import('../../src/machine/machine.js').Machine} Machine
- * @typedef {{ addr: number, value: number }} Write
- * @typedef {'auto' | 'hold' | 'force'} IrqMode
- *   auto: take the 30 Hz request at a frame end when IFF1 is set (trsjs's own rule);
- *   hold: raise it at a frame end but do not take it (the request stays raised in port $E0);
- *   force: take an interrupt now (IFF1 must be set), whether or not a frame ended.
- * @typedef {{ cycles: number, irq: boolean, raised: boolean }} RefStep
- *   irq: an interrupt response ran; raised: a frame end raised the 30 Hz request this step.
- * @typedef {{
- *   reset(): void,
- *   step(opts?: { irq?: IrqMode }): RefStep,
- *   regs(): Regs,
- *   peek(addr: number, len: number): Uint8Array,
- *   poke(addr: number, bytes: ArrayLike<number>): void,
- *   setKeyBit(row: number, bit: number, down: boolean): void,
- *   alignRtc(phaseTStates: number): void,
- *   syncFrom(machine: Machine): void,
- *   syncRegs(machine: Machine): void,
- *   redoDroppedPrefix(pc: number, r: number): number,
- *   writes(): Write[],
- *   readonly prefixedOps: ReadonlySet<number>,
- *   readonly cycles: number,
- *   readonly z: any,
- * }} Reference
+ * The shared interface (reference.js), re-exported for the callers that import it from here.
+ * @typedef {import('./reference.js').Regs} Regs
+ * @typedef {import('./reference.js').Machine} Machine
+ * @typedef {import('./reference.js').Write} Write
+ * @typedef {import('./reference.js').IrqMode} IrqMode
+ * @typedef {import('./reference.js').RefStep} RefStep
+ * @typedef {import('./reference.js').Reference} Reference
  */
 
 function stubElement() {

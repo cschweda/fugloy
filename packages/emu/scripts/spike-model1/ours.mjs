@@ -1,5 +1,5 @@
 // Emu phase 7 (Model I) spike: step our Model I and print one line per instruction, in the same
-// format as fugloy-step.c (index PC AF BC DE HL IX IY SP IFF1 cycles, the state before each).
+// format as `fugloy-xtrs <rom> --trace <n>` (packages/emu/scripts/xtrs/fugloy-xtrs.c; index PC AF BC DE HL IX IY SP IFF1 cycles, the state before each).
 // usage: node ours.mjs <rom> <instructions> <out> [mame]
 //   mame: start from MAME 0.289's reset registers and power-on video RAM (AF 0040, SP 0000,
 //   IX/IY FFFF, video RAM 00), as its trace shows.

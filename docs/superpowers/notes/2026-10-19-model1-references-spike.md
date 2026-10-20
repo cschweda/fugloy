@@ -23,10 +23,14 @@ reset state, the power-on video RAM, and one flag class in MAME (below).
 Committed in `packages/emu/scripts/spike-model1/` (no xtrs source, no ROM
 bytes, no traces):
 
-- `build.sh`: builds xtrs's core headless with our driver. It refuses a
-  `tools/xtrs/src` that is not at the pinned commit.
-- `fugloy-step.c`: the xtrs driver (our code; its header records xtrs's two
-  copyright notices, which stay in `tools/xtrs/src/LICENSE`).
+- `build.sh` and `fugloy-step.c` (the xtrs build and driver) were superseded
+  in Task 2 by `scripts/install-xtrs.sh` (`pnpm xtrs:install`) and
+  `packages/emu/scripts/xtrs/fugloy-xtrs.c`, and removed. The driver keeps
+  xtrs's two copyright notices in its header, and they stay in
+  `tools/xtrs/src/LICENSE`. `fugloy-xtrs <rom> --trace <n>` prints the spike's
+  record: over 1,000,000 instructions it is byte-identical to
+  `fugloy-step`'s. The synced comparison is now the adapter's lockstep test
+  (`packages/emu/test/diff/xtrs-adapter.test.js`).
 - `ours.mjs`: our Model I in the same line format (`mame` argument: MAME's reset
   state).
 - `boot.lua`: MAME's autoboot script (power-on fill, the trace with its
@@ -59,13 +63,16 @@ X11, readline or XQuartz.
   ROM is not part of xtrs, so it is still never committed.
 - **Build (headless, no X11):**
   `git clone https://github.com/TimothyPMann/xtrs.git tools/xtrs/src && git -C tools/xtrs/src checkout 3a2180c…`,
-  then `sh packages/emu/scripts/spike-model1/build.sh`, which builds out of tree into
+  then the spike's `build.sh` (now `pnpm xtrs:install`, which also clones and
+  applies the Task 2 patch), which builds out of tree into
   `tools/xtrs/build/`. It assembles the three built-in ROM stand-ins
   (`fakerom`, `esfrom`, `xtrsrom4p`) with our `tools/zmac/zmac -P`, runs
   `compile_rom`, and compiles every object except `main.o`, `trs_xinterface.o`
   and the GTK files with `cc -O2 -D_DARWIN_C_SOURCE`. It does **not** define
-  `KBWAIT`; the Makefile does. It also builds the driver, `packages/emu/scripts/spike-model1/fugloy-step.c`.
-  **No xtrs source file is modified:** the driver holds the stubs that
+  `KBWAIT`; the Makefile does. It also builds the driver (the spike's `fugloy-step.c`, now
+  `packages/emu/scripts/xtrs/fugloy-xtrs.c`).
+  **In the spike no xtrs source file was modified** (Task 2's patch adds
+  exported setters and an interrupt entry, below): the driver holds the stubs that
   `trs_xinterface.c` and `main.c` would have given (screen, mouse, grafyx, HRG,
   `trs_get_event`, `trs_model`, `trs_paused`, `trs_autodelay`, `program_name`),
   and `z80.c` is compiled with `-Dmem_write=fg_mem_write
@@ -173,7 +180,7 @@ X11, readline or XQuartz.
 
 ## Comparison with our Model I
 
-Tools: `fugloy-step` for xtrs, and `ours.mjs`, which steps
+Tools: `fugloy-step` for xtrs (now `fugloy-xtrs --trace`), and `ours.mjs`, which steps
 `new Machine({ model: 1 })` and prints the same line (index, PC, AF, BC, DE,
 HL, IX, IY, SP, IFF1, cycles before the instruction), and `fielddiff.py`, which
 compares the records field by field (all in `packages/emu/scripts/spike-model1/`). Our power-on: RAM `00`, video RAM `20`

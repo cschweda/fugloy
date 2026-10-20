@@ -35,7 +35,7 @@ const FLAG_BITS = ['S', 'Z', '5', 'H', '3', 'PV', 'N', 'C'];
 export const flagToken = (reg, name) => `${reg}.${name}`;
 
 /**
- * @typedef {import('./trsjs-adapter.js').Write} Write
+ * @typedef {import('./reference.js').Write} Write
  * @typedef {{
  *   a: number, f: number, b: number, c: number, d: number, e: number, h: number, l: number,
  *   a2: number, f2: number, b2: number, c2: number, d2: number, e2: number, h2: number, l2: number,

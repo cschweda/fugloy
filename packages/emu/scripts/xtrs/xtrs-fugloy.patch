@@ -1,0 +1,152 @@
+Fugløy's patch to xtrs (emu phase 7, Model I differential harness), applied by
+`pnpm xtrs:install` (scripts/install-xtrs.sh) with `git apply` to
+https://github.com/TimothyPMann/xtrs at 3a2180c063811a715faa28d39a94739c33e0abd0.
+
+It changes nothing in xtrs's emulation. It only exports what a driver stepping
+one instruction at a time needs and the files keep `static`: the interrupt check
+z80_run makes after each instruction (z80.c), a setter and a side-effect-free
+read for the keyboard matrix (trs_keyboard.c), and the same for the Model I's
+interrupt latch at $37E0 (trs_interrupt.c). The driver is
+packages/emu/scripts/xtrs/fugloy-xtrs.c.
+
+The files it modifies are xtrs's, under xtrs's licence, whose notices are kept
+here as the licence requires of modified versions:
+
+  Copyright (C) 1992 Clarendon Hill Software.
+
+  Permission is granted to any individual or institution to use, copy,
+  or redistribute this software, provided this copyright notice is retained.
+
+  This software is provided "as is" without any expressed or implied
+  warranty.  If this software brings on any sort of damage -- physical,
+  monetary, emotional, or brain -- too bad.  You've got no one to blame
+  but yourself.
+
+  The software may be modified for your own purposes, but modified versions
+  must retain this notice.
+
+  Copyright (c) 1996-2020, Timothy P. Mann
+
+  Permission is hereby granted, free of charge, to any person
+  obtaining a copy of this software and associated documentation
+  files (the "Software"), to deal in the Software without
+  restriction, including without limitation the rights to use, copy,
+  modify, merge, publish, distribute, sublicense, and/or sell copies
+  of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be
+  included in all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+  NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+  BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+  ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+  CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+diff --git a/trs_interrupt.c b/trs_interrupt.c
+index 761e484..079ac47 100644
+--- a/trs_interrupt.c
++++ b/trs_interrupt.c
+@@ -277,6 +277,24 @@ trs_reset_button_interrupt(int state)
+   if (!z80_state.nmi) z80_state.nmi_seen = 0;
+ }
+ 
++/*
++ * Fugloy (emu phase 7): set the Model I's interrupt latch ($37E0) and
++ * the INT line it drives, and read it without acknowledging the timer.
++ */
++void
++trs_interrupt_latch_fugloy_set(int value)
++{
++  interrupt_latch = value & 0xff;
++  z80_state.irq = (trs_model == 1) ? (interrupt_latch != 0)
++    : ((interrupt_latch & interrupt_mask) != 0);
++}
++
++int
++trs_interrupt_latch_fugloy_peek(void)
++{
++  return interrupt_latch;
++}
++
+ unsigned char
+ trs_interrupt_latch_read(void)
+ {
+diff --git a/trs_keyboard.c b/trs_keyboard.c
+index b2440df..9969248 100644
+--- a/trs_keyboard.c
++++ b/trs_keyboard.c
+@@ -905,6 +905,22 @@ static int kb_mem_value(int address)
+     return data;
+ }
+ 
++/*
++ * Fugloy (emu phase 7): set one key of the matrix at once, with no queue
++ * and no stretch, and read a matrix address without the side effects of
++ * trs_kb_mem_read.
++ */
++void trs_kb_fugloy_set(int row, int bit, int down)
++{
++    if (down) keystate[row & 7] |= (1 << (bit & 7));
++    else keystate[row & 7] &= ~(1 << (bit & 7));
++}
++
++int trs_kb_fugloy_peek(int address)
++{
++    return kb_mem_value(address);
++}
++
+ int trs_kb_mem_read(int address)
+ {
+     int key = -1;
+diff --git a/z80.c b/z80.c
+index eb578b3..748ff13 100644
+--- a/z80.c
++++ b/z80.c
+@@ -4427,6 +4427,42 @@ int z80_run(int continuous)
+ }
+ 
+ 
++/*
++ * Fugloy (emu phase 7): the interrupt check z80_run makes after each
++ * instruction when not called with -1, as a function of its own, so a
++ * driver stepping with z80_run(-1) can take the response at the start of
++ * the next step.  last_instruction is the first byte of the instruction
++ * just run (z80_run's own test for EI and HALT).  mode 0 is z80_run's
++ * rule; 1 also takes a maskable interrupt with no request (IFF1 set);
++ * -1 takes no maskable interrupt.  Returns 2 for an NMI, 1 for a
++ * maskable interrupt, 0 for none.
++ */
++int z80_fugloy_interrupt(int last_instruction, int mode)
++{
++    if (z80_state.nmi && !z80_state.nmi_seen)
++    {
++        if (last_instruction == 0x76) {
++	    REG_PC++;
++	}
++        do_nmi();
++        z80_state.nmi_seen = TRUE;
++        if (trs_model == 1) {
++	  trs_reset_button_interrupt(0);
++	}
++	return 2;
++    }
++    if (mode >= 0 && z80_state.iff1 == 1 && last_instruction != 0xFB
++	&& (z80_state.irq || mode == 1))
++    {
++        if (last_instruction == 0x76) {
++	    REG_PC++;
++	}
++        do_int();
++	return 1;
++    }
++    return 0;
++}
++
+ void z80_reset(void)
+ {
+     REG_PC = 0;

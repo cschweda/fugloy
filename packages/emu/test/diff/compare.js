@@ -32,8 +32,8 @@ import { diffStep, droppedPrefix, explainStep, interruptClass, REFERENCE_FIXES, 
 
 /**
  * @typedef {import('../../src/machine/machine.js').Machine} Machine
- * @typedef {import('./trsjs-adapter.js').Reference} Reference
- * @typedef {import('./trsjs-adapter.js').Write} Write
+ * @typedef {import('./reference.js').Reference} Reference
+ * @typedef {import('./reference.js').Write} Write
  * @typedef {import('./known.js').Regs} Regs
  * @typedef {{ at: number, row: number, bit: number, down: boolean }} KeyEvent
  * @typedef {{ regs: Regs, cycles: number }} SideState
@@ -240,7 +240,7 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
       // skips the pair (known.js, REFERENCE_FIXES).
       const theirsBefore = op === 0xdd || op === 0xfd ? ref.regs() : null;
       const afterPrefix = theirsBefore === null ? 0 : sys.memory.readByte((cpu.registers.PC + 1) & 0xffff);
-      const refIff1 = ref.z.reg.IFF1 !== 0;
+      const refIff1 = ref.regs().iff1;
       const fBefore = cpu.registers.F;
       // A held request our latch still holds must be taken at the first boundary where IFF1 is
       // set and nothing blocks it (Zilog UM0080 p. 7, INT pin): if our CPU does not, that is a
@@ -252,7 +252,7 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
       // Our CPU took an interrupt where the stream says none may be taken, or did not take the one
       // it had to.
       const irqWrong = (oursIrq && blocked !== null) || (mustTake && !oursIrq);
-      /** @type {import('./trsjs-adapter.js').IrqMode} */
+      /** @type {import('./reference.js').IrqMode} */
       const mode = blocked !== null ? 'hold' : oursIrq && held !== null ? 'force' : 'auto';
       const t = ref.step({ irq: mode });
       /** @type {string | null} */

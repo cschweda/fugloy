@@ -1,4 +1,4 @@
-# Emu phase 7 (Model I) spike: compare two per-instruction records (fugloy-step.c line format)
+# Emu phase 7 (Model I) spike: compare two per-instruction records (the line format of `fugloy-xtrs --trace`)
 # field by field; prints rows compared, rows differing, and per field the count and first row.
 # usage: python3 -I fielddiff.py a.txt b.txt <rows>
 import sys

@@ -25,6 +25,7 @@
     "asm:corpus": "pnpm build && node packages/asm/scripts/corpus.mjs",
     "zex:install": "bash scripts/install-zex.sh",
     "trsjs:install": "bash scripts/install-trsjs.sh",
+    "xtrs:install": "bash scripts/install-xtrs.sh",
     "diff": "node packages/emu/scripts/diff.mjs"
   },
   "devDependencies": {
