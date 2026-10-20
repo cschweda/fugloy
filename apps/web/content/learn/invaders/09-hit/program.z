@@ -1,0 +1,263 @@
+; Build Space Invaders, chapter 9: the shot hits. Chapter 8's base, shot
+; and descending row, and now a shot that moves into an invader's cell shoots
+; it down: MOVESHOT sees the invader's character there, erases the invader,
+; and KILL makes its place in the table 0. DRAWROW, EDGE and MOVEROW skip a
+; place that is 0, so the invader is gone for good, and so is the shot.
+
+        ORG     7000H           ; the program lives at 7000H, in free memory
+
+; WAIT: a counted delay, 5,120 passes of 26 T-states, about 66 ms a turn at
+; 2.03 MHz. The routines come first, and the game itself after them, from
+; START, where END START says the program begins.
+WAIT:   PUSH    BC              ; save BC, which the loop uses
+        LD      BC,1400H        ; 1400H is 5,120 passes of 26 T-states
+DELAY:  DEC     BC
+        LD      A,B
+        OR      C
+        JR      NZ,DELAY
+        POP     BC              ; BC as the caller left it
+        RET
+
+; DRAWBASE: copy the three bytes HL points at to the base's place on row 15,
+; 3FC0H plus BASEX. BC is kept on the stack; A, DE and HL are not.
+DRAWBASE:
+        PUSH    BC              ; save BC, which LDIR counts down
+        LD      A,(BASEX)       ; the base's column ...
+        ADD     A,0C0H          ; ... plus 3FC0H, row 15: the base's left cell
+        LD      E,A
+        LD      D,3FH
+        LD      BC,3            ; three bytes
+        LDIR                    ; from (HL) to (DE), one byte at a time
+        POP     BC              ; BC as the caller left it
+        RET
+
+; MOVEBASE: with the left or right arrow down, erase the base, move it a
+; column, and draw it again. Columns 0 and 61 are the edges: there it stays.
+MOVEBASE:
+        LD      A,(3840H)       ; the arrows' row: bit 5 left, 6 right
+        AND     60H             ; keep those two bits (0110 0000)
+        RET     Z               ; neither is down: nothing to do
+        LD      C,A             ; keep the keys in C, so A is free
+        LD      HL,BLANK        ; erase the base where it is
+        CALL    DRAWBASE
+        LD      A,(BASEX)       ; the base's column, from memory
+        BIT     5,C             ; left?
+        JR      Z,NOTLT
+        CP      0               ; column 0, the left edge: stay
+        JR      Z,NOTLT
+        DEC     A
+NOTLT:
+        BIT     6,C             ; right?
+        JR      Z,NOTRT
+        CP      61              ; column 61, the right edge for three cells: stay
+        JR      Z,NOTRT
+        INC     A
+NOTRT:
+        LD      (BASEX),A       ; the new column, back to memory
+        LD      HL,BASE         ; draw the base there
+        CALL    DRAWBASE
+        RET
+
+; MOVESHOT: the shot, if there is one, moves up a row; past row 0 it is gone,
+; and moving into an invader it shoots it down, and is gone too.
+MOVESHOT:
+        LD      HL,(SHOT)       ; where the shot is: two bytes from memory into HL
+        LD      A,H             ; 0 is no shot: test HL as the clear tests BC
+        OR      L
+        RET     Z               ; no shot: nothing to do
+        LD      (HL),20H        ; erase the shot where it is
+        LD      DE,-64          ; up a row
+        ADD     HL,DE
+        BIT     2,H             ; still on the screen? 3C00H-3FFFH all have bit 2 of H set
+        JR      NZ,SHOTUP
+        LD      HL,0            ; off the top: no shot
+SHOTUP: LD      (SHOT),HL       ; keep where it is, or 0
+        LD      A,H
+        OR      L
+        RET     Z               ; gone: nothing to draw
+        LD      A,(HL)          ; what is in the cell the shot moves into?
+        CP      9EH             ; an invader's left cell: HL is its address
+        JR      Z,HIT
+        CP      0ADH            ; its right cell: its address is one before
+        JR      Z,HITRT
+        LD      (HL),21H        ; the shot is an exclamation mark
+        RET
+HITRT:  DEC     HL              ; back to the invader's left cell
+HIT:    LD      (HL),20H        ; erase the invader's two cells
+        INC     HL
+        LD      (HL),20H
+        DEC     HL              ; HL is the invader's address again
+        CALL    KILL            ; its place in the table becomes 0
+        LD      HL,0            ; and the shot is gone too
+        LD      (SHOT),HL
+        RET
+
+; FIRE: with the space bar down and no shot in the air, a shot starts on
+; row 14, just above the base's middle cell.
+FIRE:   LD      A,(3840H)       ; the space bar is bit 7 of the arrows' row
+        BIT     7,A
+        RET     Z               ; not down: nothing to do
+        LD      HL,(SHOT)
+        LD      A,H
+        OR      L
+        RET     NZ              ; a shot is in the air already: one at a time
+        LD      A,(BASEX)       ; row 14 starts at 3F80H; the base's middle
+        ADD     A,81H           ; is its column plus one: 3F81H plus BASEX
+        LD      L,A
+        LD      H,3FH
+        LD      (HL),21H        ; draw the shot
+        LD      (SHOT),HL       ; and remember where it is
+        RET
+
+; DRAWROW: copy the two bytes DE points at to every invader's place: INVS
+; holds their screen addresses, a word each. IX walks the table and B counts
+; the invaders; BC is kept on the stack, and DE ends where it began.
+DRAWROW:
+        PUSH    BC              ; save BC: B counts the invaders
+        LD      IX,INVS         ; IX points at the table's first word
+        LD      B,8             ; eight invaders, counted down by DJNZ
+DRAWONE:
+        LD      L,(IX+0)        ; this invader's screen address: the low byte
+        LD      H,(IX+1)        ; first, then the high, as a DW stores them
+        LD      A,H             ; 0 is an invader shot down: nothing to draw
+        OR      L
+        JR      Z,DRAWNEXT
+        LD      A,(DE)          ; the shape's left cell
+        LD      (HL),A
+        INC     HL
+        INC     DE
+        LD      A,(DE)          ; and its right cell
+        LD      (HL),A
+        DEC     DE              ; back to the shape's start, for the next one
+DRAWNEXT:
+        INC     IX              ; on to the next word of the table
+        INC     IX
+        DJNZ    DRAWONE         ; B minus 1, and the next invader until it is 0
+        POP     BC              ; BC as the caller left it
+        RET
+
+; MARCH: every fourth turn, erase the row and move it a column, the way STEP
+; says. At the edge the row is marching to, it turns round, and that step
+; goes down a row instead, as far as row 13.
+MARCH:  LD      HL,TICK         ; one turn fewer to the row's next step
+        DEC     (HL)
+        RET     NZ              ; not 0 yet: not this turn
+        LD      (HL),4          ; 0: a step now, and the next in four turns
+        LD      DE,BLANK        ; erase the row where it is
+        CALL    DRAWROW
+        LD      DE,(STEP)       ; the step: 1 right, or -1 left
+        CALL    EDGE            ; Z: an invader is at the edge ahead
+        JR      NZ,SIDE
+        LD      HL,0            ; turn round: the step becomes 0 minus the step
+        OR      A               ; clear the carry flag, which SBC takes off too
+        SBC     HL,DE
+        LD      (STEP),HL
+        EX      DE,HL           ; and the new step into DE
+        LD      A,(INVROW)      ; the row the invaders are on
+        CP      13              ; row 13, the lowest they go for now?
+        JR      Z,SIDE          ; then they only turn, and step sideways
+        INC     A               ; one row lower
+        LD      (INVROW),A
+        LD      DE,64           ; a row is 64 cells: this step goes down
+SIDE:   CALL    MOVEROW         ; every invader moves by DE
+        RET
+
+; EDGE: is an invader at the edge the row is marching to? E is the step's
+; low byte, 1 or 0FFH. The low six bits of an invader's address are its
+; column; the next column would be 63 at the right edge, and -1 at the left,
+; and both are 3FH in six bits. Z if an invader is there, NZ if none is.
+EDGE:   LD      IX,INVS         ; IX walks the table, as in DRAWROW
+        LD      B,8
+EDGEONE:
+        LD      A,(IX+1)        ; 0 is an invader shot down: skip it
+        OR      (IX+0)
+        JR      Z,EDGENEXT
+        LD      A,(IX+0)        ; the low byte of the invader's address
+        ADD     A,E             ; plus the step
+        AND     3FH             ; its low six bits: the column it would move to
+        CP      3FH             ; 63, or -1: past an edge
+        RET     Z               ; this one is at the edge: return with Z
+EDGENEXT:
+        INC     IX
+        INC     IX
+        DJNZ    EDGEONE
+        OR      1               ; none is: A is not 0 after OR 1, so NZ
+        RET
+
+; MOVEROW: add DE to every invader's address in INVS: 1 moves the row a
+; column right, -1, the word 0FFFFH, a column left, and 64 a row down.
+MOVEROW:
+        LD      IX,INVS
+        LD      B,8
+MOVEONE:
+        LD      L,(IX+0)        ; the invader's address into HL
+        LD      H,(IX+1)
+        LD      A,H             ; 0 is an invader shot down: it stays 0
+        OR      L
+        JR      Z,MOVENEXT
+        ADD     HL,DE           ; plus the step
+        LD      (IX+0),L        ; and back into the table
+        LD      (IX+1),H
+MOVENEXT:
+        INC     IX
+        INC     IX
+        DJNZ    MOVEONE
+        RET
+
+; KILL: the invader at screen address HL is shot down: its place in INVS
+; becomes 0, which DRAWROW, EDGE and MOVEROW skip.
+KILL:   LD      IX,INVS
+        LD      B,8
+KILLONE:
+        LD      A,(IX+0)        ; this place's low byte: HL's?
+        CP      L
+        JR      NZ,KILLNEXT
+        LD      A,(IX+1)        ; and its high byte: HL's too?
+        CP      H
+        JR      NZ,KILLNEXT
+        LD      (IX+0),0        ; this is the invader: its place becomes 0
+        LD      (IX+1),0
+        RET
+KILLNEXT:
+        INC     IX
+        INC     IX
+        DJNZ    KILLONE
+        RET
+
+START:  LD      HL,3C00H        ; HL points at the top-left cell
+        LD      BC,400H         ; BC counts the cells: 400H is 1024
+CLEAR:  LD      (HL),20H        ; a space: the cell is blank
+        INC     HL              ; on to the next cell
+        DEC     BC              ; one cell fewer to go (DEC BC sets no flags ...)
+        LD      A,B             ; ... so test BC by hand: copy B into A
+        OR      C               ; and OR in C: zero only when B and C both are
+        JR      NZ,CLEAR        ; not zero yet: clear the next cell
+        LD      HL,BASE         ; draw the base where BASEX says
+        CALL    DRAWBASE
+
+; The game loop: one turn of the game, then round again. A game's turn
+; reads the keys, moves things and draws them: the base, the shot, the invaders.
+LOOP:   CALL    WAIT            ; the turn's pause, so the game runs at a steady speed
+        CALL    MOVEBASE        ; the base moves if an arrow is down
+        CALL    MOVESHOT        ; the shot, if there is one, rises a row
+        CALL    FIRE            ; the space bar starts a shot, if there is none
+        CALL    MARCH           ; every fourth turn, the row steps
+        LD      DE,INVADER      ; the row, drawn every turn: a shot passing
+        CALL    DRAWROW         ; through an invader erases a cell, and this mends it
+        JR      LOOP            ; and round again, for ever
+
+; The game's data: below the loop, where the processor never runs into it.
+BASE:   DB      0BCH,0BFH,0BCH  ; the base: a wing, a block, a wing
+BLANK:  DB      '   '           ; three spaces, to erase it
+INVADER:
+        DB      9EH,0ADH        ; an invader: two cells, a head, arms and legs
+; INVS: the invaders' places, each row 2's start, 3C80H, plus a column.
+INVS:   DW      3C80H+14,3C80H+18,3C80H+22,3C80H+26
+        DW      3C80H+30,3C80H+34,3C80H+38,3C80H+42
+BASEX:  DB      30              ; the base's column, 0 to 61
+SHOT:   DW      0               ; the shot's screen address, or 0 for none
+STEP:   DW      1               ; the row's step: 1 right, or -1 (0FFFFH) left
+TICK:   DB      4               ; turns to the row's next step
+INVROW: DB      2               ; the row the invaders are on, 2 to 13
+
+        END     START           ; the program starts at START

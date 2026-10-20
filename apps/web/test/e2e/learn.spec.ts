@@ -406,6 +406,86 @@ test('moving from lesson 7 into chapter 1 while lesson 7 runs stops it, and the 
   await expect.poll(() => page.evaluate(() => window.__fugloyLearn?.runnerState() ?? 'none')).toBe('idle');
 });
 
+/**
+ * Line `n` of the lesson editor, scrolled into view (the editor grows with its program, so the page
+ * scrolls and CodeMirror draws only the lines near the window): its text and classes, the line
+ * number beside it, and the change gutter's mark beside it ('' for none), each found by where it sits.
+ */
+async function editorLine(page: Page, n: number): Promise<{ text: string; classes: string; number: string; mark: string }> {
+  return page.evaluate(async (n) => {
+    const numberEl = (): Element | undefined =>
+      [...document.querySelectorAll('.cm-lineNumbers .cm-gutterElement')].find((e) => e.textContent === String(n));
+    const frame = (): Promise<void> => new Promise((r) => requestAnimationFrame(() => r()));
+    window.scrollTo(0, 0);
+    await frame();
+    for (let i = 0; i < 400 && numberEl() === undefined; i++) {
+      window.scrollBy(0, 200);
+      await frame();
+    }
+    const num = numberEl();
+    if (num === undefined) throw new Error(`line ${n} never appeared in the editor`);
+    num.scrollIntoView({ block: 'center' });
+    await frame();
+    await frame();
+    const top = (e: Element): number => e.getBoundingClientRect().top;
+    const at = numberEl()!;
+    const y = top(at);
+    const near = (e: Element): boolean => Math.abs(top(e) - y) < 2;
+    const line = [...document.querySelectorAll('.cm-content .cm-line')].find(near);
+    const markCell = [...document.querySelectorAll('.fg-chg-gutter .cm-gutterElement')].find(near);
+    return {
+      text: line?.textContent ?? '(no line there)',
+      classes: line?.className ?? '',
+      number: at.textContent ?? '',
+      mark: markCell?.querySelector('[data-testid="change-mark"]')?.textContent ?? '',
+    };
+  }, n);
+}
+
+test('chapter 6 lists its line taken out struck through, and each mark sits on the line the diff names (Review Focus 1)', async ({ page }) => {
+  // CodeMirror draws only the lines near the window, and LOOP is far down chapter 6, so wait on its first line.
+  await page.goto('/learn/invaders/06-row/');
+  await expect(page.locator('.cm-content')).toContainText('chapter 6: a row of invaders', { timeout: 30_000 });
+  await page.waitForFunction(() => window.__fugloyLearn !== undefined);
+  await expect(page.getByTestId('lesson-title')).toHaveText('A row of invaders');
+  await expect(page.getByTestId('lesson-marks-summary')).toHaveText('Marked since chapter 5: 13 new lines (+), 18 changed lines (~), 1 line taken out.');
+  // INVX goes: listed under the program, struck through, before line 151, the blank line above END.
+  const removed = page.getByTestId('lesson-removed-line');
+  await expect(removed).toHaveCount(1);
+  await expect(removed.locator('del')).toHaveText(/^INVX:\s+DB\s+30\s+; the invader's column, 0 to 62$/);
+  await expect(removed).toContainText('before 151');
+  expect(await removed.locator('del').evaluate((e) => getComputedStyle(e).textDecorationLine)).toContain('line-through');
+  await expect(page.locator('.cm-content')).not.toContainText('INVX');
+
+  // Each line the diff names, with its mark beside it: DRAWINV's rework changes lines 97 to 106 and adds
+  // 107 to 116, POP BC and RET stay; the loop's two lines change; INVS's three lines are new.
+  const expected: [number, RegExp, '~' | '+' | ''][] = [
+    [1, /^; Build Space Invaders, chapter 6: a row of invaders\./, '~'],
+    [6, /^$/, ''],
+    [97, /^; DRAWROW: copy the two bytes DE points at/, '~'],
+    [106, /^\s+LD\s+H,\(IX\+1\)/, '~'],
+    [107, /^\s+LD\s+A,\(DE\)\s+; the shape's left cell/, '+'],
+    [116, /^\s+DJNZ\s+DRAWONE/, '+'],
+    [117, /^\s+POP\s+BC/, ''],
+    [132, /the base, the shot, the invaders\.$/, '~'],
+    [137, /^\s+LD\s+DE,INVADER/, '~'],
+    [138, /^\s+CALL\s+DRAWROW/, '~'],
+    [139, /^\s+JR\s+LOOP/, ''],
+    [146, /^; INVS: the invaders' places/, '+'],
+    [148, /^\s+DW\s+3C80H\+30/, '+'],
+    [149, /^BASEX:/, ''],
+  ];
+  for (const [n, text, mark] of expected) {
+    const got = await editorLine(page, n);
+    expect(got.number, `line ${n}`).toBe(String(n));
+    expect(got.text, `line ${n}'s text`).toMatch(text);
+    expect(got.mark, `line ${n}'s gutter mark`).toBe(mark);
+    if (mark === '+') expect(got.classes, `line ${n}`).toContain('fg-chg-new');
+    if (mark === '~') expect(got.classes, `line ${n}`).toContain('fg-chg-changed');
+    if (mark === '') expect(got.classes, `line ${n}`).not.toMatch(/fg-chg-/);
+  }
+});
+
 test('axe finds nothing on /learn/invaders/, marked and running', async ({ page }) => {
   await openChapter(page);
   const tags = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'];

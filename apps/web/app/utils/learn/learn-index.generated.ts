@@ -19,4 +19,8 @@ export const CHAPTER_INDEX: readonly LessonEntry[] = [
   { slug: "03-move-base", number: 3, title: "Move the base with the arrow keys", idea: "reading the keyboard, RET Z, and keeping the base inside the screen", models: [3,1] },
   { slug: "04-shot", number: 4, title: "Fire one shot that rises and disappears", idea: "a 16-bit variable with DW, 0 for none, and two things moving in one loop", models: [3,1] },
   { slug: "05-one-invader", number: 5, title: "One invader", idea: "a second thing drawn by a routine like the first, and redrawn every turn", models: [3,1] },
+  { slug: "06-row", number: 6, title: "A row of invaders", idea: "a table of screen addresses, walked with IX and counted with DJNZ", models: [3,1] },
+  { slug: "07-march", number: 7, title: "The row marches left and right", idea: "a word that is 1 or -1, a turn counter in memory, and SBC to turn round", models: [3,1] },
+  { slug: "08-descend", number: 8, title: "Reaching an edge, it inches down", idea: "one routine, three moves: the same ADD HL,DE steps right, left, or down", models: [3,1] },
+  { slug: "09-hit", number: 9, title: "The shot hits an invader", idea: "a collision read off the screen, and a hole in the table that loops skip", models: [3,1] },
 ];
