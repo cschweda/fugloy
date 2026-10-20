@@ -390,7 +390,7 @@ test('moving from lesson 7 into chapter 1 while lesson 7 runs stops it, and the 
   await page.waitForFunction(() => window.__fugloyLearn !== undefined);
   await runIt(page);
   await expect.poll(async () => (await registers(page)).length).toBeGreaterThan(0);
-  // In the page, as a link does it (the link from lesson 7 comes with Task 5).
+  // In the page, as a link does it (the link itself is the next test).
   await page.evaluate(() => window.__fugloyLearn!.go('/learn/invaders/'));
   await expect(page.getByTestId('lesson-title')).toHaveText('A blank screen and a game loop that does nothing yet');
   await expect(page.locator('.cm-content')).toContainText('LOOP', { timeout: 30_000 });
@@ -404,6 +404,25 @@ test('moving from lesson 7 into chapter 1 while lesson 7 runs stops it, and the 
   await expect(page.locator('.cm-content')).toContainText('MARCH', { timeout: 30_000 });
   await expect(page.getByTestId('change-mark')).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => window.__fugloyLearn?.runnerState() ?? 'none')).toBe('idle');
+});
+
+test("lesson 7's last Try it paragraph links to the course, and the lesson list shows both courses with done marks (Task 5)", async ({ page }) => {
+  await page.goto('/learn/07-invaders-march/');
+  await expect(page.locator('.cm-content')).toContainText('MARCH', { timeout: 30_000 });
+  await page.getByTestId('lesson-try').getByRole('link', { name: 'Build Space Invaders' }).click();
+  await expect(page).toHaveURL(/\/learn\/invaders\/$/);
+  await expect(page.getByTestId('lesson-title')).toHaveText('A blank screen and a game loop that does nothing yet');
+  await expect(page.locator('.cm-content')).toContainText('LOOP', { timeout: 30_000 });
+  await page.waitForFunction(() => window.__fugloyLearn !== undefined);
+  await runIt(page);
+  await page.getByTestId('lesson-list-toggle').click();
+  const list = page.getByTestId('lesson-list');
+  await expect(list.getByRole('heading', { name: 'Learn Z80 assembly' })).toBeVisible();
+  await expect(list.getByRole('heading', { name: 'Build Space Invaders' })).toBeVisible();
+  expect(await list.locator('li').count()).toBe(19);
+  await expect(page.getByTestId('lesson-done-invaders-01-blank-loop')).toBeVisible({ timeout: 30_000 });
+  // The chapter's mark is its own: lesson 1 is not marked.
+  await expect(page.getByTestId('lesson-done-01-white-out')).toHaveCount(0);
 });
 
 /**

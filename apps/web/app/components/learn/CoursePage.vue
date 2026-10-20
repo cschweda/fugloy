@@ -30,6 +30,7 @@ import LessonText from '~/components/learn/LessonText.vue';
 import type { Lesson, LessonEntry } from '~/utils/learn/lesson-format';
 import { gameLink, itemPath, lessonNeighbours, progressId } from '~/utils/learn/page';
 import type { Course, CourseBase } from '~/utils/learn/page';
+import { CHAPTER_INDEX, LESSON_INDEX } from '~/utils/learn/lessons';
 import { knowProgram, learnProgress, loadedLearn, loadLearn } from '~/utils/learn/learn-run';
 import type { LearnParts } from '~/utils/learn/learn-run';
 import { loadFailed } from '~/utils/lazy';
@@ -162,8 +163,13 @@ onBeforeUnmount(() => {
   if (__FUGLOY_E2E__ && window.__fugloyLearn === hook) delete window.__fugloyLearn;
 });
 
-const doneCount = computed(() => items.filter((l) => done.value.has(progressId(props.course, l.slug))).length);
-const isDone = (l: LessonEntry): boolean => done.value.has(progressId(props.course, l.slug));
+/** Both courses in the list, the lessons then the chapters, each with its pages and its progress ids. */
+const courses = [
+  { course: 'lessons' as Course, name: 'Learn Z80 assembly', base: '/learn' as CourseBase, items: LESSON_INDEX },
+  { course: 'invaders' as Course, name: 'Build Space Invaders', base: '/learn/invaders' as CourseBase, items: CHAPTER_INDEX },
+];
+const totalCount = LESSON_INDEX.length + CHAPTER_INDEX.length;
+const doneCount = computed(() => courses.reduce((n, c) => n + c.items.filter((l) => done.value.has(progressId(c.course, l.slug))).length, 0));
 </script>
 
 <template>
@@ -187,13 +193,16 @@ const isDone = (l: LessonEntry): boolean => done.value.has(progressId(props.cour
         <p class="fg-learn-idea">{{ lesson.idea }}</p>
       </header>
       <nav v-show="listOpen" id="lesson-list" class="fg-learn-list" :aria-label="`${word}s`" data-testid="lesson-list">
-        <p class="fg-muted">{{ doneCount }} of {{ items.length }} done in this browser.</p>
-        <ol>
-          <li v-for="l in items" :key="l.slug">
-            <NuxtLink :to="pathOf(l.slug)" :aria-current="l.slug === lesson.slug ? 'page' : undefined">{{ l.number }}. {{ l.title }}</NuxtLink>
-            <span v-if="isDone(l)" class="fg-learn-done" :data-testid="`lesson-done-${l.slug}`"><span aria-hidden="true">✓</span><span class="sr-only">, done</span></span>
-          </li>
-        </ol>
+        <p class="fg-muted">{{ doneCount }} of {{ totalCount }} done in this browser.</p>
+        <section v-for="c in courses" :key="c.course" :aria-labelledby="`course-${c.course}`">
+          <h2 :id="`course-${c.course}`" class="fg-learn-course">{{ c.name }}</h2>
+          <ol>
+            <li v-for="l in c.items" :key="l.slug">
+              <NuxtLink :to="itemPath(c.base, l.slug)" :aria-current="c.course === course && l.slug === lesson.slug ? 'page' : undefined">{{ l.number }}. {{ l.title }}</NuxtLink>
+              <span v-if="done.has(progressId(c.course, l.slug))" class="fg-learn-done" :data-testid="`lesson-done-${c.course === 'invaders' ? 'invaders-' : ''}${l.slug}`"><span aria-hidden="true">✓</span><span class="sr-only">, done</span></span>
+            </li>
+          </ol>
+        </section>
       </nav>
       <LessonText :blocks="lesson.body" data-testid="lesson-text" />
       <aside class="fg-learn-box" aria-labelledby="lesson-try-title" data-testid="lesson-try">
@@ -242,6 +251,7 @@ const isDone = (l: LessonEntry): boolean => done.value.has(progressId(props.cour
 .fg-learn-idea { margin: 0; color: var(--fg-muted); font-size: 13px; }
 .fg-learn-list { padding: 8px 12px; border: 1px solid var(--fg-border); border-radius: 4px; background: var(--fg-surface); font-size: 13px; }
 .fg-learn-list p { margin: 0 0 6px; }
+.fg-learn-course { margin: 8px 0 4px; font-size: 13px; font-weight: 700; color: var(--fg-text-strong); }
 .fg-learn-list ol { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
 .fg-learn-list a { display: inline-flex; align-items: center; min-height: 24px; color: var(--fg-text); }
 .fg-learn-list a[aria-current='page'] { font-weight: 700; color: var(--fg-text-strong); }
