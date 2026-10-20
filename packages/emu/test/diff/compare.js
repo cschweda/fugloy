@@ -21,8 +21,17 @@
  * Keys (Ruling 3) go to both machines' keyboard matrices directly, at the first instruction
  * boundary at or after their T-state, never through our ROM keyboard hook.
  *
+ * A trace reference (MAME, mame-trace.js) cannot be synced; it brings `follow` instead (Ruling 4):
+ * our machine starts in the trace's power-on state, takes a maskable interrupt exactly at the
+ * steps the trace took one (a request ours raised at another time is the divergence `irqTime`,
+ * never excused), and its reads of the keyboard matrix return the bytes the trace's reads returned
+ * (a read on one side only is the divergence `keys`). After a difference a known class explains,
+ * our machine adopts the trace's state instead of the reverse. A trace shorter than the run ends it
+ * with the trace's sentence (`ended`), never as "no divergence".
+ *
  * The comparator wraps our CPU's `interrupt` and `executeInstruction` and our memory's `writeByte`
- * for the run, and puts them back after.
+ * (and, following a trace, our memory's `readByte` and the I/O's `pendingInterrupt`) for the run,
+ * and puts them back after.
  */
 import { decode, formatInstruction } from '@fugloy/z80';
 import { KeyQueue } from '../../src/devices/key-queue.js';
@@ -56,7 +65,9 @@ import { diffStep, droppedPrefix, explainStep, interruptClass, REFERENCE_FIXES, 
  *   differs (register names, flag bits as `f.S`, `cycles`, `writes`, `irq` (an interrupt taken where none may be, or not taken where it must), or `video`); known: the class a
  *   `strict` run stopped on, else null; context: up to 10 instructions before, the divergent one,
  *   and up to 10 after (both machines run on, unsynced).
- * @typedef {{ instructions: number, divergence: Divergence | null, known: Record<string, number> }} CompareResult
+ * @typedef {{ instructions: number, divergence: Divergence | null, known: Record<string, number>, ended?: string }} CompareResult
+ *   ended: a trace reference's sentence when its trace ended before `instructions` (then
+ *   `instructions` is how many were compared).
  */
 
 const CONTEXT = 10;
@@ -105,25 +116,39 @@ export function ourRegs(m) {
 
 /**
  * Wrap our machine's CPU and memory to log each step's writes, interrupt response, and executed
- * instruction. Returns the step function and an uninstall.
+ * instruction. Returns the step function and an uninstall. With `follow` (a trace reference), our
+ * machine also takes the trace's interrupts and keyboard bytes, and the log says where its own
+ * request or reads disagreed (`irqTime`, `irqRefused`, `keys`).
  * @param {Machine} m
+ * @param {import('./mame-trace.js').Follow | null} [follow]
  */
-function instrument(m) {
+function instrument(m, follow = null) {
   const mem = m.system.memory;
   const cpu = m.system.cpu;
-  const log = { writes: /** @type {Write[]} */ ([]), irq: false, execPc: 0, idle: false, code: 0 };
+  const io = m.system.io;
+  const log = { writes: /** @type {Write[]} */ ([]), irq: false, execPc: 0, idle: false, code: 0, irqTime: false, irqRefused: false, keys: false, requested: false };
   const own = (/** @type {object} */ o, /** @type {string} */ k) => Object.prototype.hasOwnProperty.call(o, k);
-  const saved = { write: own(mem, 'writeByte'), interrupt: own(cpu, 'interrupt'), exec: own(cpu, 'executeInstruction') };
+  const saved = { write: own(mem, 'writeByte'), interrupt: own(cpu, 'interrupt'), exec: own(cpu, 'executeInstruction'), read: own(mem, 'readByte'), pending: own(io, 'pendingInterrupt') };
   const write = mem.writeByte;
   const interrupt = cpu.interrupt;
   const exec = cpu.executeInstruction;
+  const read = mem.readByte;
+  const pending = io.pendingInterrupt;
+  let snapshot = false;
   mem.writeByte = (/** @type {number} */ addr, /** @type {number} */ value) => {
     log.writes.push({ addr: addr & 0xffff, value: value & 0xff });
     write.call(mem, addr, value);
   };
   cpu.interrupt = (/** @type {number | undefined} */ bus) => {
+    if (follow !== null && !follow.irqAt(follow.index)) {
+      // The trace took none here: hold ours. If our CPU would have taken it, ours was requested
+      // before MAME's.
+      if (cpu.IFF1 && cpu.pendingEI === 0 && !cpu.afterPrefix) log.irqTime = true;
+      return false;
+    }
     const taken = interrupt.call(cpu, bus);
     if (taken) log.irq = true;
+    else if (follow !== null) log.irqRefused = true;
     return taken;
   };
   cpu.executeInstruction = () => {
@@ -132,17 +157,52 @@ function instrument(m) {
     log.idle = cpu.halted;
     // The instruction's bytes before it runs (it may rewrite itself); a halted step runs a NOP
     // (Zilog UM0080, "HALT Exit").
+    snapshot = true;
     log.code = cpu.halted ? 0
       : ((mem.readByte(pc) << 24) | (mem.readByte((pc + 1) & 0xffff) << 16) | (mem.readByte((pc + 2) & 0xffff) << 8) | mem.readByte((pc + 3) & 0xffff)) >>> 0;
+    snapshot = false;
     return exec.call(cpu);
   };
+  if (follow !== null) {
+    // The trace's interrupt: ours is made to see a request where the trace took one; where ours
+    // had none, its request came after MAME's.
+    io.pendingInterrupt = () => {
+      log.requested = pending.call(io);
+      if (follow.irqAt(follow.index)) {
+        if (!log.requested) log.irqTime = true;
+        return true;
+      }
+      return log.requested;
+    };
+    // The trace's keyboard bytes, at the reads the trace recorded.
+    mem.readByte = (/** @type {number} */ addr) => {
+      const a = addr & 0xffff;
+      if (snapshot || a < 0x3800 || a >= 0x3c00) return read.call(mem, addr);
+      const v = follow.keyRead(follow.index, a);
+      if (v === undefined) {
+        log.keys = true;
+        return read.call(mem, addr);
+      }
+      return v;
+    };
+  }
   return {
     log,
     machine: m,
     step() {
       log.writes = [];
       log.irq = false;
+      log.irqTime = false;
+      log.irqRefused = false;
+      log.keys = false;
+      const wantIrq = follow !== null && follow.irqAt(follow.index);
       const { cycles } = m.step(1);
+      if (follow !== null) {
+        // The trace took an interrupt that ours never got to (no boundary check ran it), or read the
+        // keyboard where ours did not.
+        if (wantIrq && !log.irq) log.irqRefused = true;
+        if (follow.keyReadsLeft(follow.index) > 0) log.keys = true;
+      }
       return cycles;
     },
     uninstall() {
@@ -150,6 +210,10 @@ function instrument(m) {
       if (saved.write) mem.writeByte = write; else delete mem.writeByte;
       if (saved.interrupt) cpu.interrupt = interrupt; else delete cpu.interrupt;
       if (saved.exec) cpu.executeInstruction = exec; else delete cpu.executeInstruction;
+      if (follow !== null) {
+        if (saved.read) mem.readByte = read; else delete mem.readByte;
+        if (saved.pending) io.pendingInterrupt = pending; else delete io.pendingInterrupt;
+      }
     },
   };
 }
@@ -198,10 +262,13 @@ export function disassemble(code, pc, idle = false) {
  */
 export function compareRun({ machine: m, reference: ref, instructions, keys = [], strict = false, progress }) {
   if (m.keyboard.pending > 0) throw new Error('compareRun: the machine\'s key queue has keys waiting; pass keys to compareRun so both machines get them');
+  /** @type {import('./mame-trace.js').Follow | null} A trace reference: our machine follows it (Ruling 4). */
+  const follow = /** @type {any} */ (ref).follow ?? null;
+  if (follow !== null && keys.length > 0) throw new Error('compareRun: a trace reference brings its own keys (the bytes its keyboard reads returned); pass none');
   const sys = m.system;
   const cpu = sys.cpu;
   const io = sys.io;
-  const ours = instrument(m);
+  const ours = instrument(m, follow);
   /** @type {Record<string, number>} */
   const known = {};
   /** @type {(ContextLine | undefined)[]} The last CONTEXT compared instructions, a ring. */
@@ -230,9 +297,17 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
    */
   let blocked = cpu.pendingEI > 0 ? 'EI' : cpu.afterPrefix ? 'prefix' : null;
 
+  /** @type {string | undefined} */
+  let ended;
+  let compared = instructions;
   try {
-    ref.syncFrom(m);
+    if (follow !== null) follow.start(m); else ref.syncFrom(m);
     for (let index = 0; index < instructions; index++) {
+      if (follow !== null && !follow.has(index)) {
+        ended = follow.ended(index, instructions);
+        compared = index;
+        break;
+      }
       deliverKeys();
       const wasHalted = cpu.halted;
       const op = cpu.halted ? 0 : sys.memory.readByte(cpu.registers.PC);
@@ -296,9 +371,15 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
 
       const diff = diffStep(ctx);
       const { classes, unexplained } = diff.size === 0 ? { classes: [], unexplained: [] } : explainStep(ctx, diff);
-      if (irqWrong) {
+      if (irqWrong || ours.log.irqRefused) {
         diff.add('irq');
         unexplained.push('irq');
+      }
+      for (const field of /** @type {const} */ (['irqTime', 'keys'])) {
+        if (ours.log[field]) {
+          diff.add(field);
+          unexplained.push(field);
+        }
       }
       // The next boundary's reason, from the instruction that just ran (a halted step runs a NOP).
       blocked = ours.log.idle ? null : bytes[0] === 0xfb ? 'EI'
@@ -326,7 +407,10 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
         return { instructions: index + 1, divergence, known };
       }
       for (const c of classes) known[c] = (known[c] ?? 0) + 1;
-      if (diff.size > 0) {
+      if (diff.size > 0 && follow !== null) {
+        // A trace cannot be resynced: our machine takes the trace's registers and writes instead.
+        follow.adopt(m);
+      } else if (diff.size > 0) {
         // Resync the reference from our state: registers, cycle count and 30 Hz phase, and the
         // bytes our instruction wrote.
         ref.syncRegs(m);
@@ -337,13 +421,15 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
     }
 
     const video = compareVideo(m, ref);
+    const tail = ended === undefined ? {} : { ended };
     if (!video.equal) {
       const o = ourRegs(m);
       const s = ref.regs();
       return {
-        instructions,
+        instructions: compared,
+        ...tail,
         divergence: {
-          index: instructions,
+          index: compared,
           pc: o.pc,
           kind: 'video',
           fields: ['video'],
@@ -352,12 +438,12 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
           theirs: { regs: s, cycles: ref.cycles },
           writes: { ours: [], theirs: [] },
           video,
-          context: ringLines(ring, instructions).map(withText),
+          context: ringLines(ring, compared).map(withText),
         },
         known,
       };
     }
-    return { instructions, divergence: null, known };
+    return { instructions: compared, divergence: null, known, ...tail };
   } finally {
     ours.uninstall();
   }
@@ -422,10 +508,16 @@ export function formatReport(result) {
   out.push(classes.length === 0 ? 'known differences: none' : 'known differences:');
   for (const c of classes) out.push(`  ${String(result.known[c]).padStart(9)}  ${c}`);
   const d = result.divergence;
+  // A trace that ended early proves nothing past its end: its sentence, never "none".
+  if (d === null && result.ended !== undefined) {
+    out.push(result.ended);
+    return `${out.join('\n')}\n`;
+  }
   if (d === null) {
     out.push('divergence: none (video RAM equal at the end)');
     return `${out.join('\n')}\n`;
   }
+  if (result.ended !== undefined) out.push(result.ended);
   const what = d.known !== null ? `known difference (strict): ${d.known}` : `differs: ${d.fields.join(', ')}`;
   out.push(`divergence at instruction ${d.index}, PC $${hex4(d.pc)}${d.kind === 'video' ? ' (end of run)' : ''}: ${what}`);
   out.push(`  ours    ${regLine(d.ours)}`);

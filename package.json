@@ -26,6 +26,8 @@
     "zex:install": "bash scripts/install-zex.sh",
     "trsjs:install": "bash scripts/install-trsjs.sh",
     "xtrs:install": "bash scripts/install-xtrs.sh",
+    "mame:install": "bash scripts/install-mame.sh",
+    "mame:trace": "node packages/emu/scripts/mame-trace.mjs",
     "diff": "node packages/emu/scripts/diff.mjs"
   },
   "devDependencies": {
