@@ -101,7 +101,7 @@ GO:     CALL    WAIT            ; a turn's pause, then look at the space bar
         JR      Z,GO            ; not down: wait another turn
 ```
 
-It is lesson 4's wait for a key, with `CALL WAIT` in it, so it looks once a turn. Then a `DJNZ` loop writes 20 spaces over the words, and the game starts. The space bar is still down on the first turn, so `FIRE` fires a shot at once.
+It is lesson 4's wait for a key, with `CALL WAIT` in it, so it looks once a turn. Then a `DJNZ` loop writes 20 spaces over the words, and the game starts. If you are still holding the space bar when the first turn comes round, `FIRE` fires a shot at once.
 
 ## Landing
 
@@ -142,7 +142,7 @@ The Model I has the same keyboard row and the same screen, so the program runs u
 
 ## Try it
 
-Press Run ▶, click the screen, and press the space bar: the words go, a shot fires, and the first bomb drops. Stand still and the bombs find the base sooner or later, three times: `LIVES 2`, `LIVES 1`, and `GAME OVER`. When that happens depends on when you pressed the space bar, so run it again and press it a little later, and the bombs fall somewhere else. Then play: dodge with the arrows.
+Press Run ▶, click the screen, and press the space bar: the words go (and if you held the bar down, a shot fires), and the first bomb drops. Stand still and the bombs find the base sooner or later, three times: `LIVES 2`, `LIVES 1`, and `GAME OVER`. When that happens depends on when you pressed the space bar, so run it again and press it a little later, and the bombs fall somewhere else. Then play: dodge with the arrows.
 
 Then take out the line `CALL MOVEBOMB` in the loop, and run it standing still: no bombs fall, and about 64 seconds after the space bar, on the Model III, the lowest row lands on row 13 and the top line says `GAME OVER`, with `LIVES 3`.
 

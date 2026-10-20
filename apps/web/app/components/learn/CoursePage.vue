@@ -187,12 +187,12 @@ const doneCount = computed(() => courses.reduce((n, c) => n + c.items.filter((l)
             :aria-expanded="listOpen"
             @click="listOpen = !listOpen"
           >
-            {{ word }}s
+            Lessons and chapters
           </button>
         </div>
         <p class="fg-learn-idea">{{ lesson.idea }}</p>
       </header>
-      <nav v-show="listOpen" id="lesson-list" class="fg-learn-list" :aria-label="`${word}s`" data-testid="lesson-list">
+      <nav v-show="listOpen" id="lesson-list" class="fg-learn-list" aria-label="Lessons and chapters" data-testid="lesson-list">
         <p class="fg-muted">{{ doneCount }} of {{ totalCount }} done in this browser.</p>
         <section v-for="c in courses" :key="c.course" :aria-labelledby="`course-${c.course}`">
           <h2 :id="`course-${c.course}`" class="fg-learn-course">{{ c.name }}</h2>

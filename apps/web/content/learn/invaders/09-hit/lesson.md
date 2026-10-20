@@ -104,4 +104,4 @@ The Model I has the same keyboard row and the same screen, so the program runs u
 
 Press Run ▶, click the screen, and fire without moving: the shot rises in column 31. If an invader is over that column when the shot reaches row 2, it is shot down, and a gap marches in the row where it was; if the shot arrives between two invaders, it goes on up past them, and you can fire again. Then shoot down the invader at the row's left end: once it is gone, the row marches four columns farther left before it turns.
 
-Then take out the line `JR Z,HITRT`. Now only an invader's left cell stops the shot: a shot moving into a right cell is drawn over it, and the invader is not shot down.
+Then take out the line `JR Z,HITRT`. Now only an invader's left cell stops the shot: a shot moving into a right cell is drawn over by the invader in the same turn, so the shot seems to pass behind it, and the invader is not shot down.

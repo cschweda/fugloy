@@ -193,8 +193,8 @@ The Model I waits for a Model I reference (MAME or xtrs, ask the user first).
   without entering the ROM's space, and reaches its `check.json` screen
   (`FUGLOY_REQUIRE_ZMAC=1` in CI). Lessons 1 and 3–7 and chapters 10–12 link to Sea
   Dragon through `/?example=sea-dragon&at=XXXX` (`utils/deep-link.ts`). The Explain
-  tab loads lazily, which took the workbench's first screen from 252,257 B to about
-  228,9xx B; it is 229,039 B now against 252,775 B. `pnpm --filter @fugloy/web
+  tab loads lazily, which took the workbench's first screen from 252,257 B to
+  228,912 B; it is 229,039 B now against 252,775 B. `pnpm --filter @fugloy/web
   size:first-screen -- --page learn|invaders` measures the Learn and chapter pages
   (202,885 B) against `LEARN_BUDGET` (221,184 B gzip).
 - `packages/emu` — headless, deterministic TRS-80 emulator core (the Model III

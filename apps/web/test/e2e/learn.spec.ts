@@ -399,6 +399,16 @@ test('moving from lesson 7 into chapter 1 while lesson 7 runs stops it, and the 
   await expect(page.getByTestId('registers')).toContainText('The registers show here while a program runs.');
   await expect(page.locator('.cm-line.fg-run-now')).toHaveCount(0);
   expect(await page.getByTestId('change-mark').count()).toBeGreaterThanOrEqual(16);
+  // Chapter 1 runs; moving on to chapter 2 stops it (Review Focus 3, "and between chapters").
+  await runIt(page);
+  await expect.poll(async () => (await registers(page)).length).toBeGreaterThan(0);
+  await page.evaluate(() => window.__fugloyLearn!.go('/learn/invaders/02-base/'));
+  await expect(page.getByTestId('lesson-title')).not.toHaveText('A blank screen and a game loop that does nothing yet');
+  await expect.poll(() => page.evaluate(() => window.__fugloyLearn?.runnerState() ?? 'none')).toBe('idle');
+  await expect(page.getByTestId('registers')).toContainText('The registers show here while a program runs.');
+  await expect(page.locator('.cm-line.fg-run-now')).toHaveCount(0);
+  await page.goBack();
+  await expect(page.getByTestId('lesson-title')).toHaveText('A blank screen and a game loop that does nothing yet');
   // Back to lesson 7: its own program, unmarked, and nothing running.
   await page.goBack();
   await expect(page.locator('.cm-content')).toContainText('MARCH', { timeout: 30_000 });

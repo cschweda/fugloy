@@ -19,6 +19,7 @@
  *   { "pcIn": "FROM", "to": "TO" }          PC is in the range from FROM's address up to, not including,
  *                                 TO's address (TO must come after FROM), so a check during a counted
  *                                 loop holds on any T-state of a pass rather than on one instruction's
+ *                                 address alone
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { Machine } from '@fugloy/emu';
