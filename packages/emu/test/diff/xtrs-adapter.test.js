@@ -54,37 +54,61 @@ describe('loadXtrs refuses a build it cannot trust', () => {
   });
 });
 
-describe('the xtrs pipe fails clearly instead of hanging', () => {
-  it(`throws the sentence within ${XTRS_STEP_TIMEOUT_MS} ms when the reference stops answering`, () => {
-    // Answers its first three steps, then never again.
-    const command = fakeChild('stalls', [
-      'echo ready fugloy-xtrs 1',
-      'n=0',
-      'while read cmd rest; do',
-      '  case "$cmd" in',
-      `    step) n=$((n+1)); if [ $n -le 3 ]; then echo "S 4 0 0 0 ${R0(4)}"; else sleep 60; fi ;;`,
-      `    regs) echo "${R0()}" ;;`,
-      '    quit) exit 0 ;;',
-      '    *) echo ok ;;',
-      '  esac',
-      'done',
-    ].join('\n'));
-    const ref = openXtrs({ command, args: [] });
+/**
+ * A Node script standing in for the xtrs binary, run with this Node: it answers `regs` and its
+ * first `steps` steps, then either stalls or exits with `exit`.
+ * @param {string} name @param {{ steps: number, then: 'stall' | number }} how
+ */
+function fakeNodeChild(name, { steps, then }) {
+  const path = join(dir, `${name}.mjs`);
+  writeFileSync(path, `import { readSync, writeSync } from 'node:fs';
+const say = (t) => writeSync(1, t + '\\n');
+say('ready fugloy-xtrs 1');
+let n = 0, pending = '';
+const buf = Buffer.alloc(4096);
+for (;;) {
+  const got = readSync(0, buf, 0, buf.length, null);
+  if (got === 0) process.exit(0);
+  pending += buf.toString('latin1', 0, got);
+  let nl;
+  while ((nl = pending.indexOf('\\n')) >= 0) {
+    const cmd = pending.slice(0, nl).split(' ')[0];
+    pending = pending.slice(nl + 1);
+    if (cmd === 'regs') say(${JSON.stringify(R0())});
+    else if (cmd === 'step' && n < ${steps}) { n++; say(${JSON.stringify(`S 4 0 0 0 ${R0(4)}`)}); }
+    else if (cmd === 'step') { ${then === 'stall' ? 'setInterval(() => {}, 1000); await new Promise(() => {});' : `process.exit(${then});`} }
+    else say('ok');
+  }
+}
+`);
+  return path;
+}
+
+// The wrapper is POSIX sh: run it under the system's sh and, where it is installed, dash (CI's
+// ubuntu /bin/sh).
+const shells = ['/bin/sh', '/bin/dash'].filter((s) => existsSync(s));
+
+describe.each(shells)('the xtrs pipe fails clearly instead of hanging (wrapper %s)', (shell) => {
+  // The real timeout under /bin/sh; a short one under dash, to keep the suite quick.
+  const timeoutMs = shell === '/bin/sh' ? XTRS_STEP_TIMEOUT_MS : 500;
+  it(`throws the sentence within ${timeoutMs} ms when the reference stops answering`, () => {
+    const script = fakeNodeChild('stalls', { steps: 3, then: 'stall' });
+    const ref = openXtrs({ command: process.execPath, args: [script], shell, timeoutMs });
     try {
       for (let k = 0; k < 3; k++) expect(ref.step().cycles).toBe(4);
       const t0 = performance.now();
       expect(() => ref.step()).toThrow('xtrs stopped answering after 3 instructions. Run it again; if it repeats, rebuild with pnpm xtrs:install.');
       const waited = performance.now() - t0;
-      expect(waited).toBeGreaterThanOrEqual(XTRS_STEP_TIMEOUT_MS - 50);
-      expect(waited).toBeLessThan(XTRS_STEP_TIMEOUT_MS + 2000);
+      expect(waited).toBeGreaterThanOrEqual(timeoutMs - 50);
+      expect(waited).toBeLessThan(timeoutMs + 2000);
     } finally {
       ref.close?.();
     }
   }, XTRS_STEP_TIMEOUT_MS + 10_000);
 
   it('says so at once when the reference exits', () => {
-    const command = fakeChild('exits', `echo ready fugloy-xtrs 1\nread x\necho "${R0()}"\nread x\nexit 3`);
-    const ref = openXtrs({ command, args: [] });
+    const script = fakeNodeChild('exits', { steps: 0, then: 3 });
+    const ref = openXtrs({ command: process.execPath, args: [script], shell });
     const t0 = performance.now();
     expect(() => ref.step()).toThrow('xtrs exited after 0 instructions (exit code 3). Run it again; if it repeats, rebuild with pnpm xtrs:install.');
     expect(performance.now() - t0).toBeLessThan(XTRS_STEP_TIMEOUT_MS);
@@ -296,8 +320,31 @@ describe.skipIf(xtrsSkip !== null)(`xtrs adapter against @fugloy/emu's Model I${
     expect(ref.peek(0x0000, 1)[0]).toBe(rom()[0]);
   });
 
-  it('runs every DD/FD opcode itself: no prefix is dropped', () => {
+  it('runs a DD/FD prefix it ignores and the instruction after it as one step, as ours does', () => {
+    const m = newMachine();
+    m.step(50_000);
+    // DD C5 (PUSH BC, the prefix ignored: 15 T-states), FD 3E 42 (LD A,$42: 11), DD DD 00 (a lone
+    // DD, 4, then DD NOP, 8), and DD 21 34 12 (LD IX,$1234: 14, a pair xtrs implements).
+    m.mem.write(0x5000, [0xdd, 0xc5, 0xfd, 0x3e, 0x42, 0xdd, 0xdd, 0x00, 0xdd, 0x21, 0x34, 0x12]);
+    const cpu = m.system.cpu;
+    cpu.registers.PC = 0x5000;
+    cpu.registers.SP = 0x6000;
+    cpu.registers.B = 0x12; cpu.registers.C = 0x34;
     const ref = newRef();
-    expect(ref.prefixedOps.size).toBe(256);
+    ref.syncFrom(m);
+    const want = [[15, 0x5002], [11, 0x5005], [4, 0x5006], [8, 0x5008], [14, 0x500c]];
+    const got = want.map(() => [ref.step().cycles, ref.regs().pc]);
+    expect(got).toEqual(want);
+    ref.syncFrom(m);
+    const r = compareRun({ machine: m, reference: ref, instructions: want.length });
+    expect(r.divergence).toBeNull();
+    expect(r.known).toEqual({});
+    expect([ourRegs(m).a, ourRegs(m).ix]).toEqual([0x42, 0x1234]);
+  });
+
+  it('lists every opcode but DD, FD and ED as run with its prefix in one step', () => {
+    const ops = newRef().prefixedOps;
+    for (const op of [0x00, 0x21, 0x41, 0xc5, 0xe5, 0xcb]) expect(ops.has(op)).toBe(true);
+    for (const op of [0xdd, 0xfd, 0xed]) expect(ops.has(op)).toBe(false);
   });
 });

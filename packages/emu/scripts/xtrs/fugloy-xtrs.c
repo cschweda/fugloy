@@ -18,8 +18,9 @@
  *
  * One step is one boundary as our Machine.step runs it: the timer tick if its T-state has come,
  * then the interrupt check (the patch's z80_fugloy_interrupt, which z80_run(0) would have made at
- * the end of the previous instruction), then one instruction with z80_run(-1). So an interrupt
- * response counts with the instruction after it, as ours does.
+ * the end of the previous instruction), then one instruction with z80_run(-1) (two when xtrs ran
+ * an ignored DD/FD prefix as its own: step()). So an interrupt response counts with the
+ * instruction after it, and a DD/FD pair is one step, as ours does.
  *
  * usage: fugloy-xtrs <rom>              serve the line protocol below on stdin/stdout
  *        fugloy-xtrs <rom> --trace <n>  print n records in the spike's format and the screen
@@ -115,8 +116,9 @@ void fg_mem_write(int address, int value) {
  */
 static int push_like(void) {
   if (in_response) return 1;
-  int op = peek(insn_pc);
-  if (op == 0xDD || op == 0xFD) return peek(insn_pc + 1) == 0xE5;
+  int pc = insn_pc, op = peek(pc);
+  /* past any DD/FD prefixes: DD E5 is PUSH IX, and a prefix xtrs ignores leaves a PUSH, CALL or RST */
+  while (op == 0xDD || op == 0xFD) { pc = (pc + 1) & 0xffff; op = peek(pc); }
   return (op & 0xCF) == 0xC5 || op == 0xCD || (op & 0xC7) == 0xC4 || (op & 0xC7) == 0xC7;
 }
 void fg_mem_write_word(int address, int value) {
@@ -155,7 +157,25 @@ static unsigned long long step(int mode, int *irq, int *raised) {
   *irq = taken == 1;
   insn_pc = REG_PC;
   last_op = peek(REG_PC);
+  unsigned long long t1 = z80_state.t_count;
   z80_run(-1);
+  /*
+   * A DD or FD before an opcode xtrs has no indexed form for is ignored on its own: z80.c's
+   * do_indexed_instruction, `default:`, backs PC up to the next byte and counts 4 T-states, so the
+   * prefix ends a z80_run of its own (the only way a DD/FD run takes 4 T-states and leaves PC one
+   * on). The Z80 runs the pair as one instruction (Young, "The Undocumented Z80 Documented",
+   * §3.7), and so does our Machine.step, so the next instruction runs in the same step, with no
+   * interrupt check between. Before DD, FD or ED the prefix is a lone one, its own step on both
+   * sides (ours too), and the step ends there.
+   */
+  if ((last_op == 0xDD || last_op == 0xFD) && z80_state.t_count - t1 == 4 && REG_PC == ((insn_pc + 1) & 0xffff)) {
+    int next = peek(REG_PC);
+    if (next != 0xDD && next != 0xFD && next != 0xED) {
+      insn_pc = REG_PC;
+      last_op = next;
+      z80_run(-1);
+    }
+  }
   return z80_state.t_count - t0;
 }
 

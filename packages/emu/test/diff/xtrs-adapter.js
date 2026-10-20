@@ -7,7 +7,7 @@
  * Nothing of xtrs is committed: `pnpm xtrs:install` clones it into the gitignored `tools/xtrs/src`
  * at the pinned commit, applies Fugløy's patch (xtrs-fugloy.patch, which only exports what the
  * driver needs), and builds `tools/xtrs/build/fugloy-xtrs` with a stamp naming the tree and the
- * driver it was built from. This loader refuses a missing binary, a source tree whose SHA-256 is
+ * driver and install script it was built from. This loader refuses a missing binary, a source tree whose SHA-256 is
  * not the pinned one, or a binary whose stamp is not this checkout's, before running anything.
  *
  * The pipe is synchronous, as compareRun is: two FIFOs, written and read with `writeSync` and a
@@ -21,8 +21,7 @@
  * note, docs/superpowers/notes/2026-10-19-model1-references-spike.md); syncFrom replaces it with
  * our machine's (Ruling 4 revised).
  */
-import { spawn } from 'node:child_process';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { closeSync, constants, existsSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -42,9 +41,18 @@ export const XTRS_STEP_TIMEOUT_MS = 5000;
 export const XTRS_SRC = fileURLToPath(new URL('../../../../tools/xtrs/src', import.meta.url));
 export const XTRS_PATH = fileURLToPath(new URL('../../../../tools/xtrs/build/fugloy-xtrs', import.meta.url));
 export const XTRS_DRIVER = fileURLToPath(new URL('../../scripts/xtrs/fugloy-xtrs.c', import.meta.url));
+export const XTRS_INSTALL = fileURLToPath(new URL('../../../../scripts/install-xtrs.sh', import.meta.url));
 
 const READY = 'ready fugloy-xtrs 1';
-const ALL_OPCODES = new Set(Array.from({ length: 256 }, (_, k) => k));
+/**
+ * The opcodes after DD or FD that xtrs runs with the prefix as one step: every one but DD, FD and
+ * ED (before those the prefix is a lone one, its own step, as on the Z80 and in ours). For an
+ * opcode xtrs has no indexed form for, it ignores the prefix in a 4-T-state step of its own
+ * (z80.c, do_indexed_instruction's `default:`), and the driver runs the instruction after it in
+ * the same step (fugloy-xtrs.c, step()); so no pair is dropped, and known.js's dropped-prefix fix
+ * (a trsjs one) never applies.
+ */
+const PAIRED_OPCODES = new Set(Array.from({ length: 256 }, (_, k) => k).filter((k) => k !== 0xdd && k !== 0xfd && k !== 0xed));
 
 /** @param {Buffer | string} b */
 const sha256 = (b) => createHash('sha256').update(b).digest('hex');
@@ -86,7 +94,7 @@ function checkBuild(path, src) {
   if (!existsSync(src) || !statSync(src).isDirectory()) throw new Error(`no xtrs source at ${src}; run ${fix}`);
   const tree = treeSha256(src);
   if (tree !== XTRS_TREE_SHA256) throw new Error(`${src} has SHA-256 ${tree}, not the pinned ${XTRS_TREE_SHA256}; delete it and run ${fix}`);
-  const want = `tree ${XTRS_TREE_SHA256}\ndriver ${sha256(readFileSync(XTRS_DRIVER))}`;
+  const want = `tree ${XTRS_TREE_SHA256}\ndriver ${sha256(readFileSync(XTRS_DRIVER))}\nscript ${sha256(readFileSync(XTRS_INSTALL))}`;
   const stamp = existsSync(`${path}.stamp`) ? readFileSync(`${path}.stamp`, 'utf8').trim() : '';
   if (stamp !== want) throw new Error(`${path} was built from another driver or patch than this checkout's; run ${fix} to rebuild it`);
 }
@@ -113,10 +121,12 @@ export function loadXtrs({ path = XTRS_PATH, src = XTRS_SRC, rom }) {
 /**
  * Run `command` as the reference process and wrap its protocol as a Reference. No checks: loadXtrs
  * makes them; tests use this with a stand-in child.
- * @param {{ command: string, args?: string[], timeoutMs?: number, cleanup?: () => void }} opts
+ * `shell` runs the wrapper that holds the reply FIFO open and records the exit status; it uses
+ * only POSIX sh (the tests run it under /bin/sh and, where present, dash, as on CI's Linux).
+ * @param {{ command: string, args?: string[], timeoutMs?: number, cleanup?: () => void, shell?: string }} opts
  * @returns {import('./reference.js').Reference}
  */
-export function openXtrs({ command, args = [], timeoutMs = XTRS_STEP_TIMEOUT_MS, cleanup }) {
+export function openXtrs({ command, args = [], timeoutMs = XTRS_STEP_TIMEOUT_MS, cleanup, shell = '/bin/sh' }) {
   const dir = mkdtempSync(join(tmpdir(), 'fugloy-xtrs-pipe-'));
   const req = join(dir, 'req');
   const resp = join(dir, 'resp');
@@ -127,7 +137,7 @@ export function openXtrs({ command, args = [], timeoutMs = XTRS_STEP_TIMEOUT_MS,
   const errFd = openSync(join(dir, 'stderr'), 'w');
   // A shell holds resp open for writing until it has written the child's exit status, so the end
   // of the reply stream comes after the status is there to read.
-  const child = spawn('/bin/sh', ['-c', 'exec 4>"$1"; req=$2; st=$3; shift 3; "$@" <"$req" >&4 4>&-; echo $? >"$st"', 'sh', resp, req, status, command, ...args], {
+  const child = spawn(shell, ['-c', 'exec 4>"$1"; req=$2; st=$3; shift 3; "$@" <"$req" >&4 4>&-; echo $? >"$st"', 'sh', resp, req, status, command, ...args], {
     stdio: ['ignore', 'ignore', errFd],
     detached: true,
   });
@@ -346,7 +356,7 @@ export function openXtrs({ command, args = [], timeoutMs = XTRS_STEP_TIMEOUT_MS,
     },
 
     redoDroppedPrefix() {
-      throw new Error('xtrs runs every DD/FD opcode itself; there is no dropped prefix to redo');
+      throw new Error('xtrs drops no DD/FD pair (the driver runs an ignored prefix and its instruction as one step); there is nothing to redo');
     },
 
     writes() {
@@ -363,7 +373,7 @@ export function openXtrs({ command, args = [], timeoutMs = XTRS_STEP_TIMEOUT_MS,
       return cycles;
     },
 
-    prefixedOps: ALL_OPCODES,
+    prefixedOps: PAIRED_OPCODES,
   };
   return ref;
 }

@@ -34,8 +34,9 @@
  *   readonly cycles: number,
  *   readonly z?: any,
  * }} Reference
- *   prefixedOps: the opcodes the reference runs after DD or FD (trsjs drops the others; xtrs runs
- *   all 256); redoDroppedPrefix: trsjs only (known.js, REFERENCE_FIXES); close: ends a reference
+ *   prefixedOps: the opcodes after DD or FD that the reference runs with the prefix as one step
+ *   (trsjs drops the pair for the others; xtrs runs all but DD, FD and ED, the lone prefixes, since
+ *   its driver joins an ignored prefix to the instruction after it); redoDroppedPrefix: trsjs only (known.js, REFERENCE_FIXES); close: ends a reference
  *   that runs in another process; z: trsjs's machine object, for its own tests.
  */
 export {};

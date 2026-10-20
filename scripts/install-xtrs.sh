@@ -54,8 +54,11 @@ if [ "$GOT" != "$WANT" ]; then
   echo "install-xtrs: tools/xtrs/src has SHA-256 $GOT after the patch, expected $WANT (the tree has other changes); delete tools/xtrs/src and run pnpm xtrs:install again" >&2
   exit 1
 fi
+# The stamp names what the binary was built from: the tree, the driver, and this script (its
+# build flags); xtrs-adapter.js refuses a binary whose stamp is not this checkout's.
 STAMP="tree $WANT
-driver $(sha "$DRIVER")"
+driver $(sha "$DRIVER")
+script $(sha "$ROOT/scripts/install-xtrs.sh")"
 if [ -x "$BIN" ] && [ "$(cat "$BIN.stamp" 2>/dev/null || true)" = "$STAMP" ]; then
   echo "xtrs $PIN with Fugløy's patch already built at $BIN"
   exit 0
