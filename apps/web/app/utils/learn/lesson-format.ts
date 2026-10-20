@@ -1,8 +1,9 @@
 // The Learn page's lesson format (phase 6B Task 1). A lesson is a folder under content/learn/,
 // `NN-slug`, with lesson.md (front matter and a small Markdown subset), program.z, and check.json
-// (packages/asm/test/lessons.test.ts runs it). This parser is strict: anything outside the subset
-// is an error naming the lesson and the line, so a lesson cannot drift into markup the page does
-// not draw. No DOM, no Node APIs: the page and the CI checks both use it.
+// (packages/asm/test/lessons.test.ts runs it; its header lists the steps, pcIn's range form among
+// them). This parser is strict: anything outside the subset is an error naming the lesson and the
+// line, so a lesson cannot drift into markup the page does not draw. No DOM, no Node APIs: the page
+// and the CI checks both use it.
 //
 // Front matter, between `---` lines, `key: value`:
 //   title   the lesson's name
@@ -50,6 +51,9 @@ export interface Lesson {
   cites: Cite[];
   program: string;
 }
+
+/** What the Learn page's index keeps of a lesson or chapter (learn-index.generated.ts): enough for the lists, ◀ ▶, the kicker and the SEO. */
+export type LessonEntry = Pick<Lesson, 'slug' | 'number' | 'title' | 'idea' | 'models'>;
 
 const TRY_IT = 'Try it';
 const REAL_GAME = 'In a real game';

@@ -17,21 +17,32 @@
 // edit and stops the run. A Run that assembles and starts is clean: the page marks the lesson done
 // (`clean`), and its .CMD (asm's toCmd, as the Run kit's) lets a click on a line show Explain's
 // sentence for it until the text changes.
+//
+// 6C: on a chapter of the Space Invaders course (`course` 'invaders'), `marksAgainst` is the previous
+// chapter's program ('' for chapter 1, the blank page; null on a lesson, which has no marks). While the
+// text is the chapter's own program, its new lines carry a green band and a + in the change gutter and
+// its changed lines an amber bar and a ~ (utils/learn/diff, utils/source/change-marks), and ChangesList
+// counts them and lists the lines taken out. Once the text differs the marks hide, saying so, since
+// they describe the chapter's text and not the learner's (Review Focus 2); Reset to the lesson brings
+// them back. The edit and the done mark are kept under the chapter's progress id, `invaders/<slug>`.
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { toCmd } from '@fugloy/asm';
 import type { AsmResult } from '@fugloy/asm';
 import CodeEditor from './CodeEditor.vue';
+import ChangesList from '../learn/ChangesList.vue';
 import ProblemsList from './ProblemsList.vue';
 import { useSourceChecks } from './useSourceChecks';
 import type { Run } from '~/composables/useRun';
 import type { Sources } from '~/composables/useSources';
 import type { Lesson } from '~/utils/learn/lesson-format';
-import { lessonMessage } from '~/utils/learn/page';
+import { lessonMessage, progressId } from '~/utils/learn/page';
+import type { Course } from '~/utils/learn/page';
 import { learnProgress } from '~/utils/learn/learn-run';
 import { explainSourceLine } from '~/utils/learn/explain-line';
 import { EXPLAIN_NO_CODE, EXPLAIN_PROMPT } from '~/utils/learn/page';
+import { lineDiff } from '~/utils/learn/diff';
 
-const props = defineProps<{ run: Run; sources: Sources; lesson: Lesson }>();
+const props = withDefaults(defineProps<{ run: Run; sources: Sources; lesson: Lesson; course?: Course; marksAgainst?: string | null }>(), { course: 'lessons', marksAgainst: null });
 const emit = defineEmits<{ clean: []; 'open-workbench': [text: string, model: 1 | 3] }>();
 
 /** How long after the last keystroke an edit is kept in the browser. */
@@ -41,6 +52,9 @@ const run = props.run;
 const debug = run.debug;
 const sources = props.sources;
 const current = sources.current;
+/** Where the learner's edit and done mark are kept: the lesson's slug, or `invaders/<slug>` for a chapter. */
+const id = computed(() => progressId(props.course, props.lesson.slug));
+const isChapter = computed(() => props.course === 'invaders');
 const editor = ref<InstanceType<typeof CodeEditor> | null>(null);
 const host = ref<HTMLElement | null>(null);
 const isMac = ref(false);
@@ -75,7 +89,7 @@ function saveNow(): void {
   if (saveTimer !== null) clearTimeout(saveTimer);
   saveTimer = null;
   const src = current.value;
-  if (src !== null) learnProgress().saveEdit(props.lesson.slug, src.text);
+  if (src !== null) learnProgress().saveEdit(id.value, src.text);
 }
 function scheduleSave(): void {
   if (saveTimer !== null) clearTimeout(saveTimer);
@@ -136,7 +150,7 @@ function resetLesson(): void {
   if (src === null) return;
   if (saveTimer !== null) clearTimeout(saveTimer);
   saveTimer = null;
-  learnProgress().clearEdit(props.lesson.slug);
+  learnProgress().clearEdit(id.value);
   run.stop();
   sources.update(src.id, { text: props.lesson.program });
   clean.value = null;
@@ -167,6 +181,19 @@ function onEditorKeyup(e: KeyboardEvent): void {
   if (MOVES.has(e.key)) explainCursor();
 }
 
+// 6C: a chapter's change marks, shown while the text is the chapter's own.
+const diff = computed(() => (props.marksAgainst === null ? null : lineDiff(props.marksAgainst, props.lesson.program)));
+const againstName = computed(() => (props.lesson.number <= 1 ? 'the blank page' : `chapter ${props.lesson.number - 1}`));
+const marksShown = computed(() => diff.value !== null && current.value !== null && current.value.text === props.lesson.program);
+watch(
+  [marksShown, () => current.value?.id, () => editor.value !== null],
+  ([shown, , mounted]) => {
+    if (!mounted || diff.value === null) return;
+    editor.value?.setChangeMarks(shown ? [...diff.value.marks].map(([line, mark]) => ({ line, mark })) : []);
+  },
+  { flush: 'post' },
+);
+
 // The source (or its model, by the Model switch), once the editor is there: checked at once.
 watch(
   [() => current.value?.id, () => current.value?.model, () => editor.value !== null],
@@ -194,7 +221,7 @@ onBeforeUnmount(() => {
     <div class="fg-lesson-bar" role="group" aria-label="Program controls">
       <h2 class="fg-strong">Program</h2>
       <button type="button" class="fg-button fg-button-primary" data-testid="lesson-run" :aria-busy="run.busy.value" :title="`Assemble and run (${runKey})`" @click="runNow">Run ▶</button>
-      <button type="button" class="fg-button" data-testid="lesson-reset" title="Put the lesson's own program back, and forget your changes to it" @click="resetLesson">Reset to the lesson</button>
+      <button type="button" class="fg-button" data-testid="lesson-reset" :title="`Put the ${isChapter ? 'chapter' : 'lesson'}'s own program back, and forget your changes to it`" @click="resetLesson">Reset to the lesson</button>
       <button type="button" class="fg-button" data-testid="lesson-open-workbench" title="Copy this program into a new source in the workbench's Source ✎" @click="openWorkbench">Open in the workbench</button>
     </div>
     <!-- A click on a line explains it; with the keyboard, moving the cursor by line does (onEditorKeyup). -->
@@ -204,8 +231,9 @@ onBeforeUnmount(() => {
         ref="editor"
         :doc-id="current.id"
         wrap
+        :change-marks="diff !== null"
         :text="current.text"
-        :label="`The program for lesson ${lesson.number}, ${lesson.title}, in Z80 assembly. Tab types a tab; press Escape, then Tab, to leave the editor.`"
+        :label="`The program for ${isChapter ? 'chapter' : 'lesson'} ${lesson.number}, ${lesson.title}, in Z80 assembly. Tab types a tab; press Escape, then Tab, to leave the editor.`"
         @update:text="onText"
         @update:breakpoints="(lines: number[]) => debug.setBreakpoints(lines)"
         @toggle-breakpoint="(line: number) => debug.toggleBreakpoint(line)"
@@ -214,6 +242,7 @@ onBeforeUnmount(() => {
         @stale-fix="check"
       />
     </div>
+    <ChangesList v-if="diff !== null && current !== null" :diff="diff" :against="againstName" :hidden="!marksShown" />
     <p class="fg-lesson-hint fg-muted">Tab types a tab. To leave the editor, press Esc, then Tab. Click a line's left edge (or press F9) for a breakpoint.</p>
     <p class="fg-lesson-explain" aria-live="polite" data-testid="lesson-explain">{{ explainText }}</p>
     <p v-if="problem !== null" class="fg-lesson-problem" role="alert" data-testid="lesson-problem">{{ problem }}</p>

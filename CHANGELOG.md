@@ -39,6 +39,28 @@ creates and pushes the tag.
 
 ### Changed
 
+- Phase 6C, Build Space Invaders (web workbench, merged to main 2026-10-19; plan
+  `docs/superpowers/plans/2026-10-19-phase6c-invaders.md`), which completes phase 6. Twelve short
+  chapters under `apps/web/content/learn/invaders/NN-slug/` build a Space Invaders-style game from
+  a blank page, in the spirit of Big Five's Super Nova: a game loop, the base, moving it, the shot,
+  one invader, a row, the march, the descent, collision, three rows with a BCD score, bombs chosen
+  with R and three lives with PRESS SPACE TO START, and waves that come faster each time, ending in
+  GAME OVER when the lives run out or the invaders land. Each chapter is the previous chapter's
+  program with its changes, filled in and runnable alone on the Model III; the editor marks new and
+  changed lines, removed lines are struck through in a list (`utils/learn/diff.ts`), and the marks
+  hide, saying so, while the text differs from the chapter's own. The chapters are served at
+  `/learn/invaders/<slug>/` (`/learn/invaders/` opens chapter 1 and is canonical to it), all listed
+  in `sitemap.xml`; the lesson list shows both courses, Lessons 1-7 then Build Space Invaders 1-12,
+  with done marks kept apart (`invaders/<slug>`); lesson 7 links to the course. Chapters 10-12 carry
+  Sea Dragon boxes (ADD_SCORE, LOSE_SHIP, GAME_OVER). An index is generated
+  (`pnpm --filter @fugloy/web learn-index`, with a staleness test) and each item's text and program
+  load on its own per page. CI assembles every chapter with asm and zmac and runs it on the stub
+  ROM through its `check.json`, checking each differs from the one before
+  (`packages/asm/test/lessons.test.ts`). First screens, plain generate: workbench 229,039 B gzip
+  against 252,775 B; the Learn page and every chapter page 202,885 B against `LEARN_BUDGET`
+  221,184 B (`size:first-screen -- --page invaders` measures chapter 1). The NVDA and VoiceOver
+  hand checks wait for the project's final phase.
+
 - Phase 6B, the Learn page and lessons 1-7 (web workbench, merged to main 2026-10-19; plan
   `docs/superpowers/plans/2026-10-19-phase6b-learn-page.md`). A Learn link sits first in the
   header's Site nav, to `/learn/` (which opens lesson 1, canonical to it) and each lesson's page, listed in `sitemap.xml`. Each

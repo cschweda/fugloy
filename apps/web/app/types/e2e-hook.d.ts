@@ -23,7 +23,7 @@ interface FugloyTestHook {
   frameCost: (ms: number) => Promise<{ frames: number; mean: number; p95: number; max: number }>;
 }
 
-/** The Learn page's hook (window.__fugloyLearn), set by app/pages/learn/[[slug]].vue only in an E2E build. */
+/** The Learn page's hook (window.__fugloyLearn), set by app/components/learn/CoursePage.vue only in an E2E build. */
 interface FugloyLearnHook {
   /** The running machine's keyboard matrix rows (m.system.keyboard), eight bytes; empty with no machine. */
   keyboardRows: () => number[];
@@ -31,6 +31,8 @@ interface FugloyLearnHook {
   screenText: () => string[];
   runnerState: () => string;
   debugMode: () => string;
+  /** 6C: moves to another page in the app, as a link does (the router, not a load). */
+  go: (path: string) => Promise<unknown>;
 }
 
 interface Window {

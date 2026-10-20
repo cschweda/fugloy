@@ -1,31 +1,74 @@
-// The lessons, read from content/learn/<NN-slug>/ at build time (Vite's import.meta.glob, as text)
-// and parsed once. A lesson that breaks the format fails the build and the tests with its sentence.
+// The lessons (content/learn/NN-slug/) and, from phase 6C, the Space Invaders chapters
+// (content/learn/invaders/NN-slug/), in the same format. Only NN-slug folders count, so invaders/ is
+// not a lesson.
+//
+// Fix round 1 of 6C Task 1: the Learn pages no longer bundle every item's text. What the lists, ◀ ▶,
+// the kicker and the SEO need is the small generated index (learn-index.generated.ts, from
+// scripts/build-learn-index.ts); an item's lesson.md and program.z are loaded on their own, one chunk
+// each (Vite's import.meta.glob, not eager, as text), by `loadItem` and `loadPageItem`, which the page
+// (pages/learn/[...path].vue) calls through useAsyncData, not awaited: the server waits for it before it
+// renders, so a prerendered page's payload carries its item and hydration fetches nothing else.
 import { parseLesson } from './lesson-format';
-import type { Lesson } from './lesson-format';
+import type { Lesson, LessonEntry } from './lesson-format';
+import { CHAPTER_INDEX, LESSON_INDEX } from './learn-index.generated';
+import type { Course } from './page';
 
-const texts = import.meta.glob<string>('../../../content/learn/*/lesson.md', { query: '?raw', eager: true, import: 'default' });
-const programs = import.meta.glob<string>('../../../content/learn/*/program.z', { query: '?raw', eager: true, import: 'default' });
+export { CHAPTER_INDEX, LESSON_INDEX };
 
-/** The folder name in a glob key: `../../../content/learn/01-white-out/lesson.md` → `01-white-out`. */
-const slugOf = (path: string): string => path.split('/').at(-2)!;
+const glob = {
+  lessons: {
+    md: import.meta.glob<string>('../../../content/learn/*/lesson.md', { query: '?raw', import: 'default' }),
+    program: import.meta.glob<string>('../../../content/learn/*/program.z', { query: '?raw', import: 'default' }),
+  },
+  invaders: {
+    md: import.meta.glob<string>('../../../content/learn/invaders/*/lesson.md', { query: '?raw', import: 'default' }),
+    program: import.meta.glob<string>('../../../content/learn/invaders/*/program.z', { query: '?raw', import: 'default' }),
+  },
+};
 
-function load(): Lesson[] {
-  const bySlug = new Map(Object.entries(programs).map(([path, text]) => [slugOf(path), text]));
-  const out = Object.entries(texts).map(([path, md]) => {
-    const slug = slugOf(path);
-    const program = bySlug.get(slug);
-    if (program === undefined) throw new Error(`Lesson ${slug}: its folder has no program.z.`);
-    return parseLesson(slug, md, program);
-  });
-  out.sort((a, b) => a.number - b.number);
-  out.forEach((lesson, i) => {
-    if (i > 0 && lesson.number === out[i - 1]!.number) throw new Error(`Lesson ${lesson.slug}: lesson ${out[i - 1]!.slug} has the same number.`);
-  });
-  return out;
+const base = (course: Course): string => (course === 'invaders' ? '../../../content/learn/invaders/' : '../../../content/learn/');
+
+/** A course's index. */
+export const indexOf = (course: Course): readonly LessonEntry[] => (course === 'invaders' ? CHAPTER_INDEX : LESSON_INDEX);
+
+/** The index entry for `slug` in `course`, or null (only NN-slug folders are items). */
+export const entryOf = (course: Course, slug: string): LessonEntry | null => indexOf(course).find((e) => e.slug === slug) ?? null;
+
+/** The entry before `slug` in its course, or null. */
+export function entryBefore(course: Course, slug: string): LessonEntry | null {
+  const list = indexOf(course);
+  const i = list.findIndex((e) => e.slug === slug);
+  return i > 0 ? list[i - 1]! : null;
 }
 
-/** Every lesson, by number. */
-export const LESSONS: readonly Lesson[] = load();
+/** An item's program alone, or null when the course has no such item. */
+export async function loadProgram(course: Course, slug: string): Promise<string | null> {
+  if (entryOf(course, slug) === null) return null;
+  const load = glob[course].program[`${base(course)}${slug}/program.z`];
+  return load === undefined ? null : load();
+}
 
-/** The lesson in folder `slug`, or null. */
-export const lessonBySlug = (slug: string): Lesson | null => LESSONS.find((l) => l.slug === slug) ?? null;
+/** An item in full, parsed (its text and program), or null when the course has no such item. */
+export async function loadItem(course: Course, slug: string): Promise<Lesson | null> {
+  if (entryOf(course, slug) === null) return null;
+  const md = glob[course].md[`${base(course)}${slug}/lesson.md`];
+  const program = glob[course].program[`${base(course)}${slug}/program.z`];
+  if (md === undefined || program === undefined) return null;
+  const [text, code] = await Promise.all([md(), program()]);
+  return parseLesson(slug, text, code);
+}
+
+/** What a page shows: its item, and for a chapter the program it is marked against (the chapter before's, '' for chapter 1). */
+export interface PageItem {
+  item: Lesson;
+  /** null on a lesson, which has no marks. */
+  marksAgainst: string | null;
+}
+
+/** A page's item and, for a chapter, the previous chapter's program: two items at most, never the whole course. */
+export async function loadPageItem(course: Course, slug: string): Promise<PageItem | null> {
+  const before = course === 'invaders' ? entryBefore(course, slug) : null;
+  const [item, against] = await Promise.all([loadItem(course, slug), before === null ? Promise.resolve('') : loadProgram(course, before.slug)]);
+  if (item === null) return null;
+  return { item, marksAgainst: course === 'invaders' ? (against ?? '') : null };
+}

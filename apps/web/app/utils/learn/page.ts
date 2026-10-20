@@ -15,6 +15,18 @@ export const EXPLAIN_NO_CODE = (line: number): string => `Line ${line} has no in
 /** A lesson's page, as the site links it (with the slash of the directory it is generated as). */
 export const lessonPath = (slug: string): string => `/learn/${slug}/`;
 
+/** 6C: the two courses on the Learn page, the lessons and the Space Invaders chapters. */
+export type Course = 'lessons' | 'invaders';
+
+/** 6C: a course's pages: `/learn` for the lessons, `/learn/invaders` for the chapters. */
+export type CourseBase = '/learn' | '/learn/invaders';
+
+/** 6C: an item's page in its course, with the slash of the directory it is generated as. */
+export const itemPath = (base: CourseBase, slug: string): string => `${base}/${slug}/`;
+
+/** 6C: the key a lesson or chapter is kept under in the learner's progress: the lesson's slug, `invaders/<slug>` for a chapter. */
+export const progressId = (course: Course, slug: string): string => (course === 'invaders' ? `invaders/${slug}` : slug);
+
 /** An In a real game box's link: the workbench on the game, the cursor at the box's run address. */
 export const gameLink = (game: Pick<GameBox, 'example' | 'addr'>): string => `/?example=${game.example}&at=${game.addr.toString(16).toUpperCase().padStart(4, '0')}`;
 

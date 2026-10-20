@@ -6,6 +6,7 @@
   "scripts": {
     "postinstall": "nuxt prepare",
     "prepare-assets": "tsx scripts/prepare-assets.ts",
+    "learn-index": "tsx scripts/build-learn-index.ts",
     "predev": "pnpm run prepare-assets",
     "dev": "nuxt dev",
     "pregenerate": "pnpm run prepare-assets",

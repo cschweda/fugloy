@@ -1,0 +1,27 @@
+{
+  "models": [3, 1],
+  "steps": [
+    { "run": 243000 },
+    { "row": 15, "text": "                              ..." },
+    { "row": 14, "text": "" },
+    { "press": "LEFT" },
+    { "run": 801800 },
+    { "release": "LEFT" },
+    { "run": 266466 },
+    { "row": 15, "text": "                        ..." },
+    { "cell": "3FDB", "byte": "20" },
+    { "press": "LEFT" },
+    { "run": 4009000 },
+    { "release": "LEFT" },
+    { "run": 266466 },
+    { "row": 15, "text": "..." },
+    { "cell": "3FC0", "byte": "BC" },
+    { "press": "RIGHT" },
+    { "run": 9354300 },
+    { "release": "RIGHT" },
+    { "run": 266466 },
+    { "row": 15, "text": "                                                             ..." },
+    { "cell": "3FFF", "byte": "BC" },
+    { "row": 14, "text": "" }
+  ]
+}

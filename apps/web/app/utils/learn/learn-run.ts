@@ -8,12 +8,11 @@ import type { Run } from '../../composables/useRun';
 import type { Sources } from '../../composables/useSources';
 import { createProgress } from './progress';
 import type { Progress } from './progress';
-import { lessonBySlug } from './lessons';
 
 export interface LearnParts {
   run: Run;
   sources: Sources;
-  /** Each lesson's source id, by slug, once it has one. */
+  /** Each lesson's and chapter's source id, by progress id (utils/learn/page's progressId), once it has one. */
   ids: Map<string, string>;
 }
 
@@ -40,9 +39,16 @@ export function loadLearn(): Promise<LearnParts> {
 }
 
 let progress: Progress | null = null;
+/** Each shown item's own program, by progress id: an edit equal to it is no edit (the pages load items one at a time). */
+const ownPrograms = new Map<string, string>();
 
-/** The learner's edits and done marks (utils/learn/progress), in this browser; call it in the browser only. */
+/** Tells the progress an item's own program, before its edits are read or kept; the page calls it with its item. */
+export function knowProgram(id: string, program: string): void {
+  ownPrograms.set(id, program);
+}
+
+/** The learner's edits and done marks (utils/learn/progress), in this browser, by progress id; call it in the browser only. */
 export function learnProgress(): Progress {
-  progress ??= createProgress((slug) => lessonBySlug(slug)?.program ?? '');
+  progress ??= createProgress((id) => ownPrograms.get(id) ?? '');
   return progress;
 }

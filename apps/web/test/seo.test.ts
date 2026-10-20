@@ -1,7 +1,8 @@
 // SEO of the generated site: every page has its own title, description, canonical URL on
 // app.fugloy.dev (with the trailing slash of the directory each page is generated as, so Netlify
 // serves it without a redirect), an absolute Open Graph image with alt text, and a Twitter summary card;
-// the home page has JSON-LD; sitemap.xml lists every page (the Learn page and each lesson among them) and robots.txt names it.
+// the home page has JSON-LD; sitemap.xml lists every page (the Learn page and each lesson among them, and from 6C each
+// Space Invaders chapter) and robots.txt names it.
 // Reads .output/public, so it runs after `pnpm --filter @fugloy/web generate` (`pnpm run test:seo`
 // does both); it is skipped, with a warning, when the site has not been generated, unless
 // FUGLOY_REQUIRE_SEO=1 (set by `test:seo`, for CI) makes that a failure. With that flag the site
@@ -17,19 +18,26 @@ if (!built && process.env.FUGLOY_REQUIRE_SEO === '1') throw new Error('FUGLOY_RE
 if (!built) console.warn('seo.test: .output/public is missing; run `pnpm --filter @fugloy/web generate` first. Skipping.');
 
 const ORIGIN = 'https://app.fugloy.dev';
-// Each lesson's page, from its folder (content/learn/NN-slug) and the title in its front matter.
-const lessonDirs = readdirSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'content', 'learn'), { withFileTypes: true })
-  .filter((d) => d.isDirectory() && /^\d\d-/.test(d.name))
-  .map((d) => d.name)
-  .sort();
-const lessonTitle = (dir: string): string =>
-  /^title: (.+)$/m.exec(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'content', 'learn', dir, 'lesson.md'), 'utf8'))![1]!;
-const LESSON_PAGES = lessonDirs.map((d) => ({ path: `/learn/${d}/`, file: `learn/${d}/index.html`, title: `${lessonTitle(d)} — Learn Z80 assembly · Fugløy` }));
+// Each lesson's page, from its folder (content/learn/NN-slug) and the title in its front matter, and (6C) each
+// Space Invaders chapter's (content/learn/invaders/NN-slug).
+const learnDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'content', 'learn');
+const itemDirs = (sub: string): string[] =>
+  readdirSync(join(learnDir, sub), { withFileTypes: true })
+    .filter((d) => d.isDirectory() && /^\d\d-/.test(d.name))
+    .map((d) => (sub === '' ? d.name : `${sub}/${d.name}`))
+    .sort();
+const lessonTitle = (dir: string): string => /^title: (.+)$/m.exec(readFileSync(join(learnDir, dir, 'lesson.md'), 'utf8'))![1]!;
+const LESSON_PAGES = itemDirs('').map((d) => ({ path: `/learn/${d}/`, file: `learn/${d}/index.html`, title: `${lessonTitle(d)} — Learn Z80 assembly · Fugløy` }));
+const CHAPTER_PAGES = itemDirs('invaders').map((d) => ({ path: `/learn/${d}/`, file: `learn/${d}/index.html`, title: `${lessonTitle(d)} — Build Space Invaders · Fugløy` }));
 // /learn/ opens lesson 1 for people (the header links to it); its canonical URL, og:url and sitemap entry are lesson 1's.
+// /learn/invaders/ likewise opens chapter 1, and names chapter 1's page.
 const LEARN_ALIAS: { path: string; file: string; canonical: string; title: string } = { path: '/learn/', file: 'learn/index.html', canonical: LESSON_PAGES[0]!.path, title: LESSON_PAGES[0]!.title };
+const INVADERS_ALIAS: typeof LEARN_ALIAS = { path: '/learn/invaders/', file: 'learn/invaders/index.html', canonical: CHAPTER_PAGES[0]!.path, title: CHAPTER_PAGES[0]!.title };
+const ALIASES = [LEARN_ALIAS, INVADERS_ALIAS];
 const PAGES = [
   { path: '/', file: 'index.html', title: 'Fugløy — TRS-80 disassembler workbench' },
   ...LESSON_PAGES,
+  ...CHAPTER_PAGES,
   { path: '/technical-details/', file: 'technical-details/index.html', title: 'Technical details · Fugløy' },
   { path: '/manuals/', file: 'manuals/index.html', title: 'Manuals · Fugløy' },
   { path: '/about/', file: 'about/index.html', title: 'About · Fugløy' },
@@ -60,14 +68,20 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
     expect(new Set(titles).size).toBe(PAGES.length);
   });
 
-  it('serves /learn/ as lesson 1 with lesson 1 as its canonical page, og:url and title', () => {
-    const html = read(LEARN_ALIAS.file);
-    expect(/<title>([^<]*)<\/title>/.exec(html)?.[1]).toBe(LEARN_ALIAS.title);
-    expect(html).toContain(`<link rel="canonical" href="${ORIGIN}${LEARN_ALIAS.canonical}"`);
-    expect(meta(html, 'property', 'og:url')).toBe(ORIGIN + LEARN_ALIAS.canonical);
+  for (const alias of ALIASES) {
+    it(`serves ${alias.path} as ${alias.canonical} with that page as its canonical page, og:url and title`, () => {
+      const html = read(alias.file);
+      expect(/<title>([^<]*)<\/title>/.exec(html)?.[1]).toBe(alias.title);
+      expect(html).toContain(`<link rel="canonical" href="${ORIGIN}${alias.canonical}"`);
+      expect(meta(html, 'property', 'og:url')).toBe(ORIGIN + alias.canonical);
+    });
+  }
+
+  it('finds chapter 1 of Build Space Invaders among the pages', () => {
+    expect(CHAPTER_PAGES[0]?.path).toBe('/learn/invaders/01-blank-loop/');
   });
 
-  for (const p of [...PAGES, LEARN_ALIAS]) {
+  for (const p of [...PAGES, ...ALIASES]) {
     describe(p.path, () => {
       const html = (): string => read(p.file);
 
@@ -117,7 +131,7 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
     expect(ld.url).toBe(`${ORIGIN}/`);
     expect(ld.offers).toMatchObject({ '@type': 'Offer', price: '0', priceCurrency: 'USD' });
     expect(String(ld.license)).toMatch(/MIT/);
-    for (const p of [...PAGES, LEARN_ALIAS].slice(1)) expect(read(p.file)).not.toContain('application/ld+json');
+    for (const p of [...PAGES, ...ALIASES].slice(1)) expect(read(p.file)).not.toContain('application/ld+json');
   });
 
   it('self-hosts JetBrains Mono (400 and 700, Latin) with no font CDN on the workbench, and credits its licence', () => {
@@ -132,7 +146,7 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
       expect(src).not.toMatch(/^(https?:)?\/\//);
       expect(existsSync(src!.startsWith('/') ? join(out, src!) : join(out, dirname(f), src!))).toBe(true);
     }
-    for (const p of [...PAGES, LEARN_ALIAS].filter((x) => x.path !== '/technical-details/')) expect(read(p.file)).not.toMatch(/fonts\.(googleapis|gstatic)\.com/);
+    for (const p of [...PAGES, ...ALIASES].filter((x) => x.path !== '/technical-details/')) expect(read(p.file)).not.toMatch(/fonts\.(googleapis|gstatic)\.com/);
     expect(read('about/index.html')).toMatch(/JetBrains Mono[\s\S]*SIL Open Font License 1\.1/);
   });
 
@@ -160,7 +174,7 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
   });
 
   it('links between pages with the trailing slash, so a crawler or a new tab takes no redirect', () => {
-    for (const p of [...PAGES, LEARN_ALIAS]) {
+    for (const p of [...PAGES, ...ALIASES]) {
       const hrefs = [...read(p.file).matchAll(/<a\b[^>]*\bhref="(\/[^"#?]*)/g)].map((m) => m[1]!).filter((h) => !h.startsWith('/pdfjs/'));
       expect(hrefs.length, p.path).toBeGreaterThan(0);
       expect(hrefs.filter((h) => !h.endsWith('/')), p.path).toEqual([]);
@@ -168,13 +182,13 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
   });
 
   it('links the Learn page first in the header\'s Site nav on every page', () => {
-    for (const p of [...PAGES, LEARN_ALIAS]) {
+    for (const p of [...PAGES, ...ALIASES]) {
       const nav = /<nav[^>]*aria-label="Site"[^>]*>([\s\S]*?)<\/nav>/.exec(read(p.file))?.[1] ?? '';
       expect(/<a\b[^>]*\bhref="([^"]*)"/.exec(nav)?.[1], p.path).toBe('/learn/');
     }
   });
 
-  it('lists every canonical page in sitemap.xml (not the /learn/ alias), and robots.txt allows all and names it', () => {
+  it('lists every canonical page in sitemap.xml (not the /learn/ or /learn/invaders/ alias), and robots.txt allows all and names it', () => {
     const sitemap = read('sitemap.xml');
     const locs = [...sitemap.matchAll(/<loc>([^<]*)<\/loc>/g)].map((m) => m[1]);
     expect(locs).toEqual(PAGES.map((p) => ORIGIN + p.path));

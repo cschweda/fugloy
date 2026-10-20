@@ -6,7 +6,8 @@
 // stuck. 5C: `setLineDecorations` lights the running line and its trail, and
 // the breakpoint gutter (utils/source/run-marks) carries each breakpoint with
 // its line through edits, reporting the lines it moved (`update:breakpoints`)
-// and a click on a line (`toggle-breakpoint`). 6B: `wrap` wraps long lines.
+// and a click on a line (`toggle-breakpoint`). 6B: `wrap` wraps long lines. 6C: `changeMarks` adds
+// the chapters' change gutter and line classes (utils/source/change-marks), set by `setChangeMarks`.
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Compartment, EditorState, Prec } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
@@ -20,6 +21,8 @@ import { fixExpected, fixSpec } from '~/utils/source/fix';
 import { sourceMarks } from '~/utils/source/decorate';
 import { breakpointField, breakpointGutter, breakpointLines, external, lineField, setBreakpointMarks, setLines } from '~/utils/source/run-marks';
 import type { LineClass } from '~/utils/source/run-marks';
+import { changeMarks, setChangeMarks as setChangeMarksEffect } from '~/utils/source/change-marks';
+import type { ChangeMark } from '~/utils/source/change-marks';
 
 const props = defineProps<{
   /** Which source is open; a new id starts a fresh document (and history). */
@@ -29,6 +32,8 @@ const props = defineProps<{
   label: string;
   /** 6B: wrap long lines (the Learn page's narrow column), so the editor never scrolls sideways. */
   wrap?: boolean;
+  /** 6C: a gutter and line classes for a chapter's new and changed lines (`setChangeMarks`). */
+  changeMarks?: boolean;
 }>();
 const emit = defineEmits<{
   'update:text': [text: string];
@@ -90,6 +95,7 @@ function extensions(): Extension[] {
   return [
     breakpointGutter((line) => emit('toggle-breakpoint', line)),
     lineNumbers(),
+    props.changeMarks === true ? changeMarks : [],
     highlightActiveLineGutter(),
     lintGutter(),
     history(),
@@ -208,6 +214,10 @@ defineExpose({
     view?.focus();
   },
   applyFix,
+  /** 6C: the chapter's change marks (with `changeMarks`), replacing the last set; an empty set clears them. */
+  setChangeMarks(marks: readonly ChangeMark[]): void {
+    view?.dispatch({ effects: setChangeMarksEffect.of([...marks]) });
+  },
   /** 5C: classes on whole lines (the running line, its trail); replaces the last set. */
   setLineDecorations(set: readonly LineClass[]): void {
     view?.dispatch({ effects: setLines.of([...set]) });

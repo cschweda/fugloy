@@ -285,3 +285,255 @@ test('at 800 px wide the three columns stack: lesson, program, TRS-80', async ({
   expect(wide[2]!.x).toBeGreaterThan(wide[1]!.x + wide[1]!.width - 1);
   expect(Math.abs(wide[0]!.y - wide[2]!.y)).toBeLessThan(1);
 });
+
+// Phase 6C Task 1: the Space Invaders course. /learn/invaders/ opens chapter 1, whose every line is
+// new and marked so; Run ▶ blanks the screen and the game loop goes round; an edit hides the marks
+// with a note and Reset to the lesson brings them back (Review Focus 2); moving from lesson 7 into
+// chapter 1 while it runs stops it (Review Focus 3); and chapter and lesson keep their own edits
+// (Review Focus 5).
+const CHAPTER_EDIT_KEY = 'fugloy:learn:edit:invaders/01-blank-loop';
+const MARKS_HIDDEN = "Your edits hide the chapter's marks. Reset to the lesson brings them back.";
+
+/** A chapter's page, with its program's editor loaded. */
+async function openChapter(page: Page, path = '/learn/invaders/'): Promise<void> {
+  await page.goto(path);
+  await expect(page.locator('.cm-content')).toContainText('LOOP', { timeout: 30_000 });
+  await page.waitForFunction(() => window.__fugloyLearn !== undefined);
+}
+
+test("the generated /learn/invaders/ carries chapter 1's title and text, and names chapter 1's page as canonical", async ({ request }) => {
+  const res = await request.get('/learn/invaders/');
+  expect(res.ok()).toBe(true);
+  const html = await res.text();
+  expect(html).toContain('<title>A blank screen and a game loop that does nothing yet — Build Space Invaders · Fugløy</title>');
+  expect(html).toContain('Build Space Invaders · Chapter 1 of');
+  expect(html).toContain('data-testid="lesson-try"');
+  expect(html).toContain('<link rel="canonical" href="https://app.fugloy.dev/learn/invaders/01-blank-loop/"');
+  expect((await request.get('/learn/invaders/01-blank-loop/')).ok()).toBe(true);
+});
+
+test('chapter 1 marks every line of its program new, and Run ▶ blanks the screen while the game loop goes round', async ({ page }) => {
+  await openChapter(page);
+  await expect(page.getByTestId('lesson-title')).toHaveText('A blank screen and a game loop that does nothing yet');
+  // Every line but the editor's empty one after END's line break, which is not a line of the program.
+  const lines = await page.locator('.cm-line').count();
+  await expect(page.locator('.cm-line.fg-chg-new')).toHaveCount(lines - 1);
+  await expect(page.locator('.cm-line').last()).not.toHaveClass(/fg-chg-new/);
+  await expect(page.getByTestId('lesson-marks-summary')).toHaveText(`Marked since the blank page: ${lines - 1} new lines (+), 0 changed lines (~), 0 lines taken out.`);
+  await expect(page.locator('.cm-line.fg-chg-changed')).toHaveCount(0);
+  expect(await page.getByTestId('change-mark').count()).toBeGreaterThanOrEqual(16);
+  await expect(page.getByTestId('change-mark').first()).toHaveText('+');
+  await expect(page.getByTestId('lesson-removed')).toHaveCount(0);
+  await expect(page.getByTestId('lesson-marks-hidden')).toHaveCount(0);
+
+  await runIt(page);
+  await expect(page.getByTestId('lesson-message')).toHaveText(STUB_RUNNING);
+  await expect.poll(async () => (await samples(page)).every((px) => px[3] === 255 && px[0]! < 64 && px[1]! < 64 && px[2]! < 64)).toBe(true);
+  expect((await page.evaluate(() => window.__fugloyLearn!.screenText())).every((row) => row.trim() === '')).toBe(true);
+  // Still going round a second later: the loop never ends, and never falls into the stub ROM.
+  await page.waitForTimeout(1000);
+  expect(await page.evaluate(() => window.__fugloyLearn!.runnerState())).toBe('running');
+  await page.getByTestId('lesson-pause').click();
+  await expect.poll(() => page.evaluate(() => window.__fugloyLearn!.debugMode())).toBe('paused');
+  await expect(page.locator('.cm-line.fg-run-paused')).toHaveCount(1);
+  // The running line lights the chapter's line over its mark; both classes are on it.
+  await expect(page.locator('.cm-line.fg-run-paused.fg-chg-new')).toHaveCount(1);
+});
+
+test("an edit hides the chapter's marks with a note, and Reset to the lesson brings them back (Review Focus 2)", async ({ page }) => {
+  await openChapter(page);
+  const marks = await page.getByTestId('change-mark').count();
+  expect(marks).toBeGreaterThanOrEqual(16);
+  await page.locator('.cm-line', { hasText: 'CALL    WAIT' }).click();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('\tNOP');
+  await expect(page.getByTestId('lesson-marks-hidden')).toHaveText(MARKS_HIDDEN);
+  await expect(page.getByTestId('change-mark')).toHaveCount(0);
+  await expect(page.locator('.cm-line.fg-chg-new')).toHaveCount(0);
+  await expect.poll(() => page.evaluate((k) => localStorage.getItem(k), CHAPTER_EDIT_KEY)).toContain('NOP');
+  // The lesson with the same number keeps no edit of its own (Review Focus 5).
+  expect(await page.evaluate((k) => localStorage.getItem(k), EDIT_KEY)).toBeNull();
+  // A reload opens the edit, still without the marks.
+  await page.reload();
+  await expect(page.locator('.cm-content')).toContainText('NOP', { timeout: 30_000 });
+  await expect(page.getByTestId('lesson-marks-hidden')).toHaveText(MARKS_HIDDEN);
+  await expect(page.getByTestId('change-mark')).toHaveCount(0);
+  await page.getByTestId('lesson-reset').click();
+  await expect(page.locator('.cm-content')).not.toContainText('NOP');
+  await expect(page.getByTestId('lesson-marks-hidden')).toHaveCount(0);
+  await expect.poll(() => page.getByTestId('change-mark').count()).toBe(marks);
+  expect(await page.evaluate((k) => localStorage.getItem(k), CHAPTER_EDIT_KEY)).toBeNull();
+});
+
+test("chapter 1's Try it: a breakpoint on JR LOOP pauses there at the end of every turn", async ({ page }) => {
+  await openChapter(page);
+  const line = page.locator('.cm-line', { hasText: 'JR      LOOP' });
+  await line.scrollIntoViewIfNeeded();
+  const box = await line.boundingBox();
+  const gutter = await page.locator('.fg-bp-gutter').boundingBox();
+  await page.mouse.click(gutter!.x + gutter!.width / 2, box!.y + box!.height / 2);
+  await page.getByTestId('lesson-run').click();
+  await expect.poll(() => page.evaluate(() => window.__fugloyLearn!.debugMode())).toBe('paused');
+  await expect(page.locator('.cm-line.fg-run-paused')).toContainText('JR      LOOP');
+  // Continue: once more round the loop (the registers move: R counts every instruction), and paused there again.
+  const before = await registers(page);
+  await page.getByTestId('lesson-pause').click();
+  await expect.poll(() => registers(page)).not.toEqual(before);
+  await expect.poll(() => page.evaluate(() => window.__fugloyLearn!.debugMode())).toBe('paused');
+  await expect(page.locator('.cm-line.fg-run-paused')).toContainText('JR      LOOP');
+});
+
+test('moving from lesson 7 into chapter 1 while lesson 7 runs stops it, and the chapter shows its own text and marks (Review Focus 3)', async ({ page }) => {
+  await page.goto('/learn/07-invaders-march/');
+  await expect(page.locator('.cm-content')).toContainText('MARCH', { timeout: 30_000 });
+  await page.waitForFunction(() => window.__fugloyLearn !== undefined);
+  await runIt(page);
+  await expect.poll(async () => (await registers(page)).length).toBeGreaterThan(0);
+  // In the page, as a link does it (the link itself is the next test).
+  await page.evaluate(() => window.__fugloyLearn!.go('/learn/invaders/'));
+  await expect(page.getByTestId('lesson-title')).toHaveText('A blank screen and a game loop that does nothing yet');
+  await expect(page.locator('.cm-content')).toContainText('LOOP', { timeout: 30_000 });
+  await expect(page.locator('.cm-content')).not.toContainText('MARCH');
+  await expect.poll(() => page.evaluate(() => window.__fugloyLearn?.runnerState() ?? 'none')).toBe('idle');
+  await expect(page.getByTestId('registers')).toContainText('The registers show here while a program runs.');
+  await expect(page.locator('.cm-line.fg-run-now')).toHaveCount(0);
+  expect(await page.getByTestId('change-mark').count()).toBeGreaterThanOrEqual(16);
+  // Chapter 1 runs; moving on to chapter 2 stops it (Review Focus 3, "and between chapters").
+  await runIt(page);
+  await expect.poll(async () => (await registers(page)).length).toBeGreaterThan(0);
+  await page.evaluate(() => window.__fugloyLearn!.go('/learn/invaders/02-base/'));
+  await expect(page.getByTestId('lesson-title')).not.toHaveText('A blank screen and a game loop that does nothing yet');
+  await expect.poll(() => page.evaluate(() => window.__fugloyLearn?.runnerState() ?? 'none')).toBe('idle');
+  await expect(page.getByTestId('registers')).toContainText('The registers show here while a program runs.');
+  await expect(page.locator('.cm-line.fg-run-now')).toHaveCount(0);
+  await page.goBack();
+  await expect(page.getByTestId('lesson-title')).toHaveText('A blank screen and a game loop that does nothing yet');
+  // Back to lesson 7: its own program, unmarked, and nothing running.
+  await page.goBack();
+  await expect(page.locator('.cm-content')).toContainText('MARCH', { timeout: 30_000 });
+  await expect(page.getByTestId('change-mark')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => window.__fugloyLearn?.runnerState() ?? 'none')).toBe('idle');
+});
+
+test("lesson 7's last Try it paragraph links to the course, and the lesson list shows both courses with done marks (Task 5)", async ({ page }) => {
+  await page.goto('/learn/07-invaders-march/');
+  await expect(page.locator('.cm-content')).toContainText('MARCH', { timeout: 30_000 });
+  await page.getByTestId('lesson-try').getByRole('link', { name: 'Build Space Invaders' }).click();
+  await expect(page).toHaveURL(/\/learn\/invaders\/$/);
+  await expect(page.getByTestId('lesson-title')).toHaveText('A blank screen and a game loop that does nothing yet');
+  await expect(page.locator('.cm-content')).toContainText('LOOP', { timeout: 30_000 });
+  await page.waitForFunction(() => window.__fugloyLearn !== undefined);
+  await runIt(page);
+  await page.getByTestId('lesson-list-toggle').click();
+  const list = page.getByTestId('lesson-list');
+  await expect(list.getByRole('heading', { name: 'Learn Z80 assembly' })).toBeVisible();
+  await expect(list.getByRole('heading', { name: 'Build Space Invaders' })).toBeVisible();
+  expect(await list.locator('li').count()).toBe(19);
+  await expect(page.getByTestId('lesson-done-invaders-01-blank-loop')).toBeVisible({ timeout: 30_000 });
+  // The chapter's mark is its own: lesson 1 is not marked.
+  await expect(page.getByTestId('lesson-done-01-white-out')).toHaveCount(0);
+});
+
+/**
+ * Line `n` of the lesson editor, scrolled into view (the editor grows with its program, so the page
+ * scrolls and CodeMirror draws only the lines near the window): its text and classes, the line
+ * number beside it, and the change gutter's mark beside it ('' for none), each found by where it sits.
+ */
+async function editorLine(page: Page, n: number): Promise<{ text: string; classes: string; number: string; mark: string }> {
+  return page.evaluate(async (n) => {
+    const numberEl = (): Element | undefined =>
+      [...document.querySelectorAll('.cm-lineNumbers .cm-gutterElement')].find((e) => e.textContent === String(n));
+    const frame = (): Promise<void> => new Promise((r) => requestAnimationFrame(() => r()));
+    window.scrollTo(0, 0);
+    await frame();
+    for (let i = 0; i < 400 && numberEl() === undefined; i++) {
+      window.scrollBy(0, 200);
+      await frame();
+    }
+    const num = numberEl();
+    if (num === undefined) throw new Error(`line ${n} never appeared in the editor`);
+    num.scrollIntoView({ block: 'center' });
+    await frame();
+    await frame();
+    const top = (e: Element): number => e.getBoundingClientRect().top;
+    const at = numberEl()!;
+    const y = top(at);
+    const near = (e: Element): boolean => Math.abs(top(e) - y) < 2;
+    const line = [...document.querySelectorAll('.cm-content .cm-line')].find(near);
+    const markCell = [...document.querySelectorAll('.fg-chg-gutter .cm-gutterElement')].find(near);
+    return {
+      text: line?.textContent ?? '(no line there)',
+      classes: line?.className ?? '',
+      number: at.textContent ?? '',
+      mark: markCell?.querySelector('[data-testid="change-mark"]')?.textContent ?? '',
+    };
+  }, n);
+}
+
+test('chapter 6 lists its line taken out struck through, and each mark sits on the line the diff names (Review Focus 1)', async ({ page }) => {
+  // CodeMirror draws only the lines near the window, and LOOP is far down chapter 6, so wait on its first line.
+  await page.goto('/learn/invaders/06-row/');
+  await expect(page.locator('.cm-content')).toContainText('chapter 6: a row of invaders', { timeout: 30_000 });
+  await page.waitForFunction(() => window.__fugloyLearn !== undefined);
+  await expect(page.getByTestId('lesson-title')).toHaveText('A row of invaders');
+  await expect(page.getByTestId('lesson-marks-summary')).toHaveText('Marked since chapter 5: 13 new lines (+), 18 changed lines (~), 1 line taken out.');
+  // INVX goes: listed under the program, struck through, before line 151, the blank line above END.
+  const removed = page.getByTestId('lesson-removed-line');
+  await expect(removed).toHaveCount(1);
+  await expect(removed.locator('del')).toHaveText(/^INVX:\s+DB\s+30\s+; the invader's column, 0 to 62$/);
+  await expect(removed).toContainText('before 151');
+  expect(await removed.locator('del').evaluate((e) => getComputedStyle(e).textDecorationLine)).toContain('line-through');
+  await expect(page.locator('.cm-content')).not.toContainText('INVX');
+
+  // Each line the diff names, with its mark beside it: DRAWINV's rework changes lines 97 to 106 and adds
+  // 107 to 116, POP BC and RET stay; the loop's two lines change; INVS's three lines are new.
+  const expected: [number, RegExp, '~' | '+' | ''][] = [
+    [1, /^; Build Space Invaders, chapter 6: a row of invaders\./, '~'],
+    [6, /^$/, ''],
+    [97, /^; DRAWROW: copy the two bytes DE points at/, '~'],
+    [106, /^\s+LD\s+H,\(IX\+1\)/, '~'],
+    [107, /^\s+LD\s+A,\(DE\)\s+; the shape's left cell/, '+'],
+    [116, /^\s+DJNZ\s+DRAWONE/, '+'],
+    [117, /^\s+POP\s+BC/, ''],
+    [132, /the base, the shot, the invaders\.$/, '~'],
+    [137, /^\s+LD\s+DE,INVADER/, '~'],
+    [138, /^\s+CALL\s+DRAWROW/, '~'],
+    [139, /^\s+JR\s+LOOP/, ''],
+    [146, /^; INVS: the invaders' places/, '+'],
+    [148, /^\s+DW\s+3C80H\+30/, '+'],
+    [149, /^BASEX:/, ''],
+  ];
+  for (const [n, text, mark] of expected) {
+    const got = await editorLine(page, n);
+    expect(got.number, `line ${n}`).toBe(String(n));
+    expect(got.text, `line ${n}'s text`).toMatch(text);
+    expect(got.mark, `line ${n}'s gutter mark`).toBe(mark);
+    if (mark === '+') expect(got.classes, `line ${n}`).toContain('fg-chg-new');
+    if (mark === '~') expect(got.classes, `line ${n}`).toContain('fg-chg-changed');
+    if (mark === '') expect(got.classes, `line ${n}`).not.toMatch(/fg-chg-/);
+  }
+});
+
+test('axe finds nothing on /learn/invaders/, marked and running', async ({ page }) => {
+  await openChapter(page);
+  const tags = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'];
+  const axe = async (): Promise<string[]> => (await new AxeBuilder({ page }).withTags(tags).analyze()).violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`);
+  expect(await axe()).toEqual([]);
+  await page.getByTestId('lesson-list-toggle').click();
+  await runIt(page);
+  expect(await axe()).toEqual([]);
+});
+
+test("a lesson that cannot be fetched says so in a sentence, not a blank page", async ({ page }) => {
+  await open(page);
+  // From here on, nothing new can be fetched: the next lesson's payload and its text's chunk both fail.
+  await page.route('**/learn/02-registers/_payload.json*', (r) => r.abort());
+  await page.route('**/_nuxt/**', (r) => r.abort());
+  await page.getByTestId('lesson-next').click();
+  await expect(page).toHaveURL(/\/learn\/02-registers\/$/);
+  await expect(page.getByTestId('learn-load-failed')).toHaveText(
+    'The lesson could not be loaded: the connection may have dropped, or the site was updated since this page opened. Reload the page.',
+  );
+  await expect(page.getByTestId('learn-load-failed')).toHaveAttribute('role', 'alert');
+});

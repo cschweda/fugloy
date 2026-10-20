@@ -94,7 +94,7 @@ The Model I has the same keyboard row, and its screen is the same memory with th
 
 Change the third byte of `ROW` from `6` to `8` and press Run. Eight invaders march now, and they turn at column 34 instead of 42 without any other change, because `MARCH` reads the count from `(IX+2)` each time.
 
-Then make them hurry: change `LD B,4` to `LD B,1`, one `WAIT` a step. The invaders march at the ship's speed from lesson 5. The next part builds a whole game, piece by piece: the shot hitting invaders, the row inching down, and a score.
+Then make them hurry: change `LD B,4` to `LD B,1`, one `WAIT` a step. The invaders march at the ship's speed from lesson 5. The next part, [Build Space Invaders](/learn/invaders/), builds a whole game, piece by piece: the shot hitting invaders, the row inching down, and a score.
 
 ## In a real game
 

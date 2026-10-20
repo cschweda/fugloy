@@ -5,6 +5,21 @@
  * headless on Fugløy's stub ROM it reaches the screen its lesson describes, step by step.
  *
  * A lesson folder holds lesson.md, program.z, and check.json; adding one adds its checks here.
+ *
+ * Phase 6C: the Space Invaders chapters (apps/web/content/learn/invaders/NN-slug/) are checked the same
+ * way, and each chapter's program differs from the one before it (chapter 1's from the blank page).
+ * Only NN-slug folders are lessons or chapters, so invaders/ itself is neither.
+ *
+ * check.json's steps, run in order on the stub ROM:
+ *   { "run": n }                  run n T-states (PC must stay out of the ROM's space)
+ *   { "press": key } / { "release": key }   a key down or up on the keyboard matrix
+ *   { "row": r, "text": s }       screen row r as text, trailing blanks trimmed
+ *   { "cell": "3C00", "byte": "BF" }        one byte of memory
+ *   { "pcIn": "LABEL" }           PC is on the line LABEL names (its bytes), as for a jump-to-self wait
+ *   { "pcIn": "FROM", "to": "TO" }          PC is in the range from FROM's address up to, not including,
+ *                                 TO's address (TO must come after FROM), so a check during a counted
+ *                                 loop holds on any T-state of a pass rather than on one instruction's
+ *                                 address alone
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { Machine } from '@fugloy/emu';
@@ -23,7 +38,7 @@ type Step =
   | { release: string }
   | { row: number; text: string }
   | { cell: string; byte: string }
-  | { pcIn: string };
+  | { pcIn: string; to?: string };
 
 interface Check {
   models: LessonModel[];
@@ -31,10 +46,15 @@ interface Check {
 }
 
 const learn = new URL('../../../apps/web/content/learn/', import.meta.url);
-const folders = readdirSync(learn, { withFileTypes: true })
-  .filter((d) => d.isDirectory())
-  .map((d) => d.name)
-  .sort();
+/** The NN-slug folders under `sub` of content/learn, as paths from it. */
+const itemsIn = (sub: string): string[] =>
+  readdirSync(new URL(sub, learn), { withFileTypes: true })
+    .filter((d) => d.isDirectory() && /^\d\d-/.test(d.name))
+    .map((d) => sub + d.name)
+    .sort();
+const lessonFolders = itemsIn('');
+const chapterFolders = itemsIn('invaders/');
+const folders = [...lessonFolders, ...chapterFolders];
 const zit = skipIfNoZmac();
 
 const HALT = 0x76;
@@ -51,8 +71,12 @@ function stubRom(model: LessonModel): Uint8Array {
   return rom;
 }
 
-/** A lesson's scripted run is tens of millions of T-states: about 6 s on a CI runner for lesson 7, past Vitest's 5 s default. */
-const RUN_TIMEOUT_MS = 60_000;
+/**
+ * A lesson's scripted run is tens of millions of T-states, and chapter 8's (its floor at row 13) about
+ * 236 million. Lesson 7 takes about 6 s on a CI runner against 1.6 s locally, about 3.8 times as long;
+ * chapter 8 takes about 9 s locally, so about 35 s on CI. 180 s leaves room for that under parallel load.
+ */
+const RUN_TIMEOUT_MS = 180_000;
 
 const hex = (n: number, width: number): string => n.toString(16).toUpperCase().padStart(width, '0');
 
@@ -75,8 +99,9 @@ function readCheck(slug: string): Check {
       ((keys === 'press' || keys === 'release') && typeof step[keys] === 'string') ||
       (keys === 'row,text' && Number.isInteger(step['row']) && (step['row'] as number) >= 0 && (step['row'] as number) <= 15 && typeof step['text'] === 'string') ||
       (keys === 'byte,cell' && /^[0-9A-F]{1,4}$/i.test(String(step['cell'])) && /^[0-9A-F]{1,2}$/i.test(String(step['byte']))) ||
-      (keys === 'pcIn' && typeof step['pcIn'] === 'string');
-    if (!ok) bad(`step ${i + 1} (${JSON.stringify(s)}) is not one of run, press, release, row and text, cell and byte, or pcIn`);
+      (keys === 'pcIn' && typeof step['pcIn'] === 'string') ||
+      (keys === 'pcIn,to' && typeof step['pcIn'] === 'string' && typeof step['to'] === 'string' && step['to'] !== '');
+    if (!ok) bad(`step ${i + 1} (${JSON.stringify(s)}) is not one of run, press, release, row and text, cell and byte, pcIn, or pcIn and to`);
   });
   return raw as Check;
 }
@@ -84,6 +109,19 @@ function readCheck(slug: string): Check {
 /** The program's lines that assemble to EI, as `line: text`. */
 const eiLines = (r: AsmResult): string[] =>
   r.listing.filter((l) => l.bytes.length === 1 && l.bytes[0] === 0xfb && /^\s*(\w+:)?\s*EI\b/i.test(l.text)).map((l) => `${l.line}: ${l.text}`);
+
+/**
+ * The run addresses a pcIn step names, from the first to the last (inclusive): the bytes of the line
+ * labelled `label`, or with `to`, from `label`'s address up to, not including, `to`'s.
+ */
+function pcRange(r: AsmResult, label: string, to?: string): { start: number; end: number } {
+  if (to === undefined) return labelRange(r, label);
+  const from = labelRange(r, label).start;
+  const sym = r.symbol(to);
+  if (sym === undefined || sym.line === 0) throw new Error(`pcIn's "to" names ${to}, which the program does not define`);
+  if (sym.value <= from) throw new Error(`pcIn's "to" names ${to}, at $${hex(sym.value, 4)}, which is not after ${label} at $${hex(from, 4)}`);
+  return { start: from, end: sym.value - 1 };
+}
 
 /** The run addresses the line labelled `label` emitted bytes at, from its address to its last byte. */
 function labelRange(r: AsmResult, label: string): { start: number; end: number } {
@@ -111,27 +149,62 @@ function runSteps(slug: string, model: LessonModel, r: AsmResult, check: Check):
     else if ('row' in step) expect(m.video.text()[step.row]!.trimEnd(), where).toBe(step.text);
     else if ('cell' in step) expect(hex(m.mem.read(parseInt(step.cell, 16), 1)[0]!, 2), where).toBe(step.byte.toUpperCase().padStart(2, '0'));
     else {
-      const { start, end } = labelRange(r, step.pcIn);
+      const { start, end } = pcRange(r, step.pcIn, step.to);
       const pc = m.cpu.regs.pc;
-      expect(pc >= start && pc <= end, `${where}: PC is $${hex(pc, 4)}, not in ${step.pcIn} ($${hex(start, 4)}-$${hex(end, 4)})`).toBe(true);
+      const named = step.to === undefined ? step.pcIn : `${step.pcIn} up to ${step.to}`;
+      expect(pc >= start && pc <= end, `${where}: PC is $${hex(pc, 4)}, not in ${named} ($${hex(start, 4)}-$${hex(end, 4)})`).toBe(true);
     }
   });
 }
 
 describe('the lessons', () => {
-  it('finds lesson 1 among them', () => {
-    expect(folders).toContain('01-white-out');
+  it('finds lesson 1 among them, and chapter 1 of the invaders course', () => {
+    expect(lessonFolders).toContain('01-white-out');
+    expect(chapterFolders[0]).toBe('invaders/01-blank-loop');
+    expect(folders).not.toContain('invaders');
+  });
+});
+
+describe("check.json's pcIn", () => {
+  const r = assemble('\tORG\t7000H\nFIRST:\tNOP\n\tNOP\nPARK:\tJR\tPARK\n\tEND\tFIRST\n', { model: 3 });
+  it('names one line alone, or a range up to, not including, its "to"', () => {
+    expect(pcRange(r, 'PARK')).toEqual({ start: 0x7002, end: 0x7003 });
+    expect(pcRange(r, 'FIRST', 'PARK')).toEqual({ start: 0x7000, end: 0x7001 });
+  });
+  it('says why a "to" is not a label after the start', () => {
+    expect(() => pcRange(r, 'FIRST', 'NOPE')).toThrow('pcIn\'s "to" names NOPE, which the program does not define');
+    expect(() => pcRange(r, 'PARK', 'FIRST')).toThrow('pcIn\'s "to" names FIRST, at $7000, which is not after PARK at $7002');
+  });
+});
+
+describe('the invaders chapters', () => {
+  /** A program's lines with trailing blanks trimmed, as the page's change marks compare them. */
+  const linesOf = (text: string): string => text.split(/\r\n|\r|\n/).map((l) => l.trimEnd()).join('\n');
+  chapterFolders.forEach((folder, i) => {
+    it(`${folder} differs from ${i === 0 ? 'the blank page' : chapterFolders[i - 1]}`, () => {
+      const program = readFileSync(new URL(`${folder}/program.z`, learn), 'utf8');
+      const before = i === 0 ? '' : readFileSync(new URL(`${chapterFolders[i - 1]}/program.z`, learn), 'utf8');
+      expect(linesOf(program).trim()).not.toBe('');
+      expect(linesOf(program)).not.toBe(linesOf(before));
+    });
   });
 });
 
 for (const slug of folders) {
-  describe(`lesson ${slug}`, () => {
+  describe(`${slug.startsWith('invaders/') ? 'chapter' : 'lesson'} ${slug}`, () => {
     const md = readFileSync(new URL(`${slug}/lesson.md`, learn), 'utf8');
     const program = readFileSync(new URL(`${slug}/program.z`, learn), 'utf8');
     const check = readCheck(slug);
 
+    it('names in its pcIn steps only labels the program defines, each "to" after its start', () => {
+      for (const model of check.models) {
+        const r = assemble(program, { model });
+        for (const step of check.steps) if ('pcIn' in step) expect(() => pcRange(r, step.pcIn, step.to), `${slug}/check.json ${JSON.stringify(step)}`).not.toThrow();
+      }
+    });
+
     it("has the models its check.json runs it on in its front matter, the lesson's own first", () => {
-      expect(parseLesson(slug, md, program).models).toEqual(check.models);
+      expect(parseLesson(slug.replace(/^invaders\//, ''), md, program).models).toEqual(check.models);
     });
 
     for (const model of check.models) {

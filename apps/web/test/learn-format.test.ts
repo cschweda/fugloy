@@ -1,12 +1,16 @@
 // The lesson format (phase 6B Task 1): a lesson's front matter and its Markdown subset, parsed to a
 // Lesson, and each rule's error a sentence naming the lesson and the line. The lessons under
-// content/learn/ load through LESSONS, in order, each numbered by its folder.
+// content/learn/ and the chapters under content/learn/invaders/ are listed in the generated index
+// (LESSON_INDEX, CHAPTER_INDEX) and load one at a time through loadItem (all of them here, through
+// test/learn-items), in order, each numbered by its folder.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseLesson } from '../app/utils/learn/lesson-format';
 import type { Lesson } from '../app/utils/learn/lesson-format';
-import { LESSONS, lessonBySlug } from '../app/utils/learn/lessons';
+import { CHAPTER_INDEX, entryBefore, entryOf, LESSON_INDEX, loadItem, loadPageItem, loadProgram } from '../app/utils/learn/lessons';
+import { CHAPTERS, LESSONS } from './learn-items';
+import { learnIndexSource } from '../scripts/build-learn-index';
 
 const PROGRAM = '\tORG 7000H\nSTART:\tJR START\n\tEND START\n';
 
@@ -234,11 +238,12 @@ describe('parseLesson', () => {
 });
 
 describe('LESSONS', () => {
-  it('starts with lesson 1, White out the screen', () => {
-    expect(LESSONS[0]?.slug).toBe('01-white-out');
+  it('starts with lesson 1, White out the screen', async () => {
+    expect(LESSON_INDEX[0]?.slug).toBe('01-white-out');
     expect(LESSONS[0]?.title).toBe('White out the screen');
-    expect(lessonBySlug('01-white-out')).toBe(LESSONS[0]);
-    expect(lessonBySlug('99-none')).toBeNull();
+    expect(entryOf('lessons', '01-white-out')).toBe(LESSON_INDEX[0]);
+    expect(entryOf('lessons', '99-none')).toBeNull();
+    expect(await loadItem('lessons', '99-none')).toBeNull();
   });
 
   it("numbers every lesson by its folder's NN, in order", () => {
@@ -250,6 +255,60 @@ describe('LESSONS', () => {
 
   it('carries each lesson its program', () => {
     for (const lesson of LESSONS) expect(lesson.program).toMatch(/\bEND\b/);
+  });
+
+  it('reads only the NN-slug folders, so the invaders course is not a lesson', async () => {
+    expect(LESSON_INDEX.map((l) => l.slug).filter((s) => !/^\d\d-/.test(s))).toEqual([]);
+    expect(entryOf('lessons', 'invaders')).toBeNull();
+    expect(await loadItem('lessons', 'invaders')).toBeNull();
+  });
+});
+
+describe('CHAPTERS', () => {
+  it('starts with chapter 1, A blank screen and a game loop that does nothing yet', async () => {
+    expect(CHAPTER_INDEX[0]?.slug).toBe('01-blank-loop');
+    expect(CHAPTERS[0]?.title).toBe('A blank screen and a game loop that does nothing yet');
+    expect(entryOf('invaders', '01-blank-loop')).toBe(CHAPTER_INDEX[0]);
+    expect(entryOf('invaders', '01-white-out')).toBeNull();
+    expect(entryOf('lessons', '01-blank-loop')).toBeNull();
+    expect(await loadItem('invaders', '01-white-out')).toBeNull();
+  });
+
+  it("numbers every chapter by its folder's NN, in order from 1, and runs each on the Model III first", () => {
+    CHAPTERS.forEach((chapter, i) => {
+      expect(chapter.number).toBe(i + 1);
+      expect(chapter.number).toBe(Number(chapter.slug.slice(0, 2)));
+      expect(chapter.models[0]).toBe(3);
+      expect(chapter.program).toMatch(/\bEND\b/);
+    });
+  });
+
+  it("names what changed in each chapter's text", () => {
+    for (const chapter of CHAPTERS) expect(chapter.body.some((b) => b.kind === 'h2' && b.text === 'What changed'), chapter.slug).toBe(true);
+  });
+});
+
+describe('the Learn index and the page loader', () => {
+  it('is current with the content: run `pnpm --filter @fugloy/web learn-index` after changing a lesson or chapter', () => {
+    const generated = readFileSync(join(__dirname, '..', 'app', 'utils', 'learn', 'learn-index.generated.ts'), 'utf8');
+    expect(generated, 'learn-index.generated.ts is not current: run `pnpm --filter @fugloy/web learn-index`').toBe(learnIndexSource());
+  });
+
+  it("matches each item's own front matter", () => {
+    const strip = (l: { slug: string; number: number; title: string; idea: string; models: readonly number[] }) => ({ slug: l.slug, number: l.number, title: l.title, idea: l.idea, models: [...l.models] });
+    expect(LESSON_INDEX.map(strip)).toEqual(LESSONS.map(strip));
+    expect(CHAPTER_INDEX.map(strip)).toEqual(CHAPTERS.map(strip));
+  });
+
+  it("loads a lesson with no marks, and a chapter with the previous chapter's program (the blank page for chapter 1)", async () => {
+    expect(await loadPageItem('lessons', '01-white-out')).toEqual({ item: LESSONS[0], marksAgainst: null });
+    expect(await loadPageItem('invaders', '01-blank-loop')).toEqual({ item: CHAPTERS[0], marksAgainst: '' });
+    expect(entryBefore('invaders', '01-blank-loop')).toBeNull();
+    for (let i = 1; i < CHAPTERS.length; i++) {
+      expect((await loadPageItem('invaders', CHAPTERS[i]!.slug))?.marksAgainst).toBe(CHAPTERS[i - 1]!.program);
+    }
+    expect(await loadProgram('invaders', '01-blank-loop')).toBe(CHAPTERS[0]!.program);
+    expect(await loadPageItem('invaders', '99-none')).toBeNull();
   });
 });
 
@@ -314,7 +373,20 @@ describe('the lessons\' z80 snippets', () => {
     expect(codeOf("        DB 'A;B' ; x")).toBe("DB 'A;B'");
   });
 
-  for (const slug of readdirSync(dir).sort()) {
+  // The lessons' folders (NN-slug) and the chapters' (invaders/NN-slug).
+  const items = (sub: string): string[] =>
+    readdirSync(join(dir, sub), { withFileTypes: true })
+      .filter((d) => d.isDirectory() && /^\d\d-/.test(d.name))
+      .map((d) => (sub === '' ? d.name : `${sub}/${d.name}`))
+      .sort();
+  const folders = [...items(''), ...items('invaders')];
+
+  it('checks the chapters too', () => {
+    expect(folders).toContain('invaders/01-blank-loop');
+    expect(folders).not.toContain('invaders');
+  });
+
+  for (const slug of folders) {
     it(`${slug}: every z80 snippet is lines of program.z`, () => {
       const program = readFileSync(join(dir, slug, 'program.z'), 'utf8');
       const blocks = snippets(readFileSync(join(dir, slug, 'lesson.md'), 'utf8'));
