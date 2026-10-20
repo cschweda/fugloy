@@ -23,4 +23,7 @@ export const CHAPTER_INDEX: readonly LessonEntry[] = [
   { slug: "07-march", number: 7, title: "The row marches left and right", idea: "a word that is 1 or -1, a turn counter in memory, and SBC to turn round", models: [3,1] },
   { slug: "08-descend", number: 8, title: "Reaching an edge, it inches down", idea: "one routine, three moves: the same ADD HL,DE steps right, left, or down", models: [3,1] },
   { slug: "09-hit", number: 9, title: "The shot hits an invader", idea: "a collision read off the screen, and a hole in the table that loops skip", models: [3,1] },
+  { slug: "10-rows-score", number: 10, title: "Three rows, and a score", idea: "three rows in one table, EQU, and a score kept in BCD with DAA", models: [3,1] },
+  { slug: "11-bombs-lives", number: 11, title: "Invaders drop bombs, and the base has lives", idea: "a second thing falling, a choice from R, and a game that can end", models: [3,1] },
+  { slug: "12-waves", number: 12, title: "Waves, each faster than the last", idea: "a table copied afresh, a count of what is left, and the finished game", models: [3,1] },
 ];
