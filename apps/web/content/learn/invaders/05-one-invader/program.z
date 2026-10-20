@@ -1,0 +1,140 @@
+; Build Space Invaders, chapter 5: one invader. Chapter 4's base and shot,
+; and above them on row 2, at the column INVX holds, an invader: two cells,
+; drawn by DRAWINV as DRAWBASE draws the base. The loop draws it every turn,
+; so that a shot passing through it leaves no hole: the shot goes behind it
+; for now, and hitting it comes later.
+
+        ORG     7000H           ; the program lives at 7000H, in free memory
+
+; WAIT: a counted delay, 5,120 passes of 26 T-states, about 66 ms a turn at
+; 2.03 MHz. The routines come first, and the game itself after them, from
+; START, where END START says the program begins.
+WAIT:   PUSH    BC              ; save BC, which the loop uses
+        LD      BC,1400H        ; 1400H is 5,120 passes of 26 T-states
+DELAY:  DEC     BC
+        LD      A,B
+        OR      C
+        JR      NZ,DELAY
+        POP     BC              ; BC as the caller left it
+        RET
+
+; DRAWBASE: copy the three bytes HL points at to the base's place on row 15,
+; 3FC0H plus BASEX. BC is kept on the stack; A, DE and HL are not.
+DRAWBASE:
+        PUSH    BC              ; save BC, which LDIR counts down
+        LD      A,(BASEX)       ; the base's column ...
+        ADD     A,0C0H          ; ... plus 3FC0H, row 15: the base's left cell
+        LD      E,A
+        LD      D,3FH
+        LD      BC,3            ; three bytes
+        LDIR                    ; from (HL) to (DE), one byte at a time
+        POP     BC              ; BC as the caller left it
+        RET
+
+; MOVEBASE: with the left or right arrow down, erase the base, move it a
+; column, and draw it again. Columns 0 and 61 are the edges: there it stays.
+MOVEBASE:
+        LD      A,(3840H)       ; the arrows' row: bit 5 left, 6 right
+        AND     60H             ; keep those two bits (0110 0000)
+        RET     Z               ; neither is down: nothing to do
+        LD      C,A             ; keep the keys in C, so A is free
+        LD      HL,BLANK        ; erase the base where it is
+        CALL    DRAWBASE
+        LD      A,(BASEX)       ; the base's column, from memory
+        BIT     5,C             ; left?
+        JR      Z,NOTLT
+        CP      0               ; column 0, the left edge: stay
+        JR      Z,NOTLT
+        DEC     A
+NOTLT:
+        BIT     6,C             ; right?
+        JR      Z,NOTRT
+        CP      61              ; column 61, the right edge for three cells: stay
+        JR      Z,NOTRT
+        INC     A
+NOTRT:
+        LD      (BASEX),A       ; the new column, back to memory
+        LD      HL,BASE         ; draw the base there
+        CALL    DRAWBASE
+        RET
+
+; MOVESHOT: the shot, if there is one, moves up a row; past row 0 it is gone.
+MOVESHOT:
+        LD      HL,(SHOT)       ; where the shot is: two bytes from memory into HL
+        LD      A,H             ; 0 is no shot: test HL as the clear tests BC
+        OR      L
+        RET     Z               ; no shot: nothing to do
+        LD      (HL),20H        ; erase the shot where it is
+        LD      DE,-64          ; up a row
+        ADD     HL,DE
+        BIT     2,H             ; still on the screen? 3C00H-3FFFH all have bit 2 of H set
+        JR      NZ,SHOTUP
+        LD      HL,0            ; off the top: no shot
+SHOTUP: LD      (SHOT),HL       ; keep where it is, or 0
+        LD      A,H
+        OR      L
+        RET     Z               ; gone: nothing to draw
+        LD      (HL),21H        ; the shot is an exclamation mark
+        RET
+
+; FIRE: with the space bar down and no shot in the air, a shot starts on
+; row 14, just above the base's middle cell.
+FIRE:   LD      A,(3840H)       ; the space bar is bit 7 of the arrows' row
+        BIT     7,A
+        RET     Z               ; not down: nothing to do
+        LD      HL,(SHOT)
+        LD      A,H
+        OR      L
+        RET     NZ              ; a shot is in the air already: one at a time
+        LD      A,(BASEX)       ; row 14 starts at 3F80H; the base's middle
+        ADD     A,81H           ; is its column plus one: 3F81H plus BASEX
+        LD      L,A
+        LD      H,3FH
+        LD      (HL),21H        ; draw the shot
+        LD      (SHOT),HL       ; and remember where it is
+        RET
+
+; DRAWINV: copy the two bytes HL points at to the invader's place on row 2,
+; 3C80H plus INVX. BC is kept on the stack, as DRAWBASE keeps it.
+DRAWINV:
+        PUSH    BC              ; save BC, which LDIR counts down
+        LD      A,(INVX)        ; the invader's column ...
+        ADD     A,80H           ; ... plus 3C80H, row 2: the invader's left cell
+        LD      E,A
+        LD      D,3CH
+        LD      BC,2            ; two bytes
+        LDIR                    ; from (HL) to (DE), one byte at a time
+        POP     BC              ; BC as the caller left it
+        RET
+
+START:  LD      HL,3C00H        ; HL points at the top-left cell
+        LD      BC,400H         ; BC counts the cells: 400H is 1024
+CLEAR:  LD      (HL),20H        ; a space: the cell is blank
+        INC     HL              ; on to the next cell
+        DEC     BC              ; one cell fewer to go (DEC BC sets no flags ...)
+        LD      A,B             ; ... so test BC by hand: copy B into A
+        OR      C               ; and OR in C: zero only when B and C both are
+        JR      NZ,CLEAR        ; not zero yet: clear the next cell
+        LD      HL,BASE         ; draw the base where BASEX says
+        CALL    DRAWBASE
+
+; The game loop: one turn of the game, then round again. A game's turn
+; reads the keys, moves things and draws them: the base, the shot, the invader.
+LOOP:   CALL    WAIT            ; the turn's pause, so the game runs at a steady speed
+        CALL    MOVEBASE        ; the base moves if an arrow is down
+        CALL    MOVESHOT        ; the shot, if there is one, rises a row
+        CALL    FIRE            ; the space bar starts a shot, if there is none
+        LD      HL,INVADER      ; the invader, drawn every turn: a shot passing
+        CALL    DRAWINV         ; through it erases a cell, and this mends it
+        JR      LOOP            ; and round again, for ever
+
+; The game's data: below the loop, where the processor never runs into it.
+BASE:   DB      0BCH,0BFH,0BCH  ; the base: a wing, a block, a wing
+BLANK:  DB      '   '           ; three spaces, to erase it
+INVADER:
+        DB      9EH,0ADH        ; an invader: two cells, a head, arms and legs
+BASEX:  DB      30              ; the base's column, 0 to 61
+SHOT:   DW      0               ; the shot's screen address, or 0 for none
+INVX:   DB      30              ; the invader's column, 0 to 62
+
+        END     START           ; the program starts at START

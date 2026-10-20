@@ -1,0 +1,20 @@
+{
+  "models": [3, 1],
+  "steps": [
+    { "run": 100000 },
+    { "row": 15, "text": "                              ..." },
+    { "cell": "3FDD", "byte": "20" },
+    { "cell": "3FDE", "byte": "BC" },
+    { "cell": "3FDF", "byte": "BF" },
+    { "cell": "3FE0", "byte": "BC" },
+    { "cell": "3FE1", "byte": "20" },
+    { "row": 0, "text": "" },
+    { "row": 14, "text": "" },
+    { "pcIn": "DELAY", "to": "DRAWBASE" },
+    { "run": 2000000 },
+    { "pcIn": "DELAY", "to": "DRAWBASE" },
+    { "row": 15, "text": "                              ..." },
+    { "cell": "3FDF", "byte": "BF" },
+    { "row": 14, "text": "" }
+  ]
+}

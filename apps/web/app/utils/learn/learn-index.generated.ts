@@ -15,4 +15,8 @@ export const LESSON_INDEX: readonly LessonEntry[] = [
 /** Every chapter of Build Space Invaders (content/learn/invaders/NN-slug), by number. */
 export const CHAPTER_INDEX: readonly LessonEntry[] = [
   { slug: "01-blank-loop", number: 1, title: "A blank screen and a game loop that does nothing yet", idea: "a cleared screen and a game loop, a turn with a counted wait, round for ever", models: [3,1] },
+  { slug: "02-base", number: 2, title: "Draw the base on the bottom row", idea: "a routine with CALL and RET, and the base's column in a byte of memory", models: [3,1] },
+  { slug: "03-move-base", number: 3, title: "Move the base with the arrow keys", idea: "reading the keyboard, RET Z, and keeping the base inside the screen", models: [3,1] },
+  { slug: "04-shot", number: 4, title: "Fire one shot that rises and disappears", idea: "a 16-bit variable with DW, 0 for none, and two things moving in one loop", models: [3,1] },
+  { slug: "05-one-invader", number: 5, title: "One invader", idea: "a second thing drawn by a routine like the first, and redrawn every turn", models: [3,1] },
 ];

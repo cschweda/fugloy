@@ -1,0 +1,54 @@
+; Build Space Invaders, chapter 2: the base on the bottom row. Chapter 1's
+; blank screen and game loop, and before the loop starts, the player's base
+; is drawn on row 15: three cells, copied to the screen by a routine,
+; DRAWBASE, at the column a byte of memory, BASEX, holds. The loop still
+; only waits; the next chapter moves the base.
+
+        ORG     7000H           ; the program lives at 7000H, in free memory
+
+; WAIT: a counted delay, 5,120 passes of 26 T-states, about 66 ms a turn at
+; 2.03 MHz. The routines come first, and the game itself after them, from
+; START, where END START says the program begins.
+WAIT:   PUSH    BC              ; save BC, which the loop uses
+        LD      BC,1400H        ; 1400H is 5,120 passes of 26 T-states
+DELAY:  DEC     BC
+        LD      A,B
+        OR      C
+        JR      NZ,DELAY
+        POP     BC              ; BC as the caller left it
+        RET
+
+; DRAWBASE: copy the three bytes HL points at to the base's place on row 15,
+; 3FC0H plus BASEX. BC is kept on the stack; A, DE and HL are not.
+DRAWBASE:
+        PUSH    BC              ; save BC, which LDIR counts down
+        LD      A,(BASEX)       ; the base's column ...
+        ADD     A,0C0H          ; ... plus 3FC0H, row 15: the base's left cell
+        LD      E,A
+        LD      D,3FH
+        LD      BC,3            ; three bytes
+        LDIR                    ; from (HL) to (DE), one byte at a time
+        POP     BC              ; BC as the caller left it
+        RET
+
+START:  LD      HL,3C00H        ; HL points at the top-left cell
+        LD      BC,400H         ; BC counts the cells: 400H is 1024
+CLEAR:  LD      (HL),20H        ; a space: the cell is blank
+        INC     HL              ; on to the next cell
+        DEC     BC              ; one cell fewer to go (DEC BC sets no flags ...)
+        LD      A,B             ; ... so test BC by hand: copy B into A
+        OR      C               ; and OR in C: zero only when B and C both are
+        JR      NZ,CLEAR        ; not zero yet: clear the next cell
+        LD      HL,BASE         ; draw the base where BASEX says
+        CALL    DRAWBASE
+
+; The game loop: one turn of the game, then round again. A game's turn
+; reads the keys, moves things and draws them; this one only waits.
+LOOP:   CALL    WAIT            ; the turn's pause, so the game runs at a steady speed
+        JR      LOOP            ; and round again, for ever
+
+; The game's data: below the loop, where the processor never runs into it.
+BASE:   DB      0BCH,0BFH,0BCH  ; the base: a wing, a block, a wing
+BASEX:  DB      30              ; the base's column, 0 to 61
+
+        END     START           ; the program starts at START

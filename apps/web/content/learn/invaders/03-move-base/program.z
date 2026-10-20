@@ -1,0 +1,83 @@
+; Build Space Invaders, chapter 3: the arrow keys move the base. Chapter 2's
+; base on row 15, and each turn of the game loop now calls MOVEBASE, which
+; reads the left and right arrows, bits 5 and 6 of the keyboard row at
+; 3840H, and with one down erases the base, moves BASEX a column, and draws
+; the base again; at the screen's edges it stays where it is.
+
+        ORG     7000H           ; the program lives at 7000H, in free memory
+
+; WAIT: a counted delay, 5,120 passes of 26 T-states, about 66 ms a turn at
+; 2.03 MHz. The routines come first, and the game itself after them, from
+; START, where END START says the program begins.
+WAIT:   PUSH    BC              ; save BC, which the loop uses
+        LD      BC,1400H        ; 1400H is 5,120 passes of 26 T-states
+DELAY:  DEC     BC
+        LD      A,B
+        OR      C
+        JR      NZ,DELAY
+        POP     BC              ; BC as the caller left it
+        RET
+
+; DRAWBASE: copy the three bytes HL points at to the base's place on row 15,
+; 3FC0H plus BASEX. BC is kept on the stack; A, DE and HL are not.
+DRAWBASE:
+        PUSH    BC              ; save BC, which LDIR counts down
+        LD      A,(BASEX)       ; the base's column ...
+        ADD     A,0C0H          ; ... plus 3FC0H, row 15: the base's left cell
+        LD      E,A
+        LD      D,3FH
+        LD      BC,3            ; three bytes
+        LDIR                    ; from (HL) to (DE), one byte at a time
+        POP     BC              ; BC as the caller left it
+        RET
+
+; MOVEBASE: with the left or right arrow down, erase the base, move it a
+; column, and draw it again. Columns 0 and 61 are the edges: there it stays.
+MOVEBASE:
+        LD      A,(3840H)       ; the arrows' row: bit 5 left, 6 right
+        AND     60H             ; keep those two bits (0110 0000)
+        RET     Z               ; neither is down: nothing to do
+        LD      C,A             ; keep the keys in C, so A is free
+        LD      HL,BLANK        ; erase the base where it is
+        CALL    DRAWBASE
+        LD      A,(BASEX)       ; the base's column, from memory
+        BIT     5,C             ; left?
+        JR      Z,NOTLT
+        CP      0               ; column 0, the left edge: stay
+        JR      Z,NOTLT
+        DEC     A
+NOTLT:
+        BIT     6,C             ; right?
+        JR      Z,NOTRT
+        CP      61              ; column 61, the right edge for three cells: stay
+        JR      Z,NOTRT
+        INC     A
+NOTRT:
+        LD      (BASEX),A       ; the new column, back to memory
+        LD      HL,BASE         ; draw the base there
+        CALL    DRAWBASE
+        RET
+
+START:  LD      HL,3C00H        ; HL points at the top-left cell
+        LD      BC,400H         ; BC counts the cells: 400H is 1024
+CLEAR:  LD      (HL),20H        ; a space: the cell is blank
+        INC     HL              ; on to the next cell
+        DEC     BC              ; one cell fewer to go (DEC BC sets no flags ...)
+        LD      A,B             ; ... so test BC by hand: copy B into A
+        OR      C               ; and OR in C: zero only when B and C both are
+        JR      NZ,CLEAR        ; not zero yet: clear the next cell
+        LD      HL,BASE         ; draw the base where BASEX says
+        CALL    DRAWBASE
+
+; The game loop: one turn of the game, then round again. A game's turn
+; reads the keys, moves things and draws them; this one moves the base.
+LOOP:   CALL    WAIT            ; the turn's pause, so the game runs at a steady speed
+        CALL    MOVEBASE        ; the base moves if an arrow is down
+        JR      LOOP            ; and round again, for ever
+
+; The game's data: below the loop, where the processor never runs into it.
+BASE:   DB      0BCH,0BFH,0BCH  ; the base: a wing, a block, a wing
+BLANK:  DB      '   '           ; three spaces, to erase it
+BASEX:  DB      30              ; the base's column, 0 to 61
+
+        END     START           ; the program starts at START
