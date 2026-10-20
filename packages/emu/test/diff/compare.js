@@ -29,14 +29,39 @@
  * our machine adopts the trace's state instead of the reverse. A trace shorter than the run ends it
  * with the trace's sentence (`ended`), never as "no divergence".
  *
- * The comparator wraps our CPU's `interrupt` and `executeInstruction` and our memory's `writeByte`
- * (and, following a trace, our memory's `readByte` and the I/O's `pendingInterrupt`) for the run,
- * and puts them back after.
+ * The model's devices are passed in (`model`, `lowercase`; Ruling 5), never inferred from which
+ * reference runs (Ruling 3). The Model III's 30 Hz request is port $E0's latch under its mask; the
+ * Model I's is the Expansion Interface's latch at $37E0 (bit 7, the 40 Hz clock), and on the Model
+ * I three more things are compared:
+ *
+ * - **The $37E0 latch after every read of it** (field `latch`): a step in which our CPU read the
+ *   latch compares our latch afterwards with the reference's (`Reference.latch`), so a read that
+ *   fails to clear the clock bit shows on that instruction. A trace (MAME) records the bytes its
+ *   reads returned instead: ours must have read the same bytes, in order.
+ * - **Video RAM through the bit-6 gate** (field `video`), after every step that wrote it and at the
+ *   end: the Model I without the lowercase modification has seven video RAMs, and the CPU reads
+ *   bit 6 from NOR gate Z30 ("If Bit 5 ... and Bit 7 ... are low, then Bit 6 will be high": TRS-80
+ *   Micro Computer Technical Reference Handbook, 2nd ed., 1982, p. 34, "Video RAMs"). Our byte is
+ *   compared as stored (our memory applies the gate on the write, as xtrs's mem_write does) with
+ *   the reference's byte read through the gate (`b & 0xBF` when bit 5 or 7 is set, else
+ *   `b | 0x40`), so a reference that stores the byte as written (MAME) compares equal, and a gate
+ *   of ours that is wrong does not. With the lowercase modification the bytes compare raw.
+ *   Following a trace, a read of video RAM where the trace's byte is ours but for the gate returns
+ *   the trace's byte, counted as a reference fix (MAME's CPU reads the byte as written).
+ * - **Port $FF** (the cassette and 32-character mode latch): its reads land in a register
+ *   (`IN A,($FF)`: bit 7 the cassette latch, bit 6 not MODESEL, bits 5-0 high, on ours, xtrs's
+ *   trs_io.c and MAME's trs80_m.cpp alike) and its writes are made from registers, so both are
+ *   compared on the instruction that makes them.
+ *
+ * The comparator wraps our CPU's `interrupt` and `executeInstruction`, our memory's `writeByte`,
+ * on the Model I the latch's `read` (and, following a trace, our memory's `readByte` and the I/O's
+ * `pendingInterrupt`) for the run, and puts them back after.
  */
 import { decode, formatInstruction } from '@fugloy/z80';
 import { KeyQueue } from '../../src/devices/key-queue.js';
 import { KeyboardMatrix } from '../../src/devices/keyboard.js';
 import { RTC_IRQ_BIT } from '../../src/machine/io.js';
+import { TIMER_BIT } from '../../src/devices/interrupt-latch.js';
 import { diffStep, droppedPrefix, explainStep, interruptClass, REFERENCE_FIXES, STEP_CLASSES } from './known.js';
 
 /**
@@ -65,16 +90,56 @@ import { diffStep, droppedPrefix, explainStep, interruptClass, REFERENCE_FIXES, 
  *   differs (register names, flag bits as `f.S`, `cycles`, `writes`, `irq` (an interrupt taken where none may be, or not taken where it must), or `video`); known: the class a
  *   `strict` run stopped on, else null; context: up to 10 instructions before, the divergent one,
  *   and up to 10 after (both machines run on, unsynced).
- * @typedef {{ instructions: number, divergence: Divergence | null, known: Record<string, number>, ended?: string }} CompareResult
+ * @typedef {{ instructions: number, divergence: Divergence | null, known: Record<string, number>, ended?: string, reference: string, model: 1 | 3, lowercase: boolean }} CompareResult
  *   ended: a trace reference's sentence when its trace ended before `instructions` (then
- *   `instructions` is how many were compared).
+ *   `instructions` is how many were compared); reference: the reference's name; model, lowercase:
+ *   the devices compared.
+ * @typedef {{
+ *   model: 1 | 3,
+ *   lowercase: boolean,
+ *   through: ((b: number) => number) | null,
+ *   request(sys: Machine['system']): boolean,
+ *   latch: boolean,
+ *   videoEach: boolean,
+ * }} Devices
+ *   through: how the reference's video byte reads on this machine (the Model I's bit-6 gate), or
+ *   null for raw; request: our timer's request is pending (the one `held` tracks); latch: compare
+ *   the $37E0 latch after each read of it; videoEach: compare the video bytes each step wrote.
  */
 
 const CONTEXT = 10;
 const XY = /** @type {string} */ (STEP_CLASSES.find((c) => c.id === 'xy')?.name);
-const DROPPED_PREFIX = REFERENCE_FIXES[0].name;
+const DROPPED_PREFIX = /** @type {string} */ (REFERENCE_FIXES.find((c) => c.id === 'dropped-prefix')?.name);
+const VIDEO_READ = /** @type {string} */ (REFERENCE_FIXES.find((c) => c.id === 'video-read-gate')?.name);
 const VIDEO = 0x3c00;
 const VIDEO_LEN = 0x400;
+
+/**
+ * The Model I's bit-6 gate, as the CPU reads a video byte without the lowercase modification:
+ * bit 6 is NOR(bit 5, bit 7) (Technical Reference Handbook, 1982, p. 34; xtrs's trs_memory.c and
+ * our memory.js apply it on the write).
+ * @param {number} b
+ */
+export const videoGate = (b) => (b & 0xa0 ? b & 0xbf : b | 0x40);
+
+/**
+ * The devices compareRun compares for `model` (Ruling 5). @param {1 | 3} model @param {boolean} lowercase
+ * @returns {Devices}
+ */
+export function modelDevices(model, lowercase) {
+  if (model === 1) {
+    return {
+      model,
+      lowercase,
+      through: lowercase ? null : videoGate,
+      // The Expansion Interface's 40 Hz clock bit in the $37E0 latch (it has no mask).
+      request: (sys) => sys.io.latch !== null && (sys.io.latch.bits & TIMER_BIT) !== 0,
+      latch: true,
+      videoEach: true,
+    };
+  }
+  return { model, lowercase: false, through: null, request: (sys) => (sys.io.intLatch & sys.io.intMask & RTC_IRQ_BIT) !== 0, latch: false, videoEach: false };
+}
 
 /**
  * Key events for compareRun from a script of key presses, each held `hold` T-states (default
@@ -116,25 +181,40 @@ export function ourRegs(m) {
 
 /**
  * Wrap our machine's CPU and memory to log each step's writes, interrupt response, and executed
- * instruction. Returns the step function and an uninstall. With `follow` (a trace reference), our
- * machine also takes the trace's interrupts and keyboard bytes, and the log says where its own
- * request or reads disagreed (`irqTime`, `irqRefused`, `keys`).
+ * instruction (and, on the Model I, the bytes its reads of the $37E0 latch returned). Returns the
+ * step function and an uninstall. With `follow` (a trace reference), our machine also takes the
+ * trace's interrupts and keyboard bytes, and the log says where its own request or reads
+ * disagreed (`irqTime`, `irqRefused`, `keys`); with `theirsVideo` too (the Model I's gate), a read
+ * of video RAM whose trace byte is ours but for the gate returns the trace's (`videoRead`).
  * @param {Machine} m
  * @param {import('./mame-trace.js').Follow | null} [follow]
+ * @param {Devices} [devices]
+ * @param {((addr: number) => number) | null} [theirsVideo] the reference's video byte before this step
  */
-function instrument(m, follow = null) {
+function instrument(m, follow = null, devices = modelDevices(3, false), theirsVideo = null) {
   const mem = m.system.memory;
   const cpu = m.system.cpu;
   const io = m.system.io;
-  const log = { writes: /** @type {Write[]} */ ([]), irq: false, execPc: 0, idle: false, code: 0, irqTime: false, irqRefused: false, keys: false, requested: false };
+  const latch = devices.latch ? io.latch : null;
+  const log = { writes: /** @type {Write[]} */ ([]), irq: false, execPc: 0, idle: false, code: 0, irqTime: false, irqRefused: false, keys: false, requested: false, latchReads: /** @type {number[]} */ ([]), videoRead: false };
   const own = (/** @type {object} */ o, /** @type {string} */ k) => Object.prototype.hasOwnProperty.call(o, k);
-  const saved = { write: own(mem, 'writeByte'), interrupt: own(cpu, 'interrupt'), exec: own(cpu, 'executeInstruction'), read: own(mem, 'readByte'), pending: own(io, 'pendingInterrupt') };
+  const saved = { write: own(mem, 'writeByte'), interrupt: own(cpu, 'interrupt'), exec: own(cpu, 'executeInstruction'), read: own(mem, 'readByte'), pending: own(io, 'pendingInterrupt'), latch: latch !== null && own(latch, 'read') };
   const write = mem.writeByte;
   const interrupt = cpu.interrupt;
   const exec = cpu.executeInstruction;
   const read = mem.readByte;
   const pending = io.pendingInterrupt;
+  const latchRead = latch?.read;
   let snapshot = false;
+  // Our CPU is running an instruction (not the comparator reading our memory).
+  let executing = false;
+  if (latch !== null) {
+    latch.read = () => {
+      const v = /** @type {() => number} */ (latchRead).call(latch);
+      log.latchReads.push(v);
+      return v;
+    };
+  }
   mem.writeByte = (/** @type {number} */ addr, /** @type {number} */ value) => {
     log.writes.push({ addr: addr & 0xffff, value: value & 0xff });
     write.call(mem, addr, value);
@@ -161,7 +241,12 @@ function instrument(m, follow = null) {
     log.code = cpu.halted ? 0
       : ((mem.readByte(pc) << 24) | (mem.readByte((pc + 1) & 0xffff) << 16) | (mem.readByte((pc + 2) & 0xffff) << 8) | mem.readByte((pc + 3) & 0xffff)) >>> 0;
     snapshot = false;
-    return exec.call(cpu);
+    executing = true;
+    try {
+      return exec.call(cpu);
+    } finally {
+      executing = false;
+    }
   };
   if (follow !== null) {
     // The trace's interrupt: ours is made to see a request where the trace took one; where ours
@@ -174,9 +259,19 @@ function instrument(m, follow = null) {
       }
       return log.requested;
     };
-    // The trace's keyboard bytes, at the reads the trace recorded.
+    // The trace's keyboard bytes, at the reads the trace recorded; and its video bytes where they
+    // are ours but for the gate (the trace's CPU read the byte as written).
     mem.readByte = (/** @type {number} */ addr) => {
       const a = addr & 0xffff;
+      if (executing && !snapshot && theirsVideo !== null && devices.through !== null && a >= VIDEO && a < VIDEO + VIDEO_LEN) {
+        const v = read.call(mem, addr);
+        const t = theirsVideo(a);
+        if (t !== v && devices.through(t) === v) {
+          log.videoRead = true;
+          return t;
+        }
+        return v;
+      }
       if (snapshot || a < 0x3800 || a >= 0x3c00) return read.call(mem, addr);
       const v = follow.keyRead(follow.index, a);
       if (v === undefined) {
@@ -195,6 +290,8 @@ function instrument(m, follow = null) {
       log.irqTime = false;
       log.irqRefused = false;
       log.keys = false;
+      log.latchReads = [];
+      log.videoRead = false;
       const wantIrq = follow !== null && follow.irqAt(follow.index);
       const { cycles } = m.step(1);
       if (follow !== null) {
@@ -210,6 +307,9 @@ function instrument(m, follow = null) {
       if (saved.write) mem.writeByte = write; else delete mem.writeByte;
       if (saved.interrupt) cpu.interrupt = interrupt; else delete cpu.interrupt;
       if (saved.exec) cpu.executeInstruction = exec; else delete cpu.executeInstruction;
+      if (latch !== null) {
+        if (saved.latch) latch.read = /** @type {() => number} */ (latchRead); else delete /** @type {any} */ (latch).read;
+      }
       if (follow !== null) {
         if (saved.read) mem.readByte = read; else delete mem.readByte;
         if (saved.pending) io.pendingInterrupt = pending; else delete io.pendingInterrupt;
@@ -218,15 +318,19 @@ function instrument(m, follow = null) {
   };
 }
 
-/** @param {Machine} m @param {Reference} ref */
-function compareVideo(m, ref) {
+/**
+ * Video RAM on both sides: ours as stored, the reference's read through `through` (the Model I's
+ * bit-6 gate) when given.
+ * @param {Machine} m @param {Reference} ref @param {((b: number) => number) | null} [through]
+ */
+function compareVideo(m, ref, through = null) {
   const a = m.mem.read(VIDEO, VIDEO_LEN);
   const b = ref.peek(VIDEO, VIDEO_LEN);
   let differing = 0;
   /** @type {number | null} */
   let first = null;
   for (let k = 0; k < VIDEO_LEN; k++) {
-    if (a[k] !== b[k]) {
+    if (a[k] !== (through === null ? b[k] : through(b[k]))) {
       differing++;
       if (first === null) first = VIDEO + k;
     }
@@ -257,18 +361,31 @@ export function disassemble(code, pc, idle = false) {
  * within a few instructions); `strict: 'all'` stops on that one as well. `progress`, if given, is
  * called after every `progress.every` instructions with the count so far (a session test checks
  * the screen there).
- * @param {{ machine: Machine, reference: Reference, instructions: number, keys?: KeyEvent[], strict?: boolean | 'all', progress?: { every: number, fn: (done: number) => void } }} opts
+ *
+ * `model` (1 or 3; default the machine's, a Model 4 compared as a III) and `lowercase` (the Model
+ * I's lowercase modification; default the machine's) name the devices compared (Ruling 5); each
+ * must agree with the machine, so the comparison never assumes hardware the run does not have.
+ * @param {{ machine: Machine, reference: Reference, instructions: number, keys?: KeyEvent[], strict?: boolean | 'all', progress?: { every: number, fn: (done: number) => void }, model?: 1 | 3, lowercase?: boolean }} opts
  * @returns {CompareResult}
  */
-export function compareRun({ machine: m, reference: ref, instructions, keys = [], strict = false, progress }) {
+export function compareRun({ machine: m, reference: ref, instructions, keys = [], strict = false, progress, model, lowercase }) {
   if (m.keyboard.pending > 0) throw new Error('compareRun: the machine\'s key queue has keys waiting; pass keys to compareRun so both machines get them');
+  const machineModel = m.model === 1 ? 1 : 3;
+  if (model !== undefined && model !== machineModel) throw new Error(`compareRun: model ${model} was asked for, and the machine is a Model ${m.model === 1 ? 'I' : m.model === 4 ? '4' : 'III'}`);
+  const machineLower = machineModel === 1 && !m.system.memory.videoBit6Gate;
+  if (lowercase !== undefined && machineModel !== 1) throw new Error('compareRun: lowercase is a Model I option (the modification); this machine is not a Model I');
+  if (lowercase !== undefined && lowercase !== machineLower) throw new Error(`compareRun: lowercase ${lowercase} was asked for, and the machine ${machineLower ? 'has' : 'has no'} lowercase modification`);
+  const devices = modelDevices(machineModel, machineLower);
+  const refName = /** @type {any} */ (ref).name ?? 'the reference';
+  const tag = { reference: refName, model: devices.model, lowercase: devices.lowercase };
   /** @type {import('./mame-trace.js').Follow | null} A trace reference: our machine follows it (Ruling 4). */
   const follow = /** @type {any} */ (ref).follow ?? null;
   if (follow !== null && keys.length > 0) throw new Error('compareRun: a trace reference brings its own keys (the bytes its keyboard reads returned); pass none');
   const sys = m.system;
   const cpu = sys.cpu;
-  const io = sys.io;
-  const ours = instrument(m, follow);
+  // Following a trace on the Model I, our video reads may take the trace's byte (the gate).
+  const theirsVideo = follow !== null && devices.through !== null ? (/** @type {number} */ a) => ref.peek(a, 1)[0] : null;
+  const ours = instrument(m, follow, devices, theirsVideo);
   /** @type {Record<string, number>} */
   const known = {};
   /** @type {(ContextLine | undefined)[]} The last CONTEXT compared instructions, a ring. */
@@ -320,15 +437,21 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
       // A held request our latch still holds must be taken at the first boundary where IFF1 is
       // set and nothing blocks it (Zilog UM0080 p. 7, INT pin): if our CPU does not, that is a
       // divergence (field irq), whatever our CPU's own state says.
-      const mustTake = held !== null && refIff1 && blocked === null && (io.intLatch & io.intMask & RTC_IRQ_BIT) !== 0;
+      const mustTake = held !== null && refIff1 && blocked === null && devices.request(sys);
 
       const oursCycles = ours.step();
       const oursIrq = ours.log.irq;
       // Our CPU took an interrupt where the stream says none may be taken, or did not take the one
       // it had to.
       const irqWrong = (oursIrq && blocked !== null) || (mustTake && !oursIrq);
+      // A held request our CPU takes is forced on the reference, unless the reference still holds
+      // it itself (a latch it can show, as xtrs's): then it takes it by its own rule, and no
+      // interrupt class is counted, since it needed none.
+      const refHolds = oursIrq && held !== null && devices.latch && typeof ref.latch === 'function' && (ref.latch() & TIMER_BIT) !== 0;
       /** @type {import('./reference.js').IrqMode} */
-      const mode = blocked !== null ? 'hold' : oursIrq && held !== null ? 'force' : 'auto';
+      const mode = blocked !== null ? 'hold' : oursIrq && held !== null && !refHolds ? 'force' : 'auto';
+      // The trace's reads of the latch at this step, before the trace moves on.
+      const theirLatchReads = follow !== null && devices.latch ? follow.latchReads(index) : null;
       const t = ref.step({ irq: mode });
       /** @type {string | null} */
       let fix = null;
@@ -352,8 +475,8 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
         const reason = !refIff1 ? 'DI' : mode === 'hold' ? blocked : null;
         if (reason !== null) held ??= { reason };
       }
-      // The request is gone from our side (read from $EC, or masked): nothing is held any more.
-      if (held !== null && (io.intLatch & io.intMask & RTC_IRQ_BIT) === 0) held = null;
+      // The request is gone from our side (read from $EC or $37E0, or masked): nothing is held any more.
+      if (held !== null && !devices.request(sys)) held = null;
 
       const o = ourRegs(m);
       const s = ref.regs();
@@ -381,10 +504,20 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
           unexplained.push(field);
         }
       }
+      // The Model I's devices (Ruling 5): the latch after a read of it, and the video bytes written.
+      if (devices.latch && latchDiffers(m, ref, ours.log.latchReads, theirLatchReads)) {
+        diff.add('latch');
+        unexplained.push('latch');
+      }
+      if (devices.videoEach && videoWritesDiffer(m, ref, devices.through, ctx.ours.writes, ctx.theirs.writes)) {
+        diff.add('video');
+        unexplained.push('video');
+      }
       // The next boundary's reason, from the instruction that just ran (a halted step runs a NOP).
       blocked = ours.log.idle ? null : bytes[0] === 0xfb ? 'EI'
         : (bytes[0] === 0xdd || bytes[0] === 0xfd) && (bytes[1] === 0xdd || bytes[1] === 0xfd || bytes[1] === 0xed) ? 'prefix' : null;
       if (fix !== null) classes.unshift(fix);
+      if (ours.log.videoRead) classes.unshift(VIDEO_READ);
       if (interrupt !== null) classes.unshift(interrupt);
 
       const stopsOn = strict === false ? undefined : classes.find((c) => strict === 'all' || c !== XY);
@@ -399,12 +532,12 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
           ours: line.ours,
           theirs: line.theirs,
           writes: { ours: ctx.ours.writes, theirs: ctx.theirs.writes },
-          video: compareVideo(m, ref),
+          video: compareVideo(m, ref, devices.through),
           context: [],
         });
         divergence.context = context(ref, ring, index, line, ours);
         if (strict) for (const c of classes) known[c] = (known[c] ?? 0) + 1;
-        return { instructions: index + 1, divergence, known };
+        return { instructions: index + 1, divergence, known, ...tag };
       }
       for (const c of classes) known[c] = (known[c] ?? 0) + 1;
       if (diff.size > 0 && follow !== null) {
@@ -420,7 +553,7 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
       if (progress !== undefined && (index + 1) % progress.every === 0) progress.fn(index + 1);
     }
 
-    const video = compareVideo(m, ref);
+    const video = compareVideo(m, ref, devices.through);
     const tail = ended === undefined ? {} : { ended };
     if (!video.equal) {
       const o = ourRegs(m);
@@ -441,12 +574,48 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
           context: ringLines(ring, compared).map(withText),
         },
         known,
+        ...tag,
       };
     }
-    return { instructions: compared, divergence: null, known, ...tail };
+    return { instructions: compared, divergence: null, known, ...tail, ...tag };
   } finally {
     ours.uninstall();
   }
+}
+
+/**
+ * The $37E0 latch after a step that read it differs (Ruling 5): a trace's reads (`theirs`) must
+ * have returned what ours did, in order; a lockstep reference's latch afterwards must be ours.
+ * Nothing is asked of the reference on a step no one read the latch.
+ * @param {Machine} m @param {Reference} ref @param {number[]} ours the bytes our reads returned
+ * @param {import('./reference.js').Write[] | null} theirs a trace's recorded reads of $37E0-$37E3
+ */
+function latchDiffers(m, ref, ours, theirs) {
+  if (theirs !== null) {
+    if (ours.length !== theirs.length) return true;
+    for (let k = 0; k < ours.length; k++) if (ours[k] !== theirs[k].value) return true;
+    return false;
+  }
+  if (ours.length === 0 || typeof ref.latch !== 'function') return false;
+  return (/** @type {NonNullable<Machine['system']['io']['latch']>} */ (m.system.io.latch).peek()) !== ref.latch();
+}
+
+/**
+ * Whether a video byte either side wrote in this step differs: ours as stored, the reference's
+ * through `through` (the gate) when given.
+ * @param {Machine} m @param {Reference} ref @param {((b: number) => number) | null} through
+ * @param {import('./reference.js').Write[]} a @param {import('./reference.js').Write[]} b
+ */
+function videoWritesDiffer(m, ref, through, a, b) {
+  let lo = 0x10000;
+  let hi = -1;
+  for (const w of a) if (w.addr >= VIDEO && w.addr < VIDEO + VIDEO_LEN) { lo = Math.min(lo, w.addr); hi = Math.max(hi, w.addr); }
+  for (const w of b) if (w.addr >= VIDEO && w.addr < VIDEO + VIDEO_LEN) { lo = Math.min(lo, w.addr); hi = Math.max(hi, w.addr); }
+  if (hi < 0) return false;
+  const ours = m.mem.read(lo, hi - lo + 1);
+  const theirs = ref.peek(lo, hi - lo + 1);
+  for (let k = 0; k < ours.length; k++) if (ours[k] !== (through === null ? theirs[k] : through(theirs[k]))) return true;
+  return false;
 }
 
 /** The ring's lines in order, oldest first, ending before `index`. @param {(ContextLine | undefined)[]} ring @param {number} index */
@@ -503,7 +672,8 @@ const writesText = (ws) => (ws.length === 0 ? '(none)' : ws.map((w) => `$${hex4(
  * @returns {string}
  */
 export function formatReport(result) {
-  const out = [`instructions compared: ${result.instructions}`];
+  const model = result.model === 1 ? `Model I${result.lowercase ? ' (lowercase modification)' : ''}` : 'Model III';
+  const out = [`reference: ${result.reference}, ${model}`, `instructions compared: ${result.instructions}`];
   const classes = Object.keys(result.known).sort();
   out.push(classes.length === 0 ? 'known differences: none' : 'known differences:');
   for (const c of classes) out.push(`  ${String(result.known[c]).padStart(9)}  ${c}`);

@@ -373,7 +373,13 @@ export function openXtrs({ command, args = [], timeoutMs = XTRS_STEP_TIMEOUT_MS,
       return cycles;
     },
 
+    latch() {
+      // The driver's peek reads the latch without acknowledging the clock (the patch's peek).
+      return ref.peek(0x37e0, 1)[0];
+    },
+
     prefixedOps: PAIRED_OPCODES,
+    name: 'xtrs',
   };
   return ref;
 }

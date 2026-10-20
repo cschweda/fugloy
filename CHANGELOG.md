@@ -103,6 +103,17 @@ creates and pushes the tag.
 
 ### Added
 
+- The Model I in the differential harness (emu phase 7, Model I, Task 4): `compareRun({ model,
+  lowercase })` compares the `$37E0` latch after every read of it and video RAM through the bit-6
+  gate (raw with the lowercase modification) after every step that writes it; port `$FF` is
+  compared through the registers of each IN. `pnpm diff --model 1` runs a program against xtrs, and
+  `pnpm diff --model 1 --reference mame --trace <file>` follows a MAME trace (`pnpm mame:trace
+  compare` moved there; exit 3 for a trace that ends early). The report names the reference and
+  model. New known classes, each with its evidence: EX (SP),rr's write order (xtrs, trsjs), a
+  repeating block instruction's flags 3 and 5 (xtrs), IN and block I/O T-states (xtrs), and, for a
+  trace, MAME's video read without the gate. Test-only planted bugs (a latch read that does not
+  clear, the gate inverted) are caught where they first matter against each reference.
+
 - A Full screen button in Run ▶'s machine row; Esc leaves it (and the browser's own exit); keys keep
   reaching the TRS-80, and focus is kept. The first screen is 252,262 B gzip of its 252,775 B budget.
 

@@ -629,6 +629,7 @@ function setRegs(m, o) {
  *   start(machine: import('../../src/machine/machine.js').Machine): void,
  *   irqAt(index: number): boolean,
  *   keyRead(index: number, addr: number): number | undefined,
+ *   latchReads(index: number): import('./reference.js').Write[],
  *   keyReadsLeft(index: number): number,
  *   adopt(machine: import('../../src/machine/machine.js').Machine): void,
  *   ended(index: number, asked: number): string,
@@ -637,7 +638,8 @@ function setRegs(m, o) {
  *   index: the step the reference is at (its next step); has: whether step `index` is in the trace;
  *   irqAt: MAME took a maskable interrupt at the start of step `index`; keyRead: the byte MAME's
  *   step `index` read from keyboard address `addr` (its next unconsumed read there), or undefined;
- *   keyReadsLeft: its keyboard reads not consumed yet; adopt: copy the reference's state after the
+ *   latchReads: the bytes MAME's step `index` read from the interrupt latch ($37E0-$37E3), in
+ *   order; keyReadsLeft: its keyboard reads not consumed yet; adopt: copy the reference's state after the
  *   last step into our machine (compareRun does this after a difference a known class explains,
  *   since a trace cannot be resynced); ended: the sentence for a trace that ends at step `index`
  *   of `asked`.
@@ -645,6 +647,7 @@ function setRegs(m, o) {
  */
 
 const isKeyboard = (/** @type {number} */ a) => a >= 0x3800 && a < 0x3c00;
+const isLatch = (/** @type {number} */ a) => a >= 0x37e0 && a < 0x37e4;
 
 /**
  * Open a trace file as a Reference that compareRun drives (TraceReference). It cannot be synced
@@ -700,8 +703,11 @@ export function openTrace(path) {
       if (sys.io.latch === null) throw new Error('MAME\'s trs80l2 has the Expansion Interface\'s interrupt latch; this machine has none');
       if (header.romSha256 !== '' && m.rom.sha256 !== header.romSha256) throw new Error(`${path} was recorded on another ROM (SHA-256 ${header.romSha256}) than this machine's (${m.rom.sha256})`);
       setRegs(m, before(cur));
-      // MAME's power-on video RAM and RAM (Ruling 4 revised: all $00 in MAME 0.289).
-      sys.memory.videoRam.set(start.subarray(0x3c00, 0x4000));
+      // MAME's power-on video RAM and RAM (Ruling 4 revised: all $00 in MAME 0.289). MAME keeps
+      // video bytes as written; a Model I without the lowercase modification reads bit 6 through
+      // its gate (compare.js, videoGate), so ours holds them as its CPU would read them.
+      const video = start.subarray(0x3c00, 0x4000);
+      sys.memory.videoRam.set(sys.memory.videoBit6Gate ? video.map((b) => (b & 0xa0 ? b & 0xbf : b | 0x40)) : video);
       sys.memory.ram.set(start.subarray(0x4000, 0x10000));
     },
     irqAt(index) {
@@ -718,6 +724,10 @@ export function openTrace(path) {
         return r.value;
       }
       return undefined;
+    },
+    latchReads(index) {
+      if (index !== n || cur === null) throw new Error(`follow.latchReads(${index}): the trace is at step ${n}`);
+      return cur.reads.filter((r) => isLatch(r.addr));
     },
     keyReadsLeft(index) {
       if (index !== n || cur === null) throw new Error(`follow.keyReadsLeft(${index}): the trace is at step ${n}`);
@@ -787,6 +797,7 @@ export function openTrace(path) {
     prefixedOps: new Set(Array.from({ length: 256 }, (_, k) => k).filter((k) => k !== 0xdd && k !== 0xfd && k !== 0xed)),
     follow,
     header,
+    name: `MAME ${header.mame.split(' ')[0]} trace`,
   };
   return ref;
 }

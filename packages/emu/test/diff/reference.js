@@ -29,14 +29,18 @@
  *   syncRegs(machine: Machine): void,
  *   redoDroppedPrefix(pc: number, r: number): number,
  *   writes(): Write[],
+ *   latch?(): number,
  *   close?(): void,
+ *   readonly name?: string,
  *   readonly prefixedOps: ReadonlySet<number>,
  *   readonly cycles: number,
  *   readonly z?: any,
  * }} Reference
  *   prefixedOps: the opcodes after DD or FD that the reference runs with the prefix as one step
  *   (trsjs drops the pair for the others; xtrs runs all but DD, FD and ED, the lone prefixes, since
- *   its driver joins an ignored prefix to the instruction after it); redoDroppedPrefix: trsjs only (known.js, REFERENCE_FIXES); close: ends a reference
+ *   its driver joins an ignored prefix to the instruction after it); redoDroppedPrefix: trsjs only (known.js, REFERENCE_FIXES); latch: the
+ *   Model I's $37E0 latch as it stands, read without clearing it (xtrs; compare.js compares it
+ *   after every step in which our CPU read it); name: the reference's name in a report; close: ends a reference
  *   that runs in another process; z: trsjs's machine object, for its own tests.
  */
 export {};

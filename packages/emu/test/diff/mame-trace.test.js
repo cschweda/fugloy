@@ -12,13 +12,16 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { Machine } from '../../src/index.js';
-import { compareRun, formatReport } from './compare.js';
+import { compareRun, formatReport, videoGate } from './compare.js';
 import { mameSkip, requireRom } from './gate.js';
 import { checkMame, checkRomSet, IRQ, MAME_ROMS, MAME_VERSION, openTrace, recordMameTrace, writeTrace } from './mame-trace.js';
 
 const dir = mkdtempSync(join(tmpdir(), 'fugloy-mame-test-'));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 const CLI = fileURLToPath(new URL('../../scripts/mame-trace.mjs', import.meta.url));
+const DIFF = fileURLToPath(new URL('../../scripts/diff.mjs', import.meta.url));
+/** `pnpm diff --model 1 --reference mame --trace <file>` with `args`. @param {string} trace @param {string[]} args */
+const diffTrace = (trace, args) => spawnSync(process.execPath, [DIFF, '--model', '1', '--reference', 'mame', '--trace', trace, ...args], { encoding: 'utf8' });
 
 /** A shell script at `rel` under the test folder. @param {string} rel @param {string} body */
 function script(rel, body) {
@@ -283,16 +286,22 @@ describe('a trace that ends early says so, never "no divergence" (Review Focus 3
     expect(r.ended).toBe(SENTENCE(100, 500, 'it was recorded for 100 instructions'));
   });
 
-  it('the CLI prints the sentence and exits 3', () => {
+  it('pnpm mame:trace compare points at pnpm diff, where it moved', () => {
+    const run = spawnSync(process.execPath, [CLI, 'compare', 'x.fmt'], { encoding: 'utf8' });
+    expect(run.status).toBe(2);
+    expect(run.stderr).toContain('pnpm mame:trace compare moved: run pnpm diff --model 1 --reference mame --trace <file> [--instructions N]');
+  });
+
+  it('pnpm diff --reference mame prints the sentence and exits 3', () => {
     const t = keyedTrace(100);
     const path = join(dir, 'cli-short.fmt');
     writeTrace(path, { header: { complete: false, reason: 'MAME stopped at its time limit of 6 emulated seconds', requested: 1000 }, ...t });
-    const run = spawnSync(process.execPath, [CLI, 'compare', path, '--instructions', '1000', '--rom', romPath], { encoding: 'utf8' });
+    const run = diffTrace(path, ['--instructions', '1000', '--rom', romPath]);
     expect(run.status).toBe(3);
     expect(run.stdout).toContain(SENTENCE(100, 1000, 'MAME stopped at its time limit of 6 emulated seconds'));
     expect(run.stdout).not.toContain('divergence: none');
     // The whole trace compared: 0.
-    const full = spawnSync(process.execPath, [CLI, 'compare', path, '--instructions', '100', '--rom', romPath], { encoding: 'utf8' });
+    const full = diffTrace(path, ['--instructions', '100', '--rom', romPath]);
     expect(full.stdout).toContain('divergence: none');
     expect(full.status).toBe(0);
   });
@@ -316,24 +325,21 @@ describe.skipIf(mameSkip !== null)(`MAME's Model I as a trace${mameSkip === null
   });
 
   /**
-   * The end-of-run video comparison: MAME stores the byte the CPU wrote, ours applies the Model I's
-   * bit-6 gate (bit 6 = NOT bit 5, no lowercase), so the bytes differ in bit 6 only. Task 4 compares
-   * video RAM through the gate (the plan's Files list); until then this pins that it is the only
-   * difference.
-   * @param {import('./compare.js').CompareResult} r @param {Machine} m @param {import('./reference.js').Reference} ref
+   * Video RAM at the end, compared through the Model I's bit-6 gate (compare.js, Ruling 5): MAME
+   * stores the byte the CPU wrote, ours the byte the gate makes (bit 6 = NOR(bit 5, bit 7)), so
+   * they compare equal; this pins that the raw bytes do differ, in bit 6 only, so the gate is what
+   * makes them equal. Returns how many raw bytes differ.
+   * @param {Machine} m @param {import('./reference.js').Reference} ref
    */
-  const onlyGate = (r, m, ref) => {
-    expect(r.divergence?.kind).toBe('video');
-    expect(r.divergence?.fields).toEqual(['video']);
+  const gateOnly = (m, ref) => {
     const a = m.mem.read(0x3c00, 0x400);
     const b = ref.peek(0x3c00, 0x400);
     let n = 0;
     for (let k = 0; k < 0x400; k++) {
-      if (a[k] === b[k]) continue;
-      n++;
-      expect([a[k] ^ b[k], b[k] & 0x20, a[k] & 0x40]).toEqual([0x40, 0, 0x40]);
+      expect(a[k]).toBe(videoGate(b[k]));
+      if (a[k] !== b[k]) n++;
     }
-    expect(n).toBe(r.divergence?.video.differing);
+    return n;
   };
   /** @type {string | null} */
   let boot = null;
@@ -354,7 +360,7 @@ describe.skipIf(mameSkip !== null)(`MAME's Model I as a trace${mameSkip === null
     expect(ref.writes()).toEqual([{ addr: 0x4345, value: 0x01 }, { addr: 0x4344, value: 0x0d }]);
   });
 
-  it('a recorded boot of 100,000 instructions replays against our Model I with no known class (the repeating LDIR\'s flags now agree)', async () => {
+  it('a recorded boot of 100,000 instructions replays against our Model I: the repeating LDIR\'s flags now agree, and video RAM through the gate', async () => {
     const out = await bootTrace();
     const ref = openTrace(out);
     expect(ref.header).toMatchObject({ complete: true, verified: true, bios: 'rsl2', mame: MAME_VERSION, records: 100_001 });
@@ -366,9 +372,12 @@ describe.skipIf(mameSkip !== null)(`MAME's Model I as a trace${mameSkip === null
     const m = newMachine();
     const r = compareRun({ machine: m, reference: ref, instructions: 100_000 });
     expect(r.instructions).toBe(100_000);
-    onlyGate(r, m, ref);
+    expect(r.divergence).toBeNull();
     expect(r.ended).toBeUndefined();
-    expect(r.known).toEqual({});
+    expect(gateOnly(m, ref)).toBeGreaterThan(0);
+    // Instruction 8,272, LD D,(HL) at $0486 with HL $3C00 (the spike's D difference): MAME reads
+    // its power-on $00, a Model I $40 through the gate; ours takes MAME's byte, and it is counted.
+    expect(r.known).toEqual({ 'video read: the reference returns bit 6 as written (no gate)': 1 });
   });
 
   it('keyboard bytes MAME read reach our matrix at the recorded reads: ENTER at MEM SIZE? gives READY on both', async () => {
@@ -378,8 +387,9 @@ describe.skipIf(mameSkip !== null)(`MAME's Model I as a trace${mameSkip === null
     const m = newMachine();
     const r = compareRun({ machine: m, reference: ref, instructions: 700_000 });
     expect(r.instructions).toBe(700_000);
-    onlyGate(r, m, ref);
-    expect(r.known).toEqual({});
+    expect(r.divergence).toBeNull();
+    expect(gateOnly(m, ref)).toBeGreaterThan(0);
+    expect(Object.keys(r.known)).toEqual(['video read: the reference returns bit 6 as written (no gate)']);
     expect(m.video.text().slice(0, 3).map((l) => l.trim())).toEqual(['MEM SIZE?', 'R/S L2 BASIC', 'READY']);
     expect([...m.system.keyboard.rows].every((x) => x === 0)).toBe(true);
   });
@@ -400,7 +410,7 @@ describe.skipIf(mameSkip !== null)(`MAME's Model I as a trace${mameSkip === null
     expect(formatReport(r)).toContain(/** @type {string} */ (r.ended));
     ref.close?.();
     // The CLI never reports a killed recording as passing: a divergence (1) or the sentence (3).
-    const run = spawnSync(process.execPath, [CLI, 'compare', out, '--instructions', '5000000'], { encoding: 'utf8' });
+    const run = diffTrace(out, ['--instructions', '5000000']);
     expect([1, 3]).toContain(run.status);
     expect(run.stdout).not.toContain('divergence: none');
   });

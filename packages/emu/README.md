@@ -226,12 +226,19 @@ FUGLOY_TRSJS=1 FUGLOY_TRSJS_SWEEP=1 pnpm vitest run packages/emu/test/diff --sil
 pnpm diff examples/sea-dragon/seadrg01.cmd --instructions 10000000        # one program, with a report
 ```
 
-`pnpm diff <program> [--keys <script.json>] [--instructions N] [--from-cycle C] [--strict | --strict-all]`
-boots the Model III ROM from `fugloy.mcp.json`, loads the `.CMD` or `.BAS`,
-and prints the count of each known difference and the first divergence, if
-any, with ten instructions disassembled on each side. Exit status 0 means no
+`pnpm diff <program> [--model 3|1] [--reference trsjs|xtrs] [--lowercase] [--keys <script.json>] [--instructions N] [--from-cycle C] [--rom <file>] [--strict | --strict-all]`
+boots the model's ROM from `fugloy.mcp.json` (the Model III against trsjs by
+default; `--model 1` against xtrs, `pnpm xtrs:install`), loads the `.CMD` or
+`.BAS`, and prints the reference and model, the count of each known difference
+and the first divergence, if any, with ten instructions disassembled on each
+side. `pnpm diff --model 1 --reference mame --trace <file>` compares our Model
+I, from power-on, against a MAME trace recorded with
+`pnpm mame:trace record <instructions>` (`pnpm mame:install`). On the Model I
+the comparison also covers the `$37E0` latch after every read of it and video
+RAM through the bit-6 gate (raw with `--lowercase`). Exit status 0 means no
 divergence, 1 a divergence, 2 a usage or setup error (an unexpected error,
-such as the ROM not reaching READY or trsjs throwing, counts as one).
+such as the ROM not reaching READY or the reference throwing, counts as one),
+3 a MAME trace that ends before the instructions asked for.
 
 Where the two differ, trsjs is the inaccurate side, and the harness says so
 explicitly. Some differences it corrects in the reference (a write to ROM or

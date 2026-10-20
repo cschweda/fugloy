@@ -54,7 +54,8 @@ describe('keyEvents', () => {
 
 describe('the known classes', () => {
   it('each carries its evidence and has a distinct name', () => {
-    for (const c of ALL) expect(c.evidence).toMatch(/Young|ZEXALL|Zilog/);
+    // Ruling 6: ZEXALL, Young, Zilog's manual, the Technical Reference Handbook, or a reference's source file.
+    for (const c of ALL) expect(c.evidence).toMatch(/Young|ZEXALL|Zilog|Handbook|\b[\w-]+\.(c|cpp|lst|js)\b/);
     expect(new Set(CLASS_NAMES).size).toBe(CLASS_NAMES.length);
   });
 
@@ -88,6 +89,25 @@ describe('the known classes', () => {
     const ctx = at([0xed, 0xb0], 0x4000, 0x00);
     ctx.theirs.regs = { ...ctx.theirs.regs, pc: 0x4000, f: 0x28 };
     expect(explainStep(ctx, new Set(['f.5', 'f.3']))).toEqual({ classes: [name('block-xy')], unexplained: [] });
+  });
+
+  it('IN and block I/O cycles: one T-state more on ours, only for those instructions, no interrupt in the step', () => {
+    const io = (bytes, ours, theirs, irq = false) => {
+      const ctx = stepCtx(bytes, [], []);
+      ctx.ours.cycles = ours;
+      ctx.theirs.cycles = theirs;
+      ctx.ours.irq = ctx.theirs.irq = irq;
+      return STEP_CLASSES.find((c) => c.id === 'io-cycles').explains(ctx, new Set(['cycles']));
+    };
+    expect(io([0xdb, 0xff], 11, 10)).toEqual(['cycles']);
+    for (const op of [0x40, 0x48, 0x50, 0x58, 0x60, 0x68, 0x70, 0x78]) expect(io([0xed, op], 12, 11), op.toString(16)).toEqual(['cycles']);
+    for (const op of [0xa2, 0xaa, 0xb2, 0xba, 0xa3, 0xab, 0xb3, 0xbb]) expect(io([0xed, op], 16, 15), op.toString(16)).toEqual(['cycles']);
+    expect(io([0xdb, 0xff], 12, 10)).toBeNull(); // two more
+    expect(io([0xdb, 0xff], 10, 11)).toBeNull(); // ours less
+    expect(io([0xd3, 0xff], 12, 11)).toBeNull(); // OUT (n),A
+    expect(io([0xed, 0x41], 13, 12)).toBeNull(); // OUT (C),B
+    expect(io([0xed, 0xb0], 22, 21)).toBeNull(); // LDIR
+    expect(io([0xdb, 0xff], 24, 23, true)).toBeNull(); // an interrupt response in the step
   });
 
   it('EX (SP),rr\'s write order: only the two bytes swapped, only for EX (SP),rr', () => {

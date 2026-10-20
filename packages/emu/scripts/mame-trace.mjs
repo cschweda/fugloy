@@ -1,33 +1,28 @@
 /**
- * Record MAME's Model I as a trace, compare our Model I against a trace, or print a trace in the
- * spike's line format (emu phase 7, Model I; test/diff/mame-trace.js).
+ * Record MAME's Model I as a trace, or print a trace in the spike's line format (emu phase 7,
+ * Model I; test/diff/mame-trace.js). A trace is compared with
+ * `pnpm diff --model 1 --reference mame --trace <file>` (scripts/diff.mjs).
  *
  *   pnpm mame:trace record <instructions> [--out <file>] [--keys <script.json>]
- *   pnpm mame:trace compare <file> [--instructions N] [--rom <file>] [--strict | --strict-all]
  *   pnpm mame:trace lines <file> [--count N]
  *
  * record: runs MAME 0.289 (`pnpm mame:install` first) from power-on for N instructions and writes
  * the trace (default tools/mame/traces/trace-<N>.fmt, gitignored). `--keys` names a JSON file of
  * `[{ "at": <T-states from power-on>, "text": "\r" }]`, posted through MAME's natural keyboard.
- * compare: runs our Model I (the ROM from fugloy.mcp.json's roms.model1, or `--rom`) from power-on
- * following the trace (its interrupts and keyboard bytes) and prints the report; N defaults to the
- * trace's length. lines: `index PC AF BC DE HL IX IY SP IFF1 cycles`, the state before each
+ * lines: `index PC AF BC DE HL IX IY SP IFF1 cycles`, the state before each
  * instruction, as the spike's packages/emu/scripts/spike-model1/fielddiff.py reads it.
  *
- * Exit status: 0 no divergence, 1 a divergence, 2 a usage or setup error, 3 the trace ends before
- * the instructions asked for (the report says why; the run proves nothing past that point).
+ * Exit status: 0 done, 2 a usage or setup error, 3 a recording that ended before the instructions
+ * asked for (it says why; the trace proves nothing past that point).
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { Machine } from '../src/index.js';
-import { configuredRom } from '../test/rom.js';
-import { compareRun, formatReport } from '../test/diff/compare.js';
 import { openTrace, recordMameTrace } from '../test/diff/mame-trace.js';
 
 const USAGE = [
   'usage: pnpm mame:trace record <instructions> [--out <file>] [--keys <script.json>]',
-  '       pnpm mame:trace compare <file> [--instructions N] [--rom <file>] [--strict | --strict-all]',
   '       pnpm mame:trace lines <file> [--count N]',
+  '(compare a trace with pnpm diff --model 1 --reference mame --trace <file>)',
 ].join('\n');
 
 /** @param {string} msg @returns {never} */
@@ -80,22 +75,7 @@ if (cmd === 'record') {
   console.log(`${r.path}: ${r.instructions} of ${instructions} instructions${h.complete ? ', verified against MAME\'s memory at the end' : ` (${h.reason})`}`);
   process.exit(h.complete ? 0 : 3);
 } else if (cmd === 'compare') {
-  if (pos.length !== 1) fail(USAGE);
-  const ref = openTrace(resolve(cwd, pos[0]));
-  const instructions = opt.instructions === undefined ? Math.max(1, ref.header.requested) : count('--instructions', opt.instructions);
-  let rom;
-  if (typeof opt.rom === 'string') rom = new Uint8Array(readFileSync(resolve(cwd, opt.rom)));
-  else {
-    rom = configuredRom('model1');
-    if (rom === null) fail('no Model I ROM: name one as roms.model1 in fugloy.mcp.json (docs/fugloy-mcp-spec.md §3), or pass --rom');
-  }
-  const m = new Machine({ model: 1, roms: { level2: rom } });
-  const strict = opt['strict-all'] ? 'all' : opt.strict ? true : false;
-  const result = compareRun({ machine: m, reference: ref, instructions, strict });
-  ref.close?.();
-  process.stdout.write(`trace: ${pos[0]} (MAME ${ref.header.mame}, bios ${ref.header.bios || '?'}), compared from power-on\n`);
-  process.stdout.write(formatReport(result));
-  process.exit(result.divergence !== null ? 1 : result.ended !== undefined ? 3 : 0);
+  fail('pnpm mame:trace compare moved: run pnpm diff --model 1 --reference mame --trace <file> [--instructions N]');
 } else if (cmd === 'lines') {
   if (pos.length !== 1) fail(USAGE);
   const ref = openTrace(resolve(cwd, pos[0]));

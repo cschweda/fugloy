@@ -308,6 +308,8 @@ export function loadTrsjs({ path = TRSJS_PATH } = {}) {
 
     prefixedOps,
 
+    name: 'trsjs',
+
     z,
   };
   ref.reset();

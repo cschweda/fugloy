@@ -209,10 +209,15 @@ What the differences are:
 
 1. **Reset register state.** It differs on all three machines (above). The Z80
    leaves most registers undefined at reset. The harness should copy one
-   machine's state into the other at instruction 0. It is **unverified** that
-   Young's "The Undocumented Z80 Documented" gives AF and SP as `FFFF` after
-   reset, as xtrs has. Task 4 must quote it before anything rests on it. We
-   start AF at `0000`. That is a Task 4 question (Ruling 6), not fixed here.
+   machine's state into the other at instruction 0. Young's "The Undocumented
+   Z80 Documented" (v0.91, §2.4 "Power on defaults", p. 9) says, quoted
+   exactly (Task 4; [4] is its footnote mark): "Matt[4] has done some
+   excellent research on this. He found that AF and SP are always set to
+   FFFFh after a reset, and all other registers are undefined (different depending on how long the CPU has been
+   powered off, different for different Z80 chips)." xtrs follows it; MAME
+   (AF `0040`, SP `0000`) and we (AF `0000`) do not. Nothing in the harness
+   rests on it: lockstep syncs xtrs from our state, and a trace starts our
+   machine in MAME's (Ruling 4).
 2. **Power-on video RAM** (`D` at instruction 8272, `LD D,(HL)` at `$0486` with
    HL `$3C00`, the character under the cursor). xtrs and MAME read `00`; we read
    `20` because we fill video RAM with spaces. Real video RAM powers on random,
@@ -243,8 +248,9 @@ instructions/s.
 ## MAME trace format (Task 3)
 
 Recorded by `recordMameTrace` (`packages/emu/test/diff/mame-trace.js`) and
-replayed by `openTrace`; `pnpm mame:trace record|compare|lines` runs them from
-the command line. Traces go to the gitignored `tools/mame/traces/` by default.
+replayed by `openTrace`; `pnpm mame:trace record|lines` runs them from
+the command line, and `pnpm diff --model 1 --reference mame --trace <file>`
+compares a trace (Task 4 moved `compare` there). Traces go to the gitignored `tools/mame/traces/` by default.
 
 **What MAME writes.** `packages/emu/scripts/mame-trace.lua`, the autoboot
 script, saves the power-on memory (`save <file>,0,10000`, before the first
@@ -343,6 +349,34 @@ added to `known.js` or changed in `src/`):
 4. **ENTER at `MEM SIZE?`** (posted at T 400,000): 700,000 instructions, our
    machine reading MAME's keyboard bytes, reach `READY` on both with only
    class 1, and differences 2 and 3.
+
+**What Task 4 decided** (each cited in `packages/emu/test/diff/known.js` and the
+commits):
+
+- Class 1 was ours to fix: a repeating LDIR/LDDR/CPIR/CPDR takes F bits 5 and 3
+  from PC bits 13 and 11 (Banks's Z80Decoder research, Helcmanovsky's Z80 Block
+  Flags Test on real Z80s, MAME's `z80.lst`); Young §4.2 predates it. Our core
+  does it now (`e7: take a repeating LDIR/LDDR/CPIR/CPDR's flags 3 and 5 from
+  PC`), ZEXDOC and ZEXALL still pass, and against xtrs (which keeps Young's
+  rule) the 5,112 rows are the class `repeating LDIR/LDDR/CPIR/CPDR: flags 3
+  and 5 from PC`.
+- Difference 2 was ours too: the Z80 writes (SP+1) first (UM0080's (4, 3, 4,
+  3, 5); MAME; floooh/chips's cycle-stepped core). Fixed (`e7: write EX
+  (SP),rr's high byte first, as the Z80 does`), the test-only patch is gone,
+  and xtrs's and trsjs's order is the class `EX (SP),rr: the reference writes
+  (SP) before (SP+1)`.
+- Difference 3: video RAM is compared through the gate (the Handbook, p. 34:
+  bit 6 is NOR(bit 5, bit 7) from Z30), after every step that writes it and at
+  the end. MAME's CPU also reads the byte as written; following a trace, our
+  read takes MAME's byte where it is ours but for the gate, counted as a
+  reference fix (the boot's one, `LD D,(HL)` at instruction 8,272). The trace's
+  power-on video RAM is loaded into ours through the gate.
+- Found by Task 4: xtrs counts IN A,(n) as 10 T-states, IN r,(C) as 11 and
+  INI/IND/OUTI/OUTD as 15, one less than Zilog's 11, 12 and 16 (a class); and
+  MAME's 40 Hz, 1/40 s of 1,774,083 Hz, drifts from our 44,352 T-states: with
+  interrupts on, a synthetic loop shows `irqTime` at instruction 110,781
+  (about fifteen ticks), never excused (Ruling 4). MAME's Lua cannot set the
+  CPU clock (`device.set_clock_scale` is not exposed in 0.289).
 
 ## Recommendation: Rulings 2 and 4
 

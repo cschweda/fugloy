@@ -1,6 +1,8 @@
 /**
- * The known differences between @fugloy/emu and trsjs (emu phase 7, plan Ruling 2): each one a
- * place where trsjs is the inaccurate side, with the evidence for that. compare.js counts a
+ * The known differences between @fugloy/emu and its references (emu phase 7: trsjs for the Model
+ * III; xtrs and MAME for the Model I, Ruling 6): each one a place where the reference is the
+ * inaccurate side, with the evidence for that. Classes name the behaviour, not the reference, so
+ * any reference may need one (EX (SP),rr's write order is xtrs's and trsjs's). compare.js counts a
  * difference one of these explains (and resyncs the reference from our state) instead of
  * reporting it; `--strict` stops on it.
  *
@@ -19,13 +21,41 @@
  *   T-states, and writes must then agree (up to the step classes), so the class can never hide
  *   another difference. It is counted on the step the request is taken.
  * - **Reference fixes** make the reference run what the Z80 runs where trsjs skips it (a DD/FD
- *   the next instruction ignores), then compare the step normally. Also counted, never excusing.
+ *   the next instruction ignores), or, following a trace that cannot be rerun, make our read take
+ *   the byte the trace's CPU read (MAME's video bit 6), then compare the step normally. Also
+ *   counted, never excusing.
  *
  * Evidence:
  * - [ZEXALL] Frank Cringle's ZEXALL, which checks flag bits 3 and 5 for every instruction group;
  *   our core passes all 67 groups (`pnpm zex:install`, FUGLOY_ZEX=1; docs/fugloy-emu-spec.md §10).
  * - [Young] Sean Young, "The Undocumented Z80 Documented", version 0.91 (2005).
  * - [Zilog] Zilog, "Z80 CPU User Manual", UM008011-0816.
+ * - [Handbook] Radio Shack, "TRS-80 Micro Computer Technical Reference Handbook", 2nd ed. (1982),
+ *   the Model I's hardware (docs/reference/).
+ * - [Banks] David Banks, Z80Decoder wiki, "Undocumented Flags" (github.com/hoglet67/Z80Decoder),
+ *   with Peter Helcmanovsky's Z80 Block Flags Test run on real Z80s
+ *   (github.com/redcode/Z80/wiki/Z80-Block-Flags-Test).
+ * - The references' own source: xtrs at its pinned commit (tools/xtrs/src), MAME 0.289
+ *   (github.com/mamedev/mame, tag mame0289: src/devices/cpu/z80/z80.lst, src/mame/trs/), trsjs
+ *   1.6 (tools/trsjs/trsemu-1.6.js).
+ *
+ * Reference limitations that need no class (nothing in a run so far meets them; each would show
+ * as an unexplained divergence, never be excused):
+ * - xtrs's Model I resets on HALT (z80.c, `case 0x76`: "Z80 HALT output is tied to reset button
+ *   circuit", trs_reset(0)); MAME's trs80l2 turns HALT into an NMI (trs80.cpp, `halt_cb()` to the
+ *   "nmigate" input merger, "TODO: also causes SYSRES"); ours halts until an interrupt, as the
+ *   Z80 does (Zilog UM0080, HALT). The Handbook (p. 15) has HALT* "should never be low" in normal
+ *   running, so a program that halts is compared on our CPU's rule, and xtrs refuses to sync there.
+ * - xtrs takes no interrupt in IM 0 or IM 2 (z80.c do_int: `error("interrupt in im0 not
+ *   supported")`); MAME's recorder refuses one (mame-trace.js).
+ * - MAME's CPU clock is 10.6445 MHz / 6 = 1,774,083 Hz (trs80.cpp, the Handbook p. 14: "a little
+ *   over 1.774 MHz"), ours and xtrs's 1,774,080 (`CLOCK_MHZ_1` 1.77408); MAME times its 40 Hz
+ *   interrupt in emulated seconds (`set_periodic_int(..., attotime::from_hz(40))`), 44,352.08 of
+ *   its T-states to our 44,352, and raises it with HOLD_LINE (trs80_m.cpp rtc_interrupt), which
+ *   its acknowledge drops, where the Expansion Interface's line stays low until $37E0 is read
+ *   (Kitsz p. 137; ours and xtrs); its read of $37E0 also clears the disk bit (irq_status_r:
+ *   `m_irq = 0`). Following MAME, the drift is the divergence `irqTime` (Ruling 4), never excused;
+ *   with interrupts on it shows within about fifteen ticks (model1-devices.test.js).
  */
 
 /** Flag bit names, F's bit 7 to bit 0. */
@@ -100,6 +130,10 @@ const isBlockCompare = (/** @type {Uint8Array} */ bytes) => bytes[0] === 0xed &&
 /** LDIR, LDDR, CPIR, CPDR (ED B0, B8, B1, B9). */
 const isBlockRepeat = (/** @type {Uint8Array} */ bytes) => bytes[0] === 0xed && (bytes[1] & 0xf6) === 0xb0;
 
+/** IN A,(n) (DB), IN r,(C) (ED 40-78, x0), INI/IND/INIR/INDR and OUTI/OUTD/OTIR/OTDR (ED A2-BB, x2/x3). */
+const isTimedIo = (/** @type {Uint8Array} */ bytes) => bytes[0] === 0xdb
+  || (bytes[0] === 0xed && ((bytes[1] & 0xc7) === 0x40 || (bytes[1] & 0xe6) === 0xa2));
+
 /** EX (SP),HL (E3) or EX (SP),IX / EX (SP),IY (DD/FD E3). */
 const isExSp = (/** @type {Uint8Array} */ bytes) => bytes[0] === 0xe3 || ((bytes[0] === 0xdd || bytes[0] === 0xfd) && bytes[1] === 0xe3);
 
@@ -148,12 +182,31 @@ export const STEP_CLASSES = [
     },
   },
   {
+    id: 'io-cycles',
+    name: 'IN and block I/O: the reference counts one T-state less',
+    // Zilog UM0080: IN A,(n) 11 T-states (4, 3, 4), p. 295; IN r,(C) 12 (4, 4, 4), p. 296; INI,
+    // IND, OUTI, OUTD 16 (4, 5, 3, 4), and INIR/INDR/OTIR/OTDR 21 while they repeat; our core and
+    // @fugloy/z80's tables say the same. xtrs counts one less: z80.c `case 0xDB: /* in a, (port) */
+    // ... T_COUNT(10);`, `case 0x78: /* in a, (c) */ ... T_COUNT(11);` (and the other IN r,(C)),
+    // do_ini/do_ind/do_outi/do_outd `T_COUNT(15)`, their repeats `+ 5`. (OUT (n),A at 11 and OUT
+    // (C),r at 12 it counts right.) Explained only for those instructions, with no interrupt
+    // response in the step on either side, ours exactly one T-state more.
+    evidence: 'Zilog UM0080: IN A,(n) 11 T-states, IN r,(C) 12, INI/IND/OUTI/OUTD 16 (21 while repeating). xtrs z80.c counts 10, 11 and 15 (T_COUNT).',
+    explains(ctx, diff) {
+      if (!diff.has('cycles') || !isTimedIo(ctx.bytes) || ctx.ours.irq || ctx.theirs.irq) return null;
+      return ctx.ours.cycles - ctx.theirs.cycles === 1 ? ['cycles'] : null;
+    },
+  },
+  {
     id: 'xy',
     name: 'flags 3 and 5 (X/Y)',
-    // trsjs keeps the undocumented flag bits 3 and 5 by its own rules; our core passes every
-    // ZEXALL group, and ZEXALL (unlike ZEXDOC) checks those two bits for every instruction [ZEXALL].
-    // Young §2.3 and §4 describe the rules our core follows. Ruling 5 compares them bit by bit and
-    // this class counts them, so a run shows how often they differ.
+    // trsjs keeps the undocumented flag bits 3 and 5 by its own rules, and xtrs takes BIT n,(HL)'s
+    // from the byte tested, not MEMPTR (z80.c do_test_bit: "does not attempt to emulate the full
+    // weirdness of "bit n,(ix/iy+d)" and "bit n,(hl)""); our core passes every ZEXALL group, and
+    // ZEXALL (unlike ZEXDOC) checks those two bits for every instruction [ZEXALL]. Young §2.3 and
+    // §4 describe the rules our core follows. Ruling 5 compares them bit by bit and this class
+    // counts them, so a run shows how often they differ. A repeating block instruction's are the
+    // class above's.
     evidence: 'ZEXALL checks flag bits 3 and 5 for every instruction group and our core passes all 67 groups; the rules are Young §2.3 and §4.',
     explains(ctx, diff) {
       const t = ['f.5', 'f.3', 'f2.5', 'f2.3'].filter((k) => diff.has(k));
@@ -294,6 +347,21 @@ export const REFERENCE_FIXES = [
     // R + 2, no T-states, no writes, every other register unchanged), compare.js has it redo the
     // step as the Z80 does (Reference.redoDroppedPrefix) and compares our step against that.
     evidence: 'Young §3.2 and §3.7: a DD or FD before an instruction that does not use HL, H, L or (HL) costs one M1 and leaves the instruction to run as usual (any other byte resets the prefix); trsjs\'s opx_default skips both bytes in 0 T-states.',
+  },
+  {
+    id: 'video-read-gate',
+    name: 'video read: the reference returns bit 6 as written (no gate)',
+    // The Model I without the lowercase modification has seven video RAMs; the CPU reads bit 6
+    // from NOR gate Z30: "If Bit 5 (Z62, pin 12) and Bit 7 (Z63, pin 12) are low, then Bit 6 will
+    // be high" (TRS-80 Micro Computer Technical Reference Handbook, 2nd ed., 1982, p. 34, "Video
+    // RAMs"). Our memory and xtrs (trs_memory.c, mem_write: `if (!trs_lowercase) { if (value &
+    // 0xa0) value &= 0xbf; else value |= 0x40; }`) store the byte through the gate. MAME 0.289's
+    // trs80l2 maps $3C00-$3FFF as plain RAM (trs80.cpp, `map(0x3c00, 0x3fff).ram().share(...)`),
+    // so its CPU reads bit 6 as written. Following a trace (it cannot be rerun), a read of video
+    // RAM whose trace byte equals ours but for the gate returns the trace's byte, so both CPUs go
+    // on from what the trace's read; the step is then compared as usual (nothing is excused) and
+    // counted here. Any other difference in the byte is not touched.
+    evidence: 'TRS-80 Technical Reference Handbook (1982) p. 34: bit 6 of a video read is NOR(bit 5, bit 7) from Z30. xtrs applies it (trs_memory.c mem_write); MAME 0.289\'s trs80l2 maps video RAM as plain RAM (trs80.cpp).',
   },
 ];
 
