@@ -7,7 +7,7 @@ cite: m1-trh 12 the Model I's keyboard is memory from 3800H, and its screen at 3
 cite: decker 64 the keyboard's rows are read at 3801H to 3840H, one address a row
 cite: paay 26 the keyboard's rows are read at 3801H to 3840H, one address a row
 ---
-The shot stops going behind the invaders. A shot that moves into an invader's cell shoots it down: the invader vanishes, and so does the shot, and the space bar can fire again. The invader stays gone, a gap in the marching row. The test for a hit reads the screen, and the invader's place in the table becomes 0, which every loop over the table now steps over.
+Now the shot hits. A shot that moves into an invader's cell shoots it down: the invader vanishes, and so does the shot, and the space bar can fire again. The invader stays gone, a gap in the marching row. The test for a hit reads the screen, and the invader's place in the table becomes 0, which every loop over the table now steps over.
 
 ## What changed
 
@@ -21,6 +21,7 @@ Chapter 8's program, with these changes:
 - **+** In `EDGE`, three lines, 172 to 174, and the label `EDGENEXT` on line 180: a place that is 0 is never at an edge.
 - **+** In `MOVEROW`, three lines, 195 to 197, and the label `MOVENEXT` on line 201: a place that is 0 does not move.
 - **+** `KILL`, a new routine with its comment, after `MOVEROW`, lines 207 to 226: it finds the invader's place in the table and makes it 0.
+- **~** The comment above `INVS`, line 254: a place can now be 0, an invader shot down.
 
 Nothing is taken out.
 
@@ -71,7 +72,7 @@ A hit on the right cell steps HL back one and falls through into `HIT`, so both 
 
 ## Every loop skips the hole
 
-A place of 0 must not be drawn, must not count for an edge, and must not move: `MOVEROW` would add the step to 0, and the next `DRAWROW` would write an invader at address 1. So each of the three loops tests the place first and jumps to the next one if it is 0:
+A place of 0 must not be drawn, must not count for an edge, and must not move: `MOVEROW` would add the step to 0, making 1, `0FFFFH` or `0040H`, none of them on the screen, and the next `DRAWROW` would write an invader there. So each of the three loops tests the place first and jumps to the next one if it is 0:
 
 ```z80
         LD      A,H             ; 0 is an invader shot down: nothing to draw
@@ -82,6 +83,10 @@ A place of 0 must not be drawn, must not count for an edge, and must not move: `
 `DRAWROW` and `MOVEROW` have the place in HL already and test it as `MOVESHOT` tests the shot; `EDGE` reads it with `LD A,(IX+1)` and `OR (IX+0)`. The labels `DRAWNEXT`, `EDGENEXT` and `MOVENEXT` mark each loop's `INC IX`, where the next place starts.
 
 Because `EDGE` skips the holes, the row turns when a *living* invader reaches an edge. Shoot down the invaders at the end of the row and the rest march farther before they turn, as in the arcade game.
+
+## When an invader still covers the shot
+
+`MOVESHOT` looks at the cell the shot moves into before the invaders move: in the loop, `CALL MOVESHOT` comes before `CALL MARCH`. So on a turn when the row steps, a shot that has just risen into a gap on the invaders' row can have the neighbour beside it step onto it, and a row coming down can land on a shot just below it. Then `DRAWROW` draws the invader over the `!`; on the next turn `MOVESHOT` erases the shot's cell, now part of the invader, and the shot flies on, and `DRAWROW` mends the invader. That shot goes behind, as every shot did before this chapter. Sideways, it happens to about one shot in eight of those that rise through a gap: the row steps on one turn in four, and only one of the gap's two cells is stepped onto. Looking at the shot's own cell, too, before it moves would catch it; this chapter keeps to the one test.
 
 ## The cost
 

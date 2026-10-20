@@ -251,7 +251,7 @@ BASE:   DB      0BCH,0BFH,0BCH  ; the base: a wing, a block, a wing
 BLANK:  DB      '   '           ; three spaces, to erase it
 INVADER:
         DB      9EH,0ADH        ; an invader: two cells, a head, arms and legs
-; INVS: the invaders' places, each row 2's start, 3C80H, plus a column.
+; INVS: the invaders' places, row 2's start plus a column; 0 is shot down.
 INVS:   DW      3C80H+14,3C80H+18,3C80H+22,3C80H+26
         DW      3C80H+30,3C80H+34,3C80H+38,3C80H+42
 BASEX:  DB      30              ; the base's column, 0 to 61
