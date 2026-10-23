@@ -7,16 +7,17 @@
  */
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
-import { Machine } from '../../src/index.js';
+import { clockHz, Machine } from '../../src/index.js';
 import { compareRun, formatReport, keyEvents, videoGate } from './compare.js';
 import { mameSkip, requireRom } from './gate.js';
 import { checkMame, checkRomSet, IRQ, loadRuns, MAME_CLOCK_HZ, MAME_ROMS, MAME_VERSION, openTrace, recordMameTrace, writeTrace } from './mame-trace.js';
 import { recordOurs, syntheticRom } from './own-trace.js';
+import { configuredRom } from '../rom.js';
 
 const dir = mkdtempSync(join(tmpdir(), 'fugloy-mame-test-'));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -24,6 +25,21 @@ const CLI = fileURLToPath(new URL('../../scripts/mame-trace.mjs', import.meta.ur
 const DIFF = fileURLToPath(new URL('../../scripts/diff.mjs', import.meta.url));
 /** `pnpm diff --model 1 --reference mame --trace <file>` with `args`. @param {string} trace @param {string[]} args */
 const diffTrace = (trace, args) => spawnSync(process.execPath, [DIFF, '--model', '1', '--reference', 'mame', '--trace', trace, ...args], { encoding: 'utf8' });
+const SEA_DRAGON = fileURLToPath(new URL('../../../../examples/sea-dragon/seadrg01.cmd', import.meta.url));
+/**
+ * `pnpm diff examples/sea-dragon/seadrg01.cmd --model 1 --reference mame` with `args`: no trace is
+ * named, so the command records the program's own. Its temporary folder is `tmp`, a folder of the
+ * test's own, so that what the run leaves there can be seen.
+ * @param {string[]} args @param {string} tmp @param {NodeJS.ProcessEnv} [env]
+ */
+const diffRecord = (args, tmp, env = {}) => spawnSync(process.execPath, [DIFF, SEA_DRAGON, '--model', '1', '--reference', 'mame', ...args], { encoding: 'utf8', env: { ...process.env, TMPDIR: tmp, ...env } });
+let tmps = 0;
+/** A new empty folder under the test folder, for a command's TMPDIR. */
+const freshTmp = () => {
+  const path = join(dir, `cli-tmp-${++tmps}`);
+  mkdirSync(path);
+  return path;
+};
 
 /** A shell script at `rel` under the test folder. @param {string} rel @param {string} body */
 function script(rel, body) {
@@ -237,7 +253,7 @@ describe('a trace that loaded a program: our machine loads it at the same step',
     const { header, start, records } = loadedTrace(100, 100);
     const path = join(dir, 'loaded-refuse.fmt');
     writeTrace(path, { header, start, records });
-    expect(() => openTrace(path)).toThrow(`${path} loaded a program (SHA-256 ${sha(PROGRAM)}) at instruction 100; give the same program (openTrace's program, or pnpm diff's <program>)`);
+    expect(() => openTrace(path)).toThrow(`${path} loaded a program (SHA-256 ${sha(PROGRAM)}) at instruction 100; give the same program (openTrace's program, pnpm diff's <program>, or pnpm mame:trace lines --program <file>)`);
     const other = PROGRAM.slice();
     other[4] = 0x3d;
     expect(() => openTrace(path, { program: other })).toThrow(`${path} loaded another program (SHA-256 ${sha(PROGRAM)}) than the one given (${sha(other)})`);
@@ -263,12 +279,34 @@ describe('a trace that loaded a program: our machine loads it at the same step',
     expect(run.status).toBe(0);
     const without = diffTrace(path, ['--rom', romPath]);
     expect(without.status).toBe(2);
-    expect(without.stderr).toContain(`${path} loaded a program (SHA-256 ${sha(PROGRAM)}) at instruction ${header.load.at}; give the same program (openTrace's program, or pnpm diff's <program>)`);
+    expect(without.stderr).toContain(`${path} loaded a program (SHA-256 ${sha(PROGRAM)}) at instruction ${header.load.at}; give the same program (openTrace's program, pnpm diff's <program>, or pnpm mame:trace lines --program <file>)`);
     const plain = join(dir, 'cli-plain.fmt');
     writeTrace(plain, { header: {}, ...keyedTrace(100) });
     const stray = diffTrace(plain, [program, '--rom', romPath]);
     expect(stray.status).toBe(2);
     expect(stray.stderr).toContain(`${plain} loaded no program (pnpm mame:trace record records the ROM's boot and typed keys); pass none`);
+  });
+
+  it('pnpm mame:trace lines reads a trace that loaded a program, given it with --program, and names the option without it', () => {
+    const { header, start, records } = loadedTrace(100, 100);
+    const path = join(dir, 'lines-loaded.fmt');
+    writeTrace(path, { header, start, records });
+    const program = join(dir, 'lines-program.cmd');
+    writeFileSync(program, PROGRAM);
+    const run = spawnSync(process.execPath, [CLI, 'lines', path, '--program', program], { encoding: 'utf8' });
+    expect(run.stderr).toBe('');
+    expect(run.status).toBe(0);
+    const lines = run.stdout.trimEnd().split('\n');
+    expect(lines).toHaveLength(records.length);
+    expect(lines.every((l, k) => l.startsWith(`${k} `))).toBe(true);
+    // The load's record as MAME wrote it, with the PC the load replaced (TraceLoad); the next is
+    // the state after the program's first instruction, LD A,$42 at $5100.
+    const pc = (/** @type {string} */ l) => l.split(' ')[1];
+    expect(pc(lines[header.load.at])).toBe(header.load.pc.toString(16).toUpperCase().padStart(4, '0'));
+    expect(lines[header.load.at + 1]).toMatch(new RegExp(`^${header.load.at + 1} 5102 42`));
+    const without = spawnSync(process.execPath, [CLI, 'lines', path], { encoding: 'utf8' });
+    expect(without.status).toBe(2);
+    expect(without.stderr).toContain(`${path} loaded a program (SHA-256 ${sha(PROGRAM)}) at instruction ${header.load.at}; give the same program (openTrace's program, pnpm diff's <program>, or pnpm mame:trace lines --program <file>)`);
   });
 });
 
@@ -354,6 +392,150 @@ describe('a trace that ends early says so, never "no divergence" (Review Focus 3
     expect(full.stdout).toContain('divergence: none');
     expect(full.stdout).toContain('our 40 Hz on MAME\'s clock (1,774,083 Hz): test-only, test/diff/mame-clock.js\n');
     expect(full.status).toBe(0);
+  });
+});
+
+describe('the silence watchdog stops only a MAME that wrote nothing (the Model I sweep, Review Focus 3)', () => {
+  /**
+   * A stand-in for Homebrew's MAME 0.289 at `rel` (its Cellar folder and -version) that records a
+   * whole trace: FUGLOY_MAME_RECORDS records, each one's PC its index, and no memory writes, so its
+   * start and end memory (64K of zeros) agree with the records and the recording verifies. Before
+   * the records it writes lines the recorder reads and ignores for `busy` seconds, so it is never
+   * silent; after closing the trace it takes `exit` seconds to exit (as one process, so a SIGKILL
+   * ends it), as MAME does while it shuts down.
+   * @param {string} rel @param {{ busy?: number, exit?: number }} opts
+   */
+  const wholeTrace = (rel, { busy = 0, exit = 0 }) => script(rel, [
+    `case "$1" in -version) echo '${MAME_VERSION}'; exit 0;; esac`,
+    'head -c 65536 /dev/zero > "$FUGLOY_MAME_START"',
+    'cp "$FUGLOY_MAME_START" "$FUGLOY_MAME_END"',
+    '{',
+    `  end=$(( $(date +%s) + ${busy} ))`,
+    '  while [ "$(date +%s)" -lt "$end" ]; do i=0; while [ $i -lt 200 ]; do echo "W 0000 00"; i=$((i+1)); done; done',
+    '  i=0',
+    '  while [ $i -lt "$FUGLOY_MAME_RECORDS" ]; do',
+    '    printf "T %04X 0000 0000 0000 0000 0000 0000 0000 0000 FFFF FFFF 0000 00 00 0 0 0 %d 00\\n" $i $((i * 4))',
+    '    i=$((i+1))',
+    '  done',
+    '  echo E',
+    '} > "$FUGLOY_MAME_TRACE"',
+    `exec sleep ${exit}`,
+  ].join('\n'));
+  const whole = { complete: true, verified: true, records: 11, reason: null };
+
+  it('a busy recorder does not take MAME for silent', async () => {
+    const bin = wholeTrace('busy/Cellar/mame/0.289/bin/mame', { busy: 4 });
+    const out = join(dir, 'busy.fmt');
+    const recording = recordMameTrace({ instructions: 10, out, bin, romDir: dir, skipRomCheck: true, silenceMs: 1000 });
+    // The recorder's own event loop blocked for 2.5 s while MAME writes on, as another session's
+    // synchronous compareRun blocks it when recordings run at once (outside the timers phase, so
+    // the watchdog's tick comes before the trace's waiting data when the loop runs again).
+    setTimeout(() => setImmediate(() => {
+      const t = Date.now();
+      while (Date.now() - t < 2_500);
+    }), 500);
+    expect(await recording).toEqual({ path: out, instructions: 10 });
+    const ref = openTrace(out);
+    expect(ref.header).toMatchObject(whole);
+    ref.close?.();
+  }, 30_000);
+
+  it('the watchdog ends with the stream: a MAME slow to exit after its last record leaves the trace complete', async () => {
+    const bin = wholeTrace('slow-exit/Cellar/mame/0.289/bin/mame', { exit: 3 });
+    const out = join(dir, 'slow-exit.fmt');
+    expect(await recordMameTrace({ instructions: 10, out, bin, romDir: dir, skipRomCheck: true, silenceMs: 1000 })).toEqual({ path: out, instructions: 10 });
+    const ref = openTrace(out);
+    expect(ref.header).toMatchObject(whole);
+    ref.close?.();
+  }, 30_000);
+
+  it('a MAME that never exits after its last record is stopped, not waited on, and its trace stays whole', async () => {
+    const bin = wholeTrace('stuck-exit/Cellar/mame/0.289/bin/mame', { exit: 600 });
+    const out = join(dir, 'stuck-exit.fmt');
+    const t0 = performance.now();
+    expect(await recordMameTrace({ instructions: 10, out, bin, romDir: dir, skipRomCheck: true, silenceMs: 1000 })).toEqual({ path: out, instructions: 10 });
+    expect(performance.now() - t0).toBeLessThan(10_000);
+    const ref = openTrace(out);
+    expect(ref.header).toMatchObject(whole);
+    ref.close?.();
+  }, 30_000);
+});
+
+describe('pnpm diff <program> --model 1 --reference mame records a trace of the program: what it refuses (the Model I sweep, Task 2)', { timeout: 30_000 }, () => {
+  // MAME's absence (checkMame) or the ROM's refusal (checkRomSet), whichever comes first: a sentence
+  // either way, the one on a machine with no MAME and the other on one with it.
+  const REFUSAL = /^(no MAME at |\S+ is not Homebrew's MAME |\S+ says it is MAME |a Model I Level II ROM is 12,288 bytes; this one is \d+|the Model I ROM \(roms\.model1\) splits into 4K pieces)/;
+  const shortRom = join(dir, 'short.rom');
+  writeFileSync(shortRom, new Uint8Array(100));
+
+  it.each([
+    ['a ROM of the right size whose pieces are not the Level II ROM\'s', romPath],
+    ['a file too short to be a ROM', shortRom],
+  ])('--rom naming %s: exit 2 with a sentence, and nothing left in the temporary folder', (_what, rom) => {
+    const tmp = freshTmp();
+    const run = diffRecord(['--rom', rom], tmp);
+    expect(run.status).toBe(2);
+    expect(run.stderr).toMatch(REFUSAL);
+    expect(run.stderr.trim().split('\n')).toHaveLength(1);
+    expect(run.stdout).toBe('');
+    // The session's folder is made before MAME is asked for anything, and removed when the
+    // recording throws (the Model I sweep's Review Focus 5).
+    expect(readdirSync(tmp)).toEqual([]);
+  });
+
+  it('a program that is not a .CMD is refused before MAME is asked for anything (the format is told from the content)', () => {
+    const program = join(dir, 'not-a-cmd.bin');
+    writeFileSync(program, new Uint8Array(64));
+    const tmp = freshTmp();
+    const run = spawnSync(process.execPath, [DIFF, program, '--model', '1', '--reference', 'mame', '--rom', romPath], { encoding: 'utf8', env: { ...process.env, TMPDIR: tmp } });
+    expect(run.status).toBe(2);
+    expect(run.stderr).toBe(`${program}: a MAME run loads a .CMD program (the format is told from the content, and this one is not a .CMD)\n`);
+    expect(readdirSync(tmp)).toEqual([]);
+  });
+
+  it.each([
+    ['is not JSON', 'nope', /keys\.json is not JSON: /],
+    ['is not a list of presses', '{"at": 1}', /keys\.json: expected a JSON array of \{ "at": T-states, "key": "ENTER", "hold": T-states \(optional\) \}\n$/],
+    ['names a key the matrix has not', '[{ "at": 0, "key": "NOSUCHKEY" }]', /keys\.json: press: no matrix key for "NOSUCHKEY"\n$/],
+  ])('a --keys script that %s is refused before MAME is asked for anything', (_what, text, sentence) => {
+    const keys = join(dir, 'keys.json');
+    writeFileSync(keys, text);
+    const tmp = freshTmp();
+    const run = diffRecord(['--keys', keys, '--rom', romPath], tmp);
+    expect(run.status).toBe(2);
+    expect(run.stderr.replace(keys, 'keys.json')).toMatch(sentence);
+    expect(readdirSync(tmp)).toEqual([]);
+  });
+});
+
+describe('a program MAME cannot load is refused before the recorder makes anything (the Model I sweep, Review Focus 5)', { timeout: 30_000 }, () => {
+  // A .CMD of one byte at $3800 (the keyboard) with its entry at $5200: loadRuns refuses it.
+  const low = Uint8Array.from([0x01, 0x03, 0x00, 0x38, 0x00, 0x02, 0x02, 0x00, 0x52]);
+  const REFUSED = 'the program writes $3800, below $3C00; a MAME session loads only RAM and video RAM';
+
+  it('recordMameTrace: the refusal, and no work folder left in the temporary folder', async () => {
+    // A stand-in that passes for Homebrew's MAME 0.289, so nothing but the program is refused.
+    const bin = script('refused/Cellar/mame/0.289/bin/mame', `case "$1" in -version) echo '${MAME_VERSION}'; exit 0;; esac\nexit 1`);
+    const tmp = freshTmp();
+    const saved = process.env.TMPDIR;
+    process.env.TMPDIR = tmp;
+    try {
+      await expect(recordMameTrace({ instructions: 10, load: { program: low, at: 1000 }, out: join(dir, 'refused.fmt'), bin, romDir: dir, skipRomCheck: true })).rejects.toThrow(REFUSED);
+      expect(readdirSync(tmp)).toEqual([]);
+    } finally {
+      if (saved === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = saved;
+    }
+  });
+
+  it('pnpm diff <program> --model 1 --reference mame: exit 2 with the sentence, and nothing left in the temporary folder', () => {
+    const program = join(dir, 'low.cmd');
+    writeFileSync(program, low);
+    const tmp = freshTmp();
+    const run = spawnSync(process.execPath, [DIFF, program, '--model', '1', '--reference', 'mame'], { encoding: 'utf8', env: { ...process.env, TMPDIR: tmp } });
+    expect(run.status).toBe(2);
+    // With no Model I ROM configured (CI) the command stops at that, before the recorder.
+    expect(run.stderr).toBe(configuredRom('model1') === null ? 'no Model I ROM: name one as roms.model1 in fugloy.mcp.json (docs/fugloy-mcp-spec.md §3), or pass --rom\n' : `${REFUSED}\n`);
+    expect(readdirSync(tmp)).toEqual([]);
   });
 });
 
@@ -489,4 +671,52 @@ describe.skipIf(mameSkip !== null)(`MAME's Model I as a trace${mameSkip === null
     const b = await recordMameTrace({ instructions: 20_000, out: join(dir, 'det-b.fmt') });
     expect(readFileSync(a.path).equals(readFileSync(b.path))).toBe(true);
   });
+
+  it('pnpm diff <program> --model 1 --reference mame records the program\'s own trace, follows it on MAME\'s 40 Hz schedule, and removes it', () => {
+    const tmp = freshTmp();
+    const run = diffRecord(['--instructions', '200000'], tmp);
+    expect(run.stderr).toBe('');
+    expect(run.status).toBe(0);
+    expect(run.stdout).toContain(`${SEA_DRAGON} loaded before instruction `);
+    expect(run.stdout).toContain('our 40 Hz on MAME\'s clock (1,774,083 Hz): test-only, test/diff/mame-clock.js\n');
+    expect(run.stdout).toContain('reference: MAME 0.289 trace, Model I\n');
+    expect(run.stdout).toContain('divergence: none');
+    // Without keys Sea Dragon is still on its title, so there is no prompt on MAME's screen.
+    expect(run.stdout).toContain('MAME\'s screen at the end');
+    expect(run.stdout).not.toContain('1 OR 2 PLAYERS?');
+    // The trace (about 9 bytes an instruction) and the recorder's work folder are both gone.
+    expect(readdirSync(tmp)).toEqual([]);
+  }, 300_000);
+
+  it('with --keys the keys arrive: ENTER on Sea Dragon\'s title reaches "1 OR 2 PLAYERS?" on MAME\'s screen', () => {
+    // [{ at: T-states after the load, key, hold: T-states }], as a lockstep run takes them: ENTER a
+    // second after the load, held half a second (Sea Dragon takes it from its first screen on, and
+    // its prompt is up about a tenth of a second later; its credits come at 5.6 s).
+    const hz = clockHz(1);
+    const keys = join(dir, 'enter.json');
+    writeFileSync(keys, JSON.stringify([{ at: hz, key: 'ENTER', hold: hz / 2 }]));
+    const tmp = freshTmp();
+    const run = diffRecord(['--keys', keys, '--instructions', '300000'], tmp);
+    expect(run.stderr).toBe('');
+    expect(run.status).toBe(0);
+    expect(run.stdout).toContain('divergence: none');
+    expect(run.stdout).toContain('1 OR 2 PLAYERS?');
+    expect(readdirSync(tmp)).toEqual([]);
+  }, 300_000);
+
+  it('a MAME that stops before the program is loaded is reported as a trace that ends early (exit 3, no screen), and nothing is left behind', () => {
+    // A stand-in that passes for Homebrew's 0.289 by its Cellar folder and -version, then exits
+    // at once, first on the command's PATH (the real ROM set is still checked: roms.model1 is needed).
+    const bin = script('dies/Cellar/mame/0.289/bin/mame', `case "$1" in -version) echo '${MAME_VERSION}'; exit 0;; esac\nexit 1`);
+    const tmp = freshTmp();
+    const run = diffRecord(['--instructions', '1000'], tmp, { PATH: `${dirname(bin)}${delimiter}${process.env.PATH}` });
+    expect(run.stderr).toBe('');
+    expect(run.status).toBe(3);
+    expect(run.stdout).toContain('instructions compared: 0\n');
+    expect(run.stdout).toContain('MAME\'s trace ends after 0 of 1000 instructions (MAME never reached the load at 7096320 T-states), so the run proves nothing past that point.\n');
+    expect(run.stdout).not.toContain('divergence: none');
+    expect(run.stdout).not.toContain('loaded before instruction');
+    expect(run.stdout).not.toContain('screen at the end');
+    expect(readdirSync(tmp)).toEqual([]);
+  }, 60_000);
 });

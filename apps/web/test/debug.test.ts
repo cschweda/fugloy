@@ -14,7 +14,8 @@ import { createRun, STOPPED_SOURCE } from '../app/composables/useRun';
 import { createSources } from '../app/composables/useSources';
 import type { Sources } from '../app/composables/useSources';
 import { createWorkbench } from '../app/composables/useWorkbench';
-import { runStub } from './emulator-support';
+import type { Runner } from '../app/utils/emulator/runner';
+import { runPatched, runStub } from './emulator-support';
 import type { Holder } from './source-run-support';
 import { clickGutter, FakeIO, gutterMarks, LOOP, mountSource, noRoms, prepare } from './source-run-support';
 
@@ -262,11 +263,15 @@ function motionQuery(matches: boolean) {
   return mq;
 }
 
-/** useDebug over a runner on the stub, wired as createRun wires it: started before attach, as useRun does. */
-function debugOver(text: string, opts: { kit?: typeof realKit; motion?: ReturnType<typeof motionQuery>; breakpoints?: number[] } = {}) {
+/**
+ * useDebug over a runner on the stub, wired as createRun wires it: started before attach, as useRun
+ * does. `model1Rom`: on a Model I ROM instead, the stub with these patches (address → bytes).
+ */
+function debugOver(text: string, opts: { kit?: typeof realKit; motion?: ReturnType<typeof motionQuery>; breakpoints?: number[]; model1Rom?: Record<number, number[]> } = {}) {
   const kit = opts.kit ?? realKit;
   let dbg!: DebugControl;
-  const { runner, result, clock } = runStub(text, { onFrame: (r) => dbg.frame(r), onPause: (r) => dbg.paused(r), onStop: (r) => dbg.stopped(r) });
+  const hooks = { onFrame: (r: Runner) => dbg.frame(r), onPause: (r: Runner) => dbg.paused(r), onStop: (r: Runner) => dbg.stopped(r) };
+  const { runner, result, clock } = opts.model1Rom === undefined ? runStub(text, hooks) : runPatched(text, opts.model1Rom, { ...hooks, model: 1 });
   const stepper = realKit.createStepper(runner);
   const { inactive } = stepper.setBreakpoints(opts.breakpoints ?? []);
   dbg = createDebug({ sources: oneSource(text), say: () => {}, state: () => {}, now: clock.now, motionQuery: () => (opts.motion ?? null) as unknown as MediaQueryList | null });
@@ -299,6 +304,26 @@ describe('useDebug', () => {
     dbg.step();
     expect(dbg.announce.value).toContain(realKit.HALTED_WAITING);
     expect(realKit.HALTED_WAITING).toBe('The CPU is halted (HALT), waiting for an interrupt; press Continue to run until one comes.');
+  });
+
+  it("on a Model I a step that leaves the CPU halted says its HALT raises an NMI, never that it waits for an interrupt", () => {
+    // The Model I's HALT line drives its reset switch's NMI (emu spec §5); its ROM here is the stub with a loop at $0066.
+    const text = '        ORG     7000H\nSTART:  EI\n        HALT\nWAIT:   JR      WAIT\n        END     START\n';
+    const { dbg, runner, clock } = debugOver(text, { breakpoints: [3], model1Rom: { 0x0066: [0x18, 0xfe] } });
+    clock.frame();
+    expect(runner.pausedBy?.kind).toBe('break');
+    expect(dbg.announce.value).toBe('Paused at line 3, HALT, at a breakpoint.');
+    dbg.step();
+    expect(runner.machine.cpu.halted).toBe(true);
+    // EI's delay ends with the HALT, so IFF1 and IFF2 change on this step.
+    expect(dbg.announce.value).toBe(`Line 3, HALT. Changed: IFF1, IFF2. ${realKit.HALTED_NMI}`);
+    expect(realKit.HALTED_NMI).toBe("The CPU is halted (HALT), and on the Model I a HALT raises an NMI at the next instruction: the next step or Continue goes to $0066, the ROM's reset.");
+    // The next step takes the NMI and runs the instruction at $0066.
+    dbg.step();
+    expect(runner.machine.cpu.halted).toBe(false);
+    expect(runner.pc).toBe(0x0066);
+    expect(dbg.announce.value).not.toContain(realKit.HALTED_WAITING);
+    expect(dbg.announce.value).not.toContain(realKit.HALTED_NMI);
   });
 
   it('keeps the same marks array across frames whose set does not change', () => {

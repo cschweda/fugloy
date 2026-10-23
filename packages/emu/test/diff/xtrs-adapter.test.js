@@ -134,6 +134,39 @@ describe.each(shells)('the xtrs pipe fails clearly instead of hanging (wrapper %
   });
 });
 
+describe('the xtrs child runs in a temporary folder of its own', () => {
+  it('so what it writes where it runs (xtrs keeps its cassette files there) goes with the folder, not into the package', () => {
+    // A program that turns the cassette motor on makes xtrs write .cassette.ctl and cassette.cas
+    // where it runs (trs_cassette.c, CONTROL_FILENAME and DEFAULT_FILENAME): the Model I sweep's
+    // GO.CMD left them in packages/emu. This stand-in writes such a file, then answers as xtrs.
+    const marker = `.fugloy-cwd-probe-${process.pid}`;
+    const where = join(dir, 'child-cwd.txt');
+    const script = join(dir, 'cwd-writer.mjs');
+    writeFileSync(script, `import { readSync, writeFileSync, writeSync } from 'node:fs';
+writeFileSync(${JSON.stringify(marker)}, 'probe');
+writeFileSync(${JSON.stringify(where)}, process.cwd());
+writeSync(1, 'ready fugloy-xtrs 1\\n');
+const buf = Buffer.alloc(4096);
+for (;;) {
+  const got = readSync(0, buf, 0, buf.length, null);
+  if (got === 0) process.exit(0);
+  for (const line of buf.toString('latin1', 0, got).split('\\n').filter((l) => l !== '')) writeSync(1, (line.startsWith('regs') ? ${JSON.stringify(R0())} : 'ok') + '\\n');
+}
+`);
+    const ref = openXtrs({ command: process.execPath, args: [script] });
+    let cwd = '';
+    try {
+      cwd = readFileSync(where, 'utf8');
+      expect(cwd).not.toBe(process.cwd());
+      expect(existsSync(join(cwd, marker))).toBe(true);
+    } finally {
+      ref.close?.();
+      rmSync(join(process.cwd(), marker), { force: true });
+    }
+    expect(existsSync(cwd)).toBe(false);
+  });
+});
+
 describe.skipIf(xtrsSkip !== null)(`xtrs adapter against @fugloy/emu's Model I${xtrsSkip === null ? '' : ` (skipped: ${xtrsSkip})`}`, { timeout: ROM_TEST_TIMEOUT * 2 }, () => {
   const rom = () => requireRom('model1');
   const newMachine = () => new Machine({ model: 1, roms: { level2: rom() } });
@@ -175,7 +208,7 @@ describe.skipIf(xtrsSkip !== null)(`xtrs adapter against @fugloy/emu's Model I${
     // The one EX (SP),HL of the boot (instruction 13,603, $287D): xtrs writes (SP) first; and the
     // LDIRs at $067F and $007E while they repeat: xtrs keeps Young's flags 3 and 5, ours and MAME's
     // take PC's (known.js), the 5,112 rows the spike found in MAME.
-    expect(r.known).toEqual({ 'EX (SP),rr: the reference writes (SP) before (SP+1)': 1, 'repeating LDIR/LDDR/CPIR/CPDR: flags 3 and 5 from PC': 5_112 });
+    expect(r.known).toEqual({ 'EX (SP),rr: the reference writes (SP) before (SP+1)': 1, 'repeating LDIR/LDDR/CPIR/CPDR: the reference takes flags 3 and 5 from n, not PC': 5_112 });
     expect(ref.cycles).toBe(m.cycles);
     expect(ref.peek(0x3c00, 0xc400)).toEqual(m.mem.read(0x3c00, 0xc400));
     // The boot reached MEM SIZE? on both.

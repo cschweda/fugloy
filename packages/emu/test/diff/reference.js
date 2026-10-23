@@ -32,6 +32,7 @@
  *   latch?(): number,
  *   close?(): void,
  *   readonly name?: string,
+ *   readonly haltedPc?: 'halt' | 'next',
  *   readonly classes: ReadonlySet<string>,
  *   readonly prefixedOps: ReadonlySet<number>,
  *   readonly cycles: number,
@@ -48,5 +49,11 @@
  *   Model I's $37E0 latch as it stands, read without clearing it (xtrs; compare.js compares it
  *   after every step in which our CPU read it); name: the reference's name in a report; close: ends a reference
  *   that runs in another process; z: trsjs's machine object, for its own tests.
+ *   haltedPc: where the reference's PC stands after a HALT stopped its CPU, which compareRun
+ *   compares ours with (compare.js, ourRegs): 'halt', on the HALT (the default: trsjs's halted CPU
+ *   runs the HALT again each step, as the Z80 sits on it, Young §5.4), or 'next', after it, the
+ *   address the response will push (the Model I answers a HALT with an NMI at the next boundary,
+ *   trs80-system.js: xtrs's Model I does not halt at all, z80.c case 0x76, and a MAME trace's state
+ *   before a response holds the address that response pushes).
  */
 export {};

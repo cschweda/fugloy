@@ -10,7 +10,9 @@
  *
  * Two representation differences are mapped, not counted: during EI's one-instruction delay our
  * IFF1/2 read as set (trsjs sets them in EI itself), and a halted CPU of ours sits at HALT+1 where
- * trsjs's sits on the HALT, so our PC is compared less one while halted.
+ * trsjs's sits on the HALT, so our PC is compared less one while halted against a reference that
+ * shows a halted CPU on the HALT (`Reference.haltedPc`, the default); against one that shows it
+ * after the HALT (the Model I's, whose HALT is answered by an NMI at the next boundary), as it is.
  *
  * Where an interrupt may be taken is derived from the instruction stream, never from our CPU's
  * own state: none at the boundary right after an executed EI, none after a lone DD or FD (one whose
@@ -173,17 +175,19 @@ export function keyEvents(script) {
 }
 
 /**
- * Our registers in the comparison's terms: R as 7 bits, IFF set during EI's delay, PC on the
- * HALT while halted.
+ * Our registers in the comparison's terms: R as 7 bits, IFF set during EI's delay, and PC while
+ * halted where the reference shows a halted CPU's (`Reference.haltedPc`): on the HALT ('halt',
+ * the default) or after it ('next', ours as it is).
  * @param {Machine} m
+ * @param {'halt' | 'next'} [haltedPc]
  * @returns {Regs}
  */
-export function ourRegs(m) {
+export function ourRegs(m, haltedPc = 'halt') {
   const cpu = m.system.cpu;
   const o = m.cpu.regs;
   o.r &= 0x7f;
   if (cpu.pendingEI > 0) o.iff1 = o.iff2 = true;
-  if (cpu.halted) o.pc = (o.pc - 1) & 0xffff;
+  if (cpu.halted && haltedPc === 'halt') o.pc = (o.pc - 1) & 0xffff;
   return o;
 }
 
@@ -292,6 +296,19 @@ function instrument(m, follow = null, devices = modelDevices(3, false), theirsVi
   return {
     log,
     machine: m,
+    /**
+     * A byte of our memory without a read's side effects (known.js, StepContext's peek): the
+     * $37E0 latch peeked, and, following a trace, read as a snapshot, so no trace keyboard byte is
+     * used up. @param {number} addr
+     */
+    peek(addr) {
+      snapshot = true;
+      try {
+        return mem.peekByte(addr & 0xffff);
+      } finally {
+        snapshot = false;
+      }
+    },
     step() {
       log.writes = [];
       log.irq = false;
@@ -402,6 +419,7 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
   // (the gate: known.js, video-read-gate).
   const theirsVideo = follow !== null && devices.through !== null && declared.fixes.has('video-read-gate') ? (/** @type {number} */ a) => ref.peek(a, 1)[0] : null;
   const fixesPrefix = declared.fixes.has('dropped-prefix');
+  const haltedPc = ref.haltedPc ?? 'halt';
   const ours = instrument(m, follow, devices, theirsVideo);
   /** @type {Record<string, number>} */
   const known = {};
@@ -501,7 +519,7 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
       // The request is gone from our side (read from $EC or $37E0, or masked): nothing is held any more.
       if (held !== null && !devices.request(sys)) held = null;
 
-      const o = ourRegs(m);
+      const o = ourRegs(m, haltedPc);
       const s = ref.regs();
       const execPc = ours.log.execPc;
       const code = ours.log.code;
@@ -509,6 +527,7 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
       const ctx = {
         bytes,
         execPc,
+        peek: ours.peek,
         ours: { regs: o, cycles: oursCycles, irq: oursIrq, writes: ours.log.writes, wasHalted, fBefore, q: cpu.q, wz: cpu.wz },
         theirs: { regs: s, cycles: t.cycles, irq: t.irq, writes: ref.writes() },
       };
@@ -579,7 +598,7 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
     const video = compareVideo(m, ref, devices.through);
     const tail = ended === undefined ? {} : { ended };
     if (!video.equal) {
-      const o = ourRegs(m);
+      const o = ourRegs(m, haltedPc);
       const s = ref.regs();
       return {
         instructions: compared,
@@ -668,7 +687,7 @@ function context(ref, ring, index, line, ours) {
       const oc = ours.step();
       const tc = ref.step().cycles;
       const { execPc, code, idle } = ours.log;
-      lines.push(withText({ index: index + k, pc: execPc, code, idle, text: '', ours: { regs: ourRegs(ours.machine), cycles: oc }, theirs: { regs: ref.regs(), cycles: tc } }));
+      lines.push(withText({ index: index + k, pc: execPc, code, idle, text: '', ours: { regs: ourRegs(ours.machine, ref.haltedPc), cycles: oc }, theirs: { regs: ref.regs(), cycles: tc } }));
     } catch {
       break;
     }

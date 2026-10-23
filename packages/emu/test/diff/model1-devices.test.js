@@ -45,6 +45,14 @@ const VIDEO = [0x3e, 0x0d, 0x32, 0x00, 0x3c, 0x3e, 0x60, 0x32, 0x01, 0x3c, 0x3e,
   0x3a, 0x00, 0x3c, 0x32, 0x00, 0x50, 0x18, 0xfe];
 /** OUT ($FF),A with A = 8 (MODESEL: 32 characters), IN A,($FF), LD ($5002),A, JR $. */
 const PORT_FF = [0x3e, 0x08, 0xd3, 0xff, 0xdb, 0xff, 0x32, 0x02, 0x50, 0x18, 0xfe];
+/** DI / HALT: the Model I answers the HALT with the reset switch's NMI (trs80-system.js). */
+const HALT = [0xf3, 0x76];
+/** The synthetic ROM with `main` and an NMI handler at $0066: LD A,42H / JR $. @param {number[]} main */
+function withNmi(main) {
+  const rom = syntheticRom(main);
+  rom.set([0x3e, 0x42, 0x18, 0xfe], 0x66);
+  return rom;
+}
 
 /** A Model I on the synthetic ROM, run to $4000 with `program` there. @param {number[]} program @param {{ lowercase?: boolean }} [opts] */
 function machine(program, opts = {}) {
@@ -495,6 +503,8 @@ describe('pnpm diff: --model and --reference', () => {
     [['--model', '1', '--reference', 'mame'], 'MAME is compared from a trace of its run from power-on: record one with pnpm mame:trace record <instructions>, then pass it with --trace'],
     [['--model', '1', '--reference', 'mame', '--trace', 't.fmt', '--keys', 'k.json'], 'a MAME trace brings its own keys and is compared from power-on: pass no --keys or --from-cycle (record a trace from the ROM\'s boot and typed keys with pnpm mame:trace record <instructions> --keys <script.json>; a trace that loaded a program is recorded by the tests, test/diff/model1-fixtures.test.js, and compared here with that program named)'],
     [['--model', '1', '--reference', 'mame', '--trace', 't.fmt', '--from-cycle', '5'], 'a MAME trace brings its own keys and is compared from power-on: pass no --keys or --from-cycle'],
+    [['p.cmd', '--model', '1', '--reference', 'mame', '--from-cycle', '5'], 'MAME is compared from power-on, so a program\'s recorded run has no --from-cycle to start from: pass none'],
+    [['p.cmd', '--model', '1', '--reference', 'mame', '--lowercase'], 'MAME\'s trs80l2 is compared without the lowercase modification'],
     [['p.cmd', '--model', '1', '--trace', 't.fmt'], '--trace is for --reference mame'],
   ])('%j: exits 2 with a sentence', (args, sentence) => {
     const r = run(args);
@@ -557,6 +567,21 @@ describe.skipIf(xtrsSkip !== null)(`the Model I's devices against xtrs${xtrsSkip
     const ref = xtrs(ROM);
     expect(compareRun({ machine: m, reference: ref, instructions: 12, lowercase: true }).divergence).toBeNull();
     expect(ref.peek(0x3c00, 4)).toEqual(Uint8Array.from([0x0d, 0x60, 0x2d, 0xc1]));
+  });
+
+  it('HALT: answered by the NMI on both, xtrs\'s return address the HALT\'s plus two (halt-nmi-next), ours resynced into it', () => {
+    const rom = withNmi([0xc3, 0x00, 0x40]);
+    const m = new Machine({ model: 1, roms: { level2: rom } });
+    m.mem.write(0x4000, HALT);
+    while (m.cpu.regs.pc !== 0x4000) m.step(1);
+    const ref = xtrs(rom);
+    // DI, HALT (compared with xtrs's PC after it: Reference.haltedPc), the NMI with LD A,42H, JR $.
+    const r = compareRun({ machine: m, reference: ref, instructions: 4 });
+    expect(r.divergence).toBeNull();
+    expect(r.known).toEqual({ 'NMI after a Model I HALT: the reference pushes the HALT\'s address plus two': 1 });
+    expect(m.cpu.regs.a).toBe(0x42);
+    expect([...m.mem.read(0x7ffe, 2)]).toEqual([0x02, 0x40]); // $4002, the address after the HALT
+    expect([...ref.peek(0x7ffe, 2)]).toEqual([0x02, 0x40]);
   });
 
   it('planted: our gate inverted is caught at the Level II boot\'s first video write, against xtrs', () => {
@@ -672,6 +697,19 @@ describe.skipIf(mameSkip !== null)(`the Model I's devices against MAME${mameSkip
     const r = compareRun({ machine: m, reference: openTrace(path), instructions: 20 });
     expect(r.divergence).toMatchObject({ index: 7, pc: 0x0105, fields: ['f.3', 'f.5'], known: null });
     expect(r.known).toEqual({});
+  });
+
+  it('HALT: MAME answers it with the NMI (trs80.cpp, halt_cb to its nmigate) as ours does, nothing counted', async () => {
+    const rom = withNmi([0xc3, 0x00, 0x01]); // JP $0100
+    rom.set(HALT, 0x100);
+    const path = await record(rom, 12, 'mame-halt.fmt');
+    const m = ours(rom);
+    const r = compareRun({ machine: m, reference: openTrace(path), instructions: 12 });
+    expect(r.ended).toBeUndefined();
+    expect(r.divergence).toBeNull();
+    expect(r.known).toEqual({});
+    expect(m.cpu.regs.a).toBe(0x42);
+    expect([...m.mem.read(0x7ffe, 2)]).toEqual([0x02, 0x01]); // $0102, the address after the HALT
   });
 
   it('planted: our gate inverted is caught at the Level II boot\'s first video write, against MAME', async () => {

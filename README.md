@@ -101,8 +101,11 @@ that takes the keyboard only while it has focus. Add your own ROM for each
 model and it stays in your browser, never uploaded and never in a backup.
 Without one, a program that never calls the ROM runs on Fugløy's stub ROM,
 a few lines of its own source that blank the screen and halt; a program that
-calls the ROM is stopped with a sentence naming its line. **Open as source
-✎**, in the Program tab and Export ▾, turns a disassembly into a source:
+calls the ROM is stopped with a sentence naming its line, and so, on the
+Model I, is a program's HALT, which that machine answers with a reset to
+BASIC (its HALT line drives the reset switch's NMI) that the stub cannot
+give. **Open as source ✎**, in the Program tab and Export ▾, turns a
+disassembly into a source:
 Sea Dragon opened that way reassembles byte for byte and, on your Model III
 ROM, runs to its title screen. The screen's characters are the TRS-80's
 own character generators (each model's), from xtrs's `trs_chars.c`.

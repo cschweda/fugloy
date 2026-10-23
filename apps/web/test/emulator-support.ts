@@ -67,15 +67,15 @@ export function runStub(source: string, extra: Extra = {}) {
 }
 
 /**
- * A program on the Model III stub ROM with `patches` written into the ROM (address → bytes), booted
- * to the stub's HALT and loaded by hand. The runner is not the stub's (no ROM trap), so the program
- * may call the patched code.
+ * A program on the stub ROM (the Model III's, or `model`'s) with `patches` written into the ROM
+ * (address → bytes), booted to the stub's HALT and loaded by hand. The runner is not the stub's (no
+ * ROM trap): the ROM stands in for the user's, so the program may call the patched code.
  */
-export function runPatched(source: string, patches: Record<number, number[]>, extra: Extra = {}) {
-  const result = asm(source);
-  const rom = stubRom(3).slice();
+export function runPatched(source: string, patches: Record<number, number[]>, { model = 3, ...extra }: Extra & { model?: 1 | 3 | 4 } = {}) {
+  const result = asm(source, model);
+  const rom = stubRom(model).slice();
   for (const [at, bytes] of Object.entries(patches)) rom.set(bytes, Number(at));
-  const machine = new Machine({ model: 3, roms: { level2: rom } });
+  const machine = new Machine({ model, roms: { level2: rom } });
   expect(machine.run({ until: 'halt', cycles: machine.clockHz }).reason).toBe('halt');
   machine.load.cmd(toCmd(result));
   const clock = fakeClock();

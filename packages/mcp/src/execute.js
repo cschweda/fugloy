@@ -187,6 +187,15 @@ export function runMachine(session, { budget = Infinity, seconds: secondsBudget 
   }
 }
 
+/**
+ * What a CPU that just ran HALT does next, by model. The Model I's HALT line drives its reset
+ * switch's NMI (emu spec §5), so the next instruction boundary takes the NMI to 0066h, the Level II
+ * ROM's reset; the Model III's and Model 4's HALT waits for an interrupt.
+ * @param {number} model
+ */
+export const haltNext = (model) =>
+  model === 1 ? "the CPU ran HALT, which on the Model I raises an NMI at the next instruction, to 0066h, the ROM's reset" : 'the CPU ran HALT and waits for an interrupt';
+
 /** The default wall-clock deadline: `limits.runSecondsWall` from now. */
 export const wallDeadline = (/** @type {import('./session.js').Session} */ session) => performance.now() + session.config.limits.runSecondsWall * 1000;
 
@@ -222,7 +231,7 @@ export function stoppedLine(stop, session, why) {
     case 'watch':
       return `stopped: watch (watch ${stop.id}, after the instruction that touched it)`;
     case 'halt':
-      return 'stopped: halt (the CPU ran HALT and waits for an interrupt)';
+      return `stopped: halt (${haltNext(session.requireMachine().model)})`;
     case 'screen':
       return 'stopped: screen (video RAM changed)';
     case 'settled':

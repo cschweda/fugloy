@@ -16,6 +16,8 @@ export interface Example {
   machine: Machine;
   /** The build one click opens: the first the README presents. */
   mainBuild: string;
+  /** The build Programs to try runs (useRun's runExample), where the main one does not play; else the main one. */
+  tryBuild?: string;
   /** Every bundled build, the main one first, then in the README's order. */
   builds: string[];
   /** A committed hint file for the main build. */
@@ -68,6 +70,13 @@ export const EXAMPLES: readonly Example[] = [
     // Model I ROM has, so its machine verdict is model1 (programFacts).
     machine: 1,
     mainBuild: 'elimin8d.cmd',
+    // Programs to try runs elimin8a, the Model I cassette build. elimin8d runs RST 38H into the Level II
+    // ROM's EI / RET at $4012, after which the 40 Hz is taken in IM 0 after every return and the latch at
+    // $37E0 is never read, so on Fugløy's Model I (48K, with the Expansion Interface) it never draws its
+    // title (emu spec §11, the Model I sweep, where it stands Open: neither reference can follow those
+    // interrupts, so the claim rests on our latch model). elimin8a reaches its title and plays (emu's
+    // test/integration/model1-programs.test.js, and the Model I sessions, test/diff/model1-fixtures.test.js).
+    tryBuild: 'elimin8a.cmd',
     builds: ['elimin8d.cmd', 'elimin8f.cmd', 'elimin8g.cmd', 'elimin8h.cmd', 'elimin8c.cmd', 'elimin8e.cmd', 'elimin8a.cmd'],
     rights: RIGHTS,
     rightsQuote: RIGHTS_QUOTE,

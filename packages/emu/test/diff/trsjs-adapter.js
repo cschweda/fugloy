@@ -46,7 +46,7 @@ const RTC_PERIOD = 67_584;
  * EX (SP),rr's write order (it writes the low byte first), a repeating block instruction's flags 3
  * and 5, and SCF's and CCF's, which it leaves as they were.
  */
-export const TRSJS_CLASSES = new Set(['xy', 'bit', 'irq-r', 'ddcb-r', 'cpi-c', 'halt-push', 'held-di', 'held-ei', 'held-prefix', 'dropped-prefix', 'ex-sp-order', 'block-xy', 'scf-ccf-keep']);
+export const TRSJS_CLASSES = new Set(['xy', 'bit', 'irq-r', 'ddcb-r', 'cpi-c', 'halt-push', 'held-di', 'held-ei', 'held-prefix', 'dropped-prefix', 'ex-sp-order', 'block-xy-keep', 'scf-ccf-keep']);
 
 const EXPORTS = ['stepz80', 'mode_1_IRQ', 'BEAM_IRQ_ENABLED', 'BEAM_IRQ_RAISE', 'getAF', 'setAF', 'resetz80'];
 const RETURN_MARKER = "\t// Create the default emulator\n\tapi = api['mknew']();\n\n\treturn api;";

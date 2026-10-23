@@ -65,12 +65,13 @@ describe('the known classes', () => {
     expect(new Set(CLASS_NAMES).size).toBe(CLASS_NAMES.length);
   });
 
-  /** A step context for a step class's predicate. */
+  /** A step context for a step class's predicate; our memory reads 00H. */
   const stepCtx = (bytes, ours, theirs) => {
     const regs = { pc: 0x4001, f: 0 };
     return {
       bytes: Uint8Array.from([...bytes, 0, 0, 0, 0].slice(0, 4)),
       execPc: 0x4000,
+      peek: () => 0x00,
       ours: { regs, cycles: 19, irq: false, writes: ours, wasHalted: false, fBefore: 0, q: 0, wz: 0 },
       theirs: { regs, cycles: 19, irq: false, writes: theirs },
     };
@@ -78,23 +79,86 @@ describe('the known classes', () => {
   const explains = (id, ctx) => STEP_CLASSES.find((c) => c.id === id).explains(ctx, new Set(['writes']));
 
   it('a repeating block instruction\'s flags 3 and 5: only while it repeats, only from PC, and before the general class', () => {
+    // The reference's bits 00H, on each class's rule (the next test): xtrs's n (A 00H and the byte
+    // moved or compared, 00H) and trsjs's F before (00H).
     const at = (bytes, pc, f, execPc = 0x4000) => {
-      const ctx = stepCtx(bytes, [], []);
+      const moved = (bytes[1] & 0x01) === 0 ? [{ addr: 0x6000, value: 0x00 }] : [];
+      const ctx = stepCtx(bytes, moved, moved);
       ctx.execPc = execPc;
-      ctx.ours.regs = { ...ctx.ours.regs, pc, f };
+      ctx.ours.regs = { ...ctx.ours.regs, pc, f, a: 0x00, h: 0x50, l: 0x01 };
+      ctx.theirs.regs = { ...ctx.ours.regs, f: 0x00 };
       return ctx;
     };
     const f35 = new Set(['f.5', 'f.3']);
-    const block = (ctx) => STEP_CLASSES.find((c) => c.id === 'block-xy').explains(ctx, f35);
-    for (const op of [0xb0, 0xb8, 0xb1, 0xb9]) expect(block(at([0xed, op], 0x2800, 0x28, 0x2800))).toEqual(['f.5', 'f.3']);
-    expect(block(at([0xed, 0xb0], 0x4002, 0x00))).toBeNull(); // it ended
-    expect(block(at([0xed, 0xb0], 0x2800, 0x08, 0x2800))).toBeNull(); // not PC's bits
-    expect(block(at([0xed, 0xa0], 0x4000, 0x00))).toBeNull(); // LDI
-    expect(block(at([0xed, 0xb2], 0x4000, 0x00))).toBeNull(); // INIR: not this class
-    // Counted under this class, not also under trsjs's general flags 3 and 5.
+    for (const id of ['block-xy-n', 'block-xy-keep']) {
+      const block = (ctx) => STEP_CLASSES.find((c) => c.id === id).explains(ctx, f35);
+      for (const op of [0xb0, 0xb8, 0xb1, 0xb9]) expect(block(at([0xed, op], 0x2800, 0x28, 0x2800)), `${id} ${op.toString(16)}`).toEqual(['f.5', 'f.3']);
+      expect(block(at([0xed, 0xb0], 0x4002, 0x00)), id).toBeNull(); // it ended
+      expect(block(at([0xed, 0xb0], 0x2800, 0x08, 0x2800)), id).toBeNull(); // not PC's bits
+      expect(block(at([0xed, 0xa0], 0x4000, 0x00)), id).toBeNull(); // LDI
+      expect(block(at([0xed, 0xb2], 0x4000, 0x00)), id).toBeNull(); // INIR: not this class
+      const irq = at([0xed, 0xb0], 0x2800, 0x28, 0x2800);
+      irq.ours.irq = true;
+      expect(block(irq), id).toBeNull(); // an interrupt response in the step
+    }
+    // Counted under the reference's class, not also under trsjs's general flags 3 and 5.
     const ctx = at([0xed, 0xb0], 0x4000, 0x00);
-    ctx.theirs.regs = { ...ctx.theirs.regs, pc: 0x4000, f: 0x28 };
-    expect(explainStep(ctx, new Set(['f.5', 'f.3']), TRSJS_STEP)).toEqual({ classes: [name('block-xy')], unexplained: [] });
+    ctx.ours.fBefore = 0x28;
+    ctx.theirs.regs = { ...ctx.theirs.regs, f: 0x28 };
+    expect(explainStep(ctx, new Set(['f.5', 'f.3']), TRSJS_STEP)).toEqual({ classes: [name('block-xy-keep')], unexplained: [] });
+  });
+
+  it('block-xy holds the reference to its own rule: xtrs\'s n, trsjs\'s bits as they were', () => {
+    // A repeating step at $2800 (ours: PC's bits 13 and 11, 28H), A 10H, F before 00H, the byte
+    // moved (the step's write) or compared (at $5000; FFH elsewhere, so a wrong address shows) 08H.
+    // xtrs keeps Young §4.2's rule, the finished iteration's n, at every iteration:
+    // tools/xtrs/src/z80.c's do_ldir runs `do_ldi();` (line 1014), whose `undoc = REG_A + moved;`
+    // (line 989) sets them, and do_cpir runs `do_cpi();` (line 606), whose `result - H` (lines
+    // 537-543) does. LDIR and LDDR: n = 08H + 10H = 18H, flags 3 and 5 08H; CPIR and CPDR: n = 10H -
+    // 08H - H (1) = 07H, 20H (without H 08H, the LDs'). trsjs's oped_b0, oped_b8, oped_b1 and oped_b9
+    // (trsemu-1.6.js) leave them as they were, 00H. The value that matches neither rule is the other
+    // pair's n.
+    const step = (/** @type {number} */ op, /** @type {number} */ hl, /** @type {number} */ theirs) => {
+      const regs = { pc: 0x2800, f: 0x28, a: 0x10, h: hl >> 8, l: hl & 0xff };
+      const writes = op & 1 ? [] : [{ addr: 0x6000, value: 0x08 }];
+      return {
+        bytes: Uint8Array.from([0xed, op, 0x00, 0x00]),
+        execPc: 0x2800,
+        peek: (/** @type {number} */ addr) => (addr === 0x5000 ? 0x08 : 0xff),
+        ours: { regs, cycles: 21, irq: false, writes, wasHalted: false, fBefore: 0x00, q: 0, wz: 0x2801 },
+        theirs: { regs: { ...regs, f: theirs }, cycles: 21, irq: false, writes },
+      };
+    };
+    // HL after the iteration: LDIR and CPIR count up from $5000, LDDR and CPDR down.
+    const cases = [
+      { op: 0xb0, hl: 0x5001, n: 0x08, neither: 0x20 },
+      { op: 0xb8, hl: 0x4fff, n: 0x08, neither: 0x20 },
+      { op: 0xb1, hl: 0x5001, n: 0x20, neither: 0x08 },
+      { op: 0xb9, hl: 0x4fff, n: 0x20, neither: 0x08 },
+    ];
+    const explain = (/** @type {ReturnType<typeof step>} */ ctx, /** @type {import('./known.js').StepClass[]} */ classes) => explainStep(ctx, diffStep(ctx), classes);
+    for (const { op, hl, n, neither } of cases) {
+      const what = `ED ${op.toString(16).toUpperCase()}`;
+      // xtrs's bits as they were (trsjs's rule) or matching neither rule: a divergence against xtrs.
+      for (const theirs of [0x00, neither]) {
+        const ctx = step(op, hl, theirs);
+        expect(explain(ctx, XTRS_STEP), `${what}, xtrs ${theirs}`).toEqual({ classes: [], unexplained: [...diffStep(ctx)] });
+      }
+      // trsjs's bits from n (xtrs's rule) or matching neither: never its block class (its general
+      // flag 3 and 5 class, which ZEXALL's evidence gives it alone, counts them instead).
+      for (const theirs of [n, neither]) {
+        expect(explain(step(op, hl, theirs), TRSJS_STEP), `${what}, trsjs ${theirs}`).toEqual({ classes: [name('xy')], unexplained: [] });
+      }
+      // Each reference on its own rule: its own block class.
+      expect(explain(step(op, hl, n), XTRS_STEP), `${what}, xtrs n`).toEqual({ classes: [name('block-xy-n')], unexplained: [] });
+      expect(explain(step(op, hl, 0x00), TRSJS_STEP), `${what}, trsjs kept`).toEqual({ classes: [name('block-xy-keep')], unexplained: [] });
+    }
+    // An LDIR or LDDR step of the reference that wrote nothing has no byte moved to take n from.
+    for (const { op, hl, n } of cases.slice(0, 2)) {
+      const ctx = step(op, hl, n);
+      ctx.theirs.writes = [];
+      expect(STEP_CLASSES.find((c) => c.id === 'block-xy-n').explains(ctx, diffStep(ctx)), `ED ${op.toString(16).toUpperCase()}, no write`).toBeNull();
+    }
   });
 
   it('SCF and CCF\'s flags 3 and 5: only for SCF and CCF, only as Q gives them on ours and the reference\'s own rule on theirs', () => {
@@ -160,9 +224,9 @@ describe('the known classes', () => {
 
   it('each reference declares its own classes, and a class it does not declare explains nothing', () => {
     // Pinned, so a declaration that widens shows here: trsjs keeps every class it had; xtrs the five
-    // it was found to need; MAME only its video read.
-    expect([...TRSJS_CLASSES].sort()).toEqual(['bit', 'block-xy', 'cpi-c', 'ddcb-r', 'dropped-prefix', 'ex-sp-order', 'halt-push', 'held-di', 'held-ei', 'held-prefix', 'irq-r', 'scf-ccf-keep', 'xy']);
-    expect([...XTRS_CLASSES].sort()).toEqual(['bit-mem-xy', 'block-xy', 'ex-sp-order', 'io-cycles', 'scf-ccf-a']);
+    // its sessions were found to need and the one the Model I sweep found; MAME only its video read.
+    expect([...TRSJS_CLASSES].sort()).toEqual(['bit', 'block-xy-keep', 'cpi-c', 'ddcb-r', 'dropped-prefix', 'ex-sp-order', 'halt-push', 'held-di', 'held-ei', 'held-prefix', 'irq-r', 'scf-ccf-keep', 'xy']);
+    expect([...XTRS_CLASSES].sort()).toEqual(['bit-mem-xy', 'block-xy-n', 'ex-sp-order', 'halt-nmi-next', 'io-cycles', 'scf-ccf-a']);
     expect([...MAME_CLASSES]).toEqual(['video-read-gate']);
     expect(MAME_STEP).toEqual([]);
     // An OR A whose flags 3 and 5 differ (any instruction): trsjs's general class, nobody else's.
@@ -207,6 +271,73 @@ describe('the known classes', () => {
     const push = [{ addr: 0x7003, value: 0x40 }, { addr: 0x7002, value: 0x00 }];
     expect(explains('ex-sp-order', stepCtx([0xe3], [...push, h, l], [...push, l, h]))).toEqual(['writes']);
     expect(explains('ex-sp-order', stepCtx([0xe3], [...push, h, l], [push[1], push[0], l, h]))).toBeNull();
+  });
+
+  it('the NMI after a Model I HALT: only that step, the reference\'s return address ours plus one', () => {
+    // Rear Guard 1's HALT at $8026 (the Model I sweep): our NMI pushes $8027 (Young §5.4), xtrs's
+    // $8028 (z80.c case 0x76 leaves its Model I's PC after the HALT, and its NMI path adds one).
+    const at = (/** @type {number} */ theirs, { wasHalted = true, execPc = 0x0066, irq = false, after = /** @type {{ addr: number, value: number }[]} */ ([]) } = {}) => {
+      const ctx = stepCtx([0x31, 0x00, 0x06], [{ addr: 0xffb0, value: 0x80 }, { addr: 0xffaf, value: 0x27 }, ...after], [{ addr: 0xffb0, value: theirs >> 8 }, { addr: 0xffaf, value: theirs & 0xff }, ...after]);
+      ctx.ours.wasHalted = wasHalted;
+      ctx.execPc = execPc;
+      ctx.ours.irq = irq;
+      return ctx;
+    };
+    expect(explains('halt-nmi-next', at(0x8028))).toEqual(['writes']);
+    expect(explainStep(at(0x8028), new Set(['writes']), XTRS_STEP)).toEqual({ classes: [name('halt-nmi-next')], unexplained: [] });
+    // A carry into the high byte is the same address plus one.
+    const carry = stepCtx([0x31, 0x00, 0x06], [{ addr: 0xffb0, value: 0x80 }, { addr: 0xffaf, value: 0xff }], [{ addr: 0xffb0, value: 0x81 }, { addr: 0xffaf, value: 0x00 }]);
+    carry.ours.wasHalted = true;
+    carry.execPc = 0x0066;
+    expect(explains('halt-nmi-next', carry)).toEqual(['writes']);
+    // The same address (nothing to explain), one less (trsjs's halt-push), or two more: not explained.
+    expect(explains('halt-nmi-next', at(0x8026))).toBeNull();
+    expect(explains('halt-nmi-next', at(0x8029))).toBeNull();
+    // Not after a halt, not the NMI's $0066, or a maskable interrupt in the step: not explained.
+    expect(explains('halt-nmi-next', at(0x8028, { wasHalted: false }))).toBeNull();
+    expect(explains('halt-nmi-next', at(0x8028, { execPc: 0x0038 }))).toBeNull();
+    expect(explains('halt-nmi-next', at(0x8028, { irq: true }))).toBeNull();
+    // A maskable interrupt on the reference's side, though not on ours: not explained either.
+    const theirsIrq = at(0x8028);
+    theirsIrq.theirs.irq = true;
+    expect(explains('halt-nmi-next', theirsIrq)).toBeNull();
+    // Only a step whose writes differ at all.
+    expect(STEP_CLASSES.find((c) => c.id === 'halt-nmi-next').explains(at(0x8028), new Set(['cycles']))).toBeNull();
+    // The push must be at the same two addresses on both sides (either byte moved: not explained) ...
+    for (const k of [0, 1]) {
+      const elsewhere = at(0x8028);
+      elsewhere.theirs.writes[k] = { ...elsewhere.theirs.writes[k], addr: elsewhere.theirs.writes[k].addr - 0x10 };
+      expect(explains('halt-nmi-next', elsewhere), `write ${k} at another address`).toBeNull();
+    }
+    // ... a word's two bytes, the high byte at the address above the low byte's (two writes at the
+    // same addresses on both sides, far apart, with the right values for the rule, are no push) ...
+    const apart = stepCtx([0x31, 0x00, 0x06], [{ addr: 0xffb0, value: 0x80 }, { addr: 0xffa0, value: 0x27 }], [{ addr: 0xffb0, value: 0x80 }, { addr: 0xffa0, value: 0x28 }]);
+    apart.ours.wasHalted = true;
+    apart.execPc = 0x0066;
+    expect(explains('halt-nmi-next', apart)).toBeNull();
+    // ... and as many writes on both sides: a reference with no write at all, one write more on either side.
+    const none = at(0x8028);
+    none.theirs.writes.length = 0;
+    expect(explains('halt-nmi-next', none)).toBeNull();
+    const oursMore = at(0x8028, { after: [{ addr: 0x5000, value: 1 }] });
+    oursMore.theirs.writes.pop();
+    expect(explains('halt-nmi-next', oursMore)).toBeNull();
+    const theirsMore = at(0x8028);
+    theirsMore.theirs.writes.push({ addr: 0x5000, value: 1 });
+    expect(explains('halt-nmi-next', theirsMore)).toBeNull();
+    // Fewer than two writes of ours is no push at all.
+    const lone = at(0x8028);
+    lone.ours.writes.length = 1;
+    lone.theirs.writes.length = 1;
+    expect(explains('halt-nmi-next', lone)).toBeNull();
+    // Any other write must be equal.
+    const other = at(0x8028, { after: [{ addr: 0x5000, value: 1 }] });
+    expect(explains('halt-nmi-next', other)).toEqual(['writes']);
+    other.theirs.writes[2] = { addr: 0x5000, value: 2 };
+    expect(explains('halt-nmi-next', other)).toBeNull();
+    // Declared by xtrs alone: against trsjs and MAME it explains nothing.
+    expect(explainStep(at(0x8028), new Set(['writes']), TRSJS_STEP)).toEqual({ classes: [], unexplained: ['writes'] });
+    expect(explainStep(at(0x8028), new Set(['writes']), MAME_STEP)).toEqual({ classes: [], unexplained: ['writes'] });
   });
 });
 
@@ -284,11 +415,11 @@ describe.skipIf(trsjsSkip !== null)(`compareRun against trsjs${trsjsSkip === nul
       what: 'LDIR that repeats: flags 3 and 5 from PC in ours, kept in trsjs',
       // LD A,$28 / OR A (ours sets F bits 3 and 5 from the result, trsjs not: xy, then resynced) /
       // LD HL,$5000 / LD DE,$5100 / LD BC,3 / LDIR / NOP: the first iteration leaves PC $40's bits
-      // (0) in ours and $28 in trsjs (block-xy, resynced); the second 0 on both; the last n = A + 0
-      // = $28's bit 3 in ours, trsjs the 0 it was given (xy).
+      // (0) in ours and the $28 F had in trsjs (block-xy-keep, resynced); the second 0 on both; the
+      // last n = A + 0 = $28's bit 3 in ours, trsjs the 0 it was given (xy).
       program: [0x3e, 0x28, 0xb7, 0x21, 0x00, 0x50, 0x11, 0x00, 0x51, 0x01, 0x03, 0x00, 0xed, 0xb0, 0x00],
       n: 9,
-      known: { [name('block-xy')]: 1, [name('xy')]: 2 },
+      known: { [name('block-xy-keep')]: 1, [name('xy')]: 2 },
     },
     {
       what: 'a HALT idling with no interrupt: R counts on every step, as on trsjs',

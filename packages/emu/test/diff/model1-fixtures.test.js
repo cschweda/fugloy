@@ -7,20 +7,12 @@
  * required set; the nine in the config's fixtures folder (fixtures/real/, never committed) run where
  * present, each skipping when its file is missing.
  *
- * One timeline for both references, in our Model I's T-states (1,774,080 a second): power-on, ENTER
- * held 0.1 s from 0.5 s (MEM SIZE?), the program loaded at 4 s with m.load.cmd (READY has been on
- * the screen since about 2.2 s), then the session's keys, their times counted from the load.
- * - Against xtrs (lockstep), our machine runs alone from power-on to the load, xtrs is synced from
- *   it, and the 10 million instructions after the load are compared, the keys going into both
- *   matrices at the same T-state.
- * - Against MAME (a trace, Ruling 4), the trace is recorded from power-on with the same key events
- *   on MAME's matrix (set at frame boundaries, so up to two frames later than ours would see them;
- *   the comparison follows the bytes MAME's reads returned) and the program loaded by MAME's
- *   debugger at the first instruction boundary at or after 4 s. Our machine follows it from
- *   power-on, the boot and the 10 million instructions after the load, with its 40 Hz on MAME's
- *   schedule (mame-clock.js, the controller's ruling on MAME's clock). Each trace (about 95 MB) is
- *   recorded into a temporary folder and deleted after its comparison; the MAME sessions run five
- *   at a time (`concurrent`), since recording is MAME's speed and the comparison is not.
+ * One timeline for both references, in our Model I's T-states, and the runners that play it
+ * (lockstep against xtrs, a trace recorded for MAME and followed from power-on) are in
+ * model1-session.js, which the sweep and `pnpm diff` share: the sessions here are their script, the
+ * screens each must reach, and the counts each reference's run must give. Each MAME trace (about
+ * 95 MB) is recorded into a temporary folder and deleted after its comparison; the MAME sessions
+ * run five at a time (`concurrent`), since recording is MAME's speed and the comparison is not.
  *
  * Each session lists the screens it must reach, in order, checked every 100,000 instructions on the
  * reference's own video RAM, read as m.video.text() reads ours and upper-cased, and video RAM is
@@ -43,54 +35,23 @@
  * 70,000 a second, five at a time; following a trace runs at about a million a second); both, one
  * after the other, about 55. One session alone: `-t elimin8c`.
  */
-import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { clockHz, Machine, ROM_HASHES } from '../../src/index.js';
-import { configuredFixtures, configuredRom, ROM_TEST_TIMEOUT } from '../rom.js';
-import { compareRun, formatReport, keyEvents, videoGate } from './compare.js';
+import { Machine } from '../../src/index.js';
+import { configuredFixtures, ROM_TEST_TIMEOUT } from '../rom.js';
+import { compareRun, keyEvents } from './compare.js';
 import { mameSkip, requireRom, xtrsSkip } from './gate.js';
 import { mameTimer } from './mame-clock.js';
 import { openTrace, recordMameTrace } from './mame-trace.js';
+import { BOOT, explain, HZ, INSTRUCTIONS, level2v13, LOAD_AT, mameSession, press, rom1, screenOf, SESSION_BUILDS, SESSION_FILES, sessionSkip, sweepPrograms, toLoad, xtrsSession } from './model1-session.js';
 import { loadXtrs } from './xtrs-adapter.js';
 
 const EXAMPLES = fileURLToPath(new URL('../../../../examples/', import.meta.url));
-const HZ = clockHz(1);
-const INSTRUCTIONS = 10_000_000;
-const CHECK_EVERY = 100_000;
-/** The load's T-state from power-on. */
-const LOAD_AT = 4 * HZ;
-/** ENTER at MEM SIZE?, held 0.1 s from 0.5 s. */
-const BOOT = keyEvents([{ at: 0.5 * HZ, key: 'ENTER', hold: 0.1 * HZ }]);
 const XTRS = 'xtrs';
 const MAME = 'MAME 0.289 trace';
-
-const rom1 = configuredRom('model1');
-/** roms.model1 is Level II 1.3 (models.js's ROM_HASHES), the ROM the sessions' counts and the typing tests are about. */
-const level2v13 = rom1 !== null && ROM_HASHES[createHash('sha256').update(rom1).digest('hex')] === 'model1-level2-1.3';
-/**
- * Why the sessions skip with their flag set: their exact class counts are Level II 1.3's, and
- * another ROM runs other code, so it would only fail on them. With no roms.model1 they do not
- * skip: requireRom fails them with its sentence, as every flagged test does (gate.js).
- */
-const sessionSkip = rom1 === null || level2v13 ? null : 'roms.model1 is not Level II 1.3, for which the sessions\' class counts are pinned';
-
-/**
- * A key press `at` seconds after the load, held `hold` seconds (half a second by default, as a
- * player would: Rear Guard reads the keyboard only between the delays that blink its prompt).
- * @param {number} at @param {string} key @param {number} [hold]
- */
-const press = (at, key, hold = 0.5) => ({ at, key, hold });
-
-/**
- * @typedef {{ at: number, key: string, hold: number }} Press
- * @typedef {{ name: string, program: Uint8Array | null, keys: Press[], screens: string[], known: Record<string, Record<string, number>> }} Session
- *   program: null when a fixture is missing; screens: upper case, in order; known: the exact class
- *   counts per reference name (xtrs, MAME 0.289 trace).
- */
 
 const example = (/** @type {string} */ path) => new Uint8Array(readFileSync(join(EXAMPLES, path)));
 const fixture = (/** @type {RegExp} */ pattern) => {
@@ -99,7 +60,7 @@ const fixture = (/** @type {RegExp} */ pattern) => {
 };
 
 const BIT_XY = 'BIT n,(HL) and BIT n,(IX+d): the reference clears flags 3 and 5';
-const BLOCK_XY = 'repeating LDIR/LDDR/CPIR/CPDR: flags 3 and 5 from PC';
+const BLOCK_XY = 'repeating LDIR/LDDR/CPIR/CPDR: the reference takes flags 3 and 5 from n, not PC';
 const EX_SP = 'EX (SP),rr: the reference writes (SP) before (SP+1)';
 const IO = 'IN and block I/O: the reference counts one T-state less';
 const SCF_CCF = 'SCF/CCF: the reference takes flags 3 and 5 from A alone';
@@ -112,7 +73,7 @@ const ELIMINATOR_SCREENS = ['BY: WAYNE WESTMORELAND & TERRY GILMAN', 'TO START',
 const SPACE_WARP = [press(2, '1'), press(3, 'ENTER'), press(9, '1'), press(10, 'ENTER')];
 const SPACE_WARP_SCREENS = ['WHAT LEVEL DO YOU WISH TO PLAY (1-10)?', 'YOUR MISSION:', 'COMMAND?'];
 
-/** @type {Session[]} */
+/** @type {import('./model1-session.js').Session[]} */
 const SESSIONS = [
   {
     // The Model I-only build (it rebuilds the cassette system area from the ROM at $06D2).
@@ -212,117 +173,27 @@ const SESSIONS = [
   },
 ];
 
-/** A session's key events, from its presses' times after the load. @param {Press[]} keys */
-const sessionKeys = (keys) => keyEvents(keys.map((k) => ({ at: LOAD_AT + k.at * HZ, key: k.key, hold: k.hold * HZ })));
+// The sweep leaves out the thirteen sessions' programs (model1-session.js keeps the two lists it
+// leaves out by hand, SESSION_BUILDS and SESSION_FILES). A session is named by its path under
+// examples/ (the four builds) or by "Title (file.cmd)" (the fixtures/real/ programs), so this is where
+// the lists meet SESSIONS: a session added, renamed or dropped without them fails at once, with or
+// without the fixtures folder and with or without a reference or a ROM.
+describe('the sessions and the sweep', () => {
+  const fileOf = (/** @type {string} */ name) => /\(([^()]+)\)$/.exec(name)?.[1] ?? null;
+  const builds = SESSIONS.filter((s) => fileOf(s.name) === null).map((s) => s.name).sort();
+  const files = SESSIONS.map((s) => fileOf(s.name)).filter((f) => f !== null).sort();
 
-/**
- * A Model I from power-on to the load's T-state, ENTER at MEM SIZE? through the matrix (as
- * compareRun delivers keys: at the first boundary at or after their T-state).
- * @param {Uint8Array} rom
- */
-function toLoad(rom) {
-  const m = new Machine({ model: 1, roms: { level2: rom } });
-  let next = 0;
-  while (m.cycles < LOAD_AT) {
-    while (next < BOOT.length && BOOT[next].at <= m.cycles) {
-      const e = BOOT[next++];
-      if (e.down) m.system.keyboard.pressKey(e.row, e.bit); else m.system.keyboard.releaseKey(e.row, e.bit);
-    }
-    m.step(1);
-  }
-  return m;
-}
+  it("the sweep leaves out exactly the sessions' programs, by file name", () => {
+    expect(builds).toEqual([...SESSION_BUILDS].sort());
+    expect(files).toEqual([...SESSION_FILES].sort());
+    expect(builds.length + files.length).toBe(SESSIONS.length);
+  });
 
-/**
- * The screen in a reference's video RAM, read as m.video.text() reads ours (codes below $20 as
- * $40-$5F, graphics as '.', 32-character mode on our machine's MODESEL), upper-cased.
- * @param {Uint8Array} bytes @param {boolean} columns32
- */
-function screenOf(bytes, columns32) {
-  const step = columns32 ? 2 : 1;
-  const rows = [];
-  for (let row = 0; row < 16; row++) {
-    let line = '';
-    for (let col = 0; col < 64 / step; col++) {
-      let b = bytes[row * 64 + col * step];
-      if (b < 0x20) b += 0x40;
-      line += b < 0x80 ? String.fromCharCode(b) : '.';
-    }
-    rows.push(line.toUpperCase());
-  }
-  return rows.join('\n');
-}
-
-/**
- * The checkpoint: the screens reached so far (in order, on the reference's video RAM) and whether
- * video RAM was equal at every checkpoint, ours against the reference's through the gate.
- * @param {Machine} m @param {import('./reference.js').Reference} ref @param {string[]} screens
- */
-function checkpoints(m, ref, screens) {
-  /** @type {string[]} */
-  const seen = [];
-  let videoEqual = true;
-  return {
-    seen,
-    get videoEqual() {
-      return videoEqual;
-    },
-    fn: () => {
-      const theirs = ref.peek(0x3c00, 0x400);
-      const ours = m.mem.read(0x3c00, 0x400);
-      for (let k = 0; k < 0x400; k++) if (ours[k] !== videoGate(theirs[k])) videoEqual = false;
-      const text = screenOf(theirs, m.system.columns32);
-      while (seen.length < screens.length && text.includes(screens[seen.length])) seen.push(screens[seen.length]);
-    },
-  };
-}
-
-/** The report, when a run diverged (for the failure's output). @param {import('./compare.js').CompareResult} r */
-const explain = (r) => (r.divergence === null ? '' : formatReport(r));
-
-/**
- * A session against xtrs: ours from power-on to the load, then 10 million instructions in lockstep.
- * @param {Session} s
- */
-function xtrsSession(s) {
-  const rom = requireRom('model1');
-  const m = toLoad(rom);
-  m.load.cmd(/** @type {Uint8Array} */ (s.program));
-  const ref = loadXtrs({ rom });
-  try {
-    const check = checkpoints(m, ref, s.screens);
-    const result = compareRun({ machine: m, reference: ref, instructions: INSTRUCTIONS, keys: sessionKeys(s.keys), progress: { every: CHECK_EVERY, fn: check.fn } });
-    return { result, seen: check.seen, videoEqual: check.videoEqual };
-  } finally {
-    ref.close?.();
-  }
-}
-
-/**
- * A session against MAME: the trace recorded from power-on into a temporary folder, followed by
- * ours from power-on on MAME's 40 Hz schedule, the folder deleted after.
- * @param {Session} s
- */
-async function mameSession(s) {
-  const rom = requireRom('model1-mame');
-  const program = /** @type {Uint8Array} */ (s.program);
-  const dir = mkdtempSync(join(tmpdir(), 'fugloy-m1-session-'));
-  try {
-    const out = join(dir, 'session.fmt');
-    await recordMameTrace({ instructions: INSTRUCTIONS, matrix: [...BOOT, ...sessionKeys(s.keys)], load: { program, at: LOAD_AT }, out });
-    const ref = openTrace(out, { program });
-    try {
-      const m = mameTimer(new Machine({ model: 1, roms: { level2: rom } }));
-      const check = checkpoints(m, ref, s.screens);
-      const result = compareRun({ machine: m, reference: ref, instructions: ref.header.requested, progress: { every: CHECK_EVERY, fn: check.fn } });
-      return { result, seen: check.seen, videoEqual: check.videoEqual, header: ref.header };
-    } finally {
-      ref.close?.();
-    }
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-}
+  it('and the sweep lists none of them', () => {
+    const listed = sweepPrograms().map((p) => p.name);
+    for (const f of [...builds, ...files]) expect(listed, f).not.toContain(f.split('/').pop());
+  });
+});
 
 describe.skipIf(xtrsSkip !== null || sessionSkip !== null)(`the Model I sessions against xtrs${xtrsSkip === null && sessionSkip === null ? '' : ` (skipped: ${xtrsSkip ?? sessionSkip})`}`, { timeout: 1_200_000 }, () => {
   for (const s of SESSIONS) {

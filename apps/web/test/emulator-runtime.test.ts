@@ -6,9 +6,9 @@ import { assemble } from '@fugloy/asm';
 import type { AsmResult } from '@fugloy/asm';
 import { Machine } from '@fugloy/emu';
 import starter from '@fugloy/asm-examples/clear-screen.z?raw';
-import { stubRom, STUB_ROM_SOURCE } from '../app/utils/emulator/stub-rom';
+import { romEnd, stubRom, STUB_ROM_SOURCE } from '../app/utils/emulator/stub-rom';
 import { bootedSnapshot, prepareMachine } from '../app/utils/emulator/boot';
-import { createRunner } from '../app/utils/emulator/runner';
+import { createRunner, MODEL1_HALT } from '../app/utils/emulator/runner';
 import type { Runner } from '../app/utils/emulator/runner';
 import { romNotes, romSpaceCode, romUse } from '../app/utils/emulator/rom-use';
 import { runPatched, runStub as runWith } from './emulator-support';
@@ -254,6 +254,16 @@ describe('a program that needs the ROM', () => {
     });
   }
 
+  it('the advice after a final RET offers HALT only where a HALT waits: the Model III and Model 4, not the Model I', () => {
+    for (const model of [1, 3, 4] as const) {
+      const { clock, runner } = runStub(program('START:  LD      A,41H', '        RET'), { model });
+      runner.start();
+      frames(clock, 2);
+      expect(runner.stopLine, `Model ${model}`).toBe(3);
+      expect(runner.stopReason, `Model ${model}`).toMatch(model === 1 ? /End the program with a loop that waits, such as WAIT: JR WAIT\.$/ : /End the program with a loop that waits, such as WAIT: JR WAIT, or with HALT\.$/);
+    }
+  });
+
   it('a jump into the Model I empty space says the memory is not there, not the interrupt sentence', () => {
     const { clock, runner } = runStub(program('START:  LD      HL,3400H', '        JP      (HL)'), { model: 1 });
     runner.start();
@@ -326,6 +336,115 @@ describe('a program that needs the ROM', () => {
     expect(runner.stopReason).toMatch(/opcode table exploded/);
     expect(runner.stopReason).toMatch(/Run/);
     expect(clock.pending()).toBe(0);
+  });
+});
+
+// The Model I's HALT line drives its reset switch's NMI (emu spec §5), so a halted CPU takes the NMI
+// to $0066 at the next instruction; the Model III's waits for an interrupt.
+describe("a Model I HALT, which the machine answers with the reset switch's NMI", () => {
+  // Line 2 DI, 3 LD A,1, 4 HALT (at $5203).
+  const HALTS = ['        ORG     5200H', 'START:  DI', '        LD      A,1', '        HALT', '        END     START', ''].join('\n');
+
+  it('stops a stub run at the HALT with its sentence, before the NMI: PC past the HALT, SP where the program left it', () => {
+    const { clock, machine, runner } = runStub(HALTS, { model: 1 });
+    const sp = machine.cpu.regs.sp;
+    runner.start();
+    clock.frame();
+    expect(runner.state).toBe('stopped');
+    expect(runner.stopLine).toBe(4);
+    expect(runner.stopReason).toBe(MODEL1_HALT(4));
+    expect(MODEL1_HALT(4)).toBe(
+      "Line 4 halts the CPU (HALT), and a Model I answers a HALT with a reset to BASIC (its HALT line drives the reset switch's NMI), which needs a ROM, and none is loaded. Add a Model I ROM in the Run tab, or end the program with a loop that waits, such as WAIT: JR WAIT.",
+    );
+    // Never the trap's sentence for the NMI's $0066 (NMIENTRY, or "inside the Model I ROM").
+    expect(runner.stopReason).not.toMatch(/\$0066|NMIENTRY|inside the Model I ROM/);
+    expect(machine.cpu.halted).toBe(true);
+    expect(runner.pc).toBe(0x5204);
+    expect(runner.pc).toBeGreaterThanOrEqual(romEnd(1));
+    expect(machine.cpu.regs.sp).toBe(sp);
+    expect(clock.pending()).toBe(0);
+  });
+
+  it('a step onto the HALT stops the stub run the same way', () => {
+    const { machine, runner } = runStub(HALTS, { model: 1 });
+    const sp = machine.cpu.regs.sp;
+    runner.step(); // DI
+    runner.step(); // LD A,1
+    expect(runner.state).toBe('paused');
+    runner.step(); // HALT
+    expect(runner.state).toBe('stopped');
+    expect(runner.stopLine).toBe(4);
+    expect(runner.stopReason).toBe(MODEL1_HALT(4));
+    expect(runner.pc).toBe(0x5204);
+    expect(machine.cpu.regs.sp).toBe(sp);
+  });
+
+  it('Continue from a breakpoint on the HALT line stops the run at the HALT with the same sentence, before the NMI', () => {
+    const { clock, machine, result, runner } = runStub(HALTS, { model: 1 });
+    const halt = 0x5203;
+    expect(result.sourceMap.lineOf(halt)).toBe(4);
+    const sp = machine.cpu.regs.sp;
+    machine.debug.break(halt);
+    runner.start();
+    clock.frame();
+    // The frame ends before the HALT, at its breakpoint: paused, nothing stopped yet.
+    expect(runner.state).toBe('paused');
+    expect(runner.pausedBy).toEqual({ kind: 'break', id: machine.debug.breaks[0]!.id });
+    expect(runner.pc).toBe(halt);
+    expect(machine.cpu.halted).toBe(false);
+    expect(runner.stopReason).toBeNull();
+    // Continue runs the HALT past its own breakpoint, and the next slice (which ends when the CPU halts) stops there.
+    runner.continue();
+    expect(runner.state).toBe('running');
+    clock.frame();
+    expect(runner.state).toBe('stopped');
+    expect(runner.stopLine).toBe(4);
+    expect(runner.stopReason).toBe(MODEL1_HALT(4));
+    expect(machine.cpu.halted).toBe(true);
+    expect(runner.pc).toBe(0x5204);
+    expect(machine.cpu.regs.sp).toBe(sp);
+    expect(clock.pending()).toBe(0);
+  });
+
+  it('Continue after a step onto the HALT line, with a breakpoint on it, steps the HALT first and stops the run the same way', () => {
+    const { machine, runner } = runStub(HALTS, { model: 1 });
+    const sp = machine.cpu.regs.sp;
+    runner.step(); // DI
+    runner.step(); // LD A,1
+    machine.debug.break(0x5203);
+    expect(runner.pc).toBe(0x5203);
+    expect(runner.pausedBy).toEqual({ kind: 'step' });
+    runner.continue(); // stepPast: the HALT runs, which stops the run before Continue goes on
+    expect(runner.state).toBe('stopped');
+    expect(runner.stopLine).toBe(4);
+    expect(runner.stopReason).toBe(MODEL1_HALT(4));
+    expect(runner.pc).toBe(0x5204);
+    expect(machine.cpu.regs.sp).toBe(sp);
+  });
+
+  it('on the Model III the same program waits at its HALT, as it always has: the run goes on', () => {
+    const { clock, machine, runner } = runStub(HALTS);
+    const sp = machine.cpu.regs.sp;
+    runner.start();
+    frames(clock, 3);
+    expect(runner.state).toBe('running');
+    expect(runner.stopReason).toBeNull();
+    expect(machine.cpu.halted).toBe(true);
+    expect(runner.pc).toBe(0x5204);
+    expect(machine.cpu.regs.sp).toBe(sp);
+  });
+
+  it("on a ROM of the user's (here the stub with a loop at $0066), the HALT takes the NMI there and the run goes on", () => {
+    const { clock, machine, runner } = runPatched(HALTS, { 0x0066: [0x18, 0xfe] }, { model: 1 });
+    const sp = machine.cpu.regs.sp;
+    runner.start();
+    clock.frame();
+    expect(runner.state).toBe('running');
+    expect(runner.stopReason).toBeNull();
+    expect(machine.cpu.halted).toBe(false);
+    expect(runner.pc).toBe(0x0066);
+    expect(machine.cpu.regs.sp).toBe((sp - 2) & 0xffff);
+    expect([...machine.mem.read((sp - 2) & 0xffff, 2)]).toEqual([0x04, 0x52]); // the address after the HALT, $5204
   });
 });
 

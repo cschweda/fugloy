@@ -39,6 +39,40 @@ creates and pushes the tag.
 
 ### Changed
 
+- The web workbench and `@fugloy/mcp` follow the Model I's HALT (emu phase 7, the Model I sweep's
+  Task 4, 2026-10-23), which the machine answers with its reset switch's NMI (Fixed, below). A
+  Model I Run on Fugløy's stub ROM used to sit at its program's HALT, as a Model III's does; now it
+  stops there, before the NMI, naming the line: "Line 4 halts the CPU (HALT), and a Model I answers
+  a HALT with a reset to BASIC (its HALT line drives the reset switch's NMI), which needs a ROM, and
+  none is loaded. Add a Model I ROM in the Run tab, or end the program with a loop that waits, such
+  as WAIT: JR WAIT." (the Learn page: "… and none is loaded. Lessons run without one, so end the
+  program with a loop that waits, …"). On the user's ROM the NMI is taken as on the machine, and the
+  Model III and Model 4 are unchanged. The advice after a final RET no longer
+  offers HALT on the Model I. The debugger never calls a halted Model I stuck or waiting for an
+  interrupt: its next step takes the NMI, and a step that leaves it halted says "The CPU is halted
+  (HALT), and on the Model I a HALT raises an NMI at the next instruction: the next step or
+  Continue goes to $0066, the ROM's reset." On a Model I the MCP's `run until: "halt"` stops with
+  `stopped: halt (the CPU ran HALT, which on the Model I raises an NMI at the next instruction, to
+  0066h, the ROM's reset)`, a `step` that leaves the CPU halted ends with that parenthesis, and no
+  step there says it found the CPU halted, waiting for an interrupt; the Model III's sentences are
+  unchanged.
+
+- The Model I differential's last four residuals (emu phase 7, the Model I sweep's Task 1,
+  2026-10-23; plan `docs/superpowers/plans/2026-10-23-emu-phase7-model1-sweep.md`). The MAME
+  recorder's silence watchdog takes a tick that comes more than one interval late for a stall of the
+  recorder itself (its event loop blocked, as a comparison beside recordings that run at once blocks
+  it), not for MAME's silence, and it ends with the trace, so it never stops a healthy recording and
+  a MAME slow to exit after its last record leaves its trace complete (one still running a minute
+  after it closed its trace is stopped, the trace as whole as it was). The repeating
+  LDIR/LDDR/CPIR/CPDR class is one per reference rule, as SCF/CCF's is, each holding the reference
+  to its own rule as well as ours to PC's: xtrs's to Young's n, the finished iteration's rule, which
+  it keeps at every iteration, and trsjs's to the bits it had. A reference value off its rule is
+  then a divergence against xtrs, and against trsjs its general flag 3 and 5 class counts it; every
+  session's block count is the same under the new names. `pnpm mame:trace lines` reads a trace that
+  loaded a program, given with `--program <file>`, and names that option when it is missing. Emu
+  spec §10 lists xtrs's interrupt after a lone DD or FD among the reference limitations no session
+  meets.
+
 - The differential harness's known classes are each reference's own (emu phase 7, the final
   review of the Model I half, 2026-10-22): a reference declares the classes it needs
   (`Reference.classes`, in `test/diff/`), each found against it with its evidence, and `compareRun`
@@ -106,6 +140,31 @@ creates and pushes the tag.
 
 ### Fixed
 
+- The web workbench: Programs to try's Eliminator runs `elimin8a.cmd`, the Model I cassette build,
+  which reaches its title and plays (the manifest's new `tryBuild`; emu's
+  `test/integration/model1-programs.test.js` and the Model I sessions). It ran `elimin8d.cmd`, the
+  main build, which on Fugløy's Model I (48K, with the Expansion Interface) never draws its title: it
+  runs `RST 38H` into the ROM's `EI / RET` at `$4012`, after which the 40 Hz is taken in IM 0 after
+  every return and the latch at `$37E0` is never read, so it sits at READY (emu spec §11, the Model I
+  sweep, where it stands Open: neither reference can follow those interrupts). The workbench's
+  Eliminator still opens `elimin8d.cmd`.
+
+- `@fugloy/emu`: a Model I program that waits at a HALT now resets to BASIC: its HALT raises the
+  reset switch's NMI, as the machine is wired. HALT* and the switch meet at Z53, which drives NMI*
+  and SYSRES* through Z37 (TRS-80 Micro Computer Technical Reference Handbook, 1982, Figure 29 sheet
+  1, p. 113). The next instruction boundary takes the NMI (the address after the HALT pushed) and
+  the ROM's handler at `$0066` runs; under Level II that is BASIC's READY. Until now the CPU stayed
+  halted until an interrupt, as the Model III's does, so `m.step` idled at the HALT where it now
+  takes the NMI, and `m.cpu.halted` goes false there; `m.run({ until: 'halt' })` still stops when
+  the CPU halts, before the NMI. One NMI each HALT, and the NMI wins over a maskable request at the
+  same boundary, which stays pending. MAME's trs80l2 and xtrs both do this; found by the Model I
+  sweep (emu phase 7, the Model I sweep's Task 3), where Rear Guard 1, 2, 3 and 7 halt. SYSRES*'s
+  reset of the Expansion Interface is not modelled. The differential compares a halted PC where each
+  reference shows it (`Reference.haltedPc`: trsjs's on the HALT, the Model I's references after it),
+  and xtrs's NMI pushes the HALT's address plus two, a known class (`halt-nmi-next`, xtrs's alone).
+  The Model III is not touched; ZEXDOC and ZEXALL still pass all 67 groups; the thirteen Model I
+  sessions keep their counts.
+
 - `@fugloy/emu`: EX (SP),HL, EX (SP),IX and EX (SP),IY write (SP+1) before (SP), as the Z80 does
   (UM0080's (4, 3, 4, 3, 5) T-states; MAME's `ex_sp`; floooh/chips's cycle-stepped core); they
   wrote L first. Same bytes, same addresses: only the bus order changes. Found by the Model I
@@ -132,6 +191,50 @@ creates and pushes the tag.
   one field.
 
 ### Added
+
+- The Model I sweep against xtrs and MAME (emu phase 7, the Model I sweep's Task 3; plan
+  `docs/superpowers/plans/2026-10-23-emu-phase7-model1-sweep.md`), the Model III's sweep done for
+  the Model I: every `.CMD` in `examples/` and `fixtures/real/` that the thirteen sessions do not
+  play, 50 here (21 builds in `examples/`, 29 in `fixtures/real/`), each loaded on Level II 1.3 as
+  the sessions load theirs and run 10 million instructions past the load under one generic script
+  (`GENERIC`), in lockstep against xtrs (`test/diff/model1-sweep-xtrs.test.js`,
+  `FUGLOY_XTRS=1 FUGLOY_XTRS_SWEEP=1`) and following a recorded trace against MAME
+  (`test/diff/model1-sweep-mame.test.js`, `FUGLOY_MAME=1 FUGLOY_MAME_SWEEP=1`, five at a time).
+  Every program is listed whether or not a sweep runs; each logs its class counts and the maskable
+  interrupts our machine took (counted test-side), and the sum over the programs that passed comes
+  at the end (`--silent=false`). MAME's loader takes all 50 (a program with bytes below `$3C00`
+  would be skipped against MAME, naming the byte). After the HALT fix (under Fixed), 45 pass
+  against xtrs, its classes counting a repeating block instruction's flags 3 and 5 6,994,291 times,
+  BIT n,(HL) and BIT n,(IX+d)'s flags 3 and 5 215,380, EX (SP),rr's write order 11,252, IN and block
+  I/O's T-states 3,839 and the HALT's NMI return address 4; and 44 against MAME, counting only its
+  video read without the bit-6 gate, 8,218 in all. No program that passes takes a maskable interrupt
+  (Rear Guard 1, 2, 3 and 7 take the HALT's NMI, which is not one). Open against both, each
+  reference's own limitation: the programs that take the 40 Hz interrupt in IM 0 and never read the
+  `$37E0` latch, Eliminator b, d, f, g and h, and against MAME Asylum 1d too (on its lowercase
+  path). xtrs has no IM 0 response (it pushes PC and does not jump); MAME's recorder decodes only IM
+  1, and past it MAME's request is gone after one response, where the Expansion Interface's latch
+  keeps it, so ours takes it again after the handler's return and MAME does not (`irqTime`). Each
+  Open program's test pins that limitation (the divergence at xtrs's first IM 0 interrupt, the
+  recorder's IM 0 refusal), so the sweep passes while they stay as they are and a change in one
+  fails it. `recordMameTrace` now refuses a program it cannot load before it makes its work folder,
+  so `pnpm diff <program> --model 1 --reference mame` on one leaves nothing behind. The sweep found
+  the HALT bug (under Fixed) and one more xtrs class. The xtrs adapter now runs xtrs in its own
+  temporary folder, so the cassette files xtrs writes where it runs, when a program turns the motor
+  on (GO.CMD does), go with the folder instead of into `packages/emu`.
+
+- `pnpm diff <program> --model 1 --reference mame` records MAME's run of the program itself (emu
+  phase 7, the Model I sweep's Task 2; plan `docs/superpowers/plans/2026-10-23-emu-phase7-model1-sweep.md`),
+  as the Model I sessions do: ENTER at MEM SIZE?, the program loaded at 4 s, `--keys` (T-states
+  after the load, the format a lockstep run takes) pressed on MAME's matrix, and `--instructions`
+  past the load (default 1,000,000). It follows the recording on MAME's schedule, prints the report
+  and the screen MAME showed at the end, and deletes the trace in a `finally`, whatever the result.
+  A MAME that stops early is the trace-ended sentence (exit 3); the recorder's refusals (no MAME, a
+  ROM it cannot run, a program with bytes below `$3C00`) exit 2 with their sentences; naming a
+  trace with `--trace` works as before. The sessions' runners (`xtrsSession`, `mameSession` and
+  their helpers) moved from `model1-fixtures.test.js` into `test/diff/model1-session.js`, with the
+  generic script the sweep will use (`GENERIC`), so the sessions, the sweep and the command share
+  them; the sessions' counts are unchanged (Sea Dragon's, run against each reference after the move,
+  gives the pinned ones).
 
 - The Model I sessions against xtrs and MAME (emu phase 7, Model I, Task 5; plan
   `docs/superpowers/plans/2026-10-19-emu-phase7-model1-differential.md`), with which phase 7 is met
@@ -165,14 +268,26 @@ creates and pushes the tag.
   compared through the registers of each IN. `pnpm diff --model 1` runs a program against xtrs, and
   `pnpm diff --model 1 --reference mame --trace <file>` follows a MAME trace (`pnpm mame:trace
   compare` moved there; exit 3 for a trace that ends early); recording a trace that loads a program
-  from the command line is not supported yet (the tests record theirs). The report names the
-  reference and model. New known classes, each with its evidence: EX (SP),rr's write order (xtrs, trsjs), a
-  repeating block instruction's flags 3 and 5 (xtrs), IN and block I/O T-states (xtrs), and, for a
-  trace, MAME's video read without the gate. Test-only planted bugs (a latch read that does not
-  clear, the gate inverted) are caught where they first matter against each reference.
+  from the command line, `pnpm diff <program> --model 1 --reference mame`, came with the Model I
+  sweep (emu phase 7). The report names the reference and model. New known classes, each with its
+  evidence: EX (SP),rr's write order (xtrs, trsjs), a repeating block instruction's flags 3 and 5
+  (xtrs), IN and block I/O T-states (xtrs), and, for a trace, MAME's video read without the gate.
+  Test-only planted bugs (a latch read that does not clear, the gate inverted) are caught where
+  they first matter against each reference.
 
 - A Full screen button in Run ▶'s machine row; Esc leaves it (and the browser's own exit); keys keep
   reaching the TRS-80, and focus is kept. The first screen is 252,262 B gzip of its 252,775 B budget.
+
+### Release coupling
+
+`@fugloy/mcp`'s Model I sentences for a HALT (`run until: "halt"` and `step`, in
+`packages/mcp/src/execute.js` and `src/tools/step.js`) are true only on an `@fugloy/emu` that has the
+Model I HALT fix (Fixed, above): on emu 0.5.x a Model I stays halted after a HALT, so `run until:
+"halt"` would announce an NMI that never comes. The dependency is `workspace:^`, which publishes as
+`^` emu's version at the time, and `publish.sh check mcp` asks only that that version be on npm, so
+an mcp released while emu is still 0.5.0 would pack `^0.5.0` and pass. Emu is released first, as
+0.6.0 (in 0.x a changed `m.run`, `m.step` or `m.cpu.halted` on the Model I is a minor bump), and
+`@fugloy/mcp` 0.1.3 after it, which packs `^0.6.0`; `@fugloy/emu` 0.6.0 must be on npm before it.
 
 ## [emu 0.5.0] - 2026-10-19
 

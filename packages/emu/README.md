@@ -54,7 +54,8 @@ console.log(m.video.text().join('\n'))     // the screen, 16 lines
 
 `m.cpu.regs` and `m.cpu.flags` read the registers and the flags, and
 `m.cpu.halted` is true while the CPU sits in a HALT (PC is then just past it),
-until an interrupt or a reset.
+until an interrupt or a reset (on the Model I, below, the NMI its HALT raises
+at the next instruction).
 
 A disk image (JV1, JV3, or DMK, detected from its content) goes in a drive
 with `m.fdc.mount(drive, bytes)`, or through `m.load.dsk(bytes)`, which mounts
@@ -116,7 +117,10 @@ Type at 10 characters a second on the Model I (`m1.keyboard.type(text, {
 cps: 10 })`): the Level II keyboard routine drops every other key at the
 default 20. T-states, `m.sound` stamps included, are the model's own
 (`m.clockHz`). A label file records its model, and `mergeLabelFiles` refuses
-a Model I file with a Model III one. Cassettes play at 500 baud only. Real programs that run on it, and
+a Model I file with a Model III one. Cassettes play at 500 baud only. A HALT
+does not stay halted: the Model I wires the CPU's HALT output into the reset
+switch's NMI, so the next instruction boundary takes that NMI and the ROM's
+handler at `$0066` runs (under Level II, back to READY). Real programs that run on it, and
 what is still unverified against the Model I manual, are in spec §5.
 
 ### The Model 4
@@ -239,7 +243,10 @@ pnpm xtrs:install && pnpm mame:install                                    # the 
 FUGLOY_XTRS=1 pnpm vitest run packages/emu/test/diff                      # about 40 minutes: thirteen Model I sessions in lockstep with xtrs
 FUGLOY_MAME=1 pnpm vitest run packages/emu/test/diff                      # about 12 minutes: the same thirteen, following MAME
 FUGLOY_XTRS=1 pnpm vitest run packages/emu/test/diff/model1-fixtures.test.js -t elimin8c # one session
+FUGLOY_XTRS=1 FUGLOY_XTRS_SWEEP=1 pnpm vitest run packages/emu/test/diff/model1-sweep-xtrs.test.js --silent=false # every other .CMD against xtrs, logging each one's counts and the sum: 3 to 8 minutes a program, one at a time (-t splits it across processes)
+FUGLOY_MAME=1 FUGLOY_MAME_SWEEP=1 pnpm vitest run packages/emu/test/diff/model1-sweep-mame.test.js --silent=false # the same, following MAME: about 40 minutes, five at a time
 pnpm diff examples/eliminator/elimin8c.cmd --model 1                      # one program against xtrs, with a report
+pnpm diff examples/sea-dragon/seadrg01.cmd --model 1 --reference mame     # one program against MAME: it records its own trace, about half a minute
 ```
 
 `pnpm diff <program> [--model 3|1] [--reference trsjs|xtrs] [--lowercase] [--keys <script.json>] [--instructions N] [--from-cycle C] [--rom <file>] [--strict | --strict-all]`
@@ -251,7 +258,15 @@ divergence, if any, with ten instructions disassembled on each side.
 from power-on, against a MAME trace recorded with
 `pnpm mame:trace record <instructions>` (the ROM's boot and typed keys), our
 40 Hz on MAME's schedule as the report says; a trace that loaded a program
-(the tests record those) is compared with that program named first. Exit status 0 means no divergence, 1
+(the tests record those) is compared with that program named first.
+`pnpm diff <program> --model 1 --reference mame [--keys <script.json>] [--instructions N]`
+records MAME's run of a `.CMD` itself, as the Model I sessions do: ENTER at
+MEM SIZE?, the program loaded at 4 s, the keys of `--keys` (T-states after the
+load, as for xtrs) pressed on MAME's matrix, and `--instructions` (default
+1,000,000) past the load; MAME records about 70,000 instructions a second, so
+the default takes about half a minute. It follows the recording on MAME's
+schedule, prints the report and the screen MAME showed at the end, and deletes
+the trace, whatever the result. Exit status 0 means no divergence, 1
 a divergence, 2 a usage or setup error (an unexpected error, such as the ROM
 not reaching READY or the reference throwing, counts as one), 3 a MAME trace
 that ends before the instructions asked for.
@@ -271,7 +286,8 @@ trsjs); EX (SP),rr writing (SP) before (SP+1) (xtrs, trsjs); a repeating
 LDIR/LDDR/CPIR/CPDR's flags 3 and 5 from PC (xtrs, trsjs); SCF and CCF's
 flags 3 and 5, which trsjs leaves as they were (xtrs's are below); `BIT n,(HL)`
 and `BIT n,(IX+d)`'s flags 3 and 5, which xtrs clears where the Z80 shows
-MEMPTR; IN and block I/O one T-state short (xtrs). MAME declares none of these,
+MEMPTR; IN and block I/O one T-state short (xtrs); the return address of the
+NMI that answers a Model I HALT, which xtrs pushes one too far. MAME declares none of these,
 only its video read. Everything else is a divergence, so against MAME any flag
 difference is one. On the six Model III sessions (Sea Dragon,
 Eliminator c and e, Rear Guard 5 and 4, Armored Patrol, 10 million
@@ -279,12 +295,20 @@ instructions each) there is none, and none on the thirteen Model I sessions
 (Eliminator a and c, Sea Dragon and Rear Guard 5 from `examples/`, nine more
 from `fixtures/real/` where present, 10 million instructions each past the
 load) against either reference; against MAME the only difference counted is
-its video read. The harness found five bugs on our side, all now fixed: a
+its video read. A sweep of every other `.CMD` in `examples/` and
+`fixtures/real/` (50 here, under one generic script) passes against both but
+for the programs that take the 40 Hz interrupt in IM 0 without ever reading
+the `$37E0` latch, which neither reference can follow (xtrs has no IM 0
+response; MAME's recorder decodes only IM 1, and its request is gone after one
+response where the latch keeps it): they stand open (spec §11, phase 7), and
+each sweep tests them for that limitation, so it passes while they stay as
+they are. The harness found six bugs on our side, all now fixed: a
 halted CPU did not count R, port `FF` did not read port `EC`'s bits back
 (both against trsjs), EX (SP),rr wrote its low byte first, a repeating block
 instruction took flags 3 and 5 from its byte rather than PC, and SCF and CCF
 ignored F's flags 3 and 5 after an instruction that left them alone (all three
-against MAME). The harness cannot see a bug both machines share: where the two
+against MAME), and the Model I stayed halted after a HALT, which its wiring
+answers with the reset switch's NMI (the sweep, against both). The harness cannot see a bug both machines share: where the two
 agree, both may be wrong, so behaviour such as EI's one-instruction delay is
 pinned by our own unit tests (against Zilog UM0080 and Young §5.5) as well as
 compared. Two are judgment calls rather than reference errors: port `FF` bit

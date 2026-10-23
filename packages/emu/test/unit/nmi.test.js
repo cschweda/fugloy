@@ -9,6 +9,7 @@ import { TRS80System } from '../../src/machine/trs80-system.js';
 import { DiskImage } from '../../src/devices/disk-image.js';
 import { restoreState, serializeState } from '../../src/debug/state.js';
 import { INDEX_PERIOD } from '../../src/devices/fdc-wd1793.js';
+import { TIMER_BIT } from '../../src/devices/interrupt-latch.js';
 import { writeJv1 } from './disk-writers.js';
 
 /** A 14K ROM with `code` at 0000 and `handler` at the NMI vector 0066. */
@@ -108,6 +109,77 @@ describe('the NMI edge latch in a save state', () => {
     restoreState(other, state);
     other.runTStates(20_000);
     expect(other.memory.readByte(0x5000)).toBe(2); // the NMI fires again: why the latch is saved
+  });
+});
+
+describe("the Model I's HALT: the NMI the reset switch makes", () => {
+  // The Model I ties the CPU's HALT* output into the reset switch's NMI circuit (Z53 and Z37 to
+  // NMI*: TRS-80 Micro Computer Technical Reference Handbook, 1982, Figure 29 sheet 1, p. 113), as
+  // MAME's trs80l2 (halt_cb to its nmigate) and xtrs (z80.c, case 0x76: trs_reset) have it. A 12K
+  // Model I ROM with `code` at 0000, `nmi` at 0066 and `irq` at 0038.
+  const model1 = (/** @type {number[]} */ code, /** @type {number[]} */ nmi, /** @type {number[]} */ irq = [0x18, 0xfe]) => {
+    const bytes = new Uint8Array(0x3000);
+    bytes.set(code, 0);
+    bytes.set(irq, 0x38);
+    bytes.set(nmi, 0x66);
+    return new TRS80System({ romData: bytes, model: 1 });
+  };
+
+  it('a HALT is answered by an NMI at the next boundary: HALT+1 pushed, IFF1 cleared, 11 T-states', () => {
+    // 0000 LD SP,5000H / 0003 HALT; NMI: LD A,42H / JR $
+    const sys = model1([0x31, 0x00, 0x50, 0x76], [0x3e, 0x42, 0x18, 0xfe]);
+    sys.stepInstruction();
+    expect(sys.stepInstruction()).toBe(4); // the HALT
+    expect(sys.cpu.halted).toBe(true);
+    expect(sys.stepInstruction()).toBe(11 + 7); // the NMI response, then LD A,42H
+    expect(sys.cpu.halted).toBe(false);
+    expect(pc(sys)).toBe(0x0068);
+    expect(sys.cpu.registers.A).toBe(0x42);
+    expect(sys.cpu.registers.SP).toBe(0x4ffe);
+    expect(stackTop(sys)).toBe(0x0004);
+    expect(sys.cpu.IFF1).toBe(false);
+  });
+
+  it('each HALT is its own NMI: a handler that halts is answered again', () => {
+    // 0000 LD SP,5000H / 0003 HALT; NMI: HALT
+    const sys = model1([0x31, 0x00, 0x50, 0x76], [0x76]);
+    sys.stepInstruction();
+    sys.stepInstruction(); // the HALT at 0003
+    sys.stepInstruction(); // the NMI, then the handler's HALT at 0066
+    expect(sys.cpu.halted).toBe(true);
+    expect(stackTop(sys)).toBe(0x0004);
+    sys.stepInstruction(); // its NMI, then the HALT again
+    expect(sys.cpu.halted).toBe(true);
+    expect(sys.cpu.registers.SP).toBe(0x4ffc);
+    expect(stackTop(sys)).toBe(0x0067);
+  });
+
+  it('the NMI wins over a maskable request at the same boundary (Zilog UM0080), which stays pending', () => {
+    // 0000 LD SP,5000H / 0003 EI / 0004 HALT; NMI: RETN; maskable (IM 0, RST 38H from $FF): JR $
+    const sys = model1([0x31, 0x00, 0x50, 0xfb, 0x76], [0xed, 0x45]);
+    /** @type {NonNullable<typeof sys.io.latch>} */ (sys.io.latch).raise(TIMER_BIT);
+    sys.stepInstruction();
+    sys.stepInstruction(); // EI: no interrupt at the boundary after it
+    sys.stepInstruction(); // the HALT, IFF1 set after it
+    expect(sys.cpu.halted).toBe(true);
+    expect(sys.cpu.IFF1).toBe(true);
+    sys.stepInstruction(); // the NMI, not the request, then RETN back after the HALT
+    expect(pc(sys)).toBe(0x0005);
+    expect(sys.cpu.registers.SP).toBe(0x5000);
+    expect(sys.cpu.IFF1).toBe(true);
+    expect(/** @type {NonNullable<typeof sys.io.latch>} */ (sys.io.latch).bits & TIMER_BIT).toBe(TIMER_BIT);
+    sys.stepInstruction(); // now the request: RST 38H, then JR $
+    expect(pc(sys)).toBe(0x0038);
+    expect(stackTop(sys)).toBe(0x0005);
+  });
+
+  it('the Model III has no such wiring: its HALT waits for an interrupt', () => {
+    const sys = new TRS80System({ romData: rom([0x31, 0x00, 0x50, 0x76], [0x3e, 0x42]) });
+    sys.stepInstruction();
+    sys.stepInstruction();
+    for (let k = 0; k < 10; k++) sys.stepInstruction();
+    expect(sys.cpu.halted).toBe(true);
+    expect(sys.cpu.registers.SP).toBe(0x5000);
   });
 });
 

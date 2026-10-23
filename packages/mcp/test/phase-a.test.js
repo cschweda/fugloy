@@ -110,6 +110,14 @@ function hookRom() {
   return rom;
 }
 
+/** A synthetic 12K Model I ROM: LD SP,8000H, then a JR to itself; at 0066h, where a Model I HALT's NMI goes, another. */
+function model1Rom() {
+  const rom = new Uint8Array(0x3000);
+  rom.set([0x31, 0x00, 0x80, 0x18, 0xfe]);
+  rom.set([0x18, 0xfe], 0x0066); // 0066  JR 0066H
+  return rom;
+}
+
 let dir;
 const at = (name) => join(dir, name);
 
@@ -117,6 +125,7 @@ beforeAll(() => {
   dir = mkdtempSync(join(tmpdir(), 'fugloy-mcp-phase-a-'));
   writeFileSync(at('synthetic.rom'), syntheticRom());
   writeFileSync(at('hook.rom'), hookRom());
+  writeFileSync(at('model1.rom'), model1Rom());
   writeFileSync(at('hello.cmd'), HELLO);
   writeFileSync(at('keys.cmd'), KEYS);
   writeFileSync(at('fed.cmd'), FED);
@@ -130,9 +139,9 @@ beforeAll(() => {
 
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-/** A server on the synthetic ROM (or `rom`), with `limits` over the defaults. */
-function server({ rom = 'synthetic.rom', limits = {} } = {}) {
-  const config = testConfig({ roms: { model3: at(rom) } });
+/** A server on the synthetic ROM (or `rom`), with `limits` over the defaults; `model1` names a Model I ROM too. */
+function server({ rom = 'synthetic.rom', limits = {}, model1 = undefined } = {}) {
+  const config = testConfig({ roms: { model3: at(rom), ...(model1 === undefined ? {} : { model1: at(model1) }) } });
   config.limits = { ...config.limits, ...limits };
   return connect({ config });
 }
@@ -281,6 +290,27 @@ describe('phase A tools', () => {
     expect(halt.split('\n')[0]).toBe('stopped: halt (the CPU ran HALT and waits for an interrupt)');
     expect(halt.split('\n')[1]).toBe('Ran 4 cycles (0.000 s emulated)');
     expect((await ok(call, 'run', { seconds: 0.001 })).split('\n')[0]).toBe('stopped: cycles (the 0.001 s asked for)');
+    await close();
+  });
+
+  it("on a Model I, run until halt says the HALT raises an NMI at the next instruction, and the next step takes it to 0066h", async () => {
+    // The Model I's HALT line drives its reset switch's NMI (emu spec §5).
+    const NMI = "(the CPU ran HALT, which on the Model I raises an NMI at the next instruction, to 0066h, the ROM's reset)";
+    const { call, close } = await server({ model1: 'model1.rom' });
+    await ok(call, 'load', { path: at('hello.cmd'), model: 1 });
+    const halt = (await ok(call, 'run', { until: 'halt' })).split('\n');
+    expect(halt[0]).toBe(`stopped: halt ${NMI}`);
+    expect(halt.find((l) => l.startsWith('PC '))).toMatch(/^PC 7010  SP 7F00  /);
+    const step = await ok(call, 'step', {});
+    expect(step.split('\n')[0]).toMatch(/^0066  18 FE  /);
+    expect(step).toMatch(/\nPC 0066  SP 7EFE  /);
+    expect(step).not.toContain('waiting for an interrupt');
+    // A step that runs the HALT says the same of what comes next.
+    await ok(call, 'load', { path: at('hello.cmd'), model: 1 });
+    await ok(call, 'run', { until: 'pc:700F' });
+    const onto = (await ok(call, 'step', {})).split('\n');
+    expect(onto[0]).toMatch(/^700F  76 +HALT +\[4\]$/);
+    expect(onto[1]).toBe(NMI);
     await close();
   });
 

@@ -11,7 +11,7 @@ later phases follow, in the Roadmap's order. The recompiler and
 bundler stay in Part 2 until the plan's kill criteria have been reviewed. If a
 task seems to need machinery from a later step, stop and say so.
 
-Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.3.0 and `@fugloy/emu` 0.5.0 on npm (2026-10-19), `@fugloy/mcp` 0.1.2 (2026-10-18); emu phases 5–7 released in emu 0.3.0; the Model 4 (emu phase 6b) done for Model III mode and the native hardware, merged to main (2026-10-18); emu 0.4.0 and mcp 0.1.2 published 2026-10-18; a version 6 DOS boot still needs an LS-DOS 6 / TRSDOS 6 disk. Plan phase 5A, the assembler (`@fugloy/asm` and `fugloy asm`), merged to main (2026-10-18; plan `docs/superpowers/plans/2026-10-18-phase5a-assembler.md`), released in core 1.3.0 (2026-10-19). 5B, the workbench's Source ✎ and Run ▶ (CodeMirror 6 editor with inline errors and one-click fixes; one press assembles and runs on a fresh machine, on the user's ROM, stored per model in the browser, or on Fugløy's stub ROM; Open as source ✎ turns a disassembly into a source that reassembles byte for byte), merged to main (2026-10-19), all five tasks done (plan `docs/superpowers/plans/2026-10-18-phase5b-source-run.md`). 5C, the running line (the line a program is on lit live in Source ✎ and in a listing of the same program, with a fading trail; breakpoints by gutter click or F9, saved with the source; Continue, Step, Step Over and Run to Here; the registers and flags; debug keys F5–F11; a screen-text mirror), merged to main (2026-10-19), all five tasks done (plan `docs/superpowers/plans/2026-10-19-phase5c-running-line.md`); with it phase 5's deliverable is met. 5D, the TRS-80 on screen (the screen's glyphs from xtrs's character generators on a black tube; a TRS-80 that powers on when Run ▶ opens with a ROM, with Power, Reset and Pause; Programs to try: Sea Dragon, Rear Guard, Eliminator; the debugger in a disclosure; `m.video.altCharset` in emu), merged to main (2026-10-19), all five tasks done (plan `docs/superpowers/plans/2026-10-19-phase5d-real-machine.md`). Phase 6A, the screen's true shape (Model III and Model 4 at 4:3, the Model I at about 0.952:1 from the video timing, rows by whole screen pixels, never narrower than its dots across where space allows; a Full screen button in Run ▶; plan `docs/superpowers/plans/2026-10-19-phase6a-screen-shape.md`), merged to main (2026-10-19). 6B, the Learn page and lessons 1–7 (a header link first in the Site nav; lesson | program | TRS-80 in three columns, always on the stub ROM; each lesson self-contained, building on the last, runnable on the Model III; edits and done marks kept in the browser; plan `docs/superpowers/plans/2026-10-19-phase6b-learn-page.md`), merged to main (2026-10-19), all eight tasks done. 6C, Build Space Invaders (twelve filled-in chapters in `apps/web/content/learn/invaders/` from a blank loop to a game with a base, marching and descending invaders, a BCD score, bombs, lives, GAME OVER and faster waves; new, changed and removed lines marked; served at `/learn/invaders/<slug>/`; the lesson list shows both courses; plan `docs/superpowers/plans/2026-10-19-phase6c-invaders.md`), merged to main (2026-10-19), all five tasks done; with it phase 6 is done. Emu phase 7's Model I half, the differential harness against xtrs in lockstep and MAME 0.289 by a trace our machine follows (plan `docs/superpowers/plans/2026-10-19-emu-phase7-model1-differential.md`), merged to main (2026-10-23), all five tasks done: thirteen Model I sessions of 10 million instructions with no divergence the known classes do not explain against either reference, three core fixes it found (EX (SP),rr's write order, a repeating block instruction's flags 3 and 5, SCF and CCF's flags 3 and 5 after an instruction that left the flags alone), and the 20 cps key drop settled as the Level II 1.3 ROM's. The NVDA and VoiceOver hand checks wait for the project's final phase.**
+Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.3.0 and `@fugloy/emu` 0.5.0 on npm (2026-10-19), `@fugloy/mcp` 0.1.2 (2026-10-18); emu phases 5–7 released in emu 0.3.0; the Model 4 (emu phase 6b) done for Model III mode and the native hardware, merged to main (2026-10-18); emu 0.4.0 and mcp 0.1.2 published 2026-10-18; a version 6 DOS boot still needs an LS-DOS 6 / TRSDOS 6 disk. Plan phase 5A, the assembler (`@fugloy/asm` and `fugloy asm`), merged to main (2026-10-18; plan `docs/superpowers/plans/2026-10-18-phase5a-assembler.md`), released in core 1.3.0 (2026-10-19). 5B, the workbench's Source ✎ and Run ▶ (CodeMirror 6 editor with inline errors and one-click fixes; one press assembles and runs on a fresh machine, on the user's ROM, stored per model in the browser, or on Fugløy's stub ROM; Open as source ✎ turns a disassembly into a source that reassembles byte for byte), merged to main (2026-10-19), all five tasks done (plan `docs/superpowers/plans/2026-10-18-phase5b-source-run.md`). 5C, the running line (the line a program is on lit live in Source ✎ and in a listing of the same program, with a fading trail; breakpoints by gutter click or F9, saved with the source; Continue, Step, Step Over and Run to Here; the registers and flags; debug keys F5–F11; a screen-text mirror), merged to main (2026-10-19), all five tasks done (plan `docs/superpowers/plans/2026-10-19-phase5c-running-line.md`); with it phase 5's deliverable is met. 5D, the TRS-80 on screen (the screen's glyphs from xtrs's character generators on a black tube; a TRS-80 that powers on when Run ▶ opens with a ROM, with Power, Reset and Pause; Programs to try: Sea Dragon, Rear Guard, Eliminator; the debugger in a disclosure; `m.video.altCharset` in emu), merged to main (2026-10-19), all five tasks done (plan `docs/superpowers/plans/2026-10-19-phase5d-real-machine.md`). Phase 6A, the screen's true shape (Model III and Model 4 at 4:3, the Model I at about 0.952:1 from the video timing, rows by whole screen pixels, never narrower than its dots across where space allows; a Full screen button in Run ▶; plan `docs/superpowers/plans/2026-10-19-phase6a-screen-shape.md`), merged to main (2026-10-19). 6B, the Learn page and lessons 1–7 (a header link first in the Site nav; lesson | program | TRS-80 in three columns, always on the stub ROM; each lesson self-contained, building on the last, runnable on the Model III; edits and done marks kept in the browser; plan `docs/superpowers/plans/2026-10-19-phase6b-learn-page.md`), merged to main (2026-10-19), all eight tasks done. 6C, Build Space Invaders (twelve filled-in chapters in `apps/web/content/learn/invaders/` from a blank loop to a game with a base, marching and descending invaders, a BCD score, bombs, lives, GAME OVER and faster waves; new, changed and removed lines marked; served at `/learn/invaders/<slug>/`; the lesson list shows both courses; plan `docs/superpowers/plans/2026-10-19-phase6c-invaders.md`), merged to main (2026-10-19), all five tasks done; with it phase 6 is done. Emu phase 7's Model I half, the differential harness against xtrs in lockstep and MAME 0.289 by a trace our machine follows (plan `docs/superpowers/plans/2026-10-19-emu-phase7-model1-differential.md`), merged to main (2026-10-23), all five tasks done: thirteen Model I sessions of 10 million instructions with no divergence the known classes do not explain against either reference, three core fixes it found (EX (SP),rr's write order, a repeating block instruction's flags 3 and 5, SCF and CCF's flags 3 and 5 after an instruction that left the flags alone), and the 20 cps key drop settled as the Level II 1.3 ROM's. Its Model I sweep, every other `.CMD` against both references (plan `docs/superpowers/plans/2026-10-23-emu-phase7-model1-sweep.md`), merged to main (2026-10-23), all four tasks done: the 50 programs here (21 in `examples/`, 29 in `fixtures/real/`) of 10 million instructions each under one generic script, 45 passing against xtrs and 44 against MAME with no divergence the known classes do not explain, and Eliminator b, d, f, g and h (Asylum 1d too, against MAME) standing Open because they take the 40 Hz interrupt in IM 0 without ever reading the `$37E0` latch, which neither reference can follow (xtrs has no IM 0 response; MAME's recorder decodes only IM 1 and its request is gone after one response); a fourth core fix it found (a Model I HALT raises the reset switch's NMI, as the machine is wired); and, outside emu, a Model I Run on the stub ROM that stops at its program's HALT with a sentence, a debugger and MCP that say what a Model I HALT does, and Programs to try running Eliminator's Model I cassette build. The NVDA and VoiceOver hand checks wait for the project's final phase.**
 v1 is disassembler phases 1–4: the core decoder and loaders (v0.1.0), Pass 1
 and Pass 2 (v0.2.0), the cited symbol tables (phase 3: eight JSON tables, 634
 entries, in `packages/disasm/data/symbols/`, compiled by `pnpm symbols`), and
@@ -122,19 +122,42 @@ by `pnpm xtrs:install` into `tools/xtrs/` and run in lockstep over a pipe
 `trs80l2`'s ROM set from `roms.model1` into `tools/mame/`), whose recorded
 trace our machine follows from power-on, its 40 Hz on MAME's schedule
 (`FUGLOY_MAME=1`); `pnpm diff --model 1` runs a program against xtrs,
+`--reference mame` records MAME's run of a program (its `--keys` pressed on
+MAME's matrix) into a temporary folder and follows it, deleting the trace, and
 `--reference mame --trace <file>` follows a recorded trace. Thirteen
-Model I sessions (`test/diff/model1-fixtures.test.js`: the four `examples/`
+Model I sessions (`test/diff/model1-fixtures.test.js`, their runners shared in
+`model1-session.js`: the four `examples/`
 programs and nine from `fixtures/real/`, 10 million instructions each past the
 load) have no divergence the known classes do not explain against either, and
 against MAME none but its video read without the bit-6 gate; each reference
 declares the known classes it needs (`Reference.classes`; MAME no step class,
-xtrs no general flag 3 and 5 class), and the comparator applies only those.
-The Model I harness found and fixed three more core bugs (EX (SP),rr's write
+xtrs no general flag 3 and 5 class), and the comparator applies only those;
+a sweep of every other program (`model1-sweep-xtrs.test.js`,
+`model1-sweep-mame.test.js`; `FUGLOY_XTRS_SWEEP=1`, `FUGLOY_MAME_SWEEP=1`; 50
+here; plan `docs/superpowers/plans/2026-10-23-emu-phase7-model1-sweep.md`)
+passes against both but for the IM 0 interrupt storms neither reference can
+follow (Open, emu spec §11).
+The Model I harness found and fixed four more core bugs (EX (SP),rr's write
 order, a repeating block instruction's flags 3 and 5, SCF and CCF's flags 3 and
-5 after an instruction that left the flags alone), and settled the 20 cps key
-drop as the Level II 1.3 ROM's own debounce (emu spec §5). Open: no Model I
-session takes an interrupt or reads `$37E0`, so an interrupt-driven session (a
-DOS from a DMK) against both references waits (emu spec §12).
+5 after an instruction that left the flags alone, and, in the sweep, the Model
+I's HALT, which its wiring answers with the reset switch's NMI), and settled the 20 cps key
+drop as the Level II 1.3 ROM's own debounce (emu spec §5). The workbench and
+`@fugloy/mcp` follow that HALT: a Model I Run on the stub ROM stops at the
+program's HALT with a sentence (`MODEL1_HALT`, `utils/emulator/runner.ts`; its
+slices run `until: 'halt'`), the debugger and MCP's `run` and `step` say a
+Model I HALT raises an NMI to `$0066`, and Programs to try runs Eliminator's
+Model I cassette build, `elimin8a` (the manifest's `tryBuild`; the workbench
+still opens `elimin8d`, which on Fugløy's Model I (48K, with the Expansion
+Interface) never draws its title, a claim our latch model makes and neither
+reference can test: emu spec §11 files it Open). Release coupling: mcp's Model I
+HALT sentences are true only on an emu with that fix (on emu 0.5.x a Model I
+stays halted, so `run until: "halt"` would announce an NMI that never comes),
+and mcp packs `^` plus emu's version at the time, which `publish.sh check mcp`
+only asks to be on npm, so emu releases first, as 0.6.0 (in 0.x a changed
+`m.run`, `m.step` or `m.cpu.halted` on the Model I is a minor bump), then mcp
+0.1.3, which packs `^0.6.0`. Open: no Model I session takes a maskable interrupt
+or reads `$37E0`, so an interrupt-driven session (a DOS from a DMK) against both
+references waits (emu spec §12).
 
 ## Stack and layout
 
@@ -214,9 +237,9 @@ DOS from a DMK) against both references waits (emu spec §12).
   (`FUGLOY_REQUIRE_ZMAC=1` in CI). Lessons 1 and 3–7 and chapters 10–12 link to Sea
   Dragon through `/?example=sea-dragon&at=XXXX` (`utils/deep-link.ts`). The Explain
   tab loads lazily, which took the workbench's first screen from 252,257 B to
-  228,912 B; it is 229,039 B now against 252,775 B. `pnpm --filter @fugloy/web
+  228,912 B; it is 229,051 B now against 252,775 B. `pnpm --filter @fugloy/web
   size:first-screen -- --page learn|invaders` measures the Learn and chapter pages
-  (202,885 B) against `LEARN_BUDGET` (221,184 B gzip).
+  (202,900 B) against `LEARN_BUDGET` (221,184 B gzip).
 - `packages/emu` — headless, deterministic TRS-80 emulator core (the Model III
   and, from emu phase 6, the Model I; from emu phase 6b, the Model 4), plain JavaScript ESM, no DOM, no Node APIs. Spec: `docs/fugloy-emu-spec.md`.
   Extracted from `cschweda/trs80-emulator` in its phase 0 (`NOTICE.md`); tests
@@ -225,7 +248,9 @@ DOS from a DMK) against both references waits (emu spec §12).
   Plain JavaScript ESM, no build step; the bin is `bin/fugloy-mcp.js`, which
   imports disasm and z80 from their `dist/` (run `pnpm build` or
   `pnpm typecheck` first). Depends on emu, disasm, and z80 as `workspace:^`
-  (pnpm pack rewrites them to `^0.4.0` and `^1.2.0`), and on the MCP SDK and
+  (pnpm pack rewrites them to `^` their versions at release: `^0.4.0` and
+  `^1.2.0` for 0.1.2; 0.1.3 needs emu 0.6.0 on npm first, per the release
+  coupling above), and on the MCP SDK and
   zod at exact versions. Phases A–F are built: one machine per process
   (a Model III, a Model I from `load { model: 1 }` on `roms.model1`, or a
   Model 4 from `load { model: 4 }` on `roms.model4`),
