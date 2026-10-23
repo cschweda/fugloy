@@ -134,6 +134,39 @@ describe.each(shells)('the xtrs pipe fails clearly instead of hanging (wrapper %
   });
 });
 
+describe('the xtrs child runs in a temporary folder of its own', () => {
+  it('so what it writes where it runs (xtrs keeps its cassette files there) goes with the folder, not into the package', () => {
+    // A program that turns the cassette motor on makes xtrs write .cassette.ctl and cassette.cas
+    // where it runs (trs_cassette.c, CONTROL_FILENAME and DEFAULT_FILENAME): the Model I sweep's
+    // GO.CMD left them in packages/emu. This stand-in writes such a file, then answers as xtrs.
+    const marker = `.fugloy-cwd-probe-${process.pid}`;
+    const where = join(dir, 'child-cwd.txt');
+    const script = join(dir, 'cwd-writer.mjs');
+    writeFileSync(script, `import { readSync, writeFileSync, writeSync } from 'node:fs';
+writeFileSync(${JSON.stringify(marker)}, 'probe');
+writeFileSync(${JSON.stringify(where)}, process.cwd());
+writeSync(1, 'ready fugloy-xtrs 1\\n');
+const buf = Buffer.alloc(4096);
+for (;;) {
+  const got = readSync(0, buf, 0, buf.length, null);
+  if (got === 0) process.exit(0);
+  for (const line of buf.toString('latin1', 0, got).split('\\n').filter((l) => l !== '')) writeSync(1, (line.startsWith('regs') ? ${JSON.stringify(R0())} : 'ok') + '\\n');
+}
+`);
+    const ref = openXtrs({ command: process.execPath, args: [script] });
+    let cwd = '';
+    try {
+      cwd = readFileSync(where, 'utf8');
+      expect(cwd).not.toBe(process.cwd());
+      expect(existsSync(join(cwd, marker))).toBe(true);
+    } finally {
+      ref.close?.();
+      rmSync(join(process.cwd(), marker), { force: true });
+    }
+    expect(existsSync(cwd)).toBe(false);
+  });
+});
+
 describe.skipIf(xtrsSkip !== null)(`xtrs adapter against @fugloy/emu's Model I${xtrsSkip === null ? '' : ` (skipped: ${xtrsSkip})`}`, { timeout: ROM_TEST_TIMEOUT * 2 }, () => {
   const rom = () => requireRom('model1');
   const newMachine = () => new Machine({ model: 1, roms: { level2: rom() } });

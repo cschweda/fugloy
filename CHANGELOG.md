@@ -122,6 +122,19 @@ creates and pushes the tag.
 
 ### Fixed
 
+- `@fugloy/emu`: the Model I answers a HALT with the NMI its reset switch makes, as the machine is
+  wired: HALT* and the switch meet at Z53, which drives NMI* and SYSRES* through Z37 (TRS-80 Micro
+  Computer Technical Reference Handbook, 1982, Figure 29 sheet 1, p. 113). The next instruction
+  boundary takes the NMI (the address after the HALT pushed) and the ROM's handler at `$0066` runs;
+  under Level II that is BASIC's READY. One NMI each HALT, and the NMI wins over a maskable request
+  at the same boundary, which stays pending. It stayed halted until an interrupt. MAME's trs80l2 and
+  xtrs both do this; found by the Model I sweep (emu phase 7, the Model I sweep's Task 3), where
+  Rear Guard 1, 2, 3 and 7 halt. SYSRES*'s reset of the Expansion Interface is not modelled. The
+  differential compares a halted PC where each reference shows it (`Reference.haltedPc`: trsjs's on
+  the HALT, the Model I's references after it), and xtrs's NMI pushes the HALT's address plus two,
+  a known class (`halt-nmi-next`, xtrs's alone). The Model III is not touched; ZEXDOC and ZEXALL
+  still pass all 67 groups; the thirteen Model I sessions keep their counts.
+
 - `@fugloy/emu`: EX (SP),HL, EX (SP),IX and EX (SP),IY write (SP+1) before (SP), as the Z80 does
   (UM0080's (4, 3, 4, 3, 5) T-states; MAME's `ex_sp`; floooh/chips's cycle-stepped core); they
   wrote L first. Same bytes, same addresses: only the bus order changes. Found by the Model I
@@ -148,6 +161,32 @@ creates and pushes the tag.
   one field.
 
 ### Added
+
+- The Model I sweep against xtrs and MAME (emu phase 7, the Model I sweep's Task 3; plan
+  `docs/superpowers/plans/2026-10-23-emu-phase7-model1-sweep.md`), the Model III's sweep done for
+  the Model I: every `.CMD` in `examples/` and `fixtures/real/` that the thirteen sessions do not
+  play, 50 here (21 builds in `examples/`, 29 in `fixtures/real/`), each loaded on Level II 1.3 as
+  the sessions load theirs and run 10 million instructions past the load under one generic script
+  (`GENERIC`), in lockstep against xtrs (`test/diff/model1-sweep-xtrs.test.js`,
+  `FUGLOY_XTRS=1 FUGLOY_XTRS_SWEEP=1`) and following a recorded trace against MAME
+  (`test/diff/model1-sweep-mame.test.js`, `FUGLOY_MAME=1 FUGLOY_MAME_SWEEP=1`, five at a time).
+  Every program is listed whether or not a sweep runs; each logs its class counts and the
+  interrupts our machine took (counted test-side), and the sum over the programs that passed comes
+  at the end (`--silent=false`). MAME's loader takes all 50 (a program with bytes below `$3C00`
+  would be skipped against MAME, naming the byte). After the HALT fix (under Fixed), 45 pass
+  against xtrs, its classes counting a repeating block instruction's flags 3 and 5 6,994,291 times,
+  BIT n,(HL) and BIT n,(IX+d)'s flags 3 and 5 215,380, EX (SP),rr's write order 11,252, IN and block
+  I/O's T-states 3,839 and the HALT's NMI return address 4; and 44 against MAME, counting only its
+  video read without the bit-6 gate, 8,218 in all. No program that passes takes an interrupt.
+  Open against both, each reference's own limitation: the
+  programs that take the 40 Hz interrupt in IM 0 and never read the `$37E0` latch, Eliminator b,
+  d, f, g and h, and against MAME Asylum 1d too (on its lowercase path). xtrs
+  has no IM 0 response (it pushes PC and does not jump); MAME's recorder decodes only IM 1, and
+  past it MAME's request is gone after one response, where the Expansion Interface's latch keeps
+  it, so ours takes it again after the handler's return and MAME does not (`irqTime`). The sweep
+  found the HALT bug (under Fixed) and one more xtrs class. The xtrs adapter now runs xtrs in its own
+  temporary folder, so the cassette files xtrs writes where it runs, when a program turns the motor
+  on (GO.CMD does), go with the folder instead of into `packages/emu`.
 
 - `pnpm diff <program> --model 1 --reference mame` records MAME's run of the program itself (emu
   phase 7, the Model I sweep's Task 2; plan `docs/superpowers/plans/2026-10-23-emu-phase7-model1-sweep.md`),

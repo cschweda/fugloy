@@ -59,12 +59,14 @@ const PAIRED_OPCODES = new Set(Array.from({ length: 256 }, (_, k) => k).filter((
  * with its evidence (plan Ruling 6; Reference.classes), and no more: a repeating LDIR/LDDR/CPIR/
  * CPDR's flags 3 and 5 (xtrs keeps Young's rule), SCF's and CCF's (it takes A's alone, NEC's
  * rule), BIT n,(HL)'s and BIT n,(IX+d)'s (it clears them), EX (SP),rr's write order (it writes the
- * low byte first), and IN's and block I/O's T-states (it counts one less). No general flag 3 and 5
+ * low byte first), and IN's and block I/O's T-states (it counts one less); and, found by the Model
+ * I sweep, the return address the NMI after a Model I HALT pushes (it pushes the HALT's address
+ * plus two). No general flag 3 and 5
  * class, so a flag difference on any other instruction is a divergence; no interrupt class, since
  * it keeps its 40 Hz request in its latch as ours does (compare.js never holds it back or forces
  * it); and no reference fix, since it drops no DD/FD pair.
  */
-export const XTRS_CLASSES = new Set(['block-xy-n', 'scf-ccf-a', 'bit-mem-xy', 'ex-sp-order', 'io-cycles']);
+export const XTRS_CLASSES = new Set(['block-xy-n', 'scf-ccf-a', 'bit-mem-xy', 'ex-sp-order', 'io-cycles', 'halt-nmi-next']);
 
 /** @param {Buffer | string} b */
 const sha256 = (b) => createHash('sha256').update(b).digest('hex');
@@ -135,7 +137,10 @@ export function loadXtrs({ path = XTRS_PATH, src = XTRS_SRC, rom }) {
  * Run `command` as the reference process and wrap its protocol as a Reference. No checks: loadXtrs
  * makes them; tests use this with a stand-in child.
  * `shell` runs the wrapper that holds the reply FIFO open and records the exit status; it uses
- * only POSIX sh (the tests run it under /bin/sh and, where present, dash, as on CI's Linux).
+ * only POSIX sh (the tests run it under /bin/sh and, where present, dash, as on CI's Linux). The
+ * child runs in the pipes' temporary folder, deleted when the reference closes, so what xtrs writes
+ * where it runs goes with it: its cassette's `.cassette.ctl` and `cassette.cas` (trs_cassette.c),
+ * which a program that turns the motor on makes it write (the Model I sweep's GO.CMD did).
  * @param {{ command: string, args?: string[], timeoutMs?: number, cleanup?: () => void, shell?: string }} opts
  * @returns {import('./reference.js').Reference}
  */
@@ -153,6 +158,7 @@ export function openXtrs({ command, args = [], timeoutMs = XTRS_STEP_TIMEOUT_MS,
   const child = spawn(shell, ['-c', 'exec 4>"$1"; req=$2; st=$3; shift 3; "$@" <"$req" >&4 4>&-; echo $? >"$st"', 'sh', resp, req, status, command, ...args], {
     stdio: ['ignore', 'ignore', errFd],
     detached: true,
+    cwd: dir,
   });
   closeSync(errFd);
   let instructions = 0;
@@ -354,7 +360,7 @@ export function openXtrs({ command, args = [], timeoutMs = XTRS_STEP_TIMEOUT_MS,
       const sys = machine.system;
       const cpu = sys.cpu;
       const o = machine.cpu.regs;
-      if (cpu.halted) throw new Error('xtrs: our CPU is halted, and xtrs\'s Model I resets on HALT (z80.c, case 0x76), so the two cannot be synced there');
+      if (cpu.halted) throw new Error('xtrs: our CPU is halted, and xtrs\'s Model I never halts (z80.c, case 0x76: its HALT presses the reset switch, an NMI at the next boundary), so the two cannot be synced there');
       // Our EI takes effect after the next instruction (pendingEI); xtrs's IFF1 is set by EI itself
       // and the boundary after it takes no interrupt.
       const ei = cpu.pendingEI > 0;
@@ -393,6 +399,9 @@ export function openXtrs({ command, args = [], timeoutMs = XTRS_STEP_TIMEOUT_MS,
 
     prefixedOps: PAIRED_OPCODES,
     classes: XTRS_CLASSES,
+    // Its Model I has no halted state: z80.c's case 0x76 runs trs_reset(0), the reset switch's NMI,
+    // which the next boundary takes, so after a HALT its PC is the instruction after it.
+    haltedPc: /** @type {const} */ ('next'),
     name: 'xtrs',
   };
   return ref;

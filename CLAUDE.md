@@ -131,10 +131,16 @@ programs and nine from `fixtures/real/`, 10 million instructions each past the
 load) have no divergence the known classes do not explain against either, and
 against MAME none but its video read without the bit-6 gate; each reference
 declares the known classes it needs (`Reference.classes`; MAME no step class,
-xtrs no general flag 3 and 5 class), and the comparator applies only those.
-The Model I harness found and fixed three more core bugs (EX (SP),rr's write
+xtrs no general flag 3 and 5 class), and the comparator applies only those;
+a sweep of every other program (`model1-sweep-xtrs.test.js`,
+`model1-sweep-mame.test.js`; `FUGLOY_XTRS_SWEEP=1`, `FUGLOY_MAME_SWEEP=1`; 50
+here; plan `docs/superpowers/plans/2026-10-23-emu-phase7-model1-sweep.md`)
+passes against both but for the IM 0 interrupt storms neither reference can
+follow (Open, emu spec §11).
+The Model I harness found and fixed four more core bugs (EX (SP),rr's write
 order, a repeating block instruction's flags 3 and 5, SCF and CCF's flags 3 and
-5 after an instruction that left the flags alone), and settled the 20 cps key
+5 after an instruction that left the flags alone, and, in the sweep, the Model
+I's HALT, which its wiring answers with the reset switch's NMI), and settled the 20 cps key
 drop as the Level II 1.3 ROM's own debounce (emu spec §5). Open: no Model I
 session takes an interrupt or reads `$37E0`, so an interrupt-driven session (a
 DOS from a DMK) against both references waits (emu spec §12).

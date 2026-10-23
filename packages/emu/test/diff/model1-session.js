@@ -21,16 +21,21 @@
  *   instructions) is recorded into a temporary folder and deleted after its comparison, in a
  *   `finally`, whatever the result.
  *
+ * Both runners also count the maskable interrupts our machine takes in the comparison (`interrupts`
+ * in their result; after a divergence the ten context steps compareRun runs past it count too),
+ * which the sweep logs: test-side, by a wrapper around our CPU's `interrupt`, nothing in src/.
+ *
  * Importing this module reads roms.model1 (the sessions' gate below), which throws for a config
  * that names a file that is not there; scripts/diff.mjs therefore loads it only for the MAME
  * recording it serves, never for a run that does not need it.
  */
 import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { clockHz, Machine, ROM_HASHES } from '../../src/index.js';
-import { configuredRom } from '../rom.js';
+import { configuredFixtures, configuredRom } from '../rom.js';
 import { compareRun, formatReport, keyEvents, videoGate } from './compare.js';
 import { requireRom } from './gate.js';
 import { mameTimer } from './mame-clock.js';
@@ -79,6 +84,49 @@ export const press = (at, key, hold = 0.5) => ({ at, key, hold });
  * @type {Press[]}
  */
 export const GENERIC = [press(6, 'ENTER'), press(9, '1'), press(12, 'ENTER'), press(14, 'SPACE', 1), press(16, 'LEFT', 1), press(18, 'RIGHT', 1), press(20, 'UP'), press(22, 'SPACE', 1)];
+
+const EXAMPLES = fileURLToPath(new URL('../../../../examples/', import.meta.url));
+/** The examples/ builds the thirteen sessions play (model1-fixtures.test.js), by path under examples/. */
+const SESSION_BUILDS = new Set(['eliminator/elimin8a.cmd', 'eliminator/elimin8c.cmd', 'sea-dragon/seadrg01.cmd', 'rear-guard/reargrd5.cmd']);
+/** The fixtures/real/ programs the thirteen sessions play, by file name. */
+const SESSION_FILES = new Set(['spcwarp1.cmd', 'spcwarp3.cmd', 'asylum16.cmd', 'asylum32.cmd', 'crzpnt01.cmd', 'dthmz5k1.cmd', 'pirate.cmd', 'volcano.cmd', 'supnov3a.cmd']);
+
+/**
+ * The sweep's programs (model1-sweep-xtrs.test.js and model1-sweep-mame.test.js), the Model III
+ * sweep's list (test/diff/fixtures.test.js) less the Model I sessions' own: every .CMD or .III in
+ * examples/ (recursive, sorted) but the four session builds, then the .CMD files of the config's
+ * fixtures folder (fixtures/real/, never committed; none without it) but the nine session
+ * programs. Each sweep lists them whether or not it runs, so a skipped sweep still shows its tests,
+ * and examples/ alone keeps the list from being empty.
+ * @returns {{ name: string, path: string }[]} name: the file's name, which the test's title and the sweep's log line carry
+ */
+export function sweepPrograms() {
+  const examples = readdirSync(EXAMPLES, { recursive: true, encoding: 'utf8' })
+    .filter((f) => /\.(cmd|iii)$/i.test(f) && !SESSION_BUILDS.has(f.split('\\').join('/')))
+    .sort()
+    .map((f) => join(EXAMPLES, f));
+  const fixtures = configuredFixtures(/\.cmd$/i).filter((p) => !SESSION_FILES.has(basename(p)));
+  return [...examples, ...fixtures].map((path) => ({ name: basename(path), path }));
+}
+
+/**
+ * Count the maskable interrupts our CPU takes from here on: its `interrupt` (the one call
+ * trs80-system.js's stepInstruction makes at a boundary with a request pending) wrapped as an own
+ * property, which compareRun's instrument wraps in turn and puts back after the run (compare.js).
+ * Test-side only: the core keeps no such count.
+ * @param {Machine} m
+ */
+function countInterrupts(m) {
+  const cpu = m.system.cpu;
+  const take = cpu.interrupt;
+  const counter = { taken: 0 };
+  cpu.interrupt = (/** @type {number | undefined} */ bus) => {
+    const taken = take.call(cpu, bus);
+    if (taken) counter.taken++;
+    return taken;
+  };
+  return counter;
+}
 
 /** A session's key events, from its presses' times after the load. @param {Press[]} keys */
 export const sessionKeys = (keys) => keyEvents(keys.map((k) => ({ at: LOAD_AT + k.at * HZ, key: k.key, hold: k.hold * HZ })));
@@ -150,6 +198,7 @@ export const explain = (r) => (r.divergence === null ? '' : formatReport(r));
 
 /**
  * A session against xtrs: ours from power-on to the load, then 10 million instructions in lockstep.
+ * `interrupts`: the maskable interrupts our machine took in them.
  * @param {Session} s
  */
 export function xtrsSession(s) {
@@ -159,8 +208,9 @@ export function xtrsSession(s) {
   const ref = loadXtrs({ rom });
   try {
     const check = checkpoints(m, ref, s.screens);
+    const irq = countInterrupts(m);
     const result = compareRun({ machine: m, reference: ref, instructions: INSTRUCTIONS, keys: sessionKeys(s.keys), progress: { every: CHECK_EVERY, fn: check.fn } });
-    return { result, seen: check.seen, videoEqual: check.videoEqual };
+    return { result, seen: check.seen, videoEqual: check.videoEqual, interrupts: irq.taken };
   } finally {
     ref.close?.();
   }
@@ -173,7 +223,9 @@ export function xtrsSession(s) {
  * load (default INSTRUCTIONS, 10 million; pnpm diff asks for fewer). `rom` (default roms.model1)
  * is the Level II ROM MAME's set was assembled from, and `strict` is compareRun's; both are for
  * pnpm diff's `--rom` and `--strict`. Besides the comparison, the result holds the screen
- * MAME's video RAM showed at the end (`screenOf`).
+ * MAME's video RAM showed at the end (`screenOf`) and the maskable interrupts our machine took
+ * following the trace (`interrupts`), from power-on: the boot, the same in every session, takes
+ * none, as no MAME trace of the thirteen sessions has one.
  * @param {Session} s
  * @param {{ instructions?: number, rom?: Uint8Array, strict?: boolean | 'all' }} [opts]
  */
@@ -187,8 +239,9 @@ export async function mameSession(s, { instructions = INSTRUCTIONS, rom = requir
     try {
       const m = mameTimer(new Machine({ model: 1, roms: { level2: rom } }));
       const check = checkpoints(m, ref, s.screens);
+      const irq = countInterrupts(m);
       const result = compareRun({ machine: m, reference: ref, instructions: ref.header.requested, progress: { every: CHECK_EVERY, fn: check.fn }, strict });
-      return { result, seen: check.seen, videoEqual: check.videoEqual, header: ref.header, screen: screenOf(ref.peek(0x3c00, 0x400), m.system.columns32) };
+      return { result, seen: check.seen, videoEqual: check.videoEqual, header: ref.header, screen: screenOf(ref.peek(0x3c00, 0x400), m.system.columns32), interrupts: irq.taken };
     } finally {
       ref.close?.();
     }

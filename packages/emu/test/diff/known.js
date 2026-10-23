@@ -49,15 +49,22 @@
  *   (github.com/mamedev/mame, tag mame0289: src/devices/cpu/z80/z80.lst, src/mame/trs/), trsjs
  *   1.6 (tools/trsjs/trsemu-1.6.js).
  *
- * Reference limitations that need no class (nothing in a run so far meets them; each would show
- * as an unexplained divergence, never be excused):
- * - xtrs's Model I resets on HALT (z80.c, `case 0x76`: "Z80 HALT output is tied to reset button
- *   circuit", trs_reset(0)); MAME's trs80l2 turns HALT into an NMI (trs80.cpp, `halt_cb()` to the
- *   "nmigate" input merger, "TODO: also causes SYSRES"); ours halts until an interrupt, as the
- *   Z80 does (Zilog UM0080, HALT). The Handbook (p. 15) has HALT* "should never be low" in normal
- *   running, so a program that halts is compared on our CPU's rule, and xtrs refuses to sync there.
- * - xtrs takes no interrupt in IM 0 or IM 2 (z80.c do_int: `error("interrupt in im0 not
- *   supported")`); MAME's recorder refuses one (mame-trace.js).
+ * Reference limitations that need no class (each shows as an unexplained divergence, never
+ * excused; the first is met in the Model I sweep and stands Open, emu spec §11 phase 7):
+ * - xtrs takes no interrupt in IM 0 or IM 2 (z80.c do_int: it pushes PC and clears IFF1 and IFF2,
+ *   then `error("interrupt in im0 not supported")`, with no jump); MAME's recorder refuses one
+ *   (mame-trace.js: only IM 1), and past it MAME's 40 Hz request is gone after one response (its
+ *   HOLD_LINE, below), where the latch keeps it. The Level II ROM never leaves IM 0 (it has no IM
+ *   instruction), so a program that enables interrupts without an IM 1 of its own takes them in
+ *   IM 0: ours as RST 38H, from the $FF its idle bus is taken to hold, as MAME's default vector
+ *   is (z80.h execute_default_irq_vector); the Handbook has the CPU's input buffers open only on
+ *   RD (pp. 16-17), which an acknowledge does not assert, and says no more.
+ * - xtrs's trs_reset(0), which answers its Model I's HALT, also resets its devices (the cassette,
+ *   the disk, the latch's clock bit): SYSRES*'s work on the Expansion Interface (Figure 29), which
+ *   neither ours nor MAME's trs80l2 models (trs80.cpp: "TODO: also causes SYSRES"). It would show
+ *   only where the latch is read before the next tick (the resync after halt-nmi-next, below,
+ *   gives xtrs our latch) or with a disk mounted. Our Model I answers the HALT with the NMI as
+ *   both references do (trs80-system.js); before the sweep it stayed halted until an interrupt.
  * - xtrs takes a pending interrupt after a lone DD or FD (one before DD, FD or ED), which the Z80
  *   does not (Young §3.7, §5.5; our CPU holds it, as held-prefix below says): xtrs-fugloy.patch's
  *   z80_fugloy_interrupt passes over only EI. xtrs declares no interrupt class, so the comparator
@@ -450,6 +457,34 @@ export const STEP_CLASSES = [
       const ours = (a[0].value << 8) | a[1].value;
       const theirs = (b[0].value << 8) | b[1].value;
       return ours === ((theirs + 1) & 0xffff) ? ['writes'] : null;
+    },
+  },
+  {
+    id: 'halt-nmi-next',
+    name: 'NMI after a Model I HALT: the reference pushes the HALT\'s address plus two',
+    // The Model I answers a HALT with the NMI its reset switch makes (HALT* into Z53, NMI* out of
+    // Z37: Technical Reference Handbook, 1982, Figure 29 sheet 1, p. 113; trs80-system.js), and that
+    // NMI pushes the address after the HALT: Young §5.4, "the PC is increased before the interrupt
+    // routine is called", as MAME 0.289's take_nmi does (z80.lst: leave_halt undoes its halt's PC--,
+    // then @wm16_sp PC) and ours does; against MAME no such step differs. xtrs pushes one more: its
+    // Model I HALT (z80.c, case 0x76) calls trs_reset(0) and leaves PC after the HALT, where its
+    // other models back PC up onto it, and the NMI is still taken as from a HALT backed up
+    // (xtrs-fugloy.patch's z80_fugloy_interrupt, as z80_run's own check: `if (last_instruction ==
+    // 0x76) REG_PC++;` before do_nmi). Found as one step in each of Rear Guard 1, 2, 3 and 7 (the
+    // Model I sweep). Explained only for the step after our CPU halted, in which neither side took
+    // a maskable interrupt and our CPU ran the NMI's $0066, when the first two writes are the
+    // push on both sides at the same addresses, ours the address after the HALT and the
+    // reference's one more, and every other write is equal.
+    evidence: 'The Model I wires HALT* into the reset switch\'s NMI (Technical Reference Handbook, 1982, Figure 29 sheet 1, p. 113); an NMI that ends a HALT pushes HALT+1 (Young §5.4; MAME 0.289 z80.lst take_nmi, leave_halt). xtrs z80.c case 0x76 leaves its Model I\'s PC after the HALT and z80_fugloy_interrupt adds one, pushing HALT+2.',
+    explains(ctx, diff) {
+      if (!diff.has('writes') || !ctx.ours.wasHalted || ctx.ours.irq || ctx.theirs.irq || ctx.execPc !== 0x0066) return null;
+      const a = ctx.ours.writes;
+      const b = ctx.theirs.writes;
+      if (a.length < 2 || b.length !== a.length || a[0].addr !== b[0].addr || a[1].addr !== b[1].addr) return null;
+      if (a[0].addr !== ((a[1].addr + 1) & 0xffff) || !sameWrites(a.slice(2), b.slice(2))) return null;
+      const ours = (a[0].value << 8) | a[1].value;
+      const theirs = (b[0].value << 8) | b[1].value;
+      return theirs === ((ours + 1) & 0xffff) ? ['writes'] : null;
     },
   },
 ];

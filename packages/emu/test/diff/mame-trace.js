@@ -1004,6 +1004,11 @@ export function openTrace(path, { program } = {}) {
     // The opcodes after DD or FD that run with the prefix as one step: all but the lone prefixes.
     prefixedOps: new Set(Array.from({ length: 256 }, (_, k) => k).filter((k) => k !== 0xdd && k !== 0xfd && k !== 0xed)),
     classes: MAME_CLASSES,
+    // trs80l2's HALT raises its NMI at once (trs80.cpp, halt_cb to the "nmigate"), which the next
+    // boundary takes (z80.lst check_interrupts, before the halt's NOPs), so the state the trace
+    // holds after a HALT is the one before that NMI: its PC the address the NMI pushes, the
+    // instruction after the HALT (leave_halt's PC++, then @wm16_sp PC), rebuilt by `before`.
+    haltedPc: /** @type {const} */ ('next'),
     follow,
     header,
     name: `MAME ${header.mame.split(' ')[0]} trace`,

@@ -224,9 +224,9 @@ describe('the known classes', () => {
 
   it('each reference declares its own classes, and a class it does not declare explains nothing', () => {
     // Pinned, so a declaration that widens shows here: trsjs keeps every class it had; xtrs the five
-    // it was found to need; MAME only its video read.
+    // its sessions were found to need and the one the Model I sweep found; MAME only its video read.
     expect([...TRSJS_CLASSES].sort()).toEqual(['bit', 'block-xy-keep', 'cpi-c', 'ddcb-r', 'dropped-prefix', 'ex-sp-order', 'halt-push', 'held-di', 'held-ei', 'held-prefix', 'irq-r', 'scf-ccf-keep', 'xy']);
-    expect([...XTRS_CLASSES].sort()).toEqual(['bit-mem-xy', 'block-xy-n', 'ex-sp-order', 'io-cycles', 'scf-ccf-a']);
+    expect([...XTRS_CLASSES].sort()).toEqual(['bit-mem-xy', 'block-xy-n', 'ex-sp-order', 'halt-nmi-next', 'io-cycles', 'scf-ccf-a']);
     expect([...MAME_CLASSES]).toEqual(['video-read-gate']);
     expect(MAME_STEP).toEqual([]);
     // An OR A whose flags 3 and 5 differ (any instruction): trsjs's general class, nobody else's.
@@ -271,6 +271,40 @@ describe('the known classes', () => {
     const push = [{ addr: 0x7003, value: 0x40 }, { addr: 0x7002, value: 0x00 }];
     expect(explains('ex-sp-order', stepCtx([0xe3], [...push, h, l], [...push, l, h]))).toEqual(['writes']);
     expect(explains('ex-sp-order', stepCtx([0xe3], [...push, h, l], [push[1], push[0], l, h]))).toBeNull();
+  });
+
+  it('the NMI after a Model I HALT: only that step, the reference\'s return address ours plus one', () => {
+    // Rear Guard 1's HALT at $8026 (the Model I sweep): our NMI pushes $8027 (Young §5.4), xtrs's
+    // $8028 (z80.c case 0x76 leaves its Model I's PC after the HALT, and its NMI path adds one).
+    const at = (/** @type {number} */ theirs, { wasHalted = true, execPc = 0x0066, irq = false, after = /** @type {{ addr: number, value: number }[]} */ ([]) } = {}) => {
+      const ctx = stepCtx([0x31, 0x00, 0x06], [{ addr: 0xffb0, value: 0x80 }, { addr: 0xffaf, value: 0x27 }, ...after], [{ addr: 0xffb0, value: theirs >> 8 }, { addr: 0xffaf, value: theirs & 0xff }, ...after]);
+      ctx.ours.wasHalted = wasHalted;
+      ctx.execPc = execPc;
+      ctx.ours.irq = irq;
+      return ctx;
+    };
+    expect(explains('halt-nmi-next', at(0x8028))).toEqual(['writes']);
+    expect(explainStep(at(0x8028), new Set(['writes']), XTRS_STEP)).toEqual({ classes: [name('halt-nmi-next')], unexplained: [] });
+    // A carry into the high byte is the same address plus one.
+    const carry = stepCtx([0x31, 0x00, 0x06], [{ addr: 0xffb0, value: 0x80 }, { addr: 0xffaf, value: 0xff }], [{ addr: 0xffb0, value: 0x81 }, { addr: 0xffaf, value: 0x00 }]);
+    carry.ours.wasHalted = true;
+    carry.execPc = 0x0066;
+    expect(explains('halt-nmi-next', carry)).toEqual(['writes']);
+    // The same address (nothing to explain), one less (trsjs's halt-push), or two more: not explained.
+    expect(explains('halt-nmi-next', at(0x8026))).toBeNull();
+    expect(explains('halt-nmi-next', at(0x8029))).toBeNull();
+    // Not after a halt, not the NMI's $0066, or a maskable interrupt in the step: not explained.
+    expect(explains('halt-nmi-next', at(0x8028, { wasHalted: false }))).toBeNull();
+    expect(explains('halt-nmi-next', at(0x8028, { execPc: 0x0038 }))).toBeNull();
+    expect(explains('halt-nmi-next', at(0x8028, { irq: true }))).toBeNull();
+    // Any other write must be equal.
+    const other = at(0x8028, { after: [{ addr: 0x5000, value: 1 }] });
+    expect(explains('halt-nmi-next', other)).toEqual(['writes']);
+    other.theirs.writes[2] = { addr: 0x5000, value: 2 };
+    expect(explains('halt-nmi-next', other)).toBeNull();
+    // Declared by xtrs alone: against trsjs and MAME it explains nothing.
+    expect(explainStep(at(0x8028), new Set(['writes']), TRSJS_STEP)).toEqual({ classes: [], unexplained: ['writes'] });
+    expect(explainStep(at(0x8028), new Set(['writes']), MAME_STEP)).toEqual({ classes: [], unexplained: ['writes'] });
   });
 });
 
