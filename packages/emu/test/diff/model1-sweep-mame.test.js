@@ -10,11 +10,11 @@
  *
  * A program MAME's loader cannot take (mame-trace.js, loadRuns: a byte below $3C00, which
  * m.load.cmd drops and MAME's debugger would write into the ROM) is skipped here with loadRuns's
- * sentence in its title, never counted as passed; it still runs against xtrs. Open, and failing
- * here until MAME can be followed through them (emu spec §11, phase 7): Eliminator b, d, f, g and h,
- * and Asylum 1d (on its lowercase path), which take the 40 Hz interrupt in IM 0 and never read the
- * latch; the recorder decodes only IM 1, and past it MAME's request is gone after one response
- * (known.js, reference limitations).
+ * sentence in its title, never counted as passed; it still runs against xtrs. The programs that
+ * stand Open (emu spec §11, phase 7; OPEN below: Eliminator b, d, f, g and h, and Asylum 1d on its
+ * lowercase path, which take the 40 Hz interrupt in IM 0 and never read the latch) are tested for
+ * the recorder's IM 0 refusal at the instruction recorded, so the sweep passes while they stay as
+ * they are and fails, loud, when one of them changes; they are not in the totals.
  *
  * A divergence fails that program's test with formatReport's report and the sweep goes on; each
  * program's class counts and the maskable interrupts our machine took are logged as it finishes,
@@ -32,11 +32,31 @@
 import { readFileSync } from 'node:fs';
 import { afterAll, describe, expect, it } from 'vitest';
 import { mameSkip } from './gate.js';
+import { REFERENCE_FIXES } from './known.js';
 import { loadRuns } from './mame-trace.js';
 import { explain, GENERIC, INSTRUCTIONS, mameSession, sessionSkip, sweepPrograms } from './model1-session.js';
 
 const SWEEP = mameSkip === null && sessionSkip === null && process.env.FUGLOY_MAME_SWEEP === '1';
 const skipped = mameSkip !== null || process.env.FUGLOY_MAME_SWEEP !== '1' ? 'set FUGLOY_MAME=1 and FUGLOY_MAME_SWEEP=1 to run' : sessionSkip;
+
+const VIDEO_READ = /** @type {string} */ (REFERENCE_FIXES.find((c) => c.id === 'video-read-gate')?.name);
+
+/**
+ * The programs that stand Open against MAME (emu spec §11, phase 7): the instruction from power-on
+ * before which MAME took its first interrupt in IM 0, as the sweep recorded it, and what was counted
+ * before it. Each runs `RST 38H` into the Level II ROM's `EI / RET` at $4012 (Asylum 1d after stray
+ * code its lowercase path runs into), and the 40 Hz request pending since the boot is then taken in
+ * IM 0, which the recorder does not decode (mame-trace.js: only IM 1), so the trace ends there with
+ * its sentence. (Past it, MAME's request would be gone after one response, where the latch keeps it:
+ * `irqTime`; known.js, reference limitations.) The refusal, its instruction and the counts are
+ * pinned, and no divergence may come before it; a whole trace, a divergence, or another end fails
+ * the test.
+ * @type {Record<string, { at: number, known: Record<string, number> }>}
+ */
+const OPEN = {
+  ...Object.fromEntries(['elimin8b.cmd', 'elimin8d.cmd', 'elimin8f.cmd', 'elimin8g.cmd', 'elimin8h.cmd'].map((name) => [name, { at: 1_069_900, known: { [VIDEO_READ]: 1 } }])),
+  'asylum1d.cmd': { at: 1_036_913, known: { [VIDEO_READ]: 21 } },
+};
 
 /** Each program with its bytes and, when MAME's loader cannot take it, loadRuns's sentence. */
 const programs = sweepPrograms().map(({ name, path }) => {
@@ -63,6 +83,20 @@ describe.skipIf(!SWEEP)(`every other Model I .CMD against MAME${SWEEP ? '' : ` (
   for (const { name, program, refused } of programs) {
     if (refused !== null) {
       it.skip(`${name}: not loaded on MAME: ${refused}`, () => {});
+      continue;
+    }
+    const open = OPEN[name];
+    if (open !== undefined) {
+      it(`${name}: Open (emu spec §11), MAME's recorder decodes only IM 1: the trace ends at the first IM 0 interrupt, before instruction ${open.at.toLocaleString('en-US')}, as recorded`, async () => {
+        const { result, header } = await mameSession({ name, program, keys: GENERIC, screens: [], known: {} });
+        const reason = `MAME took an interrupt in IM 0 before instruction ${open.at}, which this recorder does not decode (only IM 1)`;
+        console.log(`sweep ${name}: Open, ${header.reason ?? 'the trace is whole'}`);
+        expect(explain(result), 'a divergence before the IM 0 interrupt').toBe('');
+        expect(header, 'the recorder\'s IM 0 refusal, where the sweep recorded it').toMatchObject({ complete: false, reason });
+        expect(result.ended).toBe(`MAME's trace ends after ${open.at - 1} of ${header.requested} instructions (${reason}), so the run proves nothing past that point.`);
+        expect(header.requested - /** @type {import('./mame-trace.js').TraceLoad} */ (header.load).at).toBe(INSTRUCTIONS);
+        expect(result.known).toEqual(open.known);
+      });
       continue;
     }
     it(`${name}: the boot and 10 million instructions past the load under the generic script, following MAME, no unexplained divergence`, async () => {

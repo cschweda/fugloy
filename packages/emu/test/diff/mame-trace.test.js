@@ -17,6 +17,7 @@ import { compareRun, formatReport, keyEvents, videoGate } from './compare.js';
 import { mameSkip, requireRom } from './gate.js';
 import { checkMame, checkRomSet, IRQ, loadRuns, MAME_CLOCK_HZ, MAME_ROMS, MAME_VERSION, openTrace, recordMameTrace, writeTrace } from './mame-trace.js';
 import { recordOurs, syntheticRom } from './own-trace.js';
+import { configuredRom } from '../rom.js';
 
 const dir = mkdtempSync(join(tmpdir(), 'fugloy-mame-test-'));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -503,6 +504,37 @@ describe('pnpm diff <program> --model 1 --reference mame records a trace of the 
     const run = diffRecord(['--keys', keys, '--rom', romPath], tmp);
     expect(run.status).toBe(2);
     expect(run.stderr.replace(keys, 'keys.json')).toMatch(sentence);
+    expect(readdirSync(tmp)).toEqual([]);
+  });
+});
+
+describe('a program MAME cannot load is refused before the recorder makes anything (the Model I sweep, Review Focus 5)', { timeout: 30_000 }, () => {
+  // A .CMD of one byte at $3800 (the keyboard) with its entry at $5200: loadRuns refuses it.
+  const low = Uint8Array.from([0x01, 0x03, 0x00, 0x38, 0x00, 0x02, 0x02, 0x00, 0x52]);
+  const REFUSED = 'the program writes $3800, below $3C00; a MAME session loads only RAM and video RAM';
+
+  it('recordMameTrace: the refusal, and no work folder left in the temporary folder', async () => {
+    // A stand-in that passes for Homebrew's MAME 0.289, so nothing but the program is refused.
+    const bin = script('refused/Cellar/mame/0.289/bin/mame', `case "$1" in -version) echo '${MAME_VERSION}'; exit 0;; esac\nexit 1`);
+    const tmp = freshTmp();
+    const saved = process.env.TMPDIR;
+    process.env.TMPDIR = tmp;
+    try {
+      await expect(recordMameTrace({ instructions: 10, load: { program: low, at: 1000 }, out: join(dir, 'refused.fmt'), bin, romDir: dir, skipRomCheck: true })).rejects.toThrow(REFUSED);
+      expect(readdirSync(tmp)).toEqual([]);
+    } finally {
+      if (saved === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = saved;
+    }
+  });
+
+  it('pnpm diff <program> --model 1 --reference mame: exit 2 with the sentence, and nothing left in the temporary folder', () => {
+    const program = join(dir, 'low.cmd');
+    writeFileSync(program, low);
+    const tmp = freshTmp();
+    const run = spawnSync(process.execPath, [DIFF, program, '--model', '1', '--reference', 'mame'], { encoding: 'utf8', env: { ...process.env, TMPDIR: tmp } });
+    expect(run.status).toBe(2);
+    // With no Model I ROM configured (CI) the command stops at that, before the recorder.
+    expect(run.stderr).toBe(configuredRom('model1') === null ? 'no Model I ROM: name one as roms.model1 in fugloy.mcp.json (docs/fugloy-mcp-spec.md §3), or pass --rom\n' : `${REFUSED}\n`);
     expect(readdirSync(tmp)).toEqual([]);
   });
 });

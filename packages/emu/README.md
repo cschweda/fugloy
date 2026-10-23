@@ -299,8 +299,9 @@ its video read. A sweep of every other `.CMD` in `examples/` and
 for the programs that take the 40 Hz interrupt in IM 0 without ever reading
 the `$37E0` latch, which neither reference can follow (xtrs has no IM 0
 response; MAME's recorder decodes only IM 1, and its request is gone after one
-response where the latch keeps it): they stand open (spec §11, phase 7). The
-harness found six bugs on our side, all now fixed: a
+response where the latch keeps it): they stand open (spec §11, phase 7), and
+each sweep tests them for that limitation, so it passes while they stay as
+they are. The harness found six bugs on our side, all now fixed: a
 halted CPU did not count R, port `FF` did not read port `EC`'s bits back
 (both against trsjs), EX (SP),rr wrote its low byte first, a repeating block
 instruction took flags 3 and 5 from its byte rather than PC, and SCF and CCF

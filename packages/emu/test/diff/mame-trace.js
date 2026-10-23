@@ -450,6 +450,17 @@ const CALLS = new Set([0xcd, 0xc4, 0xcc, 0xd4, 0xdc, 0xe4, 0xec, 0xf4, 0xfc]);
  */
 export async function recordMameTrace({ instructions, keys = [], matrix = [], load, out, bin = 'mame', romDir = MAME_ROMS, rom, skipRomCheck = false, silenceMs = MAME_SILENCE_MS }) {
   if (!Number.isInteger(instructions) || instructions < 1) throw new Error(`recordMameTrace: instructions must be a whole number above 0, not ${instructions}`);
+  // Every refusal (the program, MAME, the ROM set, the temporary folder's path) comes before the
+  // work folder is made, which the `finally` below removes (the Model I sweep's Review Focus 5: a
+  // refused load used to leave it behind).
+  /** @type {{ addr: number, bytes: Uint8Array }[]} */
+  let runs = [];
+  let entry = 0;
+  if (load !== undefined) {
+    if (!Number.isInteger(load.at) || load.at < 0) throw new Error(`recordMameTrace: load.at must be a whole number of T-states, not ${load.at}`);
+    runs = loadRuns(load.program);
+    entry = parseCmd(load.program).entry;
+  }
   const mame = checkMame({ bin });
   let bios = 'rsl2';
   let romSha256 = '';
@@ -462,8 +473,9 @@ export async function recordMameTrace({ instructions, keys = [], matrix = [], lo
   const path = out ?? join(MAME_TRACES, `trace-${instructions}.fmt`);
   mkdirSync(dirname(path), { recursive: true });
 
+  // The work folder's name adds only letters, digits and dashes, so its path is plain when TMPDIR's is.
+  if (/[\s,;{}"]/.test(tmpdir())) throw new Error(`MAME's debugger cannot take the path ${tmpdir()} (it has a space, comma, semicolon, brace or quote); set TMPDIR to a plain path`);
   const work = mkdtempSync(join(tmpdir(), 'fugloy-mame-'));
-  if (/[\s,;{}"]/.test(work)) throw new Error(`MAME's debugger cannot take the path ${work} (it has a space, comma, semicolon, brace or quote); set TMPDIR to a plain path`);
   const fifo = join(work, 'trace.fifo');
   const startMem = join(work, 'start.bin');
   const endMem = join(work, 'end.bin');
@@ -474,13 +486,8 @@ export async function recordMameTrace({ instructions, keys = [], matrix = [], lo
   writeFileSync(matrixFile, matrix.map((e) => `${(e.at / MAME_CLOCK_HZ).toFixed(9)} ${e.row} ${e.bit} ${e.down ? 1 : 0}\n`).join(''));
   /** @type {TraceLoad | null} */
   let loaded = null;
-  /** @type {{ addr: number, bytes: Uint8Array }[]} */
-  let runs = [];
   const loadFile = join(work, 'load.txt');
   if (load !== undefined) {
-    if (!Number.isInteger(load.at) || load.at < 0) throw new Error(`recordMameTrace: load.at must be a whole number of T-states, not ${load.at}`);
-    runs = loadRuns(load.program);
-    const entry = parseCmd(load.program).entry;
     const files = runs.map((r, k) => {
       const f = join(work, `run${k}.bin`);
       writeFileSync(f, r.bytes);

@@ -170,23 +170,26 @@ creates and pushes the tag.
   (`GENERIC`), in lockstep against xtrs (`test/diff/model1-sweep-xtrs.test.js`,
   `FUGLOY_XTRS=1 FUGLOY_XTRS_SWEEP=1`) and following a recorded trace against MAME
   (`test/diff/model1-sweep-mame.test.js`, `FUGLOY_MAME=1 FUGLOY_MAME_SWEEP=1`, five at a time).
-  Every program is listed whether or not a sweep runs; each logs its class counts and the
-  interrupts our machine took (counted test-side), and the sum over the programs that passed comes
-  at the end (`--silent=false`). MAME's loader takes all 50 (a program with bytes below `$3C00`
-  would be skipped against MAME, naming the byte). After the HALT fix (under Fixed), 45 pass
-  against xtrs, its classes counting a repeating block instruction's flags 3 and 5 6,994,291 times,
-  BIT n,(HL) and BIT n,(IX+d)'s flags 3 and 5 215,380, EX (SP),rr's write order 11,252, IN and block
-  I/O's T-states 3,839 and the HALT's NMI return address 4; and 44 against MAME, counting only its
-  video read without the bit-6 gate, 8,218 in all. No program that passes takes an interrupt.
-  Open against both, each reference's own limitation: the
-  programs that take the 40 Hz interrupt in IM 0 and never read the `$37E0` latch, Eliminator b,
-  d, f, g and h, and against MAME Asylum 1d too (on its lowercase path). xtrs
-  has no IM 0 response (it pushes PC and does not jump); MAME's recorder decodes only IM 1, and
-  past it MAME's request is gone after one response, where the Expansion Interface's latch keeps
-  it, so ours takes it again after the handler's return and MAME does not (`irqTime`). The sweep
-  found the HALT bug (under Fixed) and one more xtrs class. The xtrs adapter now runs xtrs in its own
-  temporary folder, so the cassette files xtrs writes where it runs, when a program turns the motor
-  on (GO.CMD does), go with the folder instead of into `packages/emu`.
+  Every program is listed whether or not a sweep runs; each logs its class counts and the interrupts
+  our machine took (counted test-side), and the sum over the programs that passed comes at the end
+  (`--silent=false`). MAME's loader takes all 50 (a program with bytes below `$3C00` would be
+  skipped against MAME, naming the byte). After the HALT fix (under Fixed), 45 pass against xtrs,
+  its classes counting a repeating block instruction's flags 3 and 5 6,994,291 times, BIT n,(HL) and
+  BIT n,(IX+d)'s flags 3 and 5 215,380, EX (SP),rr's write order 11,252, IN and block I/O's T-states
+  3,839 and the HALT's NMI return address 4; and 44 against MAME, counting only its video read
+  without the bit-6 gate, 8,218 in all. No program that passes takes an interrupt. Open against
+  both, each reference's own limitation: the programs that take the 40 Hz interrupt in IM 0 and
+  never read the `$37E0` latch, Eliminator b, d, f, g and h, and against MAME Asylum 1d too (on its
+  lowercase path). xtrs has no IM 0 response (it pushes PC and does not jump); MAME's recorder
+  decodes only IM 1, and past it MAME's request is gone after one response, where the Expansion
+  Interface's latch keeps it, so ours takes it again after the handler's return and MAME does not
+  (`irqTime`). Each Open program's test pins that limitation (the divergence at xtrs's first IM 0
+  interrupt, the recorder's IM 0 refusal), so the sweep passes while they stay as they are and a
+  change in one fails it. `recordMameTrace` now refuses a program it cannot load before it makes its
+  work folder, so `pnpm diff <program> --model 1 --reference mame` on one leaves nothing behind. The
+  sweep found the HALT bug (under Fixed) and one more xtrs class. The xtrs adapter now runs xtrs in
+  its own temporary folder, so the cassette files xtrs writes where it runs, when a program turns
+  the motor on (GO.CMD does), go with the folder instead of into `packages/emu`.
 
 - `pnpm diff <program> --model 1 --reference mame` records MAME's run of the program itself (emu
   phase 7, the Model I sweep's Task 2; plan `docs/superpowers/plans/2026-10-23-emu-phase7-model1-sweep.md`),

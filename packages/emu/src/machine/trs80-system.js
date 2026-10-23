@@ -177,12 +177,15 @@ export class TRS80System {
     // The Model I ties the CPU's HALT* output into the reset switch's NMI circuit: HALT* and the
     // switch S2 meet at Z53 (74LS132), and Z37 (74LS02) turns its output into NMI* (Z40 pin 17)
     // and SYSRES* (TRS-80 Micro Computer Technical Reference Handbook, 2nd ed., 1982, Figure 29
-    // sheet 1, p. 113; pp. 15-16). So a HALT is answered at the next boundary by the NMI a press of
-    // RESET makes, and the ROM's handler at $0066 takes over, as on MAME's trs80l2 (halt_cb to its
-    // "nmigate") and xtrs (z80.c, case 0x76). SYSRES*'s reset of the Expansion Interface is not
-    // modelled (MAME's note on that line: "TODO"). The NMI wins over a maskable request at the
-    // same boundary (Zilog UM0080), which stays pending; the CPU leaves its halt as it takes the
-    // NMI, so HALT* rises again and the next HALT is a new edge.
+    // sheet 1, p. 113). The NMI is edge-triggered and ends a HALT (Zilog UM0080), so a HALT is
+    // answered at the next boundary by the NMI a press of RESET makes, and the ROM's handler at
+    // $0066 takes over, as on MAME's trs80l2 (halt_cb to its "nmigate") and xtrs (z80.c, case
+    // 0x76). The Handbook's text on pin 18 (p. 15) tells of a lost CPU found halted that S2 cannot
+    // bring home, and taking the NMI at the HALT's own next boundary is the references' timing:
+    // emu spec §5 quotes the one and lists both as unverified. SYSRES*'s reset of the Expansion
+    // Interface is not modelled (MAME's note on that line: "TODO"). The NMI wins over a maskable
+    // request at the same boundary (Zilog UM0080), which stays pending; the CPU leaves its halt as
+    // it takes the NMI, so HALT* rises again and the next HALT is a new edge.
     const haltNmi = this.model.id === 1 && this.cpu.halted;
     if (!haltNmi && this.io.pendingInterrupt()) {
       this.cpu.interrupt();
