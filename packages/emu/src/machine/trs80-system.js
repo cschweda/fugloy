@@ -174,16 +174,26 @@ export class TRS80System {
       else if (this.io.latch !== null) this.io.latch.raise(TIMER_BIT);
       this.nextRtcAt += this.rtcInterval;
     }
-    if (this.io.pendingInterrupt()) {
+    // The Model I ties the CPU's HALT* output into the reset switch's NMI circuit: HALT* and the
+    // switch S2 meet at Z53 (74LS132), and Z37 (74LS02) turns its output into NMI* (Z40 pin 17)
+    // and SYSRES* (TRS-80 Micro Computer Technical Reference Handbook, 2nd ed., 1982, Figure 29
+    // sheet 1, p. 113; pp. 15-16). So a HALT is answered at the next boundary by the NMI a press of
+    // RESET makes, and the ROM's handler at $0066 takes over, as on MAME's trs80l2 (halt_cb to its
+    // "nmigate") and xtrs (z80.c, case 0x76). SYSRES*'s reset of the Expansion Interface is not
+    // modelled (MAME's note on that line: "TODO"). The NMI wins over a maskable request at the
+    // same boundary (Zilog UM0080), which stays pending; the CPU leaves its halt as it takes the
+    // NMI, so HALT* rises again and the next HALT is a new edge.
+    const haltNmi = this.model.id === 1 && this.cpu.halted;
+    if (!haltNmi && this.io.pendingInterrupt()) {
       this.cpu.interrupt();
     }
-    // FDC INTRQ -> NMI, edge-triggered so one assertion fires one NMI. The
+    // FDC INTRQ -> NMI (the Model III's), edge-triggered so one assertion fires one NMI. The
     // CPU holds an NMI off after a lone DD/FD prefix, as it does a maskable
     // interrupt (Young §3.6); the edge then stays pending for the next
     // boundary.
-    const nmiNow = this.io.nmiPending();
+    const nmiNow = haltNmi || this.io.nmiPending();
     if (nmiNow && !this._nmiWasPending) {
-      if (this.cpu.nmi()) this._nmiWasPending = true;
+      if (this.cpu.nmi()) this._nmiWasPending = !haltNmi || this.io.nmiPending();
     } else {
       this._nmiWasPending = nmiNow;
     }
