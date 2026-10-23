@@ -176,6 +176,12 @@ importers:
         specifier: 4.6.5
         version: 4.6.5
 
+  packages/runtime:
+    devDependencies:
+      '@fugloy/emu':
+        specifier: workspace:*
+        version: link:../emu
+
   packages/z80: {}
 
 packages:
