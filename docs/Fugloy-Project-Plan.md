@@ -304,7 +304,7 @@ Total v1: roughly four to five months of spare time. Part 2 is not estimated unt
 
 ## Part 2: recompilation (outline)
 
-The long-term goal is to turn a TRS-80 game into readable TypeScript that plays identically in a browser, shipped as a static bundle. This section records the shape and the decisions so v1 does not close doors; the detail belongs in a second design document written after phase 3.
+The long-term goal is to turn a TRS-80 game into readable JavaScript that plays identically in a browser, shipped as a static bundle, and then, as the user wants most, into a remake for a modern browser with no TRS-80 left in it. This section records the shape and the decisions so v1 does not close doors; the detail is in the second design document, `docs/superpowers/specs/2026-10-23-part2-port-and-remake-design.md` (a draft for the user's review, 2026-10-23: a port verified against the emulator, then the remake built and checked against the port). The kill criteria were reviewed on 2026-10-23: both are met (phase 3's readable Asylum listing; phase 4 shipped inside its estimate).
 
 ```mermaid
 flowchart TB
@@ -327,13 +327,13 @@ flowchart TB
 
 **Decisions already made.**
 
-- Output: TypeScript, not WebAssembly. Speed is irrelevant at 2 MHz; readability is the point.
+- Output: JavaScript (ES modules with JSDoc types), not WebAssembly. Speed is irrelevant at 2 MHz; readability is the point. (TypeScript until 2026-10-23, when the draft design changed it: the user asked for "a new javascript program", and plain JavaScript runs from a static folder with no build step.)
 - Flags: computed eagerly, every instruction, in plain code. Lazy flags would make the output unreadable for a speed gain nobody needs.
 - Scheduling: the translated game runs in a Web Worker as ordinary functions; it posts the 1K screen to the main thread each frame. No generators, no `yield*` on every call.
 - Interrupts: every basic block ends with a cycle-count update and a check for a pending heartbeat; the runtime raises it every 1/30 s of emulated time.
 - Indirect jumps: translated when the target set is known (from a hint-file table or an execution trace); otherwise a `switch` on the address for that site, which is a small interpreter and is labeled as such in the output.
 - Self-modifying code: not translatable statically. Each instance (GO.CMD's patched `JP`, Asylum's load-time patches, Valkyrie's runtime vector poke) is either annotated in the hint file as a jump with a known target set or left to an interpreter fallback for that region.
-- First target: a ten-instruction synthetic program, then a small public-domain utility, then a game. Not Volcano Hunter first; nothing about it is simple.
+- First target: a ten-instruction synthetic program, then the Learn course's own programs (lessons 1–7 and the twelve Space Invaders chapters: Fugløy's source, no ROM calls, each with a check screen), then a game, Sea Dragon (one ROM call, `$0060`, no indirect jumps). Not Volcano Hunter first; nothing about it is simple. (The utility step became the Learn programs in the 2026-10-23 draft design.)
 
 **Steps, in order.**
 
