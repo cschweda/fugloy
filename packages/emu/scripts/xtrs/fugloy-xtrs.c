@@ -13,8 +13,9 @@
  * provide); z80.o is built with -Dmem_write=fg_mem_write -Dmem_write_word=fg_mem_write_word so
  * every CPU write is logged (a push in the Z80's byte order: push_like). Deterministic, as the spike note
  * (docs/superpowers/notes/2026-10-19-model1-references-spike.md) requires: no KBWAIT, no SIGALRM
- * timer (SIGALRM is ignored; the 40 Hz timer is xtrs's own trs_timer_event, called when the
- * T-state count reaches each tick), and the key queue is never used (keys are set in the matrix).
+ * timer (nothing arms it, and SIGALRM is ignored; the 40 Hz tick is made when the T-state count
+ * reaches it, by the calls xtrs's own trs_timer_event makes: tick()), and the key queue is never
+ * used (keys are set in the matrix).
  *
  * One step is one boundary as our Machine.step runs it: the timer tick if its T-state has come,
  * then the interrupt check (the patch's z80_fugloy_interrupt, which z80_run(0) would have made at
@@ -79,7 +80,6 @@ void hrg_write_addr(int a, int m) { } void hrg_write_data(int d) { }
 extern int trs_lowercase;
 extern int trs_rom_size;
 extern Uchar memory[];
-extern void trs_timer_event(int signo);
 extern void mem_write(int address, int value);
 
 /* --- exported by xtrs-fugloy.patch --- */
@@ -145,12 +145,28 @@ static int peek(int a) {
   return 0xff;
 }
 
+/*
+ * One 40 Hz tick: the three calls xtrs's trs_timer_event (trs_interrupt.c) makes when its timer is
+ * on, as it always is here (only the debugger's command turns it off). The rest of that function
+ * is for a real-time timer: it reads the host's clock and re-arms SIGALRM by dividing by
+ * timer_hz, which only trs_timer_init (called from main.c, not linked) and, for the Model 4,
+ * trs_timer_speed set, so here it stays 0. Built for x86-64 the division traps (SIGFPE at the
+ * first tick); on arm64 it returns 0; either way it is undefined behaviour, and the host's clock
+ * has no place in a reference that must repeat byte for byte. Its x_poll_count = 0 only makes
+ * z80_run call trs_get_event, a stub here, sooner.
+ */
+static void tick(void) {
+  trs_timer_interrupt(1); /* generate */
+  trs_disk_motoroff_interrupt(trs_disk_motoroff());
+  trs_kb_heartbeat(); /* part of xtrs's keyboard stretch */
+}
+
 /* One boundary: the timer tick, the interrupt check, one instruction. Returns the T-states. */
 static unsigned long long step(int mode, int *irq, int *raised) {
   unsigned long long t0 = z80_state.t_count;
   nwrites = 0; woverflow = 0;
   *raised = 0;
-  while (z80_state.t_count >= next_tick) { trs_timer_event(SIGALRM); next_tick += TIMER_PERIOD; *raised = 1; }
+  while (z80_state.t_count >= next_tick) { tick(); next_tick += TIMER_PERIOD; *raised = 1; }
   in_response = 1;
   int taken = z80_fugloy_interrupt(last_op, mode);
   in_response = 0;

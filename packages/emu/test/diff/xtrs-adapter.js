@@ -58,9 +58,10 @@ const PAIRED_OPCODES = new Set(Array.from({ length: 256 }, (_, k) => k).filter((
 const sha256 = (b) => createHash('sha256').update(b).digest('hex');
 
 /**
- * The SHA-256 of a source tree as scripts/install-xtrs.sh computes it: every file but `.git`, by
- * path in byte order, listed as `shasum -a 256` lists them (`<sha256>  <path>`), then that list's
- * SHA-256.
+ * The SHA-256 of a source tree as scripts/install-xtrs.sh computes it: every file but `.git` and
+ * the `.DS_Store` files the Finder leaves (opening the folder must not make every xtrs test
+ * refuse), by path in byte order, listed as `shasum -a 256` lists them (`<sha256>  <path>`), then
+ * that list's SHA-256.
  * @param {string} dir
  */
 export function treeSha256(dir) {
@@ -73,7 +74,7 @@ export function treeSha256(dir) {
       if (e.isDirectory()) {
         if (d === dir && e.name === '.git') continue;
         walk(p);
-      } else if (e.isFile()) {
+      } else if (e.isFile() && e.name !== '.DS_Store') {
         files.push(relative(dir, p));
       }
     }

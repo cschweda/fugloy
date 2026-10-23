@@ -4,7 +4,8 @@
  * (`pnpm xtrs:install`) and the Model I ROM (fugloy.mcp.json, roms.model1); either missing fails
  * them (gate.js).
  */
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -13,7 +14,7 @@ import { TIMER_BIT } from '../../src/devices/interrupt-latch.js';
 import { ROM_TEST_TIMEOUT } from '../rom.js';
 import { compareRun, ourRegs } from './compare.js';
 import { requireRom, xtrsSkip } from './gate.js';
-import { loadXtrs, openXtrs, XTRS_PATH, XTRS_SRC, XTRS_STEP_TIMEOUT_MS, XTRS_TREE_SHA256 } from './xtrs-adapter.js';
+import { loadXtrs, openXtrs, treeSha256, XTRS_INSTALL, XTRS_PATH, XTRS_SRC, XTRS_STEP_TIMEOUT_MS, XTRS_TREE_SHA256 } from './xtrs-adapter.js';
 
 const dir = mkdtempSync(join(tmpdir(), 'fugloy-xtrs-'));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -51,6 +52,24 @@ describe('loadXtrs refuses a build it cannot trust', () => {
     const path = fakeChild('no-src-bin', 'echo ready fugloy-xtrs 1');
     const src = join(dir, 'no-such-src');
     expect(() => loadXtrs({ path, src, rom })).toThrow(`no xtrs source at ${src}; run \`pnpm xtrs:install\``);
+  });
+
+  it('hashes the tree as the install script does, a .DS_Store the Finder leaves changing neither hash', () => {
+    const src = join(dir, 'src-finder');
+    mkdirSync(join(src, 'sub'), { recursive: true });
+    writeFileSync(join(src, 'z80.c'), '/* a */\n');
+    writeFileSync(join(src, 'sub', 'b.h'), '/* b */\n');
+    const before = treeSha256(src);
+    writeFileSync(join(src, '.DS_Store'), 'finder');
+    writeFileSync(join(src, 'sub', '.DS_Store'), 'finder');
+    expect(treeSha256(src)).toBe(before);
+    // The install script's own tree_sha, where its shasum is installed (it needs it to build).
+    if (spawnSync('shasum', ['--version']).status === 0) {
+      const fn = readFileSync(XTRS_INSTALL, 'utf8').match(/^tree_sha\(\) \{\n[^]*?\n\}$/m)?.[0];
+      expect(fn).toBeDefined();
+      const sh = spawnSync('bash', ['-c', `${fn}\ntree_sha "$1"`, 'bash', src], { encoding: 'utf8' });
+      expect(sh.stdout.trim()).toBe(before);
+    }
   });
 });
 

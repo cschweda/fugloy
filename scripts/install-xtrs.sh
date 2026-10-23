@@ -25,10 +25,11 @@ BIN="$OUT/fugloy-xtrs"
 ZMAC="$ROOT/tools/zmac/zmac"
 
 sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
-# Every file of the tree but .git, by path in byte order, as `shasum -a 256` lists it; then the
+# Every file of the tree but .git and the .DS_Store files the Finder leaves (opening the folder
+# would otherwise change the hash), by path in byte order, as `shasum -a 256` lists it; then the
 # SHA-256 of that list. xtrs-adapter.js computes the same.
 tree_sha() {
-  (cd "$1" && find . -type f -not -path './.git/*' | sed 's|^\./||' | LC_ALL=C sort | while IFS= read -r f; do shasum -a 256 "$f"; done) | shasum -a 256 | cut -d' ' -f1
+  (cd "$1" && find . -type f -not -path './.git/*' -not -name .DS_Store | sed 's|^\./||' | LC_ALL=C sort | while IFS= read -r f; do shasum -a 256 "$f"; done) | shasum -a 256 | cut -d' ' -f1
 }
 
 if [ ! -d "$SRC/.git" ]; then

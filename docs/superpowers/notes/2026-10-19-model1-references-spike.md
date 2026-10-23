@@ -86,7 +86,12 @@ X11, readline or XQuartz.
   1. **The 40 Hz timer is real time** (`trs_interrupt.c`, `trs_timer_event` is a
      `SIGALRM` handler re-armed with `setitimer`). The driver ignores `SIGALRM` and
      calls `trs_timer_event` itself every 44,352 T-states (1.77408 MHz / 40, the same
-     period as our `rtcInterval`), with a phase argument.
+     period as our `rtcInterval`), with a phase argument. (Since the final review,
+     2026-10-22: it makes the three calls `trs_timer_event` makes when the timer is
+     on, `trs_timer_interrupt(1)`, `trs_disk_motoroff_interrupt(trs_disk_motoroff())`
+     and `trs_kb_heartbeat()`, and not the function itself, whose re-arming divides by
+     `timer_hz`, which only `trs_timer_init` in the unlinked `main.c` sets: 0 here, a
+     trap on x86-64 and undefined behaviour anywhere.)
   2. **`KBWAIT`** (`trs_keyboard.c`, `trs_next_key`) blocks in `trs_get_event(TRUE)`
      until an interrupt when the ROM waits for a key. With a timer driven from
      T-states that would never return, so it is compiled out.
