@@ -8,7 +8,7 @@
 //   while the text on screen is the one the Run assembled (`live`); once it differs (`dirty`), it
 //   waits for the next Run, which applies the source's breakpoints before its first frame.
 // - Pause, Continue, Step, Step Over and Run to Here go through the Run's one Stepper (Task 1);
-//   a sentence it returns (a CPU halted with interrupts off) goes to `run.message`.
+//   a sentence it returns (a Model III or 4 CPU halted with interrupts off) goes to `run.message`.
 // - On each pause and step: the registers, marked where they changed since the last pause
 //   (Ruling 11), `reveal` with the line to bring into view (Ruling 7), and `announce` (Ruling 12).
 //   While running, the registers and `pcAddr` update 4 times a second.
@@ -469,8 +469,12 @@ export function createDebug(deps: DebugDeps): DebugControl {
       const line = t.now;
       reveal.value = { line: line ?? t.out };
       let text = sentence(r, a, line, stepped && before !== null ? changedNames(snap, before) : stepped ? [] : null);
-      // A step on a HALT with interrupts on idles until one comes: say so, or each press repeats the line.
-      if (stepped && r.machine.cpu.halted && r.machine.cpu.regs.iff1) text = `${text} ${a.kit.HALTED_WAITING}`;
+      // A step that leaves the CPU halted. On the Model I its HALT raises an NMI at the next instruction: say where
+      // that goes. Elsewhere, with interrupts on, each step idles until one comes: say so, or each press repeats the line.
+      if (stepped && r.machine.cpu.halted) {
+        if (a.kit.haltRaisesNmi(r.machine.model)) text = `${text} ${a.kit.HALTED_NMI}`;
+        else if (r.machine.cpu.regs.iff1) text = `${text} ${a.kit.HALTED_WAITING}`;
+      }
       say(text);
       speak(text, stepped);
     },

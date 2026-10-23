@@ -18,17 +18,23 @@
 //   mid-block makes the handler's RET the newest entry, so the breakpoint stops once more there.
 // - Every temporary breakpoint is removed by `clearTemps`, which a Run calls on any pause or stop.
 // - Step and Step Over while running only pause; the next press steps.
-// - A CPU halted with interrupts off cannot move on: the actions do nothing and return the sentence.
+// - On the Model III and Model 4 a CPU halted with interrupts off cannot move on: the actions do
+//   nothing and return the sentence. A Model I's always can: its HALT raises an NMI at the next
+//   instruction (emu spec §5), which the next action takes.
 import type { AsmResult } from '@fugloy/asm';
 import type { Machine } from '@fugloy/emu';
 import { inactiveReason } from '../source/lines';
+import { haltRaisesNmi } from './runner';
 import type { Runner } from './runner';
 
 export { inactiveReason };
 
+/** The Model III and Model 4's: a HALT there waits for an interrupt that cannot come. */
 export const HALTED_INTERRUPTS_OFF = 'The CPU is halted (HALT) with interrupts off, so it will not move on. Press Stop, then Run.';
-/** Added to a step's sentence while the CPU is halted with interrupts on: each step idles until one comes. */
+/** Added to a step's sentence on the Model III and Model 4 while the CPU is halted with interrupts on: each step idles until one comes. */
 export const HALTED_WAITING = 'The CPU is halted (HALT), waiting for an interrupt; press Continue to run until one comes.';
+/** Added to a step's sentence on the Model I while the CPU is halted, interrupts on or off: the HALT's NMI comes at the next instruction. */
+export const HALTED_NMI = "The CPU is halted (HALT), and on the Model I a HALT raises an NMI at the next instruction: the next step or Continue goes to $0066, the ROM's reset.";
 
 /** The address a breakpoint on `line` stops at, or null for a line with no code. */
 export function breakAddress(result: AsmResult, line: number): number | null {
@@ -110,7 +116,7 @@ export function createStepper(runner: Runner): Stepper {
   /** The temporaries the last clearTemps removed (a pause clears them before anyone asks). */
   let cleared = new Set<number>();
 
-  const stuck = (): string | null => (m.cpu.halted && !m.cpu.regs.iff1 ? HALTED_INTERRUPTS_OFF : null);
+  const stuck = (): string | null => (m.cpu.halted && !m.cpu.regs.iff1 && !haltRaisesNmi(m.model) ? HALTED_INTERRUPTS_OFF : null);
 
   const stepper: Stepper = {
     setBreakpoints(lines) {

@@ -154,6 +154,14 @@ run      until=settled               → "BY: WAYNE WESTMORELAND & TERRY GILMAN"
 key      keys=["ENTER"] cps=1        → "1 OR 2 PLAYERS?"
 ```
 
+A HALT on the Model I does not wait for an interrupt: the machine answers it
+with its reset switch's NMI at the next instruction (emu spec §5). `run
+until=halt` stops before that NMI and says so (`stopped: halt (the CPU ran
+HALT, which on the Model I raises an NMI at the next instruction, to 0066h,
+the ROM's reset)`), a `step` that leaves the CPU halted ends with the same
+parenthesis, and the next run or step goes to `0066h`, the Level II ROM's
+reset.
+
 The Model 4 (emu phase 6b, in 0.1.2 with `@fugloy/emu` 0.4.0): `load` with `model: 4` builds a 128K
 Model 4 on `roms.model4` and boots it to `READY` in Model III mode (memory map
 0, 2 MHz, 64 by 16), answering its `Cass ?` and `Memory Size?` for you; the

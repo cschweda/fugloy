@@ -18,11 +18,11 @@
 // programless runner (`result: null`), never attached to `debug`, running the ROM's own start-up in
 // the frame loop. `reset` does it again, `powerOff` turns it off: the runner is forgotten, so the tube
 // goes dark, and Stop on the machine with no program does the same (Stop on a program keeps 5B's last
-// frame and STOPPED). `runExample` runs a bundled game's main
-// build, also programless, on the booted snapshot. A Run, a power-on and a Program to try each
-// replace whatever runs (one runner), and share the generation counter, so each cancels another
-// still loading, and each is `busy` while it loads. Changing the model while the machine is on turns
-// the new model on.
+// frame and STOPPED). `runExample` runs a bundled game's build for Programs to try (its `tryBuild`,
+// else its main build), also programless, on the booted snapshot. A Run, a power-on and a Program
+// to try each replace whatever runs (one runner), and share the generation counter, so each cancels
+// another still loading, and each is `busy` while it loads. Changing the model while the machine is
+// on turns the new model on.
 //
 // 6B: two options make a Run for the Learn page's lessons. `stubOnly`: every Run uses Fugløy's stub
 // ROM whatever ROM is stored (the ROM store is never loaded or read), and `powerOn`, `reset` and
@@ -119,7 +119,7 @@ export interface Run {
   pauseMachine(): void;
   /** Continues a runner paused by `pauseMachine`. */
   continueMachine(): void;
-  /** Runs a bundled game's main build on its model's stored ROM, programless. Armored Patrol is not offered (it throws). */
+  /** Runs a bundled game's build for Programs to try (its `tryBuild`, else its main build) on its model's stored ROM, programless. Armored Patrol is not offered (it throws). */
   runExample(id: ExampleId): Promise<void>;
   /** The model the current machine runs, of any kind; null with none. */
   machineModel: Ref<Model | null>;
@@ -317,7 +317,7 @@ function buildRun(deps: RunDeps): Run {
     await loading(gen, () => trying(gen, id, ex, model));
   }
 
-  async function trying(gen: number, id: ExampleId, ex: { title: string; mainBuild: string }, model: Model): Promise<void> {
+  async function trying(gen: number, id: ExampleId, ex: { title: string; mainBuild: string; tryBuild?: string }, model: Model): Promise<void> {
     const stale = (): boolean => gen !== generation;
     const got = await parts(stale);
     if (got === null) return;
@@ -326,7 +326,7 @@ function buildRun(deps: RunDeps): Run {
     if (rom === null) return say(EXAMPLE_NEEDS_ROM(ex.title, model), true);
     let cmd: Uint8Array;
     try {
-      const res = await (deps.fetch ?? globalThis.fetch)(`/examples/${id}/${ex.mainBuild}`);
+      const res = await (deps.fetch ?? globalThis.fetch)(`/examples/${id}/${ex.tryBuild ?? ex.mainBuild}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       cmd = new Uint8Array(await res.arrayBuffer());
     } catch {

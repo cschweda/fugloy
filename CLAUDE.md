@@ -141,7 +141,14 @@ The Model I harness found and fixed four more core bugs (EX (SP),rr's write
 order, a repeating block instruction's flags 3 and 5, SCF and CCF's flags 3 and
 5 after an instruction that left the flags alone, and, in the sweep, the Model
 I's HALT, which its wiring answers with the reset switch's NMI), and settled the 20 cps key
-drop as the Level II 1.3 ROM's own debounce (emu spec §5). Open: no Model I
+drop as the Level II 1.3 ROM's own debounce (emu spec §5). The workbench and
+`@fugloy/mcp` follow that HALT: a Model I Run on the stub ROM stops at the
+program's HALT with a sentence (`MODEL1_HALT`, `utils/emulator/runner.ts`; its
+slices run `until: 'halt'`), the debugger and MCP's `run` and `step` say a
+Model I HALT raises an NMI to `$0066`, and Programs to try runs Eliminator's
+Model I cassette build, `elimin8a` (the manifest's `tryBuild`; the workbench
+still opens `elimin8d`, which never draws its title on a cassette Level II
+Model I). Open: no Model I
 session takes an interrupt or reads `$37E0`, so an interrupt-driven session (a
 DOS from a DMK) against both references waits (emu spec §12).
 

@@ -415,6 +415,31 @@ describe('the stepper', () => {
     expect(runner.state).toBe('paused');
     expect(at('NEXT')).toBe(pc);
   });
+
+  it("on a Model I a halted CPU is never stuck: its HALT's NMI takes the next action to $0066, and none returns a sentence", () => {
+    // The Model I's HALT line drives its reset switch's NMI (emu spec §5). On the user's ROM (here the
+    // stub with a loop at $0066; a stub Run stops at the HALT itself), the CPU halted with interrupts off moves on.
+    const src = program('START:  DI', '        HALT', 'NEXT:   NOP');
+    const halted = () => {
+      let stepper!: ReturnType<typeof createStepper>;
+      const p = runPatched(src, { 0x0066: [0x18, 0xfe] }, { model: 1, onPause: () => stepper.clearTemps(), onStop: () => stepper.clearTemps() });
+      stepper = createStepper(p.runner);
+      expect(stepper.step()).toBeNull(); // DI
+      expect(stepper.step()).toBeNull(); // HALT
+      expect(p.machine.cpu.halted).toBe(true);
+      expect(p.machine.cpu.regs.iff1).toBe(false);
+      return { ...p, stepper };
+    };
+    for (const action of ['step', 'stepOver', 'continue'] as const) {
+      const { clock, machine, runner, stepper } = halted();
+      // Null: neither HALTED_INTERRUPTS_OFF nor HALTED_WAITING (which only useDebug adds).
+      expect(stepper[action](), action).toBeNull();
+      frames(clock, 1);
+      expect(machine.cpu.halted, action).toBe(false);
+      expect(runner.pc, action).toBe(0x0066);
+      expect(runner.state, action).toBe(action === 'continue' ? 'running' : 'paused');
+    }
+  });
 });
 
 describe('runOnce with breakpoints', () => {

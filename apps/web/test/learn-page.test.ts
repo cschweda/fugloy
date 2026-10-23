@@ -11,6 +11,7 @@ import { assemble, toCmd } from '@fugloy/asm';
 import LessonText from '../app/components/learn/LessonText.vue';
 import { explainSourceLine } from '../app/utils/learn/explain-line';
 import { EXPLAIN_PROMPT, lessonMessage, lessonNeighbours, lessonPath, modelOptions } from '../app/utils/learn/page';
+import { MODEL1_HALT } from '../app/utils/emulator/runner';
 import { parseLesson } from '../app/utils/learn/lesson-format';
 import type { Lesson } from '../app/utils/learn/lesson-format';
 import { lessonBySlug, LESSONS } from './learn-items';
@@ -123,6 +124,10 @@ describe('the page helpers', () => {
     );
     expect(lessonMessage('The program stopped because you changed the model. Press Run to run the source on this one.')).toBe(
       "The program stopped because you changed the model. Press Run ▶ to run the lesson's program on this one.",
+    );
+    // A Model I lesson's HALT (the stub cannot give the Model I's reset to BASIC).
+    expect(lessonMessage(MODEL1_HALT(4))).toBe(
+      "Line 4 halts the CPU (HALT), and a Model I answers a HALT with a reset to BASIC (its HALT line drives the reset switch's NMI), which Fugløy's stub ROM cannot do. Lessons run without one, so end the program with a loop that waits, such as WAIT: JR WAIT.",
     );
     expect(EXPLAIN_PROMPT).toBe('Run the program, then click a line to read what it does.');
   });

@@ -1,8 +1,9 @@
 // Phase 5D, Task 3: the TRS-80 is simply on. Power on boots the model's stored ROM live, with no
 // program (a programless runner, never attached to the debugger); Reset boots it again; Power off
 // stops it; a Run replaces it and Power on replaces a Run. A Program to try fetches a bundled game's
-// main build and runs it, programless, on the booted snapshot. The "ROM" is the stub's bytes stored
-// as the user's: the live path never waits for READY.
+// build for it (Eliminator's elimin8a, the others' main build) and runs it, programless, on the
+// booted snapshot. The "ROM" is the stub's bytes stored as the user's: the live path never waits
+// for READY.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
@@ -32,7 +33,8 @@ function fakeRoms(stored: Partial<Record<ModelId, Uint8Array>> = {}): Roms {
   };
 }
 
-const seaDragon = new Uint8Array(readFileSync(fileURLToPath(new URL('../../../examples/sea-dragon/seadrg01.cmd', import.meta.url))));
+const example = (path: string) => new Uint8Array(readFileSync(fileURLToPath(new URL(`../../../examples/${path}`, import.meta.url))));
+const seaDragon = example('sea-dragon/seadrg01.cmd');
 
 /** The kit, arriving only when `arrive` is called. */
 function slowKit() {
@@ -253,6 +255,26 @@ describe('the machine session', () => {
     expect(run.message.value).toBe('Sea Dragon is running on your Model III ROM.');
     expect(run.problem.value).toBe(false);
     expect(run.debug.live.value).toBe(false);
+  });
+
+  it("Eliminator's Program to try runs its Model I cassette build, elimin8a, on the Model I; the workbench still opens elimin8d", async () => {
+    const elimin8a = example('eliminator/elimin8a.cmd');
+    const fetcher = vi.fn(async (_url: string) => new Response(elimin8a));
+    const { run } = await setup({ roms: fakeRoms({ 1: realKit.stubRom(1) }), fetch: fetcher as unknown as typeof fetch });
+    await run.runExample('eliminator');
+    expect(fetcher).toHaveBeenCalledWith('/examples/eliminator/elimin8a.cmd');
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    const r = run.runner.value!;
+    expect(r.result).toBeNull();
+    expect(r.machine.model).toBe(1);
+    expect(run.machineModel.value).toBe(1);
+    expect(r.pc).toBe(parseCmd(elimin8a).entry);
+    expect(run.message.value).toBe('Eliminator is running on your Model I ROM.');
+    expect(run.problem.value).toBe(false);
+    // The workbench's Eliminator is still the main build.
+    const wb = createWorkbench({ readExample: async (path) => example(path) });
+    await wb.openExample('eliminator');
+    expect(wb.session.value?.name).toBe('elimin8d.cmd');
   });
 
   it("the sentences name each model as rom-ids does", () => {

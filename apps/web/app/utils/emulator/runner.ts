@@ -15,6 +15,14 @@
 //   whose $FF bytes are RST 38H): the program ran into memory that is not its own;
 // - anywhere else: the routine there (a jump to $0000 says $0000, though it halts further on).
 //
+// The Model I's HALT line drives its reset switch's NMI (emu spec §5), so a halted CPU there takes
+// the NMI to $0066 at the next instruction, and from a HALT in the stub's space it does so again
+// and again, a word pushed each time. So on that model a stub run's slices stop when the CPU halts
+// (`until: 'halt'`, before the NMI), and a HALT in the program's own code stops the run with
+// MODEL1_HALT, naming its line: the Model I's answer, a reset to BASIC, is one the stub cannot
+// give. A HALT anywhere else is the trap's, as above. The user's ROM, and the other models, whose
+// HALT waits for an interrupt, are untouched.
+//
 // Breakpoints (5C Ruling 8) are emu's own: a slice that ends with `{ reason: 'break' }` pauses the
 // run before that instruction, sets `pausedBy`, and calls `onPause`; Pause and each step call
 // `onPause` too. `continue()` resumes past a breakpoint at PC: emu skips the
@@ -31,7 +39,7 @@
 // runs on the user's ROM only (never the stub, whose trap needs a program to name), checks no
 // trap, and stops only when told to or on an emulator error.
 import type { AsmResult } from '@fugloy/asm';
-import type { Machine } from '@fugloy/emu';
+import type { Machine, Model } from '@fugloy/emu';
 import { MODEL_NAMES } from './rom-ids';
 import { describeRom, romAdvice, romNameAt } from './rom-use';
 import { romEnd, stubHalts } from './stub-rom';
@@ -70,7 +78,7 @@ export interface RunnerOptions {
   machine: Machine;
   /** Null for a programless runner, which `stub` must not be. */
   result: AsmResult | null;
-  /** True on the stub ROM: a PC inside the ROM stops the run with a sentence. */
+  /** True on the stub ROM: a PC inside the ROM, or on the Model I a HALT, stops the run with a sentence. */
   stub: boolean;
   schedule?: (cb: () => void) => number;
   cancel?: (id: number) => void;
@@ -86,6 +94,17 @@ export interface RunnerOptions {
 
 /** The longest gap a frame makes up, in seconds. */
 export const MAX_FRAME_SECONDS = 1 / 30;
+
+/**
+ * True on the Model I, whose CPU's HALT line drives the reset switch's NMI (emu spec §5): a HALT
+ * there is answered at the next instruction by the NMI to $0066, the ROM's reset, so it never
+ * waits for an interrupt. The Model III and Model 4 have no such wiring: their HALT waits.
+ */
+export const haltRaisesNmi = (model: Model): boolean => model === 1;
+
+/** Why a stub run on the Model I stopped at the program's HALT on `line` (its advice as romAdvice words it, which the Learn page rewords). */
+export const MODEL1_HALT = (line: number): string =>
+  `Line ${line} halts the CPU (HALT), and a Model I answers a HALT with a reset to BASIC (its HALT line drives the reset switch's NMI), which Fugløy's stub ROM cannot do. Add a Model I ROM in the Run tab, or end the program with a loop that waits, such as WAIT: JR WAIT.`;
 
 const hex4 = (n: number): string => `$${n.toString(16).toUpperCase().padStart(4, '0')}`;
 
@@ -112,6 +131,12 @@ function lastProgramStep(m: Machine, result: AsmResult): { from: TraceEntry | nu
     if (entries.length < n) break;
   }
   return { from: null, to: null };
+}
+
+/** The program's line for the HALT the CPU sits in (the trace's newest entry: a halted CPU adds none), or null when that HALT is not its code. */
+function haltLine(m: Machine, result: AsmResult): number | null {
+  const halt = m.debug.trace.last(1)[0];
+  return halt === undefined ? null : result.sourceMap.lineOf(halt.pc);
 }
 
 /** What an instruction's bytes do to PC, as a verb. */
@@ -146,7 +171,8 @@ function trapStop(m: Machine, result: AsmResult): { reason: string; line: number
   if (target === returned)
     return {
       line,
-      reason: `${who} returns (RET) to the ROM, but no ROM is loaded, so there is nothing to return to. End the program with a loop that waits, such as WAIT: JR WAIT, or with HALT.`,
+      // HALT ends a program only where it waits: on the Model I it is a reset.
+      reason: `${who} returns (RET) to the ROM, but no ROM is loaded, so there is nothing to return to. End the program with a loop that waits, such as WAIT: JR WAIT${haltRaisesNmi(model) ? '' : ', or with HALT'}.`,
     };
   if (target >= end) {
     const gap = model === 1 && target >= 0x3000 && target < 0x3800;
@@ -165,6 +191,8 @@ export function createRunner(opts: RunnerOptions): Runner {
   const cancel = opts.cancel ?? ((id: number) => cancelAnimationFrame(id));
   const now = opts.now ?? (() => performance.now());
   const end = romEnd(m.model);
+  /** A stub run on the Model I stops when the CPU halts, before its NMI. */
+  const haltStops = stub && haltRaisesNmi(m.model);
   if (!m.debug.trace.enabled) m.debug.trace.enable({ depth: TRACE_DEPTH });
 
   let state: RunnerState = 'paused';
@@ -181,9 +209,15 @@ export function createRunner(opts: RunnerOptions): Runner {
     handle = null;
   };
 
-  /** After a slice or a step: stop at the stub's trap. True when stopped. */
+  /** After a slice or a step: stop at the stub's trap, or at a Model I program's HALT. True when stopped. */
   const checkTrap = (): boolean => {
-    if (!stub || result === null || m.cpu.regs.pc >= end) return false;
+    if (!stub || result === null) return false;
+    const haltedOn = haltStops && m.cpu.halted ? haltLine(m, result) : null;
+    if (haltedOn !== null) {
+      runner.stop(MODEL1_HALT(haltedOn), haltedOn);
+      return true;
+    }
+    if (m.cpu.regs.pc >= end) return false;
     const t = trapStop(m, result);
     runner.stop(t.reason, t.line);
     return true;
@@ -200,7 +234,7 @@ export function createRunner(opts: RunnerOptions): Runner {
     let hit: number | null = null;
     try {
       if (budget > 0) {
-        const r = m.run({ cycles: budget });
+        const r = m.run(haltStops ? { cycles: budget, until: 'halt' } : { cycles: budget });
         if (r.reason === 'break') hit = r.id;
       }
     } catch (e) {

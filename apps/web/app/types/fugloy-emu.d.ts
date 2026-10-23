@@ -73,7 +73,7 @@ declare module '@fugloy/emu' {
     readonly system: TRS80System;
     readonly cpu: {
       readonly regs: Regs;
-      /** True while the CPU sits in a HALT (PC just past it), until an interrupt or a reset. */
+      /** True while the CPU sits in a HALT (PC just past it), until an interrupt or a reset; on the Model I, until the NMI its HALT raises at the next instruction (emu spec §5). */
       readonly halted: boolean;
     };
     readonly mem: { read(addr: number, len: number): Uint8Array; write(addr: number, bytes: Uint8Array): void };

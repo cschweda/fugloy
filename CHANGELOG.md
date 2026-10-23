@@ -39,6 +39,25 @@ creates and pushes the tag.
 
 ### Changed
 
+- The web workbench and `@fugloy/mcp` follow the Model I's HALT (emu phase 7, the Model I sweep's
+  Task 4, 2026-10-23), which the machine answers with its reset switch's NMI (Fixed, below). On
+  Fugløy's stub ROM a Model I Run stops at the program's HALT, before the NMI, naming its line:
+  "Line 4 halts the CPU (HALT), and a Model I answers a HALT with a reset to BASIC (its HALT line
+  drives the reset switch's NMI), which Fugløy's stub ROM cannot do. Add a Model I ROM in the Run
+  tab, or end the program with a loop that waits, such as WAIT: JR WAIT." (the Learn page: "…
+  Lessons run without one, so end the program with a loop that waits, …"). With the emulator's fix
+  alone, the NMI went to the stub's HALT at `$0066` and came back to it, a word pushed each time,
+  and the Run stopped naming `$0066` (NMIENTRY). On the user's ROM the NMI is taken as on the
+  machine, and the Model III and Model 4 are unchanged. The advice after a final RET no longer
+  offers HALT on the Model I. The debugger never calls a halted Model I stuck or waiting for an
+  interrupt: its next step takes the NMI, and a step that leaves it halted says "The CPU is halted
+  (HALT), and on the Model I a HALT raises an NMI at the next instruction: the next step or
+  Continue goes to $0066, the ROM's reset." On a Model I the MCP's `run until: "halt"` stops with
+  `stopped: halt (the CPU ran HALT, which on the Model I raises an NMI at the next instruction, to
+  0066h, the ROM's reset)`, a `step` that leaves the CPU halted ends with that parenthesis, and no
+  step there says it found the CPU halted, waiting for an interrupt; the Model III's sentences are
+  unchanged.
+
 - The Model I differential's last four residuals (emu phase 7, the Model I sweep's Task 1,
   2026-10-23; plan `docs/superpowers/plans/2026-10-23-emu-phase7-model1-sweep.md`). The MAME
   recorder's silence watchdog takes a tick that comes more than one interval late for a stall of the
@@ -121,6 +140,14 @@ creates and pushes the tag.
   Model III.
 
 ### Fixed
+
+- The web workbench: Programs to try's Eliminator runs `elimin8a.cmd`, the Model I cassette build,
+  which reaches its title and plays (the manifest's new `tryBuild`; emu's
+  `test/integration/model1-programs.test.js` and the Model I sessions). It ran `elimin8d.cmd`, the
+  main build, which on a cassette Level II Model I never draws its title: it runs `RST 38H` into the
+  ROM's `EI / RET` at `$4012`, after which the 40 Hz is taken in IM 0 after every return and the latch
+  at `$37E0` is never read, so it sits at READY (emu spec §11, the Model I sweep). The workbench's
+  Eliminator still opens `elimin8d.cmd`.
 
 - `@fugloy/emu`: the Model I answers a HALT with the NMI its reset switch makes, as the machine is
   wired: HALT* and the switch meet at Z53, which drives NMI* and SYSRES* through Z37 (TRS-80 Micro
