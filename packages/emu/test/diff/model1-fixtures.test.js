@@ -200,12 +200,14 @@ const SESSIONS = [
   },
   {
     // CLEAR to start, one player (the 1 is taken), then fire and move: its play screen is the
-    // score and three ships ('[[[') on the top line, losing them one by one to GAME OVER at about
-    // 55 s. It writes its credits in lowercase.
+    // score and three ships ('[[[') on the top line, from about 11.5 s on both references. Its
+    // GAME OVER is not listed: against xtrs it comes at 55 s (8.96 million instructions past the
+    // load), but MAME sets the same keys at frames, so there the game goes otherwise and ends at
+    // 70 s, past the session's 10 million. It writes its credits in lowercase.
     name: 'Super Nova (supnov3a.cmd)',
     program: fixture(/supnov3a\.cmd$/),
     keys: [press(9, 'CLEAR'), press(11, '1'), press(14, 'SPACE', 1), press(16, 'LEFT', 1), press(18, 'RIGHT', 1), press(20, 'SPACE', 1)],
-    screens: ['SOFTWARE CO.', 'NUMBER OF PLAYERS (1 OR 2) ?', '0.[[[', 'GAME OVER PLAYER 1'],
+    screens: ['SOFTWARE CO.', 'NUMBER OF PLAYERS (1 OR 2) ?', '0.[[['],
     known: { [XTRS]: { [BIT_XY]: 655, [BLOCK_XY]: 2_210_006, [IO]: 2_025 }, [MAME]: { [VIDEO_READ]: 3 } },
   },
 ];
