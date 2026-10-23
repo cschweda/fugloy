@@ -93,3 +93,32 @@
 - [ ] **Step 4: Settle each divergence** by Ruling 6: read both references' sources and the Z80 literature (Banks's Z80Decoder wiki, Young, UM0080) and either fix our core in `src/` with a unit test — then rerun ZEXDOC and ZEXALL, `pnpm test`, the thirteen sessions against the affected reference, and the trsjs sessions — or declare a class for the reference that is wrong, with its evidence and a test. Rerun the program alone (`-t`) until it passes. A divergence with no supportable explanation is recorded as **Open** in §11 and the report, never hidden.
 - [ ] **Step 5: Records.** §11 row 7's Model I part: the sweep (programs per reference, the totals per class, how many took an interrupt and whether that narrows §12's interrupt-driven-session item, the programs MAME could not load and why, the time), and §10 if a class was added; `CHANGELOG.md` `[Unreleased]` (Added: the sweep; Fixed: any core fix); the emu README's harness section; `CLAUDE.md`'s emu paragraph (one clause on the sweep).
 - [ ] **Step 6: Run** `pnpm typecheck` and `pnpm test` (flags off), then **commit** `e7: sweep every other Model I program against xtrs and MAME, and record it`
+
+### Task 4: The Model I HALT's consequences outside emu, and Programs to try's Model I Eliminator
+
+Added during execution (2026-10-23, controller's ruling; the ledger records why): Task 3 found that a Model I answers a HALT with an NMI (Handbook Figure 29: HALT* drives the reset switch's NMI) and fixed `@fugloy/emu`, which the web workbench and `@fugloy/mcp` run; and that the workbench's Programs to try runs Eliminator's `elimin8d.cmd` on the Model I, where it never draws its title. Both reach users when this branch merges (app.fugloy.dev deploys from `main`), so they are fixed here.
+
+**Files:**
+- Modify: `apps/web/app/utils/emulator/runner.ts` (the stub-ROM run on the Model I stops at a program's HALT; the trap's advice per model)
+- Modify: `apps/web/app/utils/emulator/stepping.ts` (`HALTED_INTERRUPTS_OFF`, `HALTED_WAITING` and `stuck` per model) and `apps/web/app/composables/useDebug.ts` (about line 473, where `HALTED_WAITING` is added)
+- Modify: `apps/web/app/data/examples.ts` (a `tryBuild` for Eliminator) and `apps/web/app/composables/useRun.ts` (`runExample` fetches `tryBuild ?? mainBuild`)
+- Modify: `packages/mcp/src/execute.js` (about line 225, `stopped: halt`) and `packages/mcp/src/tools/step.js` (about line 29)
+- Modify: `CHANGELOG.md` (`[Unreleased]`), and any README or spec sentence that says a HALT waits for an interrupt on every model
+- Test: `apps/web/test/` (the runner's stub trap tests, `stepping.test.ts`, `debug.test.ts`, `run-machine.test.ts`), `packages/mcp/test/phase-a.test.js`
+
+**Interfaces:**
+- Consumes: Task 3's core behaviour: on a Model I a halted CPU takes an NMI at the next instruction boundary (PC `$0066`, HALT+1 pushed); `m.run({ until: 'halt' })` stops when the CPU halts, before that NMI; `m.model`.
+- Produces: `ExampleInfo.tryBuild?: string` (the build Programs to try runs; `mainBuild` stays the workbench's).
+
+- [ ] **Step 1: Write the failing tests.**
+  - Runner, Model I, stub ROM: a program `ORG 5200H / DI / LD A,1 / HALT` run for one frame stops at its HALT with a sentence naming the HALT's line and saying that a Model I answers a HALT with a reset to BASIC (its HALT line drives the reset switch's NMI), which the stub ROM cannot do; PC is not inside the ROM, SP is where the program left it (no NMI was taken), and the trap's "inside the Model I ROM" sentence is never given. The same program on the Model III stops as it does today (its existing tests unchanged).
+  - Runner, Model I, the user's ROM (or a synthetic ROM whose `$0066` is a known loop, as the existing runner tests build ROMs): the same program takes the NMI to `$0066` and is not stopped.
+  - The trap's advice for a RET to the stub's return address ends "…such as WAIT: JR WAIT." on the Model I and keeps "…, or with HALT." on the Model III.
+  - `stepping.test.ts`: on a Model I, a halted CPU is never `stuck` (stepping takes the NMI), and neither `HALTED_INTERRUPTS_OFF` nor `HALTED_WAITING` is returned; the Model III cases unchanged.
+  - `run-machine.test.ts`: `runExample('eliminator')` fetches `/examples/eliminator/elimin8a.cmd` and runs it on the Model I; the workbench's Eliminator example still opens `elimin8d.cmd`.
+  - `phase-a.test.js`: on a Model I session, `run { until: 'halt' }` stops with a sentence saying the HALT raises an NMI at the next instruction (to `$0066`, the ROM's reset); the Model III sentence stays `stopped: halt (the CPU ran HALT and waits for an interrupt)`.
+- [ ] **Step 2: Run them**: they fail for those reasons.
+- [ ] **Step 3: Implement.** In the runner, a stub-ROM run on the Model I stops at a program's HALT (for example, its slices run with `until: 'halt'` on that model) and reports it with the sentence; the user's ROM and the other models are untouched. `stepping.ts` and `useDebug.ts` take the model into account. `examples.ts` gives Eliminator `tryBuild: 'elimin8a.cmd'`, with a comment saying why: `elimin8d` runs `RST 38H` into the Level II ROM's `EI / RET` at `$4012`, after which the 40 Hz is taken in IM 0 after every return and the latch at `$37E0` is never read, so on a cassette Level II Model I it never draws its title (emu spec §11's sweep); `elimin8a`, the Model I cassette build, reaches its title and plays (`model1-programs.test.js`, the Model I sessions). Check that `elimin8a.cmd` is served under `/examples/eliminator/`. The MCP sentences take the machine's model.
+- [ ] **Step 4: Run** the web unit tests (`pnpm test:web`), `pnpm --filter @fugloy/web typecheck`, `pnpm --filter @fugloy/web size:first-screen` (under its 252,775-byte budget) and `check:prefetch`, the MCP tests (`pnpm --filter @fugloy/mcp test`), and `pnpm test`. All pass.
+- [ ] **Step 5: Records**: `CHANGELOG.md` `[Unreleased]` (Fixed: Programs to try's Model I Eliminator; Changed: a Model I HALT stops a stub-ROM run with its sentence, and the workbench and MCP say what a Model I HALT does), and any README or spec sentence found saying a HALT waits for an interrupt on every model.
+- [ ] **Step 6: Commit** `e7: stop a Model I stub run at its HALT, say what a Model I HALT does, and run Eliminator's cassette build in Programs to try`
