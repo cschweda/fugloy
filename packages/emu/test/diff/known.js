@@ -58,7 +58,9 @@
  *   instruction), so a program that enables interrupts without an IM 1 of its own takes them in
  *   IM 0: ours as RST 38H, from the $FF its idle bus is taken to hold, as MAME's default vector
  *   is (z80.h execute_default_irq_vector); the Handbook has the CPU's input buffers open only on
- *   RD (pp. 16-17), which an acknowledge does not assert, and says no more.
+ *   RD (pp. 16-17), which an acknowledge does not assert; its account of the expansion port's INT*
+ *   (p. 92) says of the Z80's three modes only "In the first, this line is ignored" (emu spec §5
+ *   lists the byte an IM 0 acknowledge reads as unverified).
  * - xtrs's trs_reset(0), which answers its Model I's HALT, also resets its devices (the cassette,
  *   the disk, the latch's clock bit): SYSRES*'s work on the Expansion Interface (Figure 29), which
  *   neither ours nor MAME's trs80l2 models (trs80.cpp: "TODO: also causes SYSRES"). It would show
