@@ -210,55 +210,85 @@ and 29× (debug); Sea Dragon on the Model I runs at about 48×.
 
 ## Differential testing
 
-Emu phase 7 runs a program here and in [trsjs](https://trsjs.48k.ca/)
-(Peter Phillips's JavaScript conversion of George Phillips's trs80gp) in
-lockstep, and compares the two after every instruction: PC, every register
-(F bit by bit, R as 7 bits), IFF1/2, IM, the T-states, and every memory
-write, with video RAM at checkpoints and at the end. Keys go into both
-keyboard matrices at the same T-state. trsjs has no license, so it is never
-committed or bundled: `pnpm trsjs:install` fetches it into the gitignored
-`tools/trsjs/`, pinned by SHA-256, and the tests that need it are opt-in.
+Emu phase 7 runs a program here and in a reference emulator and compares the
+two after every instruction: PC, every register (F bit by bit, R as 7 bits),
+IFF1/2, IM, the T-states, and every memory write, with video RAM at
+checkpoints and at the end. The Model III's reference is
+[trsjs](https://trsjs.48k.ca/) (Peter Phillips's JavaScript conversion of
+George Phillips's trs80gp), stepped in lockstep in this process. The Model I
+has two: [xtrs](https://github.com/TimothyPMann/xtrs) (Tim Mann's), built
+headless with a small patch and stepped in lockstep over a pipe, and MAME
+0.289's `trs80l2`, which records every instruction into a trace that our
+machine follows from power-on, taking MAME's interrupts where it took them and
+its keyboard bytes where it read them. Keys go into both keyboard matrices at
+the same T-state (a trace brings its own). On the Model I the comparison also
+covers the `$37E0` latch after every read of it and video RAM through the
+bit-6 gate (raw with `--lowercase`). None of the references is committed or
+bundled: `pnpm trsjs:install` fetches trsjs (it has no license),
+`pnpm xtrs:install` clones and builds xtrs at a pinned commit, and
+`pnpm mame:install` checks Homebrew's MAME 0.289 (`brew install mame`) and
+assembles its ROM set from your Level II ROM, each into the gitignored
+`tools/`, pinned; the tests that need them are opt-in.
 
 ```sh
 pnpm trsjs:install
-FUGLOY_TRSJS=1 pnpm vitest run packages/emu/test/diff                     # about a minute: the harness tests and six game sessions
+FUGLOY_TRSJS=1 pnpm vitest run packages/emu/test/diff                     # about a minute: the harness tests and six Model III game sessions
 FUGLOY_TRSJS=1 FUGLOY_TRSJS_SWEEP=1 pnpm vitest run packages/emu/test/diff --silent=false # also every other .CMD in examples/ and fixtures/real/, logging each one's class counts and the sum
 pnpm diff examples/sea-dragon/seadrg01.cmd --instructions 10000000        # one program, with a report
+pnpm xtrs:install && pnpm mame:install                                    # the Model I's references
+FUGLOY_XTRS=1 pnpm vitest run packages/emu/test/diff                      # about 40 minutes: thirteen Model I sessions in lockstep with xtrs
+FUGLOY_MAME=1 pnpm vitest run packages/emu/test/diff                      # about 12 minutes: the same thirteen, following MAME
+FUGLOY_XTRS=1 pnpm vitest run packages/emu/test/diff/model1-fixtures.test.js -t elimin8c # one session
+pnpm diff examples/eliminator/elimin8c.cmd --model 1                      # one program against xtrs, with a report
 ```
 
 `pnpm diff <program> [--model 3|1] [--reference trsjs|xtrs] [--lowercase] [--keys <script.json>] [--instructions N] [--from-cycle C] [--rom <file>] [--strict | --strict-all]`
 boots the model's ROM from `fugloy.mcp.json` (the Model III against trsjs by
-default; `--model 1` against xtrs, `pnpm xtrs:install`), loads the `.CMD` or
-`.BAS`, and prints the reference and model, the count of each known difference
-and the first divergence, if any, with ten instructions disassembled on each
-side. `pnpm diff --model 1 --reference mame --trace <file>` compares our Model
-I, from power-on, against a MAME trace recorded with
-`pnpm mame:trace record <instructions>` (`pnpm mame:install`). On the Model I
-the comparison also covers the `$37E0` latch after every read of it and video
-RAM through the bit-6 gate (raw with `--lowercase`). Exit status 0 means no
-divergence, 1 a divergence, 2 a usage or setup error (an unexpected error,
-such as the ROM not reaching READY or the reference throwing, counts as one),
-3 a MAME trace that ends before the instructions asked for.
+default; `--model 1` against xtrs), loads the `.CMD` or `.BAS`, and prints the
+reference and model, the count of each known difference and the first
+divergence, if any, with ten instructions disassembled on each side.
+`pnpm diff --model 1 --reference mame --trace <file>` compares our Model I,
+from power-on, against a MAME trace recorded with
+`pnpm mame:trace record <instructions>`. Exit status 0 means no divergence, 1
+a divergence, 2 a usage or setup error (an unexpected error, such as the ROM
+not reaching READY or the reference throwing, counts as one), 3 a MAME trace
+that ends before the instructions asked for.
 
-Where the two differ, trsjs is the inaccurate side, and the harness says so
-explicitly. Some differences it corrects in the reference (a write to ROM or
-the keyboard, a byte stored wider than 8 bits, PC running past `$FFFF`, a
-repeating CPDR's T-states, a DD or FD prefix trsjs skips); the rest are known classes in
-`test/diff/known.js`, each with the evidence for it, counted rather than
-reported (flag bits 3 and 5; BIT's S and P/V; R on an interrupt and on
-DDCB/FDCB; the HALT return address; carry after CPI/CPD/CPIR/CPDR; and three
-interrupt timings). Everything else is a divergence. On the six sessions
-(Sea Dragon, Eliminator c and e, Rear Guard 5 and 4, Armored Patrol, 10
-million instructions each) there is none. The harness found two bugs on our
-side, both now fixed: a halted CPU did not count R, and port `FF` did not
-read port `EC`'s bits back. After those fixes, every remaining difference is
-trsjs's. The harness cannot see a bug both machines share: where the two
+Where a reference departs from the Z80 or the machine, the harness says so
+explicitly: it corrects the reference (trsjs: a write to ROM or the keyboard,
+a byte stored wider than 8 bits, PC running past `$FFFF`, a repeating CPDR's
+T-states, a DD or FD prefix it skips; MAME: its CPU reads video bit 6 as
+written, so where its byte is ours but for the gate our read takes MAME's), or
+counts a known class in `test/diff/known.js`, each with the evidence that the
+reference is the inaccurate side: flag bits 3 and 5 (trsjs's own rules,
+xtrs's `BIT n,(HL)` and `BIT n,(IX+d)`); BIT's S and P/V; R on an interrupt and on DDCB/FDCB;
+the HALT return address; carry after CPI/CPD/CPIR/CPDR; three interrupt
+timings (trsjs); EX (SP),rr writing (SP) before (SP+1) (xtrs, trsjs); a
+repeating LDIR/LDDR/CPIR/CPDR's flags 3 and 5 from PC (xtrs, trsjs); SCF and
+CCF's flags 3 and 5 after an instruction that left the flags alone (xtrs takes
+A's alone, trsjs keeps its own); IN and block I/O one T-state short (xtrs).
+Everything else is a divergence. On the six Model III sessions (Sea Dragon,
+Eliminator c and e, Rear Guard 5 and 4, Armored Patrol, 10 million
+instructions each) there is none, and none on the thirteen Model I sessions
+(Eliminator a and c, Sea Dragon and Rear Guard 5 from `examples/`, nine more
+from `fixtures/real/` where present, 10 million instructions each past the
+load) against either reference; against MAME the only difference counted is
+its video read. The harness found five bugs on our side, all now fixed: a
+halted CPU did not count R, port `FF` did not read port `EC`'s bits back
+(both against trsjs), EX (SP),rr wrote its low byte first, a repeating block
+instruction took flags 3 and 5 from its byte rather than PC, and SCF and CCF
+ignored F's flags 3 and 5 after an instruction that left them alone (all three
+against MAME). The harness cannot see a bug both machines share: where the two
 agree, both may be wrong, so behaviour such as EI's one-instruction delay is
 pinned by our own unit tests (against Zilog UM0080 and Young §5.5) as well as
-compared. One is a judgment call rather than a trsjs error: port `FF` bit 6,
-which the Model III Technical Reference Manual calls undefined; we read it as
-1, as trsjs and trs80gp do. Details in spec §10 and §11 (phase 7). The Model I waits
-for a Model I reference; trsjs is Model III only.
+compared. Two are judgment calls rather than reference errors: port `FF` bit
+6, which the Model III Technical Reference Manual calls undefined (we read it
+as 1, as trsjs and trs80gp do), and SCF and CCF, where Zilog's NMOS Z80 and
+NEC's differ (we follow Zilog's, as MAME does; xtrs follows NEC's). Typing at
+20 characters a second drops every other key under the Model I's Level II
+1.3 on all three machines alike: the ROM's keyboard driver debounces each key
+for 18.8 ms and waits 51.3 ms after taking one, so type at 10 (the default).
+Details in spec §5, §10 and §11 (phase 7).
 
 ## Testing the Z80 core
 

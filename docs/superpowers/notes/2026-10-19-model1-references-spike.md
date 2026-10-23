@@ -306,6 +306,28 @@ it) to the record that carries the response. The 100,000-instruction boot is
 924,308 bytes of records, 9.2 bytes an instruction (MAME's text with
 disassembly was 66), so 10 million instructions are about 92 MB.
 
+**A program and held keys (Task 5).** A session loads a `.CMD` at READY, as
+`m.load.cmd` does on ours, and holds keys on the matrix. `recordMameTrace`'s
+`matrix` (key events as compare.js's `keyEvents` makes them, in T-states) goes to
+the Lua as `$FUGLOY_MAME_MATRIX` and sets or clears each key's field on MAME's
+`:LINE0`–`:LINE7` at the first frame at or after its time; MAME applies a field
+at its next frame update, so a press is seen about two frames (33 ms) after its
+time and a release one frame after, and a hold lasts whole frames (measured on
+the trace's keyboard reads: held 25 or 30 ms, a key shows for one 16.7 ms frame;
+35 ms, two). `load` goes as `$FUGLOY_MAME_LOAD` (the load's cycle, the entry, and
+the program's runs of bytes, `loadRuns`, none below `$3C00`): a register point at
+the first boundary at or after that cycle writes `L <PC>`, loads each run with the
+debugger's `load` (no watchpoint sees it), writes `M`, sets the PC to the entry,
+and starts the record count there, so the trace holds the boot and then the
+instructions asked for. The header gains `matrix` (the event count) and `load`
+(`TraceLoad`: the record the load came before, the cycle, the program's SHA-256,
+the entry, the PC it replaced, the runs); `openTrace(path, { program })` refuses a
+missing or different program, and `follow.beforeStep` loads it into ours with
+`m.load.cmd` before that record's step, the step MAME ran at the entry. Our 40 Hz
+can be put on MAME's schedule for a run (`mameTimer`, `test/diff/mame-clock.js`:
+tick n at cycle floor((n/40 s) / attoseconds-per-cycle), as MAME's scheduler runs
+it), so a session with interrupts on shows `irqTime` only for a real timer fault.
+
 **Checks.** A complete recording is verified: the power-on memory with every
 recorded write applied must equal MAME's memory at the end at `$3C00`–`$FFFF`,
 or the recorder rejects it (a lost write). A recording that ends early (MAME

@@ -220,7 +220,7 @@ From the roadmap in [CLAUDE.md](CLAUDE.md) and the
 
 - **The emulator's later phases:** the Model 4's native DOS (emu phase 6b
   built the Model 4's hardware and Model III mode; an LS-DOS 6 or TRSDOS 6
-  boot waits for a disk), and a Model I differential reference. Disk images
+  boot waits for a disk). Disk images
   (phase 5) and the Model I (phase 6) are released in `@fugloy/emu` 0.3.0.
 - **Learn assembly with Fugløy** (phase 6): an introduction to assembly for
   people who have never programmed, on the small and regular Z80, with
@@ -401,7 +401,7 @@ core decoder and loaders, as
 [v0.1.0](https://github.com/cschweda/fugloy/releases/tag/v0.1.0).
 
 The emulator, `@fugloy/emu` 0.5.0 (on npm since 2026-10-19; 0.4.0 brought the Model 4), has all eight
-of its phases built, the Model 4 and the Model I's differential run aside:
+of its phases built, the Model 4 aside:
 the core of [trs80-emulator](https://github.com/cschweda/trs80-emulator)
 booting the Model III ROM to `READY` in Node (0); a Z80 core that passes
 ZEXDOC and ZEXALL (1); the Model III as a `Machine`, with video, sound,
@@ -417,8 +417,10 @@ the Model I (6): its Level II ROM, 4–48K, the Expansion Interface's 40 Hz
 clock, WD1771 disk controller, and printer, the video without bit 6 (and the
 lowercase modification), 500-baud cassette, and the keyboard, on which
 fourteen programs reach their titles and four disks boot, with MCP `load`
-taking `model: 1`; and a differential harness against trsjs (7), with no
-unexplained divergence in six game sessions on the Model III. The Model 4
+taking `model: 1`; and a differential harness (7), against trsjs on the
+Model III and against xtrs and MAME on the Model I, with no unexplained
+divergence in six game sessions on the Model III and thirteen on the Model I
+(the Model I's half is on the `e7-model1` branch). The Model 4
 (6b) is published in emu 0.4.0 and mcp 0.1.2 (2026-10-18): on the Model 4 ROM
 it boots to Model III BASIC's `READY`, where Model III programs and disks run
 (Sea Dragon matches the Model III screen for screen and T-state for T-state

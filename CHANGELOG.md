@@ -114,6 +114,28 @@ creates and pushes the tag.
 
 ### Added
 
+- The Model I sessions against xtrs and MAME (emu phase 7, Model I, Task 5; plan
+  `docs/superpowers/plans/2026-10-19-emu-phase7-model1-differential.md`), with which phase 7 is met
+  for the Model I: thirteen scripted sessions (`packages/emu/test/diff/model1-fixtures.test.js`),
+  Eliminator a and c, Sea Dragon and Rear Guard 5 from `examples/` and, where present, Space Warp 1
+  and 3, Asylum 16K and 32K, Crazy Painter, Deathmaze 5000, Pirate's Adventure, Volcano and Super
+  Nova from `fixtures/real/`, each loaded at 4 s and played 10 million instructions past the load,
+  have no divergence the known classes do not explain against xtrs in lockstep (`FUGLOY_XTRS=1`) or
+  against MAME 0.289, whose trace our machine follows from power-on (`FUGLOY_MAME=1`, 11,023,189
+  instructions a session with the boot), and reach every screen they list with video RAM equal at
+  every checkpoint. Against MAME nothing is counted but its video read without the bit-6 gate (MAME
+  keeps video RAM as plain RAM, so programs that test for the lowercase modification find it there);
+  against xtrs, its EX (SP),rr order, repeating block flags, SCF/CCF flags, IN T-states and BIT
+  n,(HL) and BIT n,(IX+d) flags (counts in emu spec §11). A MAME trace can load a `.CMD` at a cycle point, as
+  `m.load.cmd` does on ours, and hold keys on MAME's matrix, and a session runs our 40 Hz on MAME's
+  1,774,083 Hz schedule (`test/diff/mame-clock.js`); each trace goes to a temporary folder and is
+  deleted after its comparison. Eliminator c and Rear Guard 5, which never take the 1 at "1 or 2
+  Players?" on the Model III, take it on the Model I and play, on all three machines. Typing at 20
+  characters a second drops every other key under Level II 1.3 on all three alike: the ROM's
+  keyboard driver debounces each new key for 18.8 ms and waits 51.3 ms after taking one (emu spec
+  §5), so `@fugloy/mcp`'s 10 a second stays. None of the thirteen enables interrupts or reads
+  `$37E0`; those stay covered by the synthetic device tests.
+
 - The Model I in the differential harness (emu phase 7, Model I, Task 4): `compareRun({ model,
   lowercase })` compares the `$37E0` latch after every read of it and video RAM through the bit-6
   gate (raw with the lowercase modification) after every step that writes it; port `$FF` is
