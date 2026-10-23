@@ -11,9 +11,11 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { Machine } from '../../src/index.js';
 import { compareRun, formatReport, keyEvents } from './compare.js';
-import { CLASS_NAMES, explainStep, INTERRUPT_CLASSES, REFERENCE_FIXES, STEP_CLASSES } from './known.js';
+import { CLASS_NAMES, COMMON_CLASSES, declaredClasses, diffStep, explainStep, INTERRUPT_CLASSES, REFERENCE_FIXES, STEP_CLASSES } from './known.js';
 import { trsjsSkip } from './gate.js';
-import { loadTrsjs } from './trsjs-adapter.js';
+import { MAME_CLASSES } from './mame-trace.js';
+import { loadTrsjs, TRSJS_CLASSES } from './trsjs-adapter.js';
+import { XTRS_CLASSES } from './xtrs-adapter.js';
 
 const ROM = new Uint8Array(0x3800);
 ROM.set([0xf3, 0x31, 0x00, 0x70, 0xed, 0x56, 0xc3, 0x00, 0x40], 0x0000);
@@ -35,6 +37,10 @@ function setup(program, rtcIn = 1e9) {
 const ALL = [...STEP_CLASSES, ...INTERRUPT_CLASSES, ...REFERENCE_FIXES];
 const name = (id) => ALL.find((c) => c.id === id).name;
 const IRQ_R = name('irq-r');
+/** Each reference's step classes, as compareRun resolves them. */
+const TRSJS_STEP = declaredClasses(TRSJS_CLASSES, 'trsjs').step;
+const XTRS_STEP = declaredClasses(XTRS_CLASSES, 'xtrs').step;
+const MAME_STEP = declaredClasses(MAME_CLASSES, 'MAME').step;
 
 describe('keyEvents', () => {
   it('turns a key script into matrix presses and releases, in time order', () => {
@@ -65,7 +71,7 @@ describe('the known classes', () => {
     return {
       bytes: Uint8Array.from([...bytes, 0, 0, 0, 0].slice(0, 4)),
       execPc: 0x4000,
-      ours: { regs, cycles: 19, irq: false, writes: ours, wasHalted: false, fBefore: 0, q: 0 },
+      ours: { regs, cycles: 19, irq: false, writes: ours, wasHalted: false, fBefore: 0, q: 0, wz: 0 },
       theirs: { regs, cycles: 19, irq: false, writes: theirs },
     };
   };
@@ -85,35 +91,89 @@ describe('the known classes', () => {
     expect(block(at([0xed, 0xb0], 0x2800, 0x08, 0x2800))).toBeNull(); // not PC's bits
     expect(block(at([0xed, 0xa0], 0x4000, 0x00))).toBeNull(); // LDI
     expect(block(at([0xed, 0xb2], 0x4000, 0x00))).toBeNull(); // INIR: not this class
-    // Counted under this class, not also under flags 3 and 5.
+    // Counted under this class, not also under trsjs's general flags 3 and 5.
     const ctx = at([0xed, 0xb0], 0x4000, 0x00);
     ctx.theirs.regs = { ...ctx.theirs.regs, pc: 0x4000, f: 0x28 };
-    expect(explainStep(ctx, new Set(['f.5', 'f.3']))).toEqual({ classes: [name('block-xy')], unexplained: [] });
+    expect(explainStep(ctx, new Set(['f.5', 'f.3']), TRSJS_STEP)).toEqual({ classes: [name('block-xy')], unexplained: [] });
   });
 
-  it('SCF and CCF\'s flags 3 and 5: only for SCF and CCF, only as Q gives them, and before the general class', () => {
-    const at = (bytes, { f, a = 0x00, fBefore, q }) => {
+  it('SCF and CCF\'s flags 3 and 5: only for SCF and CCF, only as Q gives them on ours and the reference\'s own rule on theirs', () => {
+    const at = (bytes, { f, a = 0x00, fBefore, q, theirs }) => {
       const ctx = stepCtx(bytes, [], []);
       ctx.ours.regs = { ...ctx.ours.regs, f, a };
       ctx.ours.fBefore = fBefore;
       ctx.ours.q = q;
+      ctx.theirs.regs = { ...ctx.ours.regs, f: theirs };
       return ctx;
     };
     const f35 = new Set(['f.5', 'f.3']);
-    const scf = (ctx) => STEP_CLASSES.find((c) => c.id === 'scf-ccf-xy').explains(ctx, f35);
-    // After an instruction that left the flags alone (q 28H): F's bits 3 and 5 kept, A's added.
-    for (const op of [[0x37], [0x3f], [0xdd, 0x37], [0xfd, 0x3f]]) expect(scf(at(op, { f: 0x29, fBefore: 0x28, q: 0x28 })), op.join()).toEqual(['f.5', 'f.3']);
-    expect(scf(at([0x37], { f: 0x29, fBefore: 0x20, a: 0x08, q: 0x28 }))).toEqual(['f.5', 'f.3']);
-    // After one that set them (q 0): A's alone.
-    expect(scf(at([0x37], { f: 0x01, fBefore: 0x28, q: 0 }))).toEqual(['f.5', 'f.3']);
+    // Each asked about the bits that differ between the two sides.
+    const byA = (ctx) => STEP_CLASSES.find((c) => c.id === 'scf-ccf-a').explains(ctx, diffStep(ctx));
+    const kept = (ctx) => STEP_CLASSES.find((c) => c.id === 'scf-ccf-keep').explains(ctx, diffStep(ctx));
+    // After an instruction that left the flags alone (q 28H): ours keeps F's bits 3 and 5 and adds
+    // A's; xtrs takes A's alone (00H here), trsjs keeps F's (28H).
+    for (const op of [[0x37], [0x3f], [0xdd, 0x37], [0xfd, 0x3f]]) {
+      expect(byA(at(op, { f: 0x29, fBefore: 0x28, q: 0x28, theirs: 0x01 })), op.join()).toEqual(['f.5', 'f.3']);
+    }
+    expect(byA(at([0x37], { f: 0x29, fBefore: 0x20, a: 0x08, q: 0x28, theirs: 0x09 }))).toEqual(['f.5']);
+    expect(kept(at([0x37], { f: 0x29, fBefore: 0x20, a: 0x08, q: 0x28, theirs: 0x21 }))).toEqual(['f.3']);
+    // After one that set them (q 0): ours A's alone; trsjs still keeps F's.
+    expect(kept(at([0x37], { f: 0x01, fBefore: 0x28, q: 0, theirs: 0x29 }))).toEqual(['f.5', 'f.3']);
     // Ours off the rule either way, or another instruction (CPL): not explained.
-    expect(scf(at([0x37], { f: 0x01, fBefore: 0x28, q: 0x28 }))).toBeNull();
-    expect(scf(at([0x37], { f: 0x29, fBefore: 0x28, q: 0 }))).toBeNull();
-    expect(scf(at([0x2f], { f: 0x29, fBefore: 0x28, q: 0x28 }))).toBeNull();
-    // Counted under this class, not also under flags 3 and 5.
-    const ctx = at([0x37], { f: 0x29, fBefore: 0x28, q: 0x28 });
-    ctx.theirs.regs = { ...ctx.theirs.regs, f: 0x01 };
-    expect(explainStep(ctx, f35)).toEqual({ classes: [name('scf-ccf-xy')], unexplained: [] });
+    expect(byA(at([0x37], { f: 0x01, fBefore: 0x28, q: 0x28, theirs: 0x29 }))).toBeNull();
+    expect(kept(at([0x37], { f: 0x29, fBefore: 0x28, q: 0, theirs: 0x01 }))).toBeNull();
+    expect(byA(at([0x2f], { f: 0x29, fBefore: 0x28, q: 0x28, theirs: 0x01 }))).toBeNull();
+    // The reference off its own rule: not explained by its class (a Q bug of ours that a
+    // reference shared would not show; one it does not share is a divergence).
+    expect(byA(at([0x37], { f: 0x29, fBefore: 0x28, a: 0x00, q: 0x28, theirs: 0x09 }))).toBeNull(); // xtrs's not A's
+    expect(kept(at([0x37], { f: 0x29, fBefore: 0x28, a: 0x00, q: 0x28, theirs: 0x01 }))).toBeNull(); // trsjs's not F's
+    // Counted under the reference's class, not also under trsjs's general flags 3 and 5.
+    expect(explainStep(at([0x37], { f: 0x01, fBefore: 0x28, q: 0, theirs: 0x29 }), f35, TRSJS_STEP)).toEqual({ classes: [name('scf-ccf-keep')], unexplained: [] });
+    expect(explainStep(at([0x37], { f: 0x29, fBefore: 0x28, q: 0x28, theirs: 0x01 }), f35, XTRS_STEP)).toEqual({ classes: [name('scf-ccf-a')], unexplained: [] });
+  });
+
+  it('BIT n,(HL) and BIT n,(IX+d)\'s flags 3 and 5: only for those, ours from MEMPTR\'s high byte, the reference\'s clear', () => {
+    const at = (bytes, { f, wz, theirs }) => {
+      const ctx = stepCtx(bytes, [], []);
+      ctx.ours.regs = { ...ctx.ours.regs, f };
+      ctx.ours.wz = wz;
+      ctx.theirs.regs = { ...ctx.ours.regs, f: theirs };
+      return ctx;
+    };
+    const f35 = new Set(['f.5', 'f.3']);
+    const bit = (ctx) => STEP_CLASSES.find((c) => c.id === 'bit-mem-xy').explains(ctx, f35);
+    // BIT 0,(HL), BIT 7,(HL), BIT 2,(IX+5), BIT 4,(IY-1): MEMPTR $28xx shows 28H.
+    for (const op of [[0xcb, 0x46], [0xcb, 0x7e], [0xdd, 0xcb, 0x05, 0x56], [0xfd, 0xcb, 0xff, 0x66]]) {
+      expect(bit(at(op, { f: 0x38, wz: 0x2812, theirs: 0x10 })), op.join()).toEqual(['f.5', 'f.3']);
+    }
+    // BIT n,r, the DD CB d form with low bits 0 (xtrs takes those from the byte), SET n,(HL): not this class.
+    expect(bit(at([0xcb, 0x47], { f: 0x38, wz: 0x2812, theirs: 0x10 }))).toBeNull();
+    expect(bit(at([0xdd, 0xcb, 0x05, 0x50], { f: 0x38, wz: 0x2812, theirs: 0x10 }))).toBeNull();
+    expect(bit(at([0xcb, 0xc6], { f: 0x38, wz: 0x2812, theirs: 0x10 }))).toBeNull();
+    // Ours not MEMPTR's, or the reference's not clear: not explained.
+    expect(bit(at([0xcb, 0x46], { f: 0x38, wz: 0x0812, theirs: 0x10 }))).toBeNull();
+    expect(bit(at([0xcb, 0x46], { f: 0x38, wz: 0x2812, theirs: 0x18 }))).toBeNull();
+    // xtrs counts it; its everyday class, so `strict: true` passes it by.
+    expect(explainStep(at([0xcb, 0x46], { f: 0x38, wz: 0x2812, theirs: 0x10 }), f35, XTRS_STEP)).toEqual({ classes: [name('bit-mem-xy')], unexplained: [] });
+    expect(COMMON_CLASSES).toEqual(new Set([name('xy'), name('bit-mem-xy')]));
+  });
+
+  it('each reference declares its own classes, and a class it does not declare explains nothing', () => {
+    // Pinned, so a declaration that widens shows here: trsjs keeps every class it had; xtrs the five
+    // it was found to need; MAME only its video read.
+    expect([...TRSJS_CLASSES].sort()).toEqual(['bit', 'block-xy', 'cpi-c', 'ddcb-r', 'dropped-prefix', 'ex-sp-order', 'halt-push', 'held-di', 'held-ei', 'held-prefix', 'irq-r', 'scf-ccf-keep', 'xy']);
+    expect([...XTRS_CLASSES].sort()).toEqual(['bit-mem-xy', 'block-xy', 'ex-sp-order', 'io-cycles', 'scf-ccf-a']);
+    expect([...MAME_CLASSES]).toEqual(['video-read-gate']);
+    expect(MAME_STEP).toEqual([]);
+    // An OR A whose flags 3 and 5 differ (any instruction): trsjs's general class, nobody else's.
+    const or = stepCtx([0xb7], [], []);
+    const f35 = new Set(['f.5', 'f.3']);
+    expect(explainStep(or, f35, TRSJS_STEP)).toEqual({ classes: [name('xy')], unexplained: [] });
+    expect(explainStep(or, f35, XTRS_STEP)).toEqual({ classes: [], unexplained: ['f.5', 'f.3'] });
+    expect(explainStep(or, f35, MAME_STEP)).toEqual({ classes: [], unexplained: ['f.5', 'f.3'] });
+    // A missing or misspelt declaration is refused.
+    expect(() => declaredClasses(undefined, 'a reference')).toThrow('a reference declares no known classes (Reference.classes): a reference names the ones it needs (known.js), each with its evidence, or an empty set');
+    expect(() => declaredClasses(new Set(['xy', 'flags-xy']), 'a reference')).toThrow('a reference declares the known class flags-xy, which known.js does not have');
   });
 
   it('IN and block I/O cycles: one T-state more on ours, only for those instructions, no interrupt in the step', () => {

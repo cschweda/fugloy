@@ -18,6 +18,12 @@
  * by our CPU at the first boundary that allows it, and none may be taken where the stream forbids
  * it; either fault is a divergence in the field `irq`.
  *
+ * The known classes that may explain a difference are the reference's own (`Reference.classes`,
+ * resolved by known.js's declaredClasses; plan Rulings 3 and 6): a step class explains only
+ * against a reference that declares it, an interrupt is held back or forced on the reference only
+ * for a reason it declares a class for, and a reference fix is made only for the reference that
+ * declares it. Nothing here asks which reference it is.
+ *
  * Keys (Ruling 3) go to both machines' keyboard matrices directly, at the first instruction
  * boundary at or after their T-state, never through our ROM keyboard hook.
  *
@@ -63,7 +69,7 @@ import { KeyQueue } from '../../src/devices/key-queue.js';
 import { KeyboardMatrix } from '../../src/devices/keyboard.js';
 import { RTC_IRQ_BIT } from '../../src/machine/io.js';
 import { TIMER_BIT } from '../../src/devices/interrupt-latch.js';
-import { diffStep, droppedPrefix, explainStep, interruptClass, REFERENCE_FIXES, STEP_CLASSES } from './known.js';
+import { COMMON_CLASSES, declaredClasses, diffStep, droppedPrefix, explainStep, interruptClass, REFERENCE_FIXES } from './known.js';
 
 /**
  * @typedef {import('../../src/machine/machine.js').Machine} Machine
@@ -109,7 +115,6 @@ import { diffStep, droppedPrefix, explainStep, interruptClass, REFERENCE_FIXES, 
  */
 
 const CONTEXT = 10;
-const XY = /** @type {string} */ (STEP_CLASSES.find((c) => c.id === 'xy')?.name);
 const DROPPED_PREFIX = /** @type {string} */ (REFERENCE_FIXES.find((c) => c.id === 'dropped-prefix')?.name);
 const VIDEO_READ = /** @type {string} */ (REFERENCE_FIXES.find((c) => c.id === 'video-read-gate')?.name);
 const VIDEO = 0x3c00;
@@ -352,16 +357,18 @@ export function disassemble(code, pc, idle = false) {
  * Run `instructions` instructions on both machines in lockstep from our machine's current state
  * and compare them after each one.
  *
- * The reference is synced from our machine first (Ruling 4). A difference the known classes
- * explain is counted by class and the reference resynced from our state (its registers, its cycle
- * count and 30 Hz phase, and the bytes our instruction wrote); with `strict`, the run stops on it
- * instead. The first difference nothing explains ends the run as the divergence, with context.
- * Our machine's own key queue must be empty: keys come through `keys`.
+ * The reference is synced from our machine first (Ruling 4). A difference the known classes the
+ * reference declares (`Reference.classes`) explain is counted by class and the reference resynced
+ * from our state (its registers, its cycle count and 30 Hz phase, and the bytes our instruction
+ * wrote); with `strict`, the run stops on it instead. The first difference nothing explains ends
+ * the run as the divergence, with context. Our machine's own key queue must be empty: keys come
+ * through `keys`.
  *
- * `strict: true` stops on any known class but flag bits 3 and 5 (which differ in most programs
- * within a few instructions); `strict: 'all'` stops on that one as well. `progress`, if given, is
- * called after every `progress.every` instructions with the count so far (a session test checks
- * the screen there).
+ * `strict: true` stops on any known class but the reference's everyday flag 3 and 5 class (known.js
+ * `common`: trsjs's general one, xtrs's BIT n,(HL) and BIT n,(IX+d), which differ in most programs
+ * within a few instructions); `strict: 'all'` stops on that one as well. Against a reference that
+ * declares no such class (MAME) the two are the same. `progress`, if given, is called after every
+ * `progress.every` instructions with the count so far (a session test checks the screen there).
  *
  * `model` (1 or 3; default the machine's, a Model 4 compared as a III) and `lowercase` (the Model
  * I's lowercase modification; default the machine's) name the devices compared (Ruling 5); each
@@ -379,13 +386,17 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
   const devices = modelDevices(machineModel, machineLower);
   const refName = /** @type {any} */ (ref).name ?? 'the reference';
   const tag = { reference: refName, model: devices.model, lowercase: devices.lowercase };
+  // The known classes this reference declares, and only those (Rulings 3 and 6).
+  const declared = declaredClasses(ref.classes, `compareRun: ${refName}`);
   /** @type {import('./mame-trace.js').Follow | null} A trace reference: our machine follows it (Ruling 4). */
   const follow = /** @type {any} */ (ref).follow ?? null;
   if (follow !== null && keys.length > 0) throw new Error('compareRun: a trace reference brings its own keys (the bytes its keyboard reads returned); pass none');
   const sys = m.system;
   const cpu = sys.cpu;
-  // Following a trace on the Model I, our video reads may take the trace's byte (the gate).
-  const theirsVideo = follow !== null && devices.through !== null ? (/** @type {number} */ a) => ref.peek(a, 1)[0] : null;
+  // Following a trace on the Model I that declares it, our video reads may take the trace's byte
+  // (the gate: known.js, video-read-gate).
+  const theirsVideo = follow !== null && devices.through !== null && declared.fixes.has('video-read-gate') ? (/** @type {number} */ a) => ref.peek(a, 1)[0] : null;
+  const fixesPrefix = declared.fixes.has('dropped-prefix');
   const ours = instrument(m, follow, devices, theirsVideo);
   /** @type {Record<string, number>} */
   const known = {};
@@ -432,8 +443,8 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
       const wasHalted = cpu.halted;
       const op = cpu.halted ? 0 : sys.memory.readByte(cpu.registers.PC);
       // Before a DD or FD, the reference's registers and the byte after the prefix, in case trsjs
-      // skips the pair (known.js, REFERENCE_FIXES).
-      const theirsBefore = op === 0xdd || op === 0xfd ? ref.regs() : null;
+      // skips the pair (known.js, REFERENCE_FIXES), for a reference that declares the fix.
+      const theirsBefore = fixesPrefix && (op === 0xdd || op === 0xfd) ? ref.regs() : null;
       const afterPrefix = theirsBefore === null ? 0 : sys.memory.readByte((cpu.registers.PC + 1) & 0xffff);
       const refIff1 = ref.regs().iff1;
       const fBefore = cpu.registers.F;
@@ -449,10 +460,14 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
       const irqWrong = (oursIrq && blocked !== null) || (mustTake && !oursIrq);
       // A held request our CPU takes is forced on the reference, unless the reference still holds
       // it itself (a latch it can show, as xtrs's): then it takes it by its own rule, and no
-      // interrupt class is counted, since it needed none.
+      // interrupt class is counted, since it needed none. A reference is held back where the stream
+      // allows no interrupt, or forced, only for a reason it declares an interrupt class for
+      // (trsjs); any other takes or keeps the request by its own rule, and where that is not the
+      // Z80's the step diverges.
       const refHolds = oursIrq && held !== null && devices.latch && typeof ref.latch === 'function' && (ref.latch() & TIMER_BIT) !== 0;
       /** @type {import('./reference.js').IrqMode} */
-      const mode = blocked !== null ? 'hold' : oursIrq && held !== null && !refHolds ? 'force' : 'auto';
+      const mode = blocked !== null && declared.holds.has(blocked) ? 'hold'
+        : oursIrq && held !== null && !refHolds && declared.holds.has(held.reason) ? 'force' : 'auto';
       // The trace's reads of the latch at this step, before the trace moves on.
       const theirLatchReads = follow !== null && devices.latch ? follow.latchReads(index) : null;
       const t = ref.step({ irq: mode });
@@ -470,12 +485,12 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
         held = null;
       } else if (t.raised && !t.irq) {
         // The reference raised the request and did not take it: dropped because its IFF1 was 0
-        // (DI), or held back (hold mode) because the stream allows no interrupt here (EI's delay,
-        // a lone prefix). Either way our latch keeps it, and our CPU must take it at the first
-        // boundary that allows one (mustTake). Anything else records nothing, so a later take by
-        // our CPU is a divergence.
+        // (DI), or not taken (held back, or by its own rule) because the stream allows no interrupt
+        // here (EI's delay, a lone prefix). Either way our latch keeps it, and our CPU must take it
+        // at the first boundary that allows one (mustTake). Anything else records nothing, so a
+        // later take by our CPU is a divergence.
         /** @type {'DI' | 'EI' | 'prefix' | null} */
-        const reason = !refIff1 ? 'DI' : mode === 'hold' ? blocked : null;
+        const reason = !refIff1 ? 'DI' : blocked;
         if (reason !== null) held ??= { reason };
       }
       // The request is gone from our side (read from $EC or $37E0, or masked): nothing is held any more.
@@ -489,14 +504,14 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
       const ctx = {
         bytes,
         execPc,
-        ours: { regs: o, cycles: oursCycles, irq: oursIrq, writes: ours.log.writes, wasHalted, fBefore, q: cpu.q },
+        ours: { regs: o, cycles: oursCycles, irq: oursIrq, writes: ours.log.writes, wasHalted, fBefore, q: cpu.q, wz: cpu.wz },
         theirs: { regs: s, cycles: t.cycles, irq: t.irq, writes: ref.writes() },
       };
       /** @type {ContextLine} */
       const line = { index, pc: execPc, code, idle: ours.log.idle, text: '', ours: { regs: o, cycles: oursCycles }, theirs: { regs: s, cycles: t.cycles } };
 
       const diff = diffStep(ctx);
-      const { classes, unexplained } = diff.size === 0 ? { classes: [], unexplained: [] } : explainStep(ctx, diff);
+      const { classes, unexplained } = diff.size === 0 ? { classes: [], unexplained: [] } : explainStep(ctx, diff, declared.step);
       if (irqWrong || ours.log.irqRefused) {
         diff.add('irq');
         unexplained.push('irq');
@@ -523,7 +538,7 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
       if (ours.log.videoRead) classes.unshift(VIDEO_READ);
       if (interrupt !== null) classes.unshift(interrupt);
 
-      const stopsOn = strict === false ? undefined : classes.find((c) => strict === 'all' || c !== XY);
+      const stopsOn = strict === false ? undefined : classes.find((c) => strict === 'all' || !COMMON_CLASSES.has(c));
       const stop = unexplained.length > 0 || stopsOn !== undefined;
       if (stop) {
         const divergence = /** @type {Divergence} */ ({

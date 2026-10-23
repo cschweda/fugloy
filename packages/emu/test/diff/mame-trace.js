@@ -746,6 +746,16 @@ const isKeyboard = (/** @type {number} */ a) => a >= 0x3800 && a < 0x3c00;
 const isLatch = (/** @type {number} */ a) => a >= 0x37e0 && a < 0x37e4;
 
 /**
+ * The known classes (known.js) a MAME trace needs (plan Ruling 6; Reference.classes): only its
+ * device difference, the video read without the bit-6 gate (trs80l2 keeps video RAM as plain
+ * RAM), a reference fix that excuses nothing. No step class: MAME's Z80 follows the rules ours
+ * does, flags 3 and 5 included (Task 4 and Task 5 fixed our core where it did not), so any
+ * difference in a step against it is a divergence. No interrupt class: our machine takes MAME's
+ * interrupts where the trace took them (Ruling 4).
+ */
+export const MAME_CLASSES = new Set(['video-read-gate']);
+
+/**
  * Open a trace file as a Reference that compareRun drives (TraceReference). It cannot be synced
  * or changed: `syncFrom`, `syncRegs`, `poke`, `setKeyBit`, `alignRtc` and `reset` throw. A trace
  * that loaded a program needs that program (`program`, checked by its SHA-256).
@@ -920,6 +930,7 @@ export function openTrace(path, { program } = {}) {
     },
     // The opcodes after DD or FD that run with the prefix as one step: all but the lone prefixes.
     prefixedOps: new Set(Array.from({ length: 256 }, (_, k) => k).filter((k) => k !== 0xdd && k !== 0xfd && k !== 0xed)),
+    classes: MAME_CLASSES,
     follow,
     header,
     name: `MAME ${header.mame.split(' ')[0]} trace`,

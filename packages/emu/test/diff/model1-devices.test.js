@@ -128,6 +128,8 @@ function self({ storeRaw = false } = {}) {
     latch: () => /** @type {NonNullable<Machine['system']['io']['latch']>} */ (r.system.io.latch).peek(),
     get cycles() { return r.cycles; },
     prefixedOps: new Set(Array.from({ length: 256 }, (_, k) => k).filter((k) => k !== 0xdd && k !== 0xfd && k !== 0xed)),
+    // Our own machine needs no known class.
+    classes: new Set(),
   };
   return /** @type {import('./reference.js').Reference} */ (ref);
 }
@@ -151,6 +153,45 @@ function plantGateBug(m) {
     if (x >= 0x3c00 && x < 0x4000) mem.videoRam[x - 0x3c00] ^= 0x40;
   };
 }
+
+/**
+ * Test-only: SCF as our core had it before 32a59b7, flags 3 and 5 from A alone whatever the
+ * instruction before did (the fix undone). @param {Machine} m
+ */
+function undoScfFix(m) {
+  const cpu = m.system.cpu;
+  cpu.opcodeHandlers[0x37] = () => {
+    cpu.flagC = true;
+    cpu.flagH = false;
+    cpu.flagN = false;
+    cpu._xy(cpu.registers.A);
+    return 4;
+  };
+}
+
+/**
+ * Test-only: LDIR as our core had it before d4dbaeb, a repeating iteration's flags 3 and 5 left
+ * from its n (Young §4.2) instead of PC (the fix undone). @param {Machine} m
+ */
+function undoBlockFix(m) {
+  const cpu = m.system.cpu;
+  cpu.ldir = () => {
+    const cycles = cpu.ldi();
+    if (cpu.BC === 0) return cycles;
+    cpu.registers.PC = (cpu.registers.PC - 2) & 0xffff;
+    cpu.wz = (cpu.registers.PC + 1) & 0xffff;
+    return cycles + 5;
+  };
+}
+
+/** LD A,28H / OR A (F's flags 3 and 5 from the result: 28H) / LD A,00H (the flags left alone) / SCF / JR $. */
+const SCF = [0x3e, 0x28, 0xb7, 0x3e, 0x00, 0x37, 0x18, 0xfe];
+/**
+ * LD A,0CH / LD HL,$4000 / LD DE,$5100 / LD BC,3 / LDIR / JR $: the LDIR at $400B repeats twice, its
+ * first iteration's n ((HL) + A, $3E + $0C = $4A) has bits 1 and 3 set (Young's flags 5 and 3) and
+ * PC's bits 13 and 11 are clear.
+ */
+const LDIR = [0x3e, 0x0c, 0x21, 0x00, 0x40, 0x11, 0x00, 0x51, 0x01, 0x03, 0x00, 0xed, 0xb0, 0x18, 0xfe];
 
 /** The index of the first step of `m` (a copy is run) that writes video RAM. @param {Machine} m */
 function firstVideoWrite(m, limit = 1_000_000) {
@@ -440,6 +481,36 @@ describe('the Model I\'s devices against a trace (our own machine recorded in MA
     expect(d).toMatchObject({ index: j, pc: LATCH_READ_PC });
     expect(d?.fields).toContain('latch');
   });
+
+  // The final review's demonstration: a trace declares no step class (MAME_CLASSES), so a flag 3
+  // or 5 bug of ours is a divergence against it, never counted under a class (known.js).
+  it('our core with the SCF/CCF fix undone diverges at the SCF against a trace of the fixed one, nothing counted', () => {
+    const path = trace(SCF, 20, 'scf-q.fmt');
+    const ok = fresh();
+    ok.mem.write(0x4000, SCF);
+    expect(compareRun({ machine: ok, reference: openTrace(path), instructions: 20 })).toMatchObject({ divergence: null, known: {} });
+    const m = fresh();
+    m.mem.write(0x4000, SCF);
+    undoScfFix(m);
+    const r = compareRun({ machine: m, reference: openTrace(path), instructions: 20 });
+    // DI, LD SP, IM 1, JP $4000, LD A, OR A, LD A, then the SCF: instruction 7.
+    expect(r.divergence).toMatchObject({ index: 7, pc: 0x4005, fields: ['f.3', 'f.5'], known: null });
+    expect(r.known).toEqual({});
+  });
+
+  it('our core with the repeating-block fix undone diverges at the LDIR against a trace of the fixed one, nothing counted', () => {
+    const path = trace(LDIR, 20, 'ldir-xy.fmt');
+    const ok = fresh();
+    ok.mem.write(0x4000, LDIR);
+    expect(compareRun({ machine: ok, reference: openTrace(path), instructions: 20 })).toMatchObject({ divergence: null, known: {} });
+    const m = fresh();
+    m.mem.write(0x4000, LDIR);
+    undoBlockFix(m);
+    const r = compareRun({ machine: m, reference: openTrace(path), instructions: 20 });
+    // The boot's four, the four loads, then the LDIR's first iteration: instruction 8.
+    expect(r.divergence).toMatchObject({ index: 8, pc: 0x400b, fields: ['f.3', 'f.5'], known: null });
+    expect(r.known).toEqual({});
+  });
 });
 
 describe('pnpm diff: --model and --reference', () => {
@@ -507,7 +578,7 @@ describe.skipIf(xtrsSkip !== null)(`the Model I's devices against xtrs${xtrsSkip
     const m = machine([0x3e, 0x28, 0xb7, 0x3e, 0x00, 0x37, 0xfe, 0x28, 0x37, 0x18, 0xfe]);
     const r = compareRun({ machine: m, reference: xtrs(ROM), instructions: 8 });
     expect(r.divergence).toBeNull();
-    expect(r.known).toEqual({ 'SCF/CCF: flags 3 and 5 also from F after an instruction that left the flags alone': 1 });
+    expect(r.known).toEqual({ 'SCF/CCF: the reference takes flags 3 and 5 from A alone': 1 });
   });
 
   it('with the lowercase modification on both, video compares raw and is equal', () => {
@@ -547,6 +618,12 @@ describe.skipIf(mameSkip !== null)(`the Model I's devices against MAME${mameSkip
     const rom = syntheticRom();
     rom.set([0xc3, 0x00, 0x01], 6);
     rom.set(VIDEO, 0x100);
+    return rom;
+  })();
+  const SCF_ROM = (() => {
+    const rom = syntheticRom();
+    rom.set([0xc3, 0x00, 0x01], 6);
+    rom.set(SCF, 0x100);
     return rom;
   })();
   /** @param {Uint8Array} rom @param {number} n @param {string} name */
@@ -617,6 +694,16 @@ describe.skipIf(mameSkip !== null)(`the Model I's devices against MAME${mameSkip
     // MAME's LD A,($3C00) read $0D (no gate); ours took it, counted.
     expect(r.known).toEqual({ 'video read: the reference returns bit 6 as written (no gate)': 1 });
     expect(m.mem.read(0x5000, 1)[0]).toBe(0x0d);
+  });
+
+  it('SCF after an instruction that left the flags alone: MAME keeps F\'s flags 3 and 5 as ours does; with our fix undone it diverges, nothing counted', async () => {
+    const path = await record(SCF_ROM, 20, 'mame-scf.fmt');
+    expect(compareRun({ machine: ours(SCF_ROM), reference: openTrace(path), instructions: 20 })).toMatchObject({ divergence: null, known: {} });
+    const m = ours(SCF_ROM);
+    undoScfFix(m);
+    const r = compareRun({ machine: m, reference: openTrace(path), instructions: 20 });
+    expect(r.divergence).toMatchObject({ index: 7, pc: 0x0105, fields: ['f.3', 'f.5'], known: null });
+    expect(r.known).toEqual({});
   });
 
   it('planted: our gate inverted is caught at the Level II boot\'s first video write, against MAME', async () => {

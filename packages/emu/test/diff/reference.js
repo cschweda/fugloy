@@ -32,10 +32,16 @@
  *   latch?(): number,
  *   close?(): void,
  *   readonly name?: string,
+ *   readonly classes: ReadonlySet<string>,
  *   readonly prefixedOps: ReadonlySet<number>,
  *   readonly cycles: number,
  *   readonly z?: any,
  * }} Reference
+ *   classes: the ids of the known classes (known.js) the reference may need, each found against
+ *   it with its evidence (plan Ruling 6); compareRun explains a difference, holds back or forces
+ *   an interrupt, or fixes the reference's step only by a class its reference declares, so one
+ *   reference's evidence never excuses another's difference (Ruling 3: passed in, never branched
+ *   on the reference's name). An empty set declares none.
  *   prefixedOps: the opcodes after DD or FD that the reference runs with the prefix as one step
  *   (trsjs drops the pair for the others; xtrs runs all but DD, FD and ED, the lone prefixes, since
  *   its driver joins an ignored prefix to the instruction after it); redoDroppedPrefix: trsjs only (known.js, REFERENCE_FIXES); latch: the

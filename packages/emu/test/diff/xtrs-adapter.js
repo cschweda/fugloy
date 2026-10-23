@@ -54,6 +54,18 @@ const READY = 'ready fugloy-xtrs 1';
  */
 const PAIRED_OPCODES = new Set(Array.from({ length: 256 }, (_, k) => k).filter((k) => k !== 0xdd && k !== 0xfd && k !== 0xed));
 
+/**
+ * The known classes (known.js) xtrs needs, each found against it in emu phase 7's Model I half
+ * with its evidence (plan Ruling 6; Reference.classes), and no more: a repeating LDIR/LDDR/CPIR/
+ * CPDR's flags 3 and 5 (xtrs keeps Young's rule), SCF's and CCF's (it takes A's alone, NEC's
+ * rule), BIT n,(HL)'s and BIT n,(IX+d)'s (it clears them), EX (SP),rr's write order (it writes the
+ * low byte first), and IN's and block I/O's T-states (it counts one less). No general flag 3 and 5
+ * class, so a flag difference on any other instruction is a divergence; no interrupt class, since
+ * it keeps its 40 Hz request in its latch as ours does (compare.js never holds it back or forces
+ * it); and no reference fix, since it drops no DD/FD pair.
+ */
+export const XTRS_CLASSES = new Set(['block-xy', 'scf-ccf-a', 'bit-mem-xy', 'ex-sp-order', 'io-cycles']);
+
 /** @param {Buffer | string} b */
 const sha256 = (b) => createHash('sha256').update(b).digest('hex');
 
@@ -380,6 +392,7 @@ export function openXtrs({ command, args = [], timeoutMs = XTRS_STEP_TIMEOUT_MS,
     },
 
     prefixedOps: PAIRED_OPCODES,
+    classes: XTRS_CLASSES,
     name: 'xtrs',
   };
   return ref;

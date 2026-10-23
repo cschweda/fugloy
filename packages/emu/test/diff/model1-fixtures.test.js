@@ -88,11 +88,11 @@ const fixture = (/** @type {RegExp} */ pattern) => {
   return path === undefined ? null : new Uint8Array(readFileSync(path));
 };
 
-const XY = 'flags 3 and 5 (X/Y)';
+const BIT_XY = 'BIT n,(HL) and BIT n,(IX+d): the reference clears flags 3 and 5';
 const BLOCK_XY = 'repeating LDIR/LDDR/CPIR/CPDR: flags 3 and 5 from PC';
 const EX_SP = 'EX (SP),rr: the reference writes (SP) before (SP+1)';
 const IO = 'IN and block I/O: the reference counts one T-state less';
-const SCF_CCF = 'SCF/CCF: flags 3 and 5 also from F after an instruction that left the flags alone';
+const SCF_CCF = 'SCF/CCF: the reference takes flags 3 and 5 from A alone';
 const VIDEO_READ = 'video read: the reference returns bit 6 as written (no gate)';
 
 /** The Eliminator script: ENTER at the title, one player, then play. */
@@ -110,7 +110,7 @@ const SESSIONS = [
     program: example('eliminator/elimin8a.cmd'),
     keys: ELIMINATOR,
     screens: ELIMINATOR_SCREENS,
-    known: { [XTRS]: { [XY]: 12_315, [BLOCK_XY]: 910_787, [EX_SP]: 6_418 }, [MAME]: { [VIDEO_READ]: 158 } },
+    known: { [XTRS]: { [BIT_XY]: 12_315, [BLOCK_XY]: 910_787, [EX_SP]: 6_418 }, [MAME]: { [VIDEO_READ]: 158 } },
   },
   {
     // The $4900 build. On the Model III it never takes the 1 (its keyboard DCB's driver, $4016,
@@ -120,7 +120,7 @@ const SESSIONS = [
     program: example('eliminator/elimin8c.cmd'),
     keys: ELIMINATOR,
     screens: ELIMINATOR_SCREENS,
-    known: { [XTRS]: { [XY]: 13_265, [BLOCK_XY]: 912_897, [EX_SP]: 6_314 }, [MAME]: { [VIDEO_READ]: 158 } },
+    known: { [XTRS]: { [BIT_XY]: 13_265, [BLOCK_XY]: 912_897, [EX_SP]: 6_314 }, [MAME]: { [VIDEO_READ]: 158 } },
   },
   {
     // ENTER, 1 player, Novice, then play with the sub moving and firing.
@@ -128,7 +128,7 @@ const SESSIONS = [
     program: example('sea-dragon/seadrg01.cmd'),
     keys: [press(6, 'ENTER'), press(9, '1'), press(12, '0'), press(15, 'SPACE', 2), press(18, 'UP', 1), press(20, 'DOWN', 1), press(22, 'RIGHT', 2)],
     screens: ['BY: WAYNE WESTMORELAND & TERRY GILMAN', 'TO BEGIN', '1 OR 2 PLAYERS?', 'PLAYER 1: SKILL LEVEL', 'SHIPS 4', 'GAME OVER PLAYER 1'],
-    known: { [XTRS]: { [XY]: 396_000, [BLOCK_XY]: 755_064, [IO]: 460 }, [MAME]: { [VIDEO_READ]: 228 } },
+    known: { [XTRS]: { [BIT_XY]: 396_000, [BLOCK_XY]: 755_064, [IO]: 460 }, [MAME]: { [VIDEO_READ]: 228 } },
   },
   {
     // ENTER, 1 player, then play: like Eliminator c, it takes the 1 on the Model I.
@@ -136,7 +136,7 @@ const SESSIONS = [
     program: example('rear-guard/reargrd5.cmd'),
     keys: [press(4, 'ENTER'), press(7, '1'), press(10, 'SPACE', 1), press(12, 'UP', 1), press(14, 'DOWN', 1)],
     screens: ['TO BEGIN', 'HIGH SCORES', '1 OR 2 PLAYERS?', 'SHIPS:4 SHIELD:35', 'GAME OVER PLAYER 1'],
-    known: { [XTRS]: { [XY]: 90_086, [BLOCK_XY]: 1_677_314, [IO]: 1_889 }, [MAME]: { [VIDEO_READ]: 1_332 } },
+    known: { [XTRS]: { [BIT_XY]: 90_086, [BLOCK_XY]: 1_677_314, [IO]: 1_889 }, [MAME]: { [VIDEO_READ]: 1_332 } },
   },
   { name: 'Space Warp 1 (spcwarp1.cmd)', program: fixture(/spcwarp1\.cmd$/), keys: SPACE_WARP, screens: SPACE_WARP_SCREENS, known: { [XTRS]: { [BLOCK_XY]: 3_148 }, [MAME]: { [VIDEO_READ]: 1 } } },
   { name: 'Space Warp 3 (spcwarp3.cmd)', program: fixture(/spcwarp3\.cmd$/), keys: SPACE_WARP, screens: SPACE_WARP_SCREENS, known: { [XTRS]: { [BLOCK_XY]: 3_177 }, [MAME]: { [VIDEO_READ]: 1 } } },
@@ -146,7 +146,7 @@ const SESSIONS = [
     program: fixture(/asylum16\.cmd$/),
     keys: [press(3, 'N'), press(4, 'ENTER'), press(8, 'N'), press(9, 'ENTER')],
     screens: ['RESTORE AN OLD GAME (Y OR N)?', '09:30', 'WHAT IS:'],
-    known: { [XTRS]: { [XY]: 166, [BLOCK_XY]: 6_122 }, [MAME]: { [VIDEO_READ]: 2 } },
+    known: { [XTRS]: { [BIT_XY]: 166, [BLOCK_XY]: 6_122 }, [MAME]: { [VIDEO_READ]: 2 } },
   },
   {
     // Its credits first, then the same.
@@ -154,7 +154,7 @@ const SESSIONS = [
     program: fixture(/asylum32\.cmd$/),
     keys: [press(12, 'N'), press(13, 'ENTER'), press(17, 'N'), press(18, 'ENTER')],
     screens: ['A FRANK CORR / WILLIAM DENMAN PRODUCTION', 'DO YOU WISH TO RESTORE AN OLD GAME (Y OR N)?', '09:30', "I DON'T KNOW THE FOLLOWING WORD:"],
-    known: { [XTRS]: { [XY]: 166, [BLOCK_XY]: 25_983 }, [MAME]: { [VIDEO_READ]: 53 } },
+    known: { [XTRS]: { [BIT_XY]: 166, [BLOCK_XY]: 25_983 }, [MAME]: { [VIDEO_READ]: 53 } },
   },
   {
     // ENTER, one player, skill 0, then the painter round the board.
@@ -186,7 +186,7 @@ const SESSIONS = [
     program: fixture(/volcano\.cmd$/),
     keys: [press(2, 'SPACE', 1), press(4, 'LEFT', 1), press(6, 'RIGHT', 1), press(8, 'SPACE', 1)],
     screens: ['MEN :', 'SCORE :'],
-    known: { [XTRS]: { [XY]: 8_265, [BLOCK_XY]: 96_922, [IO]: 1_597 }, [MAME]: { [VIDEO_READ]: 177 } },
+    known: { [XTRS]: { [BIT_XY]: 8_265, [BLOCK_XY]: 96_922, [IO]: 1_597 }, [MAME]: { [VIDEO_READ]: 177 } },
   },
   {
     // CLEAR to start, one player, then fire and move. It writes its credits in lowercase.
@@ -194,7 +194,7 @@ const SESSIONS = [
     program: fixture(/supnov3a\.cmd$/),
     keys: [press(9, 'CLEAR'), press(11, '1'), press(14, 'SPACE', 1), press(16, 'LEFT', 1), press(18, 'RIGHT', 1), press(20, 'SPACE', 1)],
     screens: ['SOFTWARE CO.', 'NUMBER OF PLAYERS (1 OR 2) ?'],
-    known: { [XTRS]: { [XY]: 655, [BLOCK_XY]: 2_210_006, [IO]: 2_025 }, [MAME]: { [VIDEO_READ]: 3 } },
+    known: { [XTRS]: { [BIT_XY]: 655, [BLOCK_XY]: 2_210_006, [IO]: 2_025 }, [MAME]: { [VIDEO_READ]: 3 } },
   },
 ];
 
