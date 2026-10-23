@@ -6,15 +6,16 @@
  * either missing fails them (gate.js).
  */
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { chmodSync, cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { Machine } from '../../src/index.js';
-import { compareRun, formatReport, videoGate } from './compare.js';
+import { compareRun, formatReport, keyEvents, videoGate } from './compare.js';
 import { mameSkip, requireRom } from './gate.js';
-import { checkMame, checkRomSet, IRQ, MAME_ROMS, MAME_VERSION, openTrace, recordMameTrace, writeTrace } from './mame-trace.js';
+import { checkMame, checkRomSet, IRQ, loadRuns, MAME_CLOCK_HZ, MAME_ROMS, MAME_VERSION, openTrace, recordMameTrace, writeTrace } from './mame-trace.js';
 
 const dir = mkdtempSync(join(tmpdir(), 'fugloy-mame-test-'));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -249,6 +250,79 @@ describe('a trace file replays as a Reference that our machine follows', () => {
   });
 });
 
+/**
+ * A small .CMD (emu phase 7, Task 5): at $5100 it stores $42 at $5200, then ORs keyboard row 6
+ * ($3840, ENTER in bit 0) into $5300 for ever; a second block puts 'a' ($61) in video RAM's first
+ * cell, which the Model I's gate reads as '!' ($21).
+ */
+const PROGRAM = Uint8Array.from([
+  0x01, 0x11, 0x00, 0x51, 0x3e, 0x42, 0x32, 0x00, 0x52, 0x3a, 0x40, 0x38, 0x21, 0x00, 0x53, 0xb6, 0x77, 0x18, 0xf6,
+  0x01, 0x03, 0x00, 0x3c, 0x61,
+  0x02, 0x02, 0x00, 0x51,
+]);
+const sha = (/** @type {Uint8Array} */ b) => createHash('sha256').update(b).digest('hex');
+
+describe('a trace that loaded a program: our machine loads it at the same step', () => {
+  /**
+   * Our machine runs `before` instructions, loads PROGRAM as MAME's debugger does (between the
+   * state before an instruction and the instruction), and runs `after` more: in the trace, record
+   * `before` keeps the PC the load replaced and its instruction is the program's first.
+   */
+  const loadedTrace = (before = 5_000, after = 20_000) => {
+    const a = newSynthetic();
+    const t = recordOurs(a, before - 1);
+    const pc = a.cpu.regs.pc;
+    a.load.cmd(PROGRAM);
+    const u = recordOurs(a, after);
+    const first = { ...u.records[0], w: [pc, ...u.records[0].w.slice(1)] };
+    const load = { at: before, cycles: 0, sha256: sha(PROGRAM), entry: 0x5100, pc, runs: [{ addr: 0x3c00, len: 1 }, { addr: 0x5100, len: 15 }] };
+    return { header: { load, requested: before + after }, start: t.start, records: [...t.records, first, ...u.records.slice(1)], machine: a };
+  };
+
+  it('runs into the program where the trace did, its bytes in both memories, video through the gate', () => {
+    const { header, start, records } = loadedTrace();
+    const path = join(dir, 'loaded.fmt');
+    writeTrace(path, { header, start, records });
+    const ref = openTrace(path, { program: PROGRAM });
+    const m = newSynthetic();
+    const r = compareRun({ machine: m, reference: ref, instructions: 25_000 });
+    expect(r.divergence).toBeNull();
+    expect(r.ended).toBeUndefined();
+    expect(r.known).toEqual({});
+    expect(m.mem.read(0x5200, 1)[0]).toBe(0x42);
+    expect(m.mem.read(0x3c00, 1)[0]).toBe(0x21);
+    expect(ref.peek(0x3c00, 1)[0]).toBe(0x61);
+    expect(ref.peek(0x5100, 3)).toEqual(PROGRAM.subarray(4, 7));
+  });
+
+  it('a load at another step than the trace\'s is a divergence (the PC)', () => {
+    const { header, start, records } = loadedTrace();
+    const path = join(dir, 'loaded-late.fmt');
+    writeTrace(path, { header: { ...header, load: { ...header.load, at: header.load.at + 1 } }, start, records });
+    const r = compareRun({ machine: newSynthetic(), reference: openTrace(path, { program: PROGRAM }), instructions: 25_000 });
+    expect(r.divergence?.index).toBe(header.load.at);
+    expect(r.divergence?.fields).toContain('pc');
+  });
+
+  it('refuses to open without the program, or with another one', () => {
+    const { header, start, records } = loadedTrace(100, 100);
+    const path = join(dir, 'loaded-refuse.fmt');
+    writeTrace(path, { header, start, records });
+    expect(() => openTrace(path)).toThrow(`${path} loaded a program (SHA-256 ${sha(PROGRAM)}) at instruction 100; pass it to openTrace as program`);
+    const other = PROGRAM.slice();
+    other[4] = 0x3d;
+    expect(() => openTrace(path, { program: other })).toThrow(`${path} loaded another program (SHA-256 ${sha(PROGRAM)}) than the one given (${sha(other)})`);
+  });
+
+  it('loadRuns: consecutive bytes as one run, a later block over an earlier, nothing below $3C00', () => {
+    const over = Uint8Array.from([0x01, 0x04, 0x00, 0x60, 0x11, 0x22, 0x01, 0x03, 0x01, 0x60, 0x33, 0x01, 0x03, 0x02, 0x60, 0x44, 0x02, 0x02, 0x00, 0x60]);
+    expect(loadRuns(over)).toEqual([{ addr: 0x6000, bytes: Uint8Array.from([0x11, 0x33, 0x44]) }]);
+    expect(loadRuns(PROGRAM).map((r) => [r.addr, r.bytes.length])).toEqual([[0x3c00, 1], [0x5100, 15]]);
+    const low = Uint8Array.from([0x01, 0x03, 0xff, 0x3b, 0x00, 0x02, 0x02, 0x00, 0x60]);
+    expect(() => loadRuns(low)).toThrow('the program writes $3BFF, below $3C00; a MAME session loads only RAM and video RAM');
+  });
+});
+
 describe('a trace that ends early says so, never "no divergence" (Review Focus 3)', () => {
   const SENTENCE = (n, N, reason) => `MAME's trace ends after ${n} of ${N} instructions (${reason}), so the run proves nothing past that point.`;
 
@@ -413,6 +487,25 @@ describe.skipIf(mameSkip !== null)(`MAME's Model I as a trace${mameSkip === null
     const run = diffTrace(out, ['--instructions', '5000000']);
     expect([1, 3]).toContain(run.status);
     expect(run.stdout).not.toContain('divergence: none');
+  });
+
+  it('loads a program at READY and holds a matrix key: ours loads it at the same step and reads the key MAME read', async () => {
+    const out = join(dir, 'mame-load.fmt');
+    const HZ = MAME_CLOCK_HZ;
+    // ENTER at MEM SIZE?, the program at 4 s (READY), then ENTER held 0.2 s from 4.5 s.
+    const matrix = keyEvents([{ at: 0.5 * HZ, key: 'ENTER', hold: 0.1 * HZ }, { at: 4.5 * HZ, key: 'ENTER', hold: 0.2 * HZ }]);
+    const rec = await recordMameTrace({ instructions: 300_000, matrix, load: { program: PROGRAM, at: 4 * HZ }, out });
+    const ref = openTrace(out, { program: PROGRAM });
+    expect(ref.header).toMatchObject({ complete: true, verified: true, matrix: 4, load: { at: rec.load?.at, entry: 0x5100, sha256: sha(PROGRAM) } });
+    expect(ref.header.requested).toBe(/** @type {number} */ (rec.load?.at) + 300_000);
+    const m = newMachine();
+    const r = compareRun({ machine: m, reference: ref, instructions: ref.header.requested });
+    expect(r.divergence).toBeNull();
+    expect(r.ended).toBeUndefined();
+    expect(m.video.text().slice(0, 3).map((l) => l.trim())).toEqual(['!EM SIZE?', 'R/S L2 BASIC', 'READY']);
+    expect([...m.mem.read(0x5200, 1)]).toEqual([0x42]);
+    expect([...m.mem.read(0x5300, 1)]).toEqual([0x01]);
+    expect(gateOnly(m, ref)).toBeGreaterThan(0);
   });
 
   it('records the same trace twice, byte for byte', async () => {

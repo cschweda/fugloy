@@ -25,7 +25,8 @@
  * our machine starts in the trace's power-on state, takes a maskable interrupt exactly at the
  * steps the trace took one (a request ours raised at another time is the divergence `irqTime`,
  * never excused), and its reads of the keyboard matrix return the bytes the trace's reads returned
- * (a read on one side only is the divergence `keys`). After a difference a known class explains,
+ * (a read on one side only is the divergence `keys`). A trace that loaded a program loads it into
+ * ours before the same step (follow.beforeStep). After a difference a known class explains,
  * our machine adopts the trace's state instead of the reverse. A trace shorter than the run ends it
  * with the trace's sentence (`ended`), never as "no divergence".
  *
@@ -425,6 +426,8 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
         compared = index;
         break;
       }
+      // A trace that loaded a program loads it into ours where MAME's debugger did.
+      follow?.beforeStep?.(index, m);
       deliverKeys();
       const wasHalted = cpu.halted;
       const op = cpu.halted ? 0 : sys.memory.readByte(cpu.registers.PC);

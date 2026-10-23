@@ -24,6 +24,7 @@ import { compareRun, formatReport, modelDevices, ourRegs, videoGate } from './co
 import { mameSkip, requireRom, xtrsSkip } from './gate.js';
 import { CHARGEN, IRQ, openTrace, recordMameTrace, ROM_SETS, writeTrace } from './mame-trace.js';
 import { loadXtrs } from './xtrs-adapter.js';
+import { mameTimer } from './mame-clock.js';
 
 const dir = mkdtempSync(join(tmpdir(), 'fugloy-m1dev-'));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -566,6 +567,23 @@ describe.skipIf(mameSkip !== null)(`the Model I's devices against MAME${mameSkip
     expect(d).toMatchObject({ index: 110_781, fields: ['irqTime'], known: null });
     // The trace took it at the next boundary.
     expect(d?.context.find((l) => l.index === 110_782)?.theirs.cycles).toBe(24); // the response (13) and PUSH AF (11)
+  });
+
+  it('the latch on MAME\'s clock (mameTimer): 200,000 instructions of 40 Hz interrupts with no irqTime; one T-state late is caught', async () => {
+    const path = await latchPath();
+    const r = compareRun({ machine: mameTimer(ours(LOOP_ROM)), reference: openTrace(path), instructions: 200_000 });
+    expect(r.ended).toBeUndefined();
+    expect(r.divergence).toBeNull();
+    expect(r.known).toEqual({});
+    // A timer of ours one T-state late at every tick is still a divergence, at the first tick
+    // whose boundary it moves.
+    const late = ours(LOOP_ROM);
+    mameTimer(late);
+    const get = /** @type {() => number} */ (Object.getOwnPropertyDescriptor(late.system, 'nextRtcAt')?.get);
+    const set = /** @type {(v: number) => void} */ (Object.getOwnPropertyDescriptor(late.system, 'nextRtcAt')?.set);
+    Object.defineProperty(late.system, 'nextRtcAt', { configurable: true, get: () => get() + 1, set });
+    const d = compareRun({ machine: late, reference: openTrace(path), instructions: 200_000 }).divergence;
+    expect(d?.fields).toEqual(['irqTime']);
   });
 
   it('planted: a latch read that does not clear, against MAME: caught after the handler\'s RETI (irqTime)', async () => {

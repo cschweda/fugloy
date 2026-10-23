@@ -24,6 +24,7 @@ import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { crc32 } from 'node:zlib';
+import { parseCmd } from '../../src/loaders/cmd-format.js';
 import { configuredRom } from '../rom.js';
 
 /** `mame -version` of the pinned MAME. */
@@ -310,11 +311,50 @@ class Decoder {
 }
 
 /**
+ * A program the recording loaded (recordMameTrace's `load`): before record `at` ran, its runs went
+ * into memory and the PC moved from `pc` to `entry`, so record `at` (the state before it, as MAME
+ * wrote it) holds `pc` and its instruction is the program's first.
+ * @typedef {{ at: number, cycles: number, sha256: string, entry: number, pc: number, runs: { addr: number, len: number }[] }} TraceLoad
+ */
+
+/**
+ * The bytes a .CMD puts in memory, as runs of consecutive addresses (a later block's byte over an
+ * earlier one's, as the loader writes them), for MAME's debugger to load and for the trace's
+ * memory image. Bytes below $3C00 (ROM, the keyboard, the devices) are refused: m.load.cmd drops
+ * them and MAME's `load` would write the ROM.
+ * @param {Uint8Array} program
+ * @returns {{ addr: number, bytes: Uint8Array }[]}
+ */
+export function loadRuns(program) {
+  const parsed = parseCmd(program);
+  const image = new Uint8Array(MEM);
+  const set = new Uint8Array(MEM);
+  for (const b of parsed.blocks) {
+    for (let k = 0; k < b.data.length; k++) {
+      const a = (b.addr + k) & 0xffff;
+      if (a < 0x3c00) throw new Error(`the program writes $${a.toString(16).toUpperCase().padStart(4, '0')}, below $3C00; a MAME session loads only RAM and video RAM`);
+      image[a] = b.data[k];
+      set[a] = 1;
+    }
+  }
+  /** @type {{ addr: number, bytes: Uint8Array }[]} */
+  const runs = [];
+  for (let a = 0; a < MEM;) {
+    if (!set[a]) { a++; continue; }
+    let e = a;
+    while (e < MEM && set[e]) e++;
+    runs.push({ addr: a, bytes: image.slice(a, e) });
+    a = e;
+  }
+  return runs;
+}
+
+/**
  * The header of a trace file.
  * @typedef {{
  *   format: string, version: number, mame: string, bios: string, romSha256: string,
  *   requested: number, records: number, complete: boolean, reason: string | null, verified: boolean,
- *   keys: { at: number, text: string }[],
+ *   keys: { at: number, text: string }[], matrix?: number, load?: TraceLoad | null,
  * }} TraceHeader
  *   requested: instructions asked for (records = requested + 1 when complete: the state after the
  *   last instruction is the record after it); reason: why it ended short, else null; verified:
@@ -354,18 +394,25 @@ const CALLS = new Set([0xcd, 0xc4, 0xcc, 0xd4, 0xdc, 0xe4, 0xec, 0xf4, 0xfc]);
 /**
  * Run MAME and record `instructions` instructions from power-on into the trace file `out`
  * (default tools/mame/traces/trace-<instructions>.fmt). `keys` are posted through MAME's natural
- * keyboard at their T-state (converted with MAME_CLOCK_HZ, at frame granularity); the comparison
- * follows the bytes the ROM read, not these times.
+ * keyboard at their T-state (converted with MAME_CLOCK_HZ, at frame granularity); `matrix` are key
+ * events of the matrix (compare.js, keyEvents: `{ at, row, bit, down }`, at in T-states), set and
+ * cleared on MAME's keyboard rows at the first frame at or after their time, so a key is held as
+ * long as asked. Either way the comparison follows the bytes the ROM read, not these times.
+ *
+ * `load` puts a .CMD program in memory at the first instruction boundary at or after `at` T-states
+ * from power-on and moves the PC to its entry, as m.load.cmd does on ours (the trace's header
+ * says at which record, TraceLoad); `instructions` then counts from the load, and the header's
+ * `requested` is the instructions from power-on (the load's record and those after it).
  *
  * Resolves with the path and the instructions recorded, which are fewer than asked when MAME
  * stopped early: the file's header then says why, and a comparison against it reports that
  * sentence. Rejects (a sentence) when MAME or the ROM set is not the pinned one, or when MAME's
  * memory at the end disagrees with the recorded writes (the trace lost something).
- * @param {{ instructions: number, keys?: { at: number, text: string }[], out?: string, bin?: string, romDir?: string, rom?: Uint8Array, skipRomCheck?: boolean }} opts
+ * @param {{ instructions: number, keys?: { at: number, text: string }[], matrix?: { at: number, row: number, bit: number, down: boolean }[], load?: { program: Uint8Array, at: number }, out?: string, bin?: string, romDir?: string, rom?: Uint8Array, skipRomCheck?: boolean }} opts
  *   skipRomCheck: tests only, to run a synthetic ROM set in `romDir` (the user's ROM is then not compared).
- * @returns {Promise<{ path: string, instructions: number }>}
+ * @returns {Promise<{ path: string, instructions: number, load?: TraceLoad }>}
  */
-export async function recordMameTrace({ instructions, keys = [], out, bin = 'mame', romDir = MAME_ROMS, rom, skipRomCheck = false }) {
+export async function recordMameTrace({ instructions, keys = [], matrix = [], load, out, bin = 'mame', romDir = MAME_ROMS, rom, skipRomCheck = false }) {
   if (!Number.isInteger(instructions) || instructions < 1) throw new Error(`recordMameTrace: instructions must be a whole number above 0, not ${instructions}`);
   const mame = checkMame({ bin });
   let bios = 'rsl2';
@@ -387,14 +434,34 @@ export async function recordMameTrace({ instructions, keys = [], out, bin = 'mam
   execFileSync('mkfifo', [fifo]);
   const keysFile = join(work, 'keys.txt');
   writeFileSync(keysFile, keys.map((k) => `${(k.at / MAME_CLOCK_HZ).toFixed(9)} ${Buffer.from(k.text, 'latin1').toString('hex')}\n`).join(''));
+  const matrixFile = join(work, 'matrix.txt');
+  writeFileSync(matrixFile, matrix.map((e) => `${(e.at / MAME_CLOCK_HZ).toFixed(9)} ${e.row} ${e.bit} ${e.down ? 1 : 0}\n`).join(''));
+  /** @type {TraceLoad | null} */
+  let loaded = null;
+  /** @type {{ addr: number, bytes: Uint8Array }[]} */
+  let runs = [];
+  const loadFile = join(work, 'load.txt');
+  if (load !== undefined) {
+    if (!Number.isInteger(load.at) || load.at < 0) throw new Error(`recordMameTrace: load.at must be a whole number of T-states, not ${load.at}`);
+    runs = loadRuns(load.program);
+    const entry = parseCmd(load.program).entry;
+    const files = runs.map((r, k) => {
+      const f = join(work, `run${k}.bin`);
+      writeFileSync(f, r.bytes);
+      return `${r.addr.toString(16)} ${f}`;
+    });
+    writeFileSync(loadFile, [`${load.at} ${entry.toString(16)}`, ...files].join('\n') + '\n');
+    loaded = { at: -1, cycles: load.at, sha256: createHash('sha256').update(load.program).digest('hex'), entry, pc: -1, runs: runs.map((r) => ({ addr: r.addr, len: r.bytes.length })) };
+  }
+  // With a load, the records MAME writes after it; the records before it are counted when it comes.
   const records = instructions + 1;
-  const lastKey = keys.reduce((m, k) => Math.max(m, k.at), 0);
+  const lastKey = Math.max(keys.reduce((m, k) => Math.max(m, k.at), 0), matrix.reduce((m, k) => Math.max(m, k.at), 0), load?.at ?? 0);
   // A cap on emulated time, never reached in a normal run (the register point stops MAME first):
   // 40 T-states an instruction is more than any instruction and its interrupt response take.
   const seconds = Math.ceil((records * 40 + lastKey) / MAME_CLOCK_HZ) + 5;
 
   /** @type {TraceHeader} */
-  const header = { format: FORMAT, version: VERSION, mame: mame.version, bios, romSha256, requested: instructions, records: 0, complete: false, reason: 'the recording did not finish', verified: false, keys };
+  const header = { format: FORMAT, version: VERSION, mame: mame.version, bios, romSha256, requested: instructions, records: 0, complete: false, reason: 'the recording did not finish', verified: false, keys, matrix: matrix.length, load: loaded };
   const fd = openSync(path, 'w');
   writeHeader(fd, header);
   let pos = RECORDS_AT;
@@ -403,7 +470,7 @@ export async function recordMameTrace({ instructions, keys = [], out, bin = 'mam
     '-autoboot_script', MAME_LUA, '-autoboot_delay', '0', '-seconds_to_run', String(seconds), '-skip_gameinfo',
     '-snapshot_directory', join(work, 'snap'), '-nvram_directory', join(work, 'nvram'), '-cfg_directory', join(work, 'cfg'),
     '-diff_directory', join(work, 'diff'), '-state_directory', join(work, 'sta'), '-input_directory', join(work, 'inp'), '-noreadconfig'];
-  const env = { ...process.env, FUGLOY_MAME_TRACE: fifo, FUGLOY_MAME_RECORDS: String(records), FUGLOY_MAME_START: startMem, FUGLOY_MAME_END: endMem, FUGLOY_MAME_KEYS: keys.length > 0 ? keysFile : '' };
+  const env = { ...process.env, FUGLOY_MAME_TRACE: fifo, FUGLOY_MAME_RECORDS: String(records), FUGLOY_MAME_START: startMem, FUGLOY_MAME_END: endMem, FUGLOY_MAME_KEYS: keys.length > 0 ? keysFile : '', FUGLOY_MAME_MATRIX: matrix.length > 0 ? matrixFile : '', FUGLOY_MAME_LOAD: loaded !== null ? loadFile : '' };
   const child = spawn(mame.path, args, { cwd: work, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let tail = '';
   const keepTail = (/** @type {Buffer} */ d) => { tail = (tail + d.toString('latin1')).slice(-4000); };
@@ -420,6 +487,10 @@ export async function recordMameTrace({ instructions, keys = [], out, bin = 'mam
   let count = 0;
   let sawIrq = false;
   let ended = false;
+  /** Between the load's `L` and `M` lines. */
+  let loading = false;
+  /** The records before the load's (its index), once it came. */
+  let beforeLoad = 0;
   /** @type {string | null} */
   let stop = null;
 
@@ -446,7 +517,7 @@ export async function recordMameTrace({ instructions, keys = [], out, bin = 'mam
     if (stop !== null || ended) return;
     const c = line.charCodeAt(0);
     if (c === 0x57 /* W */ || c === 0x52 /* R */) {
-      if (line[1] !== ' ' || pending === null) return;
+      if (line[1] !== ' ' || pending === null || loading) return;
       const a = { addr: parseInt(line.slice(2, 6), 16), value: parseInt(line.slice(7, 9), 16) };
       (c === 0x57 ? pending.writes : pending.reads).push(a);
     } else if (c === 0x54 /* T */ && line[1] === ' ') {
@@ -495,6 +566,27 @@ export async function recordMameTrace({ instructions, keys = [], out, bin = 'mam
         return;
       }
       sawIrq = true;
+    } else if (c === 0x4c /* L */ && line[1] === ' ') {
+      // The load, before the pending record's instruction ran (it ran at the entry instead).
+      if (loaded === null || loaded.at !== -1 || pending === null) {
+        stop = `MAME wrote a load line this recording did not ask for: ${line}`;
+        return;
+      }
+      if (pending.kind !== 0) {
+        stop = `the load fell on an interrupt response (before instruction ${count - 1}); load at another time`;
+        return;
+      }
+      if (!imageReady) {
+        image.set(readFileSync(startMem));
+        imageReady = true;
+      }
+      loaded.at = count - 1;
+      loaded.pc = parseInt(line.slice(2, 6), 16);
+      beforeLoad = count - 1;
+      for (const r of runs) image.set(r.bytes, r.addr);
+      loading = true;
+    } else if (line === 'M') {
+      loading = false;
     } else if (line === 'E') {
       ended = true;
     }
@@ -535,7 +627,9 @@ export async function recordMameTrace({ instructions, keys = [], out, bin = 'mam
     if (pending !== null) emit(pending);
     flush();
     header.records = count;
-    if (ended && count === records) {
+    if (loaded !== null && loaded.at === -1) stop ??= `MAME never reached the load at ${loaded.cycles} T-states`;
+    if (loaded !== null) header.requested = beforeLoad + instructions;
+    if (ended && stop === null && count === beforeLoad + records) {
       const end = readFileSync(endMem);
       writeSync(fd, readFileSync(startMem), 0, MEM, HEADER);
       writeSync(fd, end, 0, MEM, HEADER + MEM);
@@ -571,7 +665,7 @@ export async function recordMameTrace({ instructions, keys = [], out, bin = 'mam
     closeSync(fd);
     rmSync(work, { recursive: true, force: true });
   }
-  return { path, instructions: Math.max(0, header.records - 1) };
+  return { path, instructions: Math.max(0, header.records - 1), ...(loaded !== null ? { load: loaded } : {}) };
 }
 
 // --- Replaying ------------------------------------------------------------------------------
@@ -627,6 +721,7 @@ function setRegs(m, o) {
  *   index: number,
  *   has(index: number): boolean,
  *   start(machine: import('../../src/machine/machine.js').Machine): void,
+ *   beforeStep(index: number, machine: import('../../src/machine/machine.js').Machine): void,
  *   irqAt(index: number): boolean,
  *   keyRead(index: number, addr: number): number | undefined,
  *   latchReads(index: number): import('./reference.js').Write[],
@@ -642,7 +737,8 @@ function setRegs(m, o) {
  *   order; keyReadsLeft: its keyboard reads not consumed yet; adopt: copy the reference's state after the
  *   last step into our machine (compareRun does this after a difference a known class explains,
  *   since a trace cannot be resynced); ended: the sentence for a trace that ends at step `index`
- *   of `asked`.
+ *   of `asked`; beforeStep: at the trace's load (TraceLoad), load the same program into our
+ *   machine with m.load.cmd before step `index` runs, as MAME's debugger did.
  * @typedef {import('./reference.js').Reference & { follow: Follow, header: TraceHeader }} TraceReference
  */
 
@@ -651,11 +747,13 @@ const isLatch = (/** @type {number} */ a) => a >= 0x37e0 && a < 0x37e4;
 
 /**
  * Open a trace file as a Reference that compareRun drives (TraceReference). It cannot be synced
- * or changed: `syncFrom`, `syncRegs`, `poke`, `setKeyBit`, `alignRtc` and `reset` throw.
+ * or changed: `syncFrom`, `syncRegs`, `poke`, `setKeyBit`, `alignRtc` and `reset` throw. A trace
+ * that loaded a program needs that program (`program`, checked by its SHA-256).
  * @param {string} path
+ * @param {{ program?: Uint8Array }} [opts]
  * @returns {TraceReference}
  */
-export function openTrace(path) {
+export function openTrace(path, { program } = {}) {
   if (!existsSync(path)) throw new Error(`no MAME trace at ${path}; record one with recordMameTrace (pnpm mame:install first)`);
   const fd = openSync(path, 'r');
   const head = Buffer.alloc(HEADER);
@@ -672,6 +770,22 @@ export function openTrace(path) {
     closeSync(fd);
     throw new Error(`${path} is a ${header.format} ${header.version} file, not a ${FORMAT} ${VERSION}; record it again`);
   }
+  const load = header.load ?? null;
+  /** @type {{ addr: number, bytes: Uint8Array }[]} */
+  let runs = [];
+  if (load !== null) {
+    if (program === undefined) {
+      closeSync(fd);
+      throw new Error(`${path} loaded a program (SHA-256 ${load.sha256}) at instruction ${load.at}; pass it to openTrace as program`);
+    }
+    const sha = createHash('sha256').update(program).digest('hex');
+    if (sha !== load.sha256) {
+      closeSync(fd);
+      throw new Error(`${path} loaded another program (SHA-256 ${load.sha256}) than the one given (${sha})`);
+    }
+    runs = loadRuns(program);
+  }
+  let loadDone = false;
   const start = Buffer.alloc(MEM);
   readSync(fd, start, 0, MEM, HEADER);
   const dec = new Decoder(fd, RECORDS_AT);
@@ -709,6 +823,17 @@ export function openTrace(path) {
       const video = start.subarray(0x3c00, 0x4000);
       sys.memory.videoRam.set(sys.memory.videoBit6Gate ? video.map((b) => (b & 0xa0 ? b & 0xbf : b | 0x40)) : video);
       sys.memory.ram.set(start.subarray(0x4000, 0x10000));
+    },
+    beforeStep(index, m) {
+      if (load === null || loadDone || index !== load.at) return;
+      if (index !== n || cur === null) throw new Error(`follow.beforeStep(${index}): the trace is at step ${n}`);
+      if (cur.w[0] !== load.pc) throw new Error(`${path}: the record before the load has PC $${cur.w[0].toString(16)}, not the load's $${load.pc.toString(16)}`);
+      const manifest = m.load.cmd(/** @type {Uint8Array} */ (program));
+      if (manifest.entry !== load.entry) throw new Error(`${path}: the program's entry is $${manifest.entry.toString(16)}, the trace's $${load.entry.toString(16)}`);
+      for (const r of runs) image.set(r.bytes, r.addr);
+      // The instruction MAME ran in this record is the program's first.
+      cur.w[0] = load.entry;
+      loadDone = true;
     },
     irqAt(index) {
       if (index !== n || cur === null) throw new Error(`follow.irqAt(${index}): the trace is at step ${n}`);
