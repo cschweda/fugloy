@@ -39,8 +39,8 @@ creates and pushes the tag.
 
 ### Changed
 
-- The web workbench and `@fugloy/mcp` follow the Model I's HALT (emu phase 7, the Model I sweep's
-  Task 4, 2026-10-23), which the machine answers with its reset switch's NMI (Fixed, below). A
+- The web workbench follows the Model I's HALT (emu phase 7, the Model I sweep's
+  Task 4, 2026-10-23), which the machine answers with its reset switch's NMI (`@fugloy/emu` 0.6.0, Fixed). A
   Model I Run on Fugløy's stub ROM used to sit at its program's HALT, as a Model III's does; now it
   stops there, before the NMI, naming the line: "Line 4 halts the CPU (HALT), and a Model I answers
   a HALT with a reset to BASIC (its HALT line drives the reset switch's NMI), which needs a ROM, and
@@ -51,46 +51,7 @@ creates and pushes the tag.
   offers HALT on the Model I. The debugger never calls a halted Model I stuck or waiting for an
   interrupt: its next step takes the NMI, and a step that leaves it halted says "The CPU is halted
   (HALT), and on the Model I a HALT raises an NMI at the next instruction: the next step or
-  Continue goes to $0066, the ROM's reset." On a Model I the MCP's `run until: "halt"` stops with
-  `stopped: halt (the CPU ran HALT, which on the Model I raises an NMI at the next instruction, to
-  0066h, the ROM's reset)`, a `step` that leaves the CPU halted ends with that parenthesis, and no
-  step there says it found the CPU halted, waiting for an interrupt; the Model III's sentences are
-  unchanged.
-
-- The Model I differential's last four residuals (emu phase 7, the Model I sweep's Task 1,
-  2026-10-23; plan `docs/superpowers/plans/2026-10-23-emu-phase7-model1-sweep.md`). The MAME
-  recorder's silence watchdog takes a tick that comes more than one interval late for a stall of the
-  recorder itself (its event loop blocked, as a comparison beside recordings that run at once blocks
-  it), not for MAME's silence, and it ends with the trace, so it never stops a healthy recording and
-  a MAME slow to exit after its last record leaves its trace complete (one still running a minute
-  after it closed its trace is stopped, the trace as whole as it was). The repeating
-  LDIR/LDDR/CPIR/CPDR class is one per reference rule, as SCF/CCF's is, each holding the reference
-  to its own rule as well as ours to PC's: xtrs's to Young's n, the finished iteration's rule, which
-  it keeps at every iteration, and trsjs's to the bits it had. A reference value off its rule is
-  then a divergence against xtrs, and against trsjs its general flag 3 and 5 class counts it; every
-  session's block count is the same under the new names. `pnpm mame:trace lines` reads a trace that
-  loaded a program, given with `--program <file>`, and names that option when it is missing. Emu
-  spec §10 lists xtrs's interrupt after a lone DD or FD among the reference limitations no session
-  meets.
-
-- The differential harness's known classes are each reference's own (emu phase 7, the final
-  review of the Model I half, 2026-10-22): a reference declares the classes it needs
-  (`Reference.classes`, in `test/diff/`), each found against it with its evidence, and `compareRun`
-  explains a difference, holds back or forces an interrupt, or fixes the reference's step only by a
-  class its reference declares, so one reference's evidence never excuses another's difference.
-  trsjs keeps every class it had, its six sessions' counts unchanged. xtrs declares five, its flags
-  3 and 5 limited to BIT n,(HL) and BIT n,(IX+d), which it clears where the Z80 shows MEMPTR (the
-  520,918 steps the general flag 3 and 5 class took in its sessions, every one of them), and the
-  SCF/CCF classes check the reference's side as well as ours. MAME declares none but its video read,
-  so any flag difference against it is a divergence: our core with its SCF/CCF fix undone now
-  diverges against MAME, where the general class had counted the difference. `--strict` passes by
-  the reference's everyday flag 3 and 5 class. With it: xtrs's driver makes its 40 Hz tick with the
-  calls xtrs's timer makes, not `trs_timer_event`, which divides by a `timer_hz` nothing sets (a
-  trap on x86-64); `pnpm diff --reference mame` runs our 40 Hz on MAME's schedule and says so in its
-  report, takes the program a trace loaded (named first), and ends a trace with no records with its
-  sentence (exit 3); a MAME recording that writes nothing to its trace for a minute is stopped, its
-  trace saying why; a `.DS_Store` no longer breaks xtrs's tree hash; and the MAME trace module
-  computes its CRC-32 itself, so the tests load on Node 22.0 and 22.1.
+  Continue goes to $0066, the ROM's reset."
 
 - Phase 6C, Build Space Invaders (web workbench, merged to main 2026-10-19; plan
   `docs/superpowers/plans/2026-10-19-phase6c-invaders.md`), which completes phase 6. Twelve short
@@ -149,6 +110,47 @@ creates and pushes the tag.
   sweep, where it stands Open: neither reference can follow those interrupts). The workbench's
   Eliminator still opens `elimin8d.cmd`.
 
+### Added
+
+- A Full screen button in Run ▶'s machine row; Esc leaves it (and the browser's own exit); keys keep
+  reaching the TRS-80, and focus is kept. The first screen is 252,262 B gzip of its 252,775 B budget.
+
+
+## [mcp 0.1.3] - 2026-10-23
+
+The MCP server on `@fugloy/emu` 0.6.0 (the dependency packs to `^0.6.0`), which is published first.
+
+`@fugloy/mcp`'s Model I sentences for a HALT (`run until: "halt"` and `step`, in
+`packages/mcp/src/execute.js` and `src/tools/step.js`) are true only on an `@fugloy/emu` that has the
+Model I HALT fix (emu 0.6.0, Fixed, below): on emu 0.5.x a Model I stays halted after a HALT, so `run until:
+"halt"` would announce an NMI that never comes. The dependency is `workspace:^`, which publishes as
+`^` emu's version at the time, and `publish.sh check mcp` asks only that that version be on npm, so
+an mcp released while emu is still 0.5.0 would pack `^0.5.0` and pass. Emu is released first, as
+0.6.0 (in 0.x a changed `m.run`, `m.step` or `m.cpu.halted` on the Model I is a minor bump), and
+`@fugloy/mcp` 0.1.3 after it, which packs `^0.6.0`; `@fugloy/emu` 0.6.0 must be on npm before it.
+
+### Changed
+
+- `@fugloy/mcp` follows the Model I's HALT, which `@fugloy/emu` 0.6.0 answers with the reset switch's
+  NMI (emu phase 7, the Model I sweep's Task 4, 2026-10-23). On a Model I the MCP's `run until: "halt"` stops with
+  `stopped: halt (the CPU ran HALT, which on the Model I raises an NMI at the next instruction, to
+  0066h, the ROM's reset)`, a `step` that leaves the CPU halted ends with that parenthesis, and no
+  step there says it found the CPU halted, waiting for an interrupt; the Model III's sentences are
+  unchanged.
+
+- It runs on `@fugloy/emu` 0.6.0, so its sessions take the Z80 fixes the Model I's references found
+  (EX (SP),rr's write order; a repeating block instruction's flags 3 and 5; SCF and CCF's flags 3
+  and 5 after an instruction that left the flags alone) as well as the Model I's HALT.
+
+## [emu 0.6.0] - 2026-10-23
+
+Emu phase 7's Model I half, merged to main (2026-10-23): the differential harness
+against xtrs in lockstep and MAME 0.289 by trace, thirteen sessions and a sweep of every other
+program, and the four bugs in the Z80 core and the Model I it found. A minor bump: on the Model I,
+`m.run`, `m.step` and `m.cpu.halted` behave differently after a HALT.
+
+### Fixed
+
 - `@fugloy/emu`: a Model I program that waits at a HALT now resets to BASIC: its HALT raises the
   reset switch's NMI, as the machine is wired. HALT* and the switch meet at Z53, which drives NMI*
   and SYSRES* through Z37 (TRS-80 Micro Computer Technical Reference Handbook, 1982, Figure 29 sheet
@@ -189,6 +191,45 @@ creates and pushes the tag.
   phase 7, Model I, Task 5); xtrs takes A's alone (NEC's NMOS rule) and trsjs leaves the bits, a
   known class. ZEXDOC and ZEXALL still pass all 67 groups; the Model III state fixture gains the
   one field.
+
+
+### Changed
+
+- The Model I differential's last four residuals (emu phase 7, the Model I sweep's Task 1,
+  2026-10-23; plan `docs/superpowers/plans/2026-10-23-emu-phase7-model1-sweep.md`). The MAME
+  recorder's silence watchdog takes a tick that comes more than one interval late for a stall of the
+  recorder itself (its event loop blocked, as a comparison beside recordings that run at once blocks
+  it), not for MAME's silence, and it ends with the trace, so it never stops a healthy recording and
+  a MAME slow to exit after its last record leaves its trace complete (one still running a minute
+  after it closed its trace is stopped, the trace as whole as it was). The repeating
+  LDIR/LDDR/CPIR/CPDR class is one per reference rule, as SCF/CCF's is, each holding the reference
+  to its own rule as well as ours to PC's: xtrs's to Young's n, the finished iteration's rule, which
+  it keeps at every iteration, and trsjs's to the bits it had. A reference value off its rule is
+  then a divergence against xtrs, and against trsjs its general flag 3 and 5 class counts it; every
+  session's block count is the same under the new names. `pnpm mame:trace lines` reads a trace that
+  loaded a program, given with `--program <file>`, and names that option when it is missing. Emu
+  spec §10 lists xtrs's interrupt after a lone DD or FD among the reference limitations no session
+  meets.
+
+- The differential harness's known classes are each reference's own (emu phase 7, the final
+  review of the Model I half, 2026-10-22): a reference declares the classes it needs
+  (`Reference.classes`, in `test/diff/`), each found against it with its evidence, and `compareRun`
+  explains a difference, holds back or forces an interrupt, or fixes the reference's step only by a
+  class its reference declares, so one reference's evidence never excuses another's difference.
+  trsjs keeps every class it had, its six sessions' counts unchanged. xtrs declares five, its flags
+  3 and 5 limited to BIT n,(HL) and BIT n,(IX+d), which it clears where the Z80 shows MEMPTR (the
+  520,918 steps the general flag 3 and 5 class took in its sessions, every one of them), and the
+  SCF/CCF classes check the reference's side as well as ours. MAME declares none but its video read,
+  so any flag difference against it is a divergence: our core with its SCF/CCF fix undone now
+  diverges against MAME, where the general class had counted the difference. `--strict` passes by
+  the reference's everyday flag 3 and 5 class. With it: xtrs's driver makes its 40 Hz tick with the
+  calls xtrs's timer makes, not `trs_timer_event`, which divides by a `timer_hz` nothing sets (a
+  trap on x86-64); `pnpm diff --reference mame` runs our 40 Hz on MAME's schedule and says so in its
+  report, takes the program a trace loaded (named first), and ends a trace with no records with its
+  sentence (exit 3); a MAME recording that writes nothing to its trace for a minute is stopped, its
+  trace saying why; a `.DS_Store` no longer breaks xtrs's tree hash; and the MAME trace module
+  computes its CRC-32 itself, so the tests load on Node 22.0 and 22.1.
+
 
 ### Added
 
@@ -275,19 +316,6 @@ creates and pushes the tag.
   Test-only planted bugs (a latch read that does not clear, the gate inverted) are caught where
   they first matter against each reference.
 
-- A Full screen button in Run ▶'s machine row; Esc leaves it (and the browser's own exit); keys keep
-  reaching the TRS-80, and focus is kept. The first screen is 252,262 B gzip of its 252,775 B budget.
-
-### Release coupling
-
-`@fugloy/mcp`'s Model I sentences for a HALT (`run until: "halt"` and `step`, in
-`packages/mcp/src/execute.js` and `src/tools/step.js`) are true only on an `@fugloy/emu` that has the
-Model I HALT fix (Fixed, above): on emu 0.5.x a Model I stays halted after a HALT, so `run until:
-"halt"` would announce an NMI that never comes. The dependency is `workspace:^`, which publishes as
-`^` emu's version at the time, and `publish.sh check mcp` asks only that that version be on npm, so
-an mcp released while emu is still 0.5.0 would pack `^0.5.0` and pass. Emu is released first, as
-0.6.0 (in 0.x a changed `m.run`, `m.step` or `m.cpu.halted` on the Model I is a minor bump), and
-`@fugloy/mcp` 0.1.3 after it, which packs `^0.6.0`; `@fugloy/emu` 0.6.0 must be on npm before it.
 
 ## [emu 0.5.0] - 2026-10-19
 

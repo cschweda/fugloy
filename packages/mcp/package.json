@@ -1,6 +1,6 @@
 {
   "name": "@fugloy/mcp",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "stdio MCP server that exposes a running TRS-80 via @fugloy/emu (see docs/fugloy-mcp-spec.md)",
   "license": "MIT",
   "type": "module",
