@@ -186,8 +186,9 @@ export class Z80CPU {
    * iteration's n (Young §4.2 gives n "at every iteration"; the repeat's extra 5 T-states put PC's
    * high byte there instead). David Banks, Z80Decoder wiki, "Undocumented Flags", "LDxR / CPxR
    * interrupted"; confirmed on real Z80s by Peter Helcmanovsky's Z80 Block Flags Test; MAME
-   * 0.289's z80.lst (`m_f.yx_val = PC >> 8`). INIR/INDR/OTIR/OTDR also change H and P/V when they
-   * repeat (the same research; MAME's block_io_interrupted_flags); not modelled here.
+   * 0.289's z80.lst (`m_f.yx_val = PC >> 8`). INIR/INDR/OTIR/OTDR, when they repeat, also take
+   * flags 3 and 5 from PC this way and change H and P/V (the same research, "INxR / OTxR
+   * interrupted"; MAME's block_io_interrupted_flags); none of that is modelled here.
    */
   _xyRepeat() {
     this.flagsWritten = true;

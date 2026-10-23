@@ -420,7 +420,7 @@ fourteen programs reach their titles and four disks boot, with MCP `load`
 taking `model: 1`; and a differential harness (7), against trsjs on the
 Model III and against xtrs and MAME on the Model I, with no unexplained
 divergence in six game sessions on the Model III and thirteen on the Model I
-(the Model I's half is on the `e7-model1` branch). The Model 4
+(the Model I's half merged to main 2026-10-22). The Model 4
 (6b) is published in emu 0.4.0 and mcp 0.1.2 (2026-10-18): on the Model 4 ROM
 it boots to Model III BASIC's `READY`, where Model III programs and disks run
 (Sea Dragon matches the Model III screen for screen and T-state for T-state

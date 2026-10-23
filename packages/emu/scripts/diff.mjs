@@ -25,8 +25,10 @@
  * test/diff/model1-fixtures.test.js) is compared with that program named as <program>; recording
  * one from the command line is not supported yet (emu spec §11, phase 7).
  *
- * `--strict` stops on a known difference as well, except flag bits 3 and 5 (which differ within a
- * few instructions in most programs); `--strict-all` stops on those too.
+ * `--strict` stops on a known difference as well, except the reference's everyday flag 3 and 5
+ * class (which differs within a few instructions in most programs: trsjs's general one, xtrs's
+ * BIT n,(HL) and BIT n,(IX+d); MAME declares none); `--strict-all` stops on those too. Only the
+ * classes the reference declares are known to it (test/diff/known.js).
  *
  * Prints the report (the reference and model, the counts per class, the divergence with ten
  * instructions disassembled on each side). Exit status: 0 no divergence, 1 a divergence, 2 a

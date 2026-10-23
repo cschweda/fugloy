@@ -249,7 +249,9 @@ reference and model, the count of each known difference and the first
 divergence, if any, with ten instructions disassembled on each side.
 `pnpm diff --model 1 --reference mame --trace <file>` compares our Model I,
 from power-on, against a MAME trace recorded with
-`pnpm mame:trace record <instructions>`. Exit status 0 means no divergence, 1
+`pnpm mame:trace record <instructions>` (the ROM's boot and typed keys), our
+40 Hz on MAME's schedule as the report says; a trace that loaded a program
+(the tests record those) is compared with that program named first. Exit status 0 means no divergence, 1
 a divergence, 2 a usage or setup error (an unexpected error, such as the ROM
 not reaching READY or the reference throwing, counts as one), 3 a MAME trace
 that ends before the instructions asked for.
@@ -260,14 +262,18 @@ a byte stored wider than 8 bits, PC running past `$FFFF`, a repeating CPDR's
 T-states, a DD or FD prefix it skips; MAME: its CPU reads video bit 6 as
 written, so where its byte is ours but for the gate our read takes MAME's), or
 counts a known class in `test/diff/known.js`, each with the evidence that the
-reference is the inaccurate side: flag bits 3 and 5 (trsjs's own rules,
-xtrs's `BIT n,(HL)` and `BIT n,(IX+d)`); BIT's S and P/V; R on an interrupt and on DDCB/FDCB;
-the HALT return address; carry after CPI/CPD/CPIR/CPDR; three interrupt
-timings (trsjs); EX (SP),rr writing (SP) before (SP+1) (xtrs, trsjs); a
-repeating LDIR/LDDR/CPIR/CPDR's flags 3 and 5 from PC (xtrs, trsjs); SCF and
-CCF's flags 3 and 5 after an instruction that left the flags alone (xtrs takes
-A's alone, trsjs keeps its own); IN and block I/O one T-state short (xtrs).
-Everything else is a divergence. On the six Model III sessions (Sea Dragon,
+reference is the inaccurate side and each declared by the reference that
+needs it (`Reference.classes`), so one reference's evidence never excuses
+another's difference: flag bits 3 and 5 (trsjs's own rules, a class only trsjs
+declares); BIT's S and P/V; R on an interrupt and on DDCB/FDCB; the HALT
+return address; carry after CPI/CPD/CPIR/CPDR; three interrupt timings (all
+trsjs); EX (SP),rr writing (SP) before (SP+1) (xtrs, trsjs); a repeating
+LDIR/LDDR/CPIR/CPDR's flags 3 and 5 from PC (xtrs, trsjs); SCF and CCF's
+flags 3 and 5, which trsjs leaves as they were (xtrs's are below); `BIT n,(HL)`
+and `BIT n,(IX+d)`'s flags 3 and 5, which xtrs clears where the Z80 shows
+MEMPTR; IN and block I/O one T-state short (xtrs). MAME declares none of these,
+only its video read. Everything else is a divergence, so against MAME any flag
+difference is one. On the six Model III sessions (Sea Dragon,
 Eliminator c and e, Rear Guard 5 and 4, Armored Patrol, 10 million
 instructions each) there is none, and none on the thirteen Model I sessions
 (Eliminator a and c, Sea Dragon and Rear Guard 5 from `examples/`, nine more
@@ -283,11 +289,13 @@ agree, both may be wrong, so behaviour such as EI's one-instruction delay is
 pinned by our own unit tests (against Zilog UM0080 and Young §5.5) as well as
 compared. Two are judgment calls rather than reference errors: port `FF` bit
 6, which the Model III Technical Reference Manual calls undefined (we read it
-as 1, as trsjs and trs80gp do), and SCF and CCF, where Zilog's NMOS Z80 and
-NEC's differ (we follow Zilog's, as MAME does; xtrs follows NEC's). Typing at
-20 characters a second drops every other key under the Model I's Level II
-1.3 on all three machines alike: the ROM's keyboard driver debounces each key
-for 18.8 ms and waits 51.3 ms after taking one, so type at 10 (the default).
+as 1, as trsjs and trs80gp do), and SCF and CCF against xtrs, where Zilog's
+NMOS Z80 and NEC's differ (we follow Zilog's, as MAME does; xtrs follows
+NEC's, a class of its own). Typing at 20 characters a second drops every other
+key under the Model I's Level II 1.3, the ROM's doing: its keyboard driver
+debounces each key for 18.8 ms and waits 51.3 ms after taking one, so type at
+10 (the default). xtrs drops the same keys; MAME, whose keys change only at a
+frame, drops every key at `type`'s 25 ms holds and the same ones at 35 ms.
 Details in spec §5, §10 and §11 (phase 7).
 
 ## Testing the Z80 core
