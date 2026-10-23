@@ -1,8 +1,8 @@
 # Part 2 — From a TRS-80 Program to a JavaScript Game (Design, draft)
 
-**Status:** draft for the user's review, 2026-10-23. The user asked for a draft without the
-design questions ("skip — just start drafting"), so every choice below that the user did not
-state is marked **(Claude's call)** and is theirs to overturn.
+**Status:** approved by the user, 2026-10-23 ("that works — please start"). The user asked for a
+draft without the design questions ("skip — just start drafting"), so every choice below that the
+user did not state is marked **(Claude's call)**; the user accepted them with the design.
 
 ## Why
 
@@ -46,8 +46,9 @@ replay identically on the remake's logic. At the end, the remake has no TRS-80 i
 ## Goals
 
 1. **A verified port of Sea Dragon** (`examples/sea-dragon/seadrg01.cmd`, public domain since
-   1995) that plays in a browser at full speed with no ROM, no Z80 interpreter and no original
-   bytes, and matches `@fugloy/emu` frame for frame on scripted sessions from the title to GAME
+   1995) that plays in a browser at full speed with no ROM, no Z80 interpreter and none of the
+   original code bytes (the data it reads, its graphics, text and tables, is carried as data), and
+   matches `@fugloy/emu` frame for frame on scripted sessions from the title to GAME
    OVER.
 2. **A recompiler that is general enough for the next games**: Rear Guard, Eliminator, and the
    Learn course's own Space Invaders, without starting over for each.
