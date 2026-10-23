@@ -12,7 +12,8 @@
  *     BIT n,(IX+d): from the high byte of IX+d
  *   - LDI/LDD: n = transferred byte + A, Y = n bit 1, X = n bit 3
  *   - CPI/CPD: n = A - (HL) - H(after), same bit mapping
- *   - SCF/CCF: from A
+ *   - SCF/CCF: from A, or-ed with F's own when the instruction before
+ *     left the flags alone (Patrik Rak's Q; below)
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
@@ -320,5 +321,115 @@ describe("X/Y after a repeating block iteration come from PC's high byte", () =>
       expect(hit.registers.PC, op.toString(16)).toBe(0x2802);
       expect(xy(hit), op.toString(16)).toBe(0x00);
     }
+  });
+});
+
+/**
+ * SCF and CCF (Patrik Rak, 2012; David Banks, Z80Decoder wiki, "Undocumented Flags", "SCF/CCF",
+ * checked on the Zilog NMOS Z80 and its second sources): when the instruction before modified the
+ * flags, X and Y are A's bits 3 and 5; when it left them alone, F's own bits 3 and 5 or-ed with
+ * A's. POP AF and EX AF,AF' do not count as modifying them, a DD or FD before SCF or CCF counts as
+ * an instruction that left them alone, and an interrupt response is none at all. MAME 0.289's
+ * z80.lst keeps the same rule in Q (`Q = QT; QT = YXF` at each opcode fetch, `QT = 0` in each
+ * instruction that sets flags, `scf`: `(m_f.yx_val & Q) | A`). ZEXALL cannot see it: its
+ * <daa,cpl,scf,ccf> group never sets F's bits 3 and 5 before the instruction (base F 04H, varied
+ * under the mask D7H), so F | A is A there.
+ */
+describe("SCF and CCF: X/Y also from F when the instruction before left the flags alone", () => {
+  /** Run the program's instructions one by one, F set to `f` first. */
+  function run(bytes, { a = 0x00, f = 0x00, steps = bytes.length } = {}) {
+    const c = cpuWithMemory(bytes);
+    c.registers.SP = 0x8000;
+    c.registers.A = a;
+    c.registers.F = f;
+    for (let k = 0; k < steps; k++) c.executeInstruction();
+    return c;
+  }
+
+  it("after LD B,C (no flags written): F's bits 3/5 stay, or-ed with A's", () => {
+    // LD B,C / SCF with F 28H and A 00H: F's bits survive.
+    expect(xy(run([0x41, 0x37], { f: 0x28 }))).toBe(0x28);
+    // and A's are added: F 08H, A 20H.
+    expect(xy(run([0x41, 0x37], { f: 0x08, a: 0x20 }))).toBe(0x28);
+    // CCF the same.
+    expect(xy(run([0x41, 0x3f], { f: 0x28 }))).toBe(0x28);
+  });
+
+  it("after CP 28H (flags written, X/Y from the operand): A's bits alone", () => {
+    const c = run([0xfe, 0x28, 0x37], { steps: 2 });
+    expect(xy(c)).toBe(0x00);
+    expect(c.flagC).toBe(1);
+    expect(xy(run([0xfe, 0x28, 0x3f], { steps: 2 }))).toBe(0x00);
+    // CP 28H then SCF with A 08H: A's bit 3 only.
+    expect(xy(run([0xfe, 0x28, 0x37], { a: 0x08, steps: 2 }))).toBe(0x08);
+  });
+
+  it("POP AF and EX AF,AF' do not count as writing the flags", () => {
+    // POP AF loading F 28H, A 00H (the stack holds F then A), then SCF.
+    const pop = cpuWithMemory([0xf1, 0x37]);
+    pop.registers.SP = 0x8000;
+    pop.mem.set([0x28, 0x00], 0x8000);
+    pop.executeInstruction();
+    pop.executeInstruction();
+    expect(xy(pop)).toBe(0x28);
+    // EX AF,AF' bringing in F' 28H after a CP that wrote the flags.
+    const ex = cpuWithMemory([0xfe, 0x00, 0x08, 0x37]);
+    ex.registers.F_ = 0x28;
+    for (let k = 0; k < 3; k++) ex.executeInstruction();
+    expect(xy(ex)).toBe(0x28);
+  });
+
+  it("a DD or FD before SCF is an instruction that left the flags alone (Banks, 2026)", () => {
+    // CP 28H writes X/Y 28H, then DD 37: the DD, not the CP, is the instruction before.
+    expect(xy(run([0xfe, 0x28, 0xdd, 0x37], { steps: 2 }))).toBe(0x28);
+    expect(xy(run([0xfe, 0x28, 0xfd, 0x3f], { steps: 2 }))).toBe(0x28);
+  });
+
+  it("an interrupt response is no instruction: the handler's SCF sees the one interrupted", () => {
+    // CP 28H, then an IM 1 interrupt; SCF at 0038H follows CP's flags: A's bits alone.
+    const c = cpuWithMemory([0xfe, 0x28]);
+    c.mem[0x38] = 0x37;
+    c.registers.SP = 0x8000;
+    c.interruptMode = 1;
+    c.IFF1 = c.IFF2 = true;
+    c.executeInstruction();
+    expect(c.interrupt()).toBe(true);
+    c.executeInstruction();
+    expect(c.registers.PC).toBe(0x39);
+    expect(xy(c)).toBe(0x00);
+    // NOP, then the interrupt: F's bits stay.
+    const n = cpuWithMemory([0x00]);
+    n.mem[0x38] = 0x37;
+    n.registers.SP = 0x8000;
+    n.registers.F = 0x28;
+    n.interruptMode = 1;
+    n.IFF1 = n.IFF2 = true;
+    n.executeInstruction();
+    n.interrupt();
+    n.executeInstruction();
+    expect(xy(n)).toBe(0x28);
+  });
+
+  it("a halted CPU's NOPs leave the flags alone", () => {
+    // CP 28H / HALT, two halted steps, an interrupt, SCF at 0038H: F's bits stay.
+    const c = cpuWithMemory([0xfe, 0x28, 0x76]);
+    c.mem[0x38] = 0x37;
+    c.registers.SP = 0x8000;
+    c.interruptMode = 1;
+    c.IFF1 = c.IFF2 = true;
+    for (let k = 0; k < 4; k++) c.executeInstruction();
+    expect(c.halted).toBe(true);
+    c.interrupt();
+    c.executeInstruction();
+    expect(xy(c)).toBe(0x28);
+  });
+
+  it("a reset starts as if the flags were just written (A's bits alone)", () => {
+    const c = cpuWithMemory([0x37]);
+    c.registers.F = 0x28;
+    c.reset();
+    c.registers.F = 0x28;
+    c.executeInstruction();
+    expect(xy(c)).toBe(0x00);
   });
 });

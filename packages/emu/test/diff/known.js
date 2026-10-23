@@ -76,12 +76,13 @@ export const flagToken = (reg, name) => `${reg}.${name}`;
  * @typedef {{
  *   bytes: Uint8Array,
  *   execPc: number,
- *   ours: Side & { wasHalted: boolean, fBefore: number },
+ *   ours: Side & { wasHalted: boolean, fBefore: number, q: number },
  *   theirs: Side,
  * }} StepContext
  *   bytes: four bytes of our memory at execPc as our CPU began the instruction it executed this
  *   step (after an interrupt response, the handler's first; four zeros, a NOP, for a halted step).
- *   ours.fBefore: our F before the step.
+ *   ours.fBefore: our F before the step; ours.q: our CPU's Q for the instruction it executed (F's
+ *   bits 5 and 3 an SCF or CCF keeps: 28H when the instruction before left the flags alone, else 0).
  * @typedef {{ id: string, name: string, evidence: string, explains(ctx: StepContext, diff: Set<string>): string[] | null }} StepClass
  * @typedef {{ id: string, name: string, reason: 'DI' | 'EI' | 'prefix', evidence: string }} InterruptClass
  */
@@ -134,6 +135,10 @@ const isBlockRepeat = (/** @type {Uint8Array} */ bytes) => bytes[0] === 0xed && 
 const isTimedIo = (/** @type {Uint8Array} */ bytes) => bytes[0] === 0xdb
   || (bytes[0] === 0xed && ((bytes[1] & 0xc7) === 0x40 || (bytes[1] & 0xe6) === 0xa2));
 
+/** SCF (37) or CCF (3F), alone or after a DD or FD. */
+const isScfCcf = (/** @type {Uint8Array} */ bytes) => bytes[0] === 0x37 || bytes[0] === 0x3f
+  || ((bytes[0] === 0xdd || bytes[0] === 0xfd) && (bytes[1] === 0x37 || bytes[1] === 0x3f));
+
 /** EX (SP),HL (E3) or EX (SP),IX / EX (SP),IY (DD/FD E3). */
 const isExSp = (/** @type {Uint8Array} */ bytes) => bytes[0] === 0xe3 || ((bytes[0] === 0xdd || bytes[0] === 0xfd) && bytes[1] === 0xe3);
 
@@ -154,6 +159,31 @@ export const STEP_CLASSES = [
     explains(ctx, diff) {
       if (!isBlockRepeat(ctx.bytes) || ctx.ours.irq || ctx.ours.regs.pc !== ctx.execPc) return null;
       if ((ctx.ours.regs.f & 0x28) !== ((ctx.execPc >> 8) & 0x28)) return null;
+      const t = ['f.5', 'f.3'].filter((k) => diff.has(k));
+      return t.length > 0 ? t : null;
+    },
+  },
+  {
+    id: 'scf-ccf-xy',
+    name: 'SCF/CCF: flags 3 and 5 also from F after an instruction that left the flags alone',
+    // Patrik Rak's 2012 finding, as David Banks's Z80Decoder wiki ("Undocumented Flags",
+    // "SCF/CCF") gives it, checked there on the Zilog NMOS Z80 and its second sources: after an
+    // instruction that modified the flags, X and Y are A's bits 3 and 5; after one that left them
+    // alone (POP AF and EX AF,AF' among those, and a DD or FD before the SCF), F's own or-ed with
+    // A's. MAME 0.289 keeps it (z80.lst `scf`, `ccf`: `m_f.yx_val = (m_f.yx_val & Q) | A`), as our
+    // core does (z80cpu.js, `q`); found as 44 SCF steps of Pirate's Adventure against MAME. xtrs
+    // takes A's alone (z80.c `case 0x37: /* scf */` and `case 0x3F: /* ccf */`: `REG_A &
+    // (UNDOC3_MASK|UNDOC5_MASK)`), the rule Banks gives for NEC's NMOS part, and trsjs leaves the
+    // bits as they were (trsemu-1.6.js op_37, op_3f). The Model I's parts list names only a "Z80
+    // Microprocessor Circuit" (Z40; Technical Reference Handbook, 1982), so a given machine follows
+    // its CPU's maker; ours and MAME's follow Zilog's. ZEXALL cannot tell: its <daa,cpl,scf,ccf>
+    // group never sets F's bits 3 and 5 before the instruction (base F 04H, varied under D7H).
+    // Explained only for SCF or CCF when our F bits 3 and 5 are (F before & our q) | A; it takes
+    // these bits before the general class below.
+    evidence: 'Rak (2012) via Banks, Z80Decoder wiki, "SCF/CCF": X/Y from A after an instruction that set the flags, else F | A, on the Zilog NMOS Z80 (A alone on NEC\'s); MAME 0.289 z80.lst `scf`; xtrs z80.c takes A alone, trsjs op_37 leaves them. ZEXALL never sets F\'s bits 3 and 5 before SCF.',
+    explains(ctx, diff) {
+      if (!isScfCcf(ctx.bytes)) return null;
+      if ((ctx.ours.regs.f & 0x28) !== (((ctx.ours.fBefore & ctx.ours.q) | ctx.ours.regs.a) & 0x28)) return null;
       const t = ['f.5', 'f.3'].filter((k) => diff.has(k));
       return t.length > 0 ? t : null;
     },
@@ -205,8 +235,8 @@ export const STEP_CLASSES = [
     // weirdness of "bit n,(ix/iy+d)" and "bit n,(hl)""); our core passes every ZEXALL group, and
     // ZEXALL (unlike ZEXDOC) checks those two bits for every instruction [ZEXALL]. Young §2.3 and
     // §4 describe the rules our core follows. Ruling 5 compares them bit by bit and this class
-    // counts them, so a run shows how often they differ. A repeating block instruction's are the
-    // class above's.
+    // counts them, so a run shows how often they differ. A repeating block instruction's and SCF's
+    // and CCF's, which ZEXALL does not see, are the classes above's.
     evidence: 'ZEXALL checks flag bits 3 and 5 for every instruction group and our core passes all 67 groups; the rules are Young §2.3 and §4.',
     explains(ctx, diff) {
       const t = ['f.5', 'f.3', 'f2.5', 'f2.3'].filter((k) => diff.has(k));

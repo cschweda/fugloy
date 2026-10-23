@@ -65,7 +65,7 @@ describe('the known classes', () => {
     return {
       bytes: Uint8Array.from([...bytes, 0, 0, 0, 0].slice(0, 4)),
       execPc: 0x4000,
-      ours: { regs, cycles: 19, irq: false, writes: ours, wasHalted: false, fBefore: 0 },
+      ours: { regs, cycles: 19, irq: false, writes: ours, wasHalted: false, fBefore: 0, q: 0 },
       theirs: { regs, cycles: 19, irq: false, writes: theirs },
     };
   };
@@ -89,6 +89,31 @@ describe('the known classes', () => {
     const ctx = at([0xed, 0xb0], 0x4000, 0x00);
     ctx.theirs.regs = { ...ctx.theirs.regs, pc: 0x4000, f: 0x28 };
     expect(explainStep(ctx, new Set(['f.5', 'f.3']))).toEqual({ classes: [name('block-xy')], unexplained: [] });
+  });
+
+  it('SCF and CCF\'s flags 3 and 5: only for SCF and CCF, only as Q gives them, and before the general class', () => {
+    const at = (bytes, { f, a = 0x00, fBefore, q }) => {
+      const ctx = stepCtx(bytes, [], []);
+      ctx.ours.regs = { ...ctx.ours.regs, f, a };
+      ctx.ours.fBefore = fBefore;
+      ctx.ours.q = q;
+      return ctx;
+    };
+    const f35 = new Set(['f.5', 'f.3']);
+    const scf = (ctx) => STEP_CLASSES.find((c) => c.id === 'scf-ccf-xy').explains(ctx, f35);
+    // After an instruction that left the flags alone (q 28H): F's bits 3 and 5 kept, A's added.
+    for (const op of [[0x37], [0x3f], [0xdd, 0x37], [0xfd, 0x3f]]) expect(scf(at(op, { f: 0x29, fBefore: 0x28, q: 0x28 })), op.join()).toEqual(['f.5', 'f.3']);
+    expect(scf(at([0x37], { f: 0x29, fBefore: 0x20, a: 0x08, q: 0x28 }))).toEqual(['f.5', 'f.3']);
+    // After one that set them (q 0): A's alone.
+    expect(scf(at([0x37], { f: 0x01, fBefore: 0x28, q: 0 }))).toEqual(['f.5', 'f.3']);
+    // Ours off the rule either way, or another instruction (CPL): not explained.
+    expect(scf(at([0x37], { f: 0x01, fBefore: 0x28, q: 0x28 }))).toBeNull();
+    expect(scf(at([0x37], { f: 0x29, fBefore: 0x28, q: 0 }))).toBeNull();
+    expect(scf(at([0x2f], { f: 0x29, fBefore: 0x28, q: 0x28 }))).toBeNull();
+    // Counted under this class, not also under flags 3 and 5.
+    const ctx = at([0x37], { f: 0x29, fBefore: 0x28, q: 0x28 });
+    ctx.theirs.regs = { ...ctx.theirs.regs, f: 0x01 };
+    expect(explainStep(ctx, f35)).toEqual({ classes: [name('scf-ccf-xy')], unexplained: [] });
   });
 
   it('IN and block I/O cycles: one T-state more on ours, only for those instructions, no interrupt in the step', () => {

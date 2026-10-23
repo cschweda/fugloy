@@ -38,4 +38,22 @@ describe('CPU state that only the flags show', () => {
     restoreState(restored, state);
     expect(restored.cpu.afterPrefix).toBe(false);
   });
+
+  it('a save state keeps whether the last instruction wrote the flags (SCF and CCF read it)', () => {
+    const saved = blank();
+    saved.cpu.flagsWritten = false;
+    const restored = blank();
+    restored.cpu.flagsWritten = true;
+    restoreState(restored, serializeState(saved));
+    expect(restored.cpu.flagsWritten).toBe(false);
+  });
+
+  it('a save from before emu phase 7 restores the flags as written, so SCF and CCF take A\'s bits alone, as they did', () => {
+    const state = serializeState(blank());
+    delete state.cpu.flagsWritten;
+    const restored = blank();
+    restored.cpu.flagsWritten = false;
+    restoreState(restored, state);
+    expect(restored.cpu.flagsWritten).toBe(true);
+  });
 });

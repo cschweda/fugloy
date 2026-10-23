@@ -101,6 +101,17 @@ creates and pushes the tag.
   and OTDR also change H and P/V while they repeat; that is not modelled yet. ZEXDOC and ZEXALL
   still pass all 67 groups.
 
+- `@fugloy/emu`: SCF and CCF take flags 3 and 5 from F or-ed with A after an instruction that left
+  the flags alone, as Zilog's NMOS Z80 does (Patrik Rak's 2012 finding, checked on Zilog's part and
+  its second sources by David Banks's Z80Decoder research; MAME keeps it as Q); after one that set
+  the flags they take A's alone, as before. POP AF and EX AF,AF' do not count as setting them, a DD
+  or FD before SCF counts as an instruction that left them alone, and save states keep it
+  (`flagsWritten`; a save from before restores as set). ZEXALL cannot see it: its SCF/CCF group
+  never sets F's bits 3 and 5 first. Found as 44 SCF steps of Pirate's Adventure against MAME (emu
+  phase 7, Model I, Task 5); xtrs takes A's alone (NEC's NMOS rule) and trsjs leaves the bits, a
+  known class. ZEXDOC and ZEXALL still pass all 67 groups; the Model III state fixture gains the
+  one field.
+
 ### Added
 
 - The Model I in the differential harness (emu phase 7, Model I, Task 4): `compareRun({ model,

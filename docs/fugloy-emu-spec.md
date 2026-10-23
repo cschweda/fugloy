@@ -234,10 +234,14 @@ Phase 1 also models:
 - **Lone prefixes.** A `DD` or `FD` before another prefix or `ED` runs as a 4-T-state step, with no maskable interrupt taken after it, and (since phase 5) no NMI either: the NMI waits one instruction, as a maskable interrupt does (Young §3.6), and `TRS80System` keeps its edge pending until the CPU takes it (`test/unit/nmi.test.js`).
 - **The block I/O flags** of Young's §4.3.
 
+Emu phase 7 (the Model I differential, against MAME) added two that ZEXALL cannot see, each with a unit test:
+
+- **A repeating `LDIR`, `LDDR`, `CPIR` or `CPDR`** leaves flags 5 and 3 from bits 13 and 11 of PC, its `ED`'s address (David Banks's Z80Decoder research, "LDxR / CPxR interrupted", checked on real Z80s by Peter Helcmanovsky's Z80 Block Flags Test; Task 4).
+- **`SCF` and `CCF`** take flags 3 and 5 from A after an instruction that set the flags, and from F or-ed with A after one that left them alone (`POP AF` and `EX AF,AF'` among those, and a `DD` or `FD` before the `SCF`): Patrik Rak's 2012 finding, checked by Banks on Zilog's NMOS Z80 and its second sources (NEC's NMOS part takes A's alone); MAME 0.289 keeps it as Q. Save states keep it (`flagsWritten`). ZEXALL's `<daa,cpl,scf,ccf>` group never sets F's bits 3 and 5 before the instruction, so it cannot tell (Task 5).
+
 Not modeled, and invisible to ZEXALL:
 
-- `SCF` and `CCF` taking flags 3 and 5 from the previous instruction's flags (Patrik Rak's z80test);
-- the flags of a repeating block instruction interrupted mid-run;
+- the H and P/V flags of a repeating `INIR`, `INDR`, `OTIR` or `OTDR` (the same research; MAME's `block_io_interrupted_flags`);
 - IM 0 with a bus byte other than `FFH` (the Model III's bus reads `FFH`).
 
 ## 5. Machine models

@@ -63,6 +63,7 @@ const CPU_SCALARS = [
   "pendingEI",
   "wz",
   "afterPrefix",
+  "flagsWritten",
   "cycles",
 ];
 const IO_SCALARS = [
@@ -216,6 +217,9 @@ export function restoreState(system, state) {
   for (const key of CPU_SCALARS) cpu[key] = state.cpu[key];
   cpu.wz ??= 0; // absent in version-1 saves from before emu phase 1
   cpu.afterPrefix ??= false; // likewise
+  // Absent in saves from before emu phase 7 (the Model I differential): as written, so an SCF or
+  // CCF right after the restore takes A's bits 5 and 3 alone, as it did then.
+  cpu.flagsWritten ??= true;
   for (const key of IO_SCALARS) io[key] = state.io[key];
   // The Model 4's clock follows its mode register's bit 6; the state's disk counters are already
   // in that clock's T-states, so nothing is rescaled.

@@ -489,7 +489,7 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
       const ctx = {
         bytes,
         execPc,
-        ours: { regs: o, cycles: oursCycles, irq: oursIrq, writes: ours.log.writes, wasHalted, fBefore },
+        ours: { regs: o, cycles: oursCycles, irq: oursIrq, writes: ours.log.writes, wasHalted, fBefore, q: cpu.q },
         theirs: { regs: s, cycles: t.cycles, irq: t.irq, writes: ref.writes() },
       };
       /** @type {ContextLine} */

@@ -101,6 +101,9 @@ export function romKeyReturn(cpu, pc, code) {
   r.PC = cpu.readMemory(sp) | (cpu.readMemory((sp + 1) & 0xffff) << 8);
   r.SP = (sp + 2) & 0xffff;
   cpu.incrementR();
+  // A RET writes no flags (the routine's own CP or OR set them before it), so an SCF or CCF after
+  // it keeps F's bits 3 and 5 (Q, Z80CPU.executeInstruction).
+  cpu.flagsWritten = false;
   // The end of any instruction (Z80CPU.executeInstruction): a pending EI counts down and takes effect.
   if (cpu.pendingEI > 0) {
     cpu.pendingEI--;

@@ -501,6 +501,15 @@ describe.skipIf(xtrsSkip !== null)(`the Model I's devices against xtrs${xtrsSkip
     expect(r.known).toEqual({ 'IN and block I/O: the reference counts one T-state less': 1 });
   });
 
+  it('SCF after an instruction that left the flags alone: ours keeps F\'s flags 3 and 5, xtrs takes A\'s alone (the SCF/CCF class)', () => {
+    // LD A,28H / OR A (F's bits 3 and 5 from the result, 28H, on both) / LD A,00H / SCF / CP 28H /
+    // SCF (after CP, A's alone on both) / JR $.
+    const m = machine([0x3e, 0x28, 0xb7, 0x3e, 0x00, 0x37, 0xfe, 0x28, 0x37, 0x18, 0xfe]);
+    const r = compareRun({ machine: m, reference: xtrs(ROM), instructions: 8 });
+    expect(r.divergence).toBeNull();
+    expect(r.known).toEqual({ 'SCF/CCF: flags 3 and 5 also from F after an instruction that left the flags alone': 1 });
+  });
+
   it('with the lowercase modification on both, video compares raw and is equal', () => {
     const m = machine(VIDEO, { lowercase: true });
     const ref = xtrs(ROM);
