@@ -240,6 +240,7 @@ FUGLOY_XTRS=1 pnpm vitest run packages/emu/test/diff                      # abou
 FUGLOY_MAME=1 pnpm vitest run packages/emu/test/diff                      # about 12 minutes: the same thirteen, following MAME
 FUGLOY_XTRS=1 pnpm vitest run packages/emu/test/diff/model1-fixtures.test.js -t elimin8c # one session
 pnpm diff examples/eliminator/elimin8c.cmd --model 1                      # one program against xtrs, with a report
+pnpm diff examples/sea-dragon/seadrg01.cmd --model 1 --reference mame     # one program against MAME: it records its own trace, about half a minute
 ```
 
 `pnpm diff <program> [--model 3|1] [--reference trsjs|xtrs] [--lowercase] [--keys <script.json>] [--instructions N] [--from-cycle C] [--rom <file>] [--strict | --strict-all]`
@@ -251,7 +252,15 @@ divergence, if any, with ten instructions disassembled on each side.
 from power-on, against a MAME trace recorded with
 `pnpm mame:trace record <instructions>` (the ROM's boot and typed keys), our
 40 Hz on MAME's schedule as the report says; a trace that loaded a program
-(the tests record those) is compared with that program named first. Exit status 0 means no divergence, 1
+(the tests record those) is compared with that program named first.
+`pnpm diff <program> --model 1 --reference mame [--keys <script.json>] [--instructions N]`
+records MAME's run of a `.CMD` itself, as the Model I sessions do: ENTER at
+MEM SIZE?, the program loaded at 4 s, the keys of `--keys` (T-states after the
+load, as for xtrs) pressed on MAME's matrix, and `--instructions` (default
+1,000,000) past the load; MAME records about 70,000 instructions a second, so
+the default takes about half a minute. It follows the recording on MAME's
+schedule, prints the report and the screen MAME showed at the end, and deletes
+the trace, whatever the result. Exit status 0 means no divergence, 1
 a divergence, 2 a usage or setup error (an unexpected error, such as the ROM
 not reaching READY or the reference throwing, counts as one), 3 a MAME trace
 that ends before the instructions asked for.

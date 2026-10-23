@@ -495,6 +495,8 @@ describe('pnpm diff: --model and --reference', () => {
     [['--model', '1', '--reference', 'mame'], 'MAME is compared from a trace of its run from power-on: record one with pnpm mame:trace record <instructions>, then pass it with --trace'],
     [['--model', '1', '--reference', 'mame', '--trace', 't.fmt', '--keys', 'k.json'], 'a MAME trace brings its own keys and is compared from power-on: pass no --keys or --from-cycle (record a trace from the ROM\'s boot and typed keys with pnpm mame:trace record <instructions> --keys <script.json>; a trace that loaded a program is recorded by the tests, test/diff/model1-fixtures.test.js, and compared here with that program named)'],
     [['--model', '1', '--reference', 'mame', '--trace', 't.fmt', '--from-cycle', '5'], 'a MAME trace brings its own keys and is compared from power-on: pass no --keys or --from-cycle'],
+    [['p.cmd', '--model', '1', '--reference', 'mame', '--from-cycle', '5'], 'MAME is compared from power-on, so a program\'s recorded run has no --from-cycle to start from: pass none'],
+    [['p.cmd', '--model', '1', '--reference', 'mame', '--lowercase'], 'MAME\'s trs80l2 is compared without the lowercase modification'],
     [['p.cmd', '--model', '1', '--trace', 't.fmt'], '--trace is for --reference mame'],
   ])('%j: exits 2 with a sentence', (args, sentence) => {
     const r = run(args);

@@ -5,6 +5,7 @@
  *
  *   pnpm diff <program> [--model 3|1] [--reference trsjs|xtrs] [--lowercase] [--keys <script.json>]
  *             [--instructions N] [--from-cycle C] [--rom <file>] [--strict | --strict-all]
+ *   pnpm diff <program> --model 1 --reference mame [--keys <script.json>] [--instructions N] [--rom <file>] [--strict | --strict-all]
  *   pnpm diff [<program>] --model 1 --reference mame --trace <file> [--instructions N] [--rom <file>] [--strict | --strict-all]
  *
  * The Model III (`--model 3`, the default) is compared against trsjs, the Model I (`--model 1`)
@@ -17,13 +18,24 @@
  * `--lowercase` fits the Model I's lowercase modification on both (video RAM then compares raw).
  * `--rom` names the ROM file in place of fugloy.mcp.json's.
  *
- * MAME is compared from a trace of its run from power-on (Ruling 4), recorded with
- * `pnpm mame:trace record <instructions> [--keys …]` (the ROM's boot and keys typed through MAME's
- * keyboard); our Model I follows it from power-on, with its 40 Hz on MAME's schedule (MAME's
- * 1,774,083 Hz clock; test/diff/mame-clock.js, test-only), which the report names. N defaults to
- * the trace's length. A trace that loaded a program (the tests record those:
- * test/diff/model1-fixtures.test.js) is compared with that program named as <program>; recording
- * one from the command line is not supported yet (emu spec §11, phase 7).
+ * MAME is compared from a trace of its run from power-on (Ruling 4); our Model I follows it from
+ * power-on, with its 40 Hz on MAME's schedule (MAME's 1,774,083 Hz clock; test/diff/mame-clock.js,
+ * test-only), which the report names.
+ * - With a program and no `--trace`, the command records the trace itself, as the Model I sessions
+ *   do (test/diff/model1-session.js, `mameSession`): MAME boots the Level II ROM with ENTER at
+ *   MEM SIZE?, loads the program at the first instruction boundary at or after 4 s, presses
+ *   `--keys` on its matrix (T-states after the load, as for xtrs; MAME sets a key at a frame, so
+ *   up to two frames late, and the comparison follows the bytes MAME's reads returned), and
+ *   records `--instructions` past the load (default 1,000,000; MAME records about 70,000
+ *   instructions a second, and the boot up to the load adds about a million). It takes a .CMD
+ *   whose bytes all lie at $3C00 or above (MAME's loader writes only RAM and video RAM) and needs
+ *   the Level II ROM that MAME's set was assembled from (`pnpm mame:install`). The trace goes to
+ *   a temporary folder (TMPDIR) and is deleted when the comparison is done, whatever its result;
+ *   the report ends with the screen MAME showed.
+ * - With `--trace <file>`, a trace recorded with `pnpm mame:trace record <instructions> [--keys …]`
+ *   (the ROM's boot and keys typed through MAME's keyboard) is compared; N defaults to the
+ *   trace's length. A trace that loaded a program (the tests record those:
+ *   test/diff/model1-fixtures.test.js) is compared with that program named as <program>.
  *
  * `--strict` stops on a known difference as well, except the reference's everyday flag 3 and 5
  * class (which differs within a few instructions in most programs: trsjs's general one, xtrs's
@@ -51,6 +63,7 @@ import { MAME_CLOCK_HZ, openTrace } from '../test/diff/mame-trace.js';
 
 const USAGE = [
   'usage: pnpm diff <program> [--model 3|1] [--reference trsjs|xtrs] [--lowercase] [--keys <script.json>] [--instructions N] [--from-cycle C] [--rom <file>] [--strict | --strict-all]',
+  '       pnpm diff <program> --model 1 --reference mame [--keys <script.json>] [--instructions N] [--rom <file>] [--strict | --strict-all]',
   '       pnpm diff [<program>] --model 1 --reference mame --trace <file> [--instructions N] [--rom <file>] [--strict | --strict-all]',
 ].join('\n');
 
@@ -108,8 +121,9 @@ function parseArgs(argv) {
   if (o.model === 1 && o.reference === 'trsjs') fail('trsjs runs the Model III; the Model I is compared against xtrs or mame');
   if (o.lowercase && o.model !== 1) fail('--lowercase is the Model I\'s modification (--model 1)');
   if (o.reference === 'mame') {
-    if (o.trace === null) fail(`MAME is compared from a trace of its run from power-on: record one with pnpm mame:trace record <instructions>, then pass it with --trace\n${USAGE}`);
-    if (o.keys !== null || o.fromCycle !== 0) fail('a MAME trace brings its own keys and is compared from power-on: pass no --keys or --from-cycle (record a trace from the ROM\'s boot and typed keys with pnpm mame:trace record <instructions> --keys <script.json>; a trace that loaded a program is recorded by the tests, test/diff/model1-fixtures.test.js, and compared here with that program named)');
+    if (o.trace === null && o.program === null) fail(`MAME is compared from a trace of its run from power-on: record one with pnpm mame:trace record <instructions>, then pass it with --trace, or name a program and pnpm diff records one of its run\n${USAGE}`);
+    if (o.trace !== null && (o.keys !== null || o.fromCycle !== 0)) fail('a MAME trace brings its own keys and is compared from power-on: pass no --keys or --from-cycle (record a trace from the ROM\'s boot and typed keys with pnpm mame:trace record <instructions> --keys <script.json>; a trace that loaded a program is recorded by the tests, test/diff/model1-fixtures.test.js, and compared here with that program named), or leave out --trace and name a program: pnpm diff then records its run with those keys');
+    if (o.trace === null && o.fromCycle !== 0) fail('MAME is compared from power-on, so a program\'s recorded run has no --from-cycle to start from: pass none (its --keys count from the load)');
     if (o.lowercase) fail('MAME\'s trs80l2 is compared without the lowercase modification');
   } else {
     if (o.trace !== null) fail('--trace is for --reference mame');
@@ -133,6 +147,69 @@ function readOrFail(path, what) {
     return fail(`cannot read the ${what} ${path}: ${/** @type {Error} */ (e).message}`);
   }
 }
+
+/**
+ * The `--keys` script, `[{ "at": <T-states after the load>, "key": "ENTER", "hold": <T-states> }]`
+ * (`hold` optional), or none without the option; a file that is not that is a usage error.
+ * @returns {{ at: number, key: string, hold?: number }[]}
+ */
+function readKeys() {
+  if (opts.keys === null) return [];
+  const text = readOrFail(opts.keys, 'key script').toString('utf8');
+  let script;
+  try {
+    script = JSON.parse(text);
+  } catch (e) {
+    return fail(`${opts.keys} is not JSON: ${/** @type {Error} */ (e).message}`);
+  }
+  const ok = Array.isArray(script) && script.every((e) => e !== null && typeof e === 'object' && Number.isFinite(e.at) && e.at >= 0 && typeof e.key === 'string' && (e.hold === undefined || (Number.isFinite(e.hold) && e.hold > 0)));
+  if (!ok) fail(`${opts.keys}: expected a JSON array of { "at": T-states, "key": "ENTER", "hold": T-states (optional) }`);
+  return script;
+}
+
+/**
+ * `pnpm diff <program> --model 1 --reference mame`: the run MAME makes of the program, recorded
+ * for this command and followed on MAME's schedule as a trace file is (the header comment says
+ * what is recorded). mameSession (test/diff/model1-session.js) records into a temporary folder
+ * and deletes it in a `finally`, whatever the result, so nothing is left to clean up here.
+ * Prints the report and returns the exit status as for `--trace`.
+ * @param {Uint8Array} program
+ */
+async function recordedRun(program) {
+  if (detectFormat(program) !== 'cmd') fail(`${opts.program}: a MAME run loads a .CMD program (the format is told from the content, and this one is not a .CMD)`);
+  const rom = romFor();
+  if (rom === null) fail('no Model I ROM: name one as roms.model1 in fugloy.mcp.json (docs/fugloy-mcp-spec.md §3), or pass --rom');
+  const script = readKeys();
+  try {
+    keyEvents(script.map((e) => ({ ...e, at: 0 })));
+  } catch (e) {
+    fail(`${opts.keys}: ${/** @type {Error} */ (e).message}`);
+  }
+  let run;
+  try {
+    // Loaded here, not with the imports above: the module reads roms.model1 as it loads (the
+    // sessions' Level II 1.3 gate), which throws for a config naming a ROM that is not there, and
+    // no run of this command but this one has any use for it.
+    const { HZ, mameSession } = await import('../test/diff/model1-session.js');
+    // The session's keys are seconds after the load; this command's are T-states, held for
+    // keyEvents' default (100,000) when they give no hold, as the lockstep runs hold them.
+    const keys = script.map((e) => ({ at: e.at / HZ, key: e.key, hold: (e.hold ?? 100_000) / HZ }));
+    run = await mameSession({ name: /** @type {string} */ (opts.program), program, keys, screens: [], known: {} }, { instructions: opts.instructions ?? 1_000_000, rom, strict: opts.strict });
+  } catch (e) {
+    // The recorder's refusals (no MAME, a ROM it cannot run, a program it cannot load) are sentences.
+    return fail(/** @type {Error} */ (e).message);
+  }
+  const { result, header, screen } = run;
+  const load = header.load ?? null;
+  process.stdout.write(`trace: recorded for this run, deleted after it (MAME ${header.mame}, bios ${header.bios || '?'}), compared from power-on${load === null || load.at < 0 ? '' : `, ${opts.program} loaded before instruction ${load.at}`}\n`);
+  process.stdout.write(`our 40 Hz on MAME's clock (${MAME_CLOCK_HZ.toLocaleString('en-US')} Hz): test-only, test/diff/mame-clock.js\n`);
+  process.stdout.write(formatReport(result));
+  // A run that ended early has no end to show a screen at.
+  if (result.ended === undefined) process.stdout.write(`MAME's screen at the end (upper case, graphics as .):\n${screen.split('\n').map((l) => `| ${l.trimEnd()}`).join('\n')}\n`);
+  return result.divergence !== null ? 1 : result.ended !== undefined ? 3 : 0;
+}
+
+if (opts.reference === 'mame' && opts.trace === null) process.exit(await recordedRun(new Uint8Array(readOrFail(/** @type {string} */ (opts.program), 'program'))));
 
 if (opts.reference === 'mame') {
   // The program a trace loaded, if one is named: openTrace checks it is that one.
@@ -168,18 +245,7 @@ try {
 }
 
 const bytes = new Uint8Array(readOrFail(/** @type {string} */ (opts.program), 'program'));
-/** @type {{ at: number, key: string, hold?: number }[]} */
-let script = [];
-if (opts.keys !== null) {
-  const text = readOrFail(opts.keys, 'key script').toString('utf8');
-  try {
-    script = JSON.parse(text);
-  } catch (e) {
-    fail(`${opts.keys} is not JSON: ${/** @type {Error} */ (e).message}`);
-  }
-  const ok = Array.isArray(script) && script.every((e) => e !== null && typeof e === 'object' && Number.isFinite(e.at) && e.at >= 0 && typeof e.key === 'string' && (e.hold === undefined || (Number.isFinite(e.hold) && e.hold > 0)));
-  if (!ok) fail(`${opts.keys}: expected a JSON array of { "at": T-states, "key": "ENTER", "hold": T-states (optional) }`);
-}
+let script = readKeys();
 
 /** The Model I at READY: MEM SIZE? (Level II 1.3's wording; 1.2's MEMORY SIZE?) answered with ENTER. */
 function bootModel1() {

@@ -122,8 +122,11 @@ by `pnpm xtrs:install` into `tools/xtrs/` and run in lockstep over a pipe
 `trs80l2`'s ROM set from `roms.model1` into `tools/mame/`), whose recorded
 trace our machine follows from power-on, its 40 Hz on MAME's schedule
 (`FUGLOY_MAME=1`); `pnpm diff --model 1` runs a program against xtrs,
+`--reference mame` records MAME's run of a program (its `--keys` pressed on
+MAME's matrix) into a temporary folder and follows it, deleting the trace, and
 `--reference mame --trace <file>` follows a recorded trace. Thirteen
-Model I sessions (`test/diff/model1-fixtures.test.js`: the four `examples/`
+Model I sessions (`test/diff/model1-fixtures.test.js`, their runners shared in
+`model1-session.js`: the four `examples/`
 programs and nine from `fixtures/real/`, 10 million instructions each past the
 load) have no divergence the known classes do not explain against either, and
 against MAME none but its video read without the bit-6 gate; each reference

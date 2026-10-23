@@ -149,6 +149,20 @@ creates and pushes the tag.
 
 ### Added
 
+- `pnpm diff <program> --model 1 --reference mame` records MAME's run of the program itself (emu
+  phase 7, the Model I sweep's Task 2; plan `docs/superpowers/plans/2026-10-23-emu-phase7-model1-sweep.md`),
+  as the Model I sessions do: ENTER at MEM SIZE?, the program loaded at 4 s, `--keys` (T-states
+  after the load, the format a lockstep run takes) pressed on MAME's matrix, and `--instructions`
+  past the load (default 1,000,000). It follows the recording on MAME's schedule, prints the report
+  and the screen MAME showed at the end, and deletes the trace in a `finally`, whatever the result.
+  A MAME that stops early is the trace-ended sentence (exit 3); the recorder's refusals (no MAME, a
+  ROM it cannot run, a program with bytes below `$3C00`) exit 2 with their sentences; naming a
+  trace with `--trace` works as before. The sessions' runners (`xtrsSession`, `mameSession` and
+  their helpers) moved from `model1-fixtures.test.js` into `test/diff/model1-session.js`, with the
+  generic script the sweep will use (`GENERIC`), so the sessions, the sweep and the command share
+  them; the sessions' counts are unchanged (Sea Dragon's, run against each reference after the move,
+  gives the pinned ones).
+
 - The Model I sessions against xtrs and MAME (emu phase 7, Model I, Task 5; plan
   `docs/superpowers/plans/2026-10-19-emu-phase7-model1-differential.md`), with which phase 7 is met
   for the Model I: thirteen scripted sessions (`packages/emu/test/diff/model1-fixtures.test.js`),
@@ -181,11 +195,12 @@ creates and pushes the tag.
   compared through the registers of each IN. `pnpm diff --model 1` runs a program against xtrs, and
   `pnpm diff --model 1 --reference mame --trace <file>` follows a MAME trace (`pnpm mame:trace
   compare` moved there; exit 3 for a trace that ends early); recording a trace that loads a program
-  from the command line is not supported yet (the tests record theirs). The report names the
-  reference and model. New known classes, each with its evidence: EX (SP),rr's write order (xtrs, trsjs), a
-  repeating block instruction's flags 3 and 5 (xtrs), IN and block I/O T-states (xtrs), and, for a
-  trace, MAME's video read without the gate. Test-only planted bugs (a latch read that does not
-  clear, the gate inverted) are caught where they first matter against each reference.
+  from the command line, `pnpm diff <program> --model 1 --reference mame`, came with the Model I
+  sweep (emu phase 7). The report names the reference and model. New known classes, each with its
+  evidence: EX (SP),rr's write order (xtrs, trsjs), a repeating block instruction's flags 3 and 5
+  (xtrs), IN and block I/O T-states (xtrs), and, for a trace, MAME's video read without the gate.
+  Test-only planted bugs (a latch read that does not clear, the gate inverted) are caught where
+  they first matter against each reference.
 
 - A Full screen button in Run ▶'s machine row; Esc leaves it (and the browser's own exit); keys keep
   reaching the TRS-80, and focus is kept. The first screen is 252,262 B gzip of its 252,775 B budget.
