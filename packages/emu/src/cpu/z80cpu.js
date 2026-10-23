@@ -87,6 +87,11 @@ export class Z80CPU {
     this.cycles = 0;
     this.lastOpCycles = 0;
     this.wz = 0x0000; // MEMPTR (internal address latch)
+    // Q, for SCF and CCF: whether the instruction running has written the flags, and so (`q`) the
+    // F bits 5 and 3 the next SCF or CCF keeps (28H when the instruction before left the flags
+    // alone, 0 when it wrote them; executeInstruction, SCF below). A reset starts as written.
+    this.flagsWritten = true;
+    this.q = 0;
 
     // External interfaces (connected by system)
     this.readMemory = (address) => 0x00;
@@ -164,16 +169,38 @@ export class Z80CPU {
    * call sites). ZEXALL-class fidelity lives or dies here.
    */
   _xy(value) {
+    this.flagsWritten = true;
     this.registers.F = (this.registers.F & ~0x28) | (value & 0x28);
   }
 
   /** Block-op X/Y mapping: Y = bit 1 of n, X = bit 3 of n. */
   _xyBlock(n) {
+    this.flagsWritten = true;
     this.registers.F =
       (this.registers.F & ~0x28) | ((n & 0x02) << 4) | (n & 0x08);
   }
 
+  /**
+   * F bits 3 and 5 after an LDIR, LDDR, CPIR or CPDR iteration that repeats (PC already back on
+   * its ED): Y = PC bit 13, X = PC bit 11, the high byte's bits 5 and 3, in place of the
+   * iteration's n (Young §4.2 gives n "at every iteration"; the repeat's extra 5 T-states put PC's
+   * high byte there instead). David Banks, Z80Decoder wiki, "Undocumented Flags", "LDxR / CPxR
+   * interrupted"; confirmed on real Z80s by Peter Helcmanovsky's Z80 Block Flags Test; MAME
+   * 0.289's z80.lst (`m_f.yx_val = PC >> 8`). INIR/INDR/OTIR/OTDR, when they repeat, also take
+   * flags 3 and 5 from PC this way and change H and P/V (the same research, "INxR / OTxR
+   * interrupted"; MAME's block_io_interrupted_flags); none of that is modelled here.
+   */
+  _xyRepeat() {
+    this.flagsWritten = true;
+    this.registers.F = (this.registers.F & ~0x28) | ((this.registers.PC >> 8) & 0x28);
+  }
+
+  /**
+   * Every flag an instruction sets goes through here or the X/Y helpers above, which mark the
+   * flags written for SCF and CCF's Q; POP AF and EX AF,AF' load F directly and do not.
+   */
   setFlag(flag, value) {
+    this.flagsWritten = true;
     if (value) {
       this.registers.F |= 1 << flag;
     } else {
@@ -230,6 +257,8 @@ export class Z80CPU {
     this.registers.I = 0x00;
     this.registers.R = 0x00;
     this.wz = 0x0000; // MEMPTR — feeds BIT n,(HL)'s X/Y flags
+    this.flagsWritten = true; // Q: as if the flags were just written
+    this.q = 0;
     this.halted = false;
     this.IFF1 = false;
     this.IFF2 = false;
@@ -242,6 +271,11 @@ export class Z80CPU {
   // Execute single instruction
   executeInstruction() {
     this.afterPrefix = false;
+    // Q: SCF and CCF keep F's bits 5 and 3 only when the instruction before left the flags alone
+    // (the SCF handler). A halted step is a NOP M1 and writes none; an interrupt response is no
+    // instruction and changes nothing here (MAME 0.289's take_interrupt makes no opcode fetch).
+    this.q = this.flagsWritten ? 0 : 0x28;
+    this.flagsWritten = false;
     if (this.halted) {
       // A halted Z80 keeps running NOP M1 cycles for refresh (Zilog UM0080), and R counts every M1
       this.incrementR();
@@ -1396,22 +1430,26 @@ export class Z80CPU {
       return 4;
     };
 
-    // SCF (0x37) - Set Carry Flag
+    // SCF (0x37) - Set Carry Flag. X/Y: A's bits 5 and 3, or-ed with F's own when the instruction
+    // before left the flags alone (`q`, executeInstruction): Patrik Rak's 2012 finding, checked on
+    // the Zilog NMOS Z80 and its second sources by David Banks (Z80Decoder wiki, "Undocumented
+    // Flags", "SCF/CCF"; NEC's NMOS part takes A's alone); MAME 0.289's z80.lst `scf`,
+    // `(m_f.yx_val & Q) | A`. ZEXALL never sets F's bits 5 and 3 before it, so cannot tell.
     this.opcodeHandlers[0x37] = () => {
       this.flagC = true;
       this.flagH = false;
       this.flagN = false;
-      this._xy(this.registers.A);
+      this._xy((this.registers.F & this.q) | this.registers.A);
       return 4;
     };
 
-    // CCF (0x3F) - Complement Carry Flag; H receives the previous carry
+    // CCF (0x3F) - Complement Carry Flag; H receives the previous carry; X/Y as SCF's
     this.opcodeHandlers[0x3f] = () => {
       const oldCarry = this.flagC;
       this.flagC = !oldCarry;
       this.flagH = oldCarry;
       this.flagN = false;
-      this._xy(this.registers.A);
+      this._xy((this.registers.F & this.q) | this.registers.A);
       return 4;
     };
 
@@ -1521,13 +1559,15 @@ export class Z80CPU {
       return 4;
     };
 
-    // EX (SP), HL (0xE3)
+    // EX (SP), HL (0xE3); DD/FD E3 run it with HL swapped for IX/IY. 19 T-states as (4, 3, 4, 3,
+    // 5) (Zilog UM0080 p. 127): read (SP), read (SP+1), then write (SP+1) <- H before (SP) <- L
+    // (MAME's z80.lst `ex_sp`; floooh/chips z80.h's cycle-stepped EX (SP),HL).
     this.opcodeHandlers[0xe3] = () => {
       const low = this.readMemory(this.registers.SP);
       const high = this.readMemory((this.registers.SP + 1) & 0xffff);
       const temp = (high << 8) | low;
-      this.writeMemory(this.registers.SP, this.registers.L);
       this.writeMemory((this.registers.SP + 1) & 0xffff, this.registers.H);
+      this.writeMemory(this.registers.SP, this.registers.L);
       this.HL = temp;
       this.wz = temp;
       return 19;
@@ -1975,6 +2015,9 @@ export class Z80CPU {
     }
     this.registers.PC = (this.registers.PC + 1) & 0xffff;
     this.incrementR(); // the second opcode fetch
+    // Q: to an SCF or CCF after it, the prefix is the instruction before, and it wrote no flags
+    // (David Banks, Z80Decoder wiki, "SCF/CCF", the update of 2026 crediting TonyB).
+    this.q = 0x28;
 
     // DD instructions (IX register operations)
     // Most DD instructions mirror HL instructions but use IX
@@ -2003,6 +2046,9 @@ export class Z80CPU {
     }
     this.registers.PC = (this.registers.PC + 1) & 0xffff;
     this.incrementR(); // the second opcode fetch
+    // Q: to an SCF or CCF after it, the prefix is the instruction before, and it wrote no flags
+    // (David Banks, Z80Decoder wiki, "SCF/CCF", the update of 2026 crediting TonyB).
+    this.q = 0x28;
 
     // FD instructions (IY register operations)
     // Most FD instructions mirror HL instructions but use IY
@@ -2812,6 +2858,7 @@ export class Z80CPU {
       // Repeat: decrement PC by 2 to re-execute instruction
       this.registers.PC = (this.registers.PC - 2) & 0xffff;
       this.wz = (this.registers.PC + 1) & 0xffff;
+      this._xyRepeat();
       return cycles + 5; // Extra cycles for repeat
     }
     return cycles;
@@ -2846,6 +2893,7 @@ export class Z80CPU {
     if (this.BC !== 0) {
       this.registers.PC = (this.registers.PC - 2) & 0xffff;
       this.wz = (this.registers.PC + 1) & 0xffff;
+      this._xyRepeat();
       return cycles + 5;
     }
     return cycles;
@@ -2886,6 +2934,7 @@ export class Z80CPU {
     if (this.BC !== 0 && !this.flagZ) {
       this.registers.PC = (this.registers.PC - 2) & 0xffff;
       this.wz = (this.registers.PC + 1) & 0xffff;
+      this._xyRepeat();
       return cycles + 5;
     }
     return cycles;
@@ -2924,6 +2973,7 @@ export class Z80CPU {
     if (this.BC !== 0 && !this.flagZ) {
       this.registers.PC = (this.registers.PC - 2) & 0xffff;
       this.wz = (this.registers.PC + 1) & 0xffff;
+      this._xyRepeat();
       return cycles + 5;
     }
     return cycles;

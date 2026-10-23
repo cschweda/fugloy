@@ -39,6 +39,25 @@ creates and pushes the tag.
 
 ### Changed
 
+- The differential harness's known classes are each reference's own (emu phase 7, the final
+  review of the Model I half, 2026-10-22): a reference declares the classes it needs
+  (`Reference.classes`, in `test/diff/`), each found against it with its evidence, and `compareRun`
+  explains a difference, holds back or forces an interrupt, or fixes the reference's step only by a
+  class its reference declares, so one reference's evidence never excuses another's difference.
+  trsjs keeps every class it had, its six sessions' counts unchanged. xtrs declares five, its flags
+  3 and 5 limited to BIT n,(HL) and BIT n,(IX+d), which it clears where the Z80 shows MEMPTR (the
+  520,918 steps the general flag 3 and 5 class took in its sessions, every one of them), and the
+  SCF/CCF classes check the reference's side as well as ours. MAME declares none but its video read,
+  so any flag difference against it is a divergence: our core with its SCF/CCF fix undone now
+  diverges against MAME, where the general class had counted the difference. `--strict` passes by
+  the reference's everyday flag 3 and 5 class. With it: xtrs's driver makes its 40 Hz tick with the
+  calls xtrs's timer makes, not `trs_timer_event`, which divides by a `timer_hz` nothing sets (a
+  trap on x86-64); `pnpm diff --reference mame` runs our 40 Hz on MAME's schedule and says so in its
+  report, takes the program a trace loaded (named first), and ends a trace with no records with its
+  sentence (exit 3); a MAME recording that writes nothing to its trace for a minute is stopped, its
+  trace saying why; a `.DS_Store` no longer breaks xtrs's tree hash; and the MAME trace module
+  computes its CRC-32 itself, so the tests load on Node 22.0 and 22.1.
+
 - Phase 6C, Build Space Invaders (web workbench, merged to main 2026-10-19; plan
   `docs/superpowers/plans/2026-10-19-phase6c-invaders.md`), which completes phase 6. Twelve short
   chapters under `apps/web/content/learn/invaders/NN-slug/` build a Space Invaders-style game from
@@ -85,7 +104,72 @@ creates and pushes the tag.
   its dots across where space allows, so in a typical panel the Model I is taller than the
   Model III.
 
+### Fixed
+
+- `@fugloy/emu`: EX (SP),HL, EX (SP),IX and EX (SP),IY write (SP+1) before (SP), as the Z80 does
+  (UM0080's (4, 3, 4, 3, 5) T-states; MAME's `ex_sp`; floooh/chips's cycle-stepped core); they
+  wrote L first. Same bytes, same addresses: only the bus order changes. Found by the Model I
+  differential against MAME (emu phase 7, Model I, Task 4); xtrs and trsjs write the low byte
+  first, a known class in `test/diff/known.js`.
+
+- `@fugloy/emu`: an LDIR, LDDR, CPIR or CPDR iteration that repeats leaves F bits 5 and 3 from
+  bits 13 and 11 of PC (its ED's address), not from the iteration's n (David Banks's Z80Decoder
+  research, "LDxR / CPxR interrupted", checked on real Z80s by Peter Helcmanovsky's Z80 Block Flags
+  Test; MAME does the same). The iteration that ends keeps Young's rule. Found as the 5,112 flag
+  rows of the Model I boot against MAME; xtrs keeps Young's rule, a known class. INIR, INDR, OTIR
+  and OTDR, while they repeat, also take flags 3 and 5 from PC in the same way and change H and
+  P/V; none of that is modelled yet. ZEXDOC and ZEXALL still pass all 67 groups.
+
+- `@fugloy/emu`: SCF and CCF take flags 3 and 5 from F or-ed with A after an instruction that left
+  the flags alone, as Zilog's NMOS Z80 does (Patrik Rak's 2012 finding, checked on Zilog's part and
+  its second sources by David Banks's Z80Decoder research; MAME keeps it as Q); after one that set
+  the flags they take A's alone, as before. POP AF and EX AF,AF' do not count as setting them, a DD
+  or FD before SCF counts as an instruction that left them alone, and save states keep it
+  (`flagsWritten`; a save from before restores as set). ZEXALL cannot see it: its SCF/CCF group
+  never sets F's bits 3 and 5 first. Found as 44 SCF steps of Pirate's Adventure against MAME (emu
+  phase 7, Model I, Task 5); xtrs takes A's alone (NEC's NMOS rule) and trsjs leaves the bits, a
+  known class. ZEXDOC and ZEXALL still pass all 67 groups; the Model III state fixture gains the
+  one field.
+
 ### Added
+
+- The Model I sessions against xtrs and MAME (emu phase 7, Model I, Task 5; plan
+  `docs/superpowers/plans/2026-10-19-emu-phase7-model1-differential.md`), with which phase 7 is met
+  for the Model I: thirteen scripted sessions (`packages/emu/test/diff/model1-fixtures.test.js`),
+  Eliminator a and c, Sea Dragon and Rear Guard 5 from `examples/` and, where present, Space Warp 1
+  and 3, Asylum 16K and 32K, Crazy Painter, Deathmaze 5000, Pirate's Adventure, Volcano and Super
+  Nova from `fixtures/real/`, each loaded at 4 s and played 10 million instructions past the load,
+  have no divergence the known classes do not explain against xtrs in lockstep (`FUGLOY_XTRS=1`) or
+  against MAME 0.289, whose trace our machine follows from power-on (`FUGLOY_MAME=1`, 11,023,189
+  instructions a session with the boot), and reach every screen they list with video RAM equal at
+  every checkpoint. Against MAME nothing is counted but its video read without the bit-6 gate (MAME
+  keeps video RAM as plain RAM, so programs that test for the lowercase modification find it there);
+  against xtrs, its EX (SP),rr order, repeating block flags, SCF/CCF flags, IN T-states and BIT
+  n,(HL) and BIT n,(IX+d) flags (counts in emu spec §11), each the reference's own declared class
+  (Changed, above). A MAME trace can load a `.CMD` at a cycle point, as
+  `m.load.cmd` does on ours, and hold keys on MAME's matrix, and a session runs our 40 Hz on MAME's
+  1,774,083 Hz schedule (`test/diff/mame-clock.js`); each trace goes to a temporary folder and is
+  deleted after its comparison. Eliminator c and Rear Guard 5, which never take the 1 at "1 or 2
+  Players?" on the Model III, take it on the Model I and play, on all three machines. Typing at 20
+  characters a second drops every other key under Level II 1.3, the ROM's own doing: its keyboard
+  driver debounces each new key for 18.8 ms and waits 51.3 ms after taking one (emu spec §5). xtrs
+  drops the same keys; MAME, whose keys change only at a frame, drops every key at
+  `m.keyboard.type`'s 25 ms holds and the same ones at two-frame (35 ms) holds. So `@fugloy/mcp`'s
+  10 a second stays. None of the thirteen enables interrupts or reads `$37E0`; those stay covered by
+  the synthetic device tests, and an interrupt-driven session (a DOS booted from a DMK) against both
+  references is open (emu spec §12).
+
+- The Model I in the differential harness (emu phase 7, Model I, Task 4): `compareRun({ model,
+  lowercase })` compares the `$37E0` latch after every read of it and video RAM through the bit-6
+  gate (raw with the lowercase modification) after every step that writes it; port `$FF` is
+  compared through the registers of each IN. `pnpm diff --model 1` runs a program against xtrs, and
+  `pnpm diff --model 1 --reference mame --trace <file>` follows a MAME trace (`pnpm mame:trace
+  compare` moved there; exit 3 for a trace that ends early); recording a trace that loads a program
+  from the command line is not supported yet (the tests record theirs). The report names the
+  reference and model. New known classes, each with its evidence: EX (SP),rr's write order (xtrs, trsjs), a
+  repeating block instruction's flags 3 and 5 (xtrs), IN and block I/O T-states (xtrs), and, for a
+  trace, MAME's video read without the gate. Test-only planted bugs (a latch read that does not
+  clear, the gate inverted) are caught where they first matter against each reference.
 
 - A Full screen button in Run ▶'s machine row; Esc leaves it (and the browser's own exit); keys keep
   reaching the TRS-80, and focus is kept. The first screen is 252,262 B gzip of its 252,775 B budget.

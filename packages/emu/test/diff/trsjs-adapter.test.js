@@ -66,9 +66,10 @@ describe.skipIf(trsjsSkip !== null)(`trsjs adapter against @fugloy/emu${trsjsSki
     // The ROM boot's exact counts: a class that started to excuse more would change them.
     expect(r.known).toEqual({
       'BIT: S and P/V': 642,
-      'flags 3 and 5 (X/Y)': 2806,
+      'flags 3 and 5 (X/Y)': 2728,
       'interrupt held while DI: trsjs drops it': 1,
       'interrupt response: R not counted': 13,
+      'repeating LDIR/LDDR/CPIR/CPDR: flags 3 and 5 from PC': 1,
     });
     // Video RAM and RAM agree at the end.
     expect(ref.peek(0x3c00, 0xc400)).toEqual(m.mem.read(0x3c00, 0xc400));

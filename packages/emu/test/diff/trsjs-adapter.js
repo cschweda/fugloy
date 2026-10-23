@@ -37,6 +37,17 @@ export const TRSJS_PATH = fileURLToPath(new URL('../../../../tools/trsjs/trsemu-
 /** Our 30 Hz heartbeat period (RTC_INTERVAL_TSTATES), which is two of trsjs's frames. */
 const RTC_PERIOD = 67_584;
 
+/**
+ * The known classes (known.js) trsjs needs, each found against it with its evidence (plan Ruling
+ * 6; Reference.classes): from the Model III half of emu phase 7, its own rules for flags 3 and 5
+ * (ZEXALL), BIT's S and P/V, R on an interrupt response and on DDCB/FDCB, the HALT's return
+ * address, CPI's C, the three interrupt timings (a request dropped while DI, taken right after EI
+ * or after a lone prefix), and the DD/FD pair it drops; and, since the Model I half fixed our core,
+ * EX (SP),rr's write order (it writes the low byte first), a repeating block instruction's flags 3
+ * and 5, and SCF's and CCF's, which it leaves as they were.
+ */
+export const TRSJS_CLASSES = new Set(['xy', 'bit', 'irq-r', 'ddcb-r', 'cpi-c', 'halt-push', 'held-di', 'held-ei', 'held-prefix', 'dropped-prefix', 'ex-sp-order', 'block-xy', 'scf-ccf-keep']);
+
 const EXPORTS = ['stepz80', 'mode_1_IRQ', 'BEAM_IRQ_ENABLED', 'BEAM_IRQ_RAISE', 'getAF', 'setAF', 'resetz80'];
 const RETURN_MARKER = "\t// Create the default emulator\n\tapi = api['mknew']();\n\n\treturn api;";
 const PUTBYTE_MARKER = 'function putbyte(z,addr,val)\n{\n';
@@ -48,31 +59,13 @@ const CPDR_REPEAT = '		if ( z.reg.BC == 0 || z.reg.fZ ) { cy(z,  16 ) \n return 
 const IXY_ADDR = 'return signed_char(z.mem[z.reg.PC++ & 0xffff]) + z.reg.IQ';
 
 /**
- * @typedef {import('../../src/machine/machine.js').Regs} Regs
- * @typedef {import('../../src/machine/machine.js').Machine} Machine
- * @typedef {{ addr: number, value: number }} Write
- * @typedef {'auto' | 'hold' | 'force'} IrqMode
- *   auto: take the 30 Hz request at a frame end when IFF1 is set (trsjs's own rule);
- *   hold: raise it at a frame end but do not take it (the request stays raised in port $E0);
- *   force: take an interrupt now (IFF1 must be set), whether or not a frame ended.
- * @typedef {{ cycles: number, irq: boolean, raised: boolean }} RefStep
- *   irq: an interrupt response ran; raised: a frame end raised the 30 Hz request this step.
- * @typedef {{
- *   reset(): void,
- *   step(opts?: { irq?: IrqMode }): RefStep,
- *   regs(): Regs,
- *   peek(addr: number, len: number): Uint8Array,
- *   poke(addr: number, bytes: ArrayLike<number>): void,
- *   setKeyBit(row: number, bit: number, down: boolean): void,
- *   alignRtc(phaseTStates: number): void,
- *   syncFrom(machine: Machine): void,
- *   syncRegs(machine: Machine): void,
- *   redoDroppedPrefix(pc: number, r: number): number,
- *   writes(): Write[],
- *   readonly prefixedOps: ReadonlySet<number>,
- *   readonly cycles: number,
- *   readonly z: any,
- * }} Reference
+ * The shared interface (reference.js), re-exported for the callers that import it from here.
+ * @typedef {import('./reference.js').Regs} Regs
+ * @typedef {import('./reference.js').Machine} Machine
+ * @typedef {import('./reference.js').Write} Write
+ * @typedef {import('./reference.js').IrqMode} IrqMode
+ * @typedef {import('./reference.js').RefStep} RefStep
+ * @typedef {import('./reference.js').Reference} Reference
  */
 
 function stubElement() {
@@ -325,6 +318,10 @@ export function loadTrsjs({ path = TRSJS_PATH } = {}) {
     },
 
     prefixedOps,
+
+    classes: TRSJS_CLASSES,
+
+    name: 'trsjs',
 
     z,
   };

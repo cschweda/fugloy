@@ -1,0 +1,437 @@
+# Model I references spike: xtrs and MAME (emu phase 7, Model I, Task 1)
+
+Run on 2026-10-20 on macOS (arm64), Node 22. Plan:
+`docs/superpowers/plans/2026-10-19-emu-phase7-model1-differential.md`, Task 1.
+Every number below comes from a run made for this note.
+
+## Result in one paragraph
+
+Both references work headless and give a per-instruction record. Booting the
+user's Level II ROM (`fixtures/real/level2-model1.rom`, SHA-256 `5515d95d…6776`,
+recognised by `models.js` as `model1-level2-1.3`) to its `MEM SIZE?` prompt
+(Level II 1.3's wording; the plan's `MEMORY SIZE?` is wrong for this ROM, and
+this note says `MEM SIZE?` throughout), all three machines (xtrs,
+MAME, and our Model I) agree on PC and on the cumulative T-state count at
+**every one of the first 3,000,000 instructions** (22,553,071 T-states), so
+the first 1,000 agree too. The `?` lands at `$3C08` at instruction 14,525
+(T 204,057) and the ROM reaches its wait-for-key at `$0049` at instruction
+14,726 (T 206,114) on all three. The only differences in the registers are the
+reset state, the power-on video RAM, and one flag class in MAME (below).
+
+## The spike's files
+
+Committed in `packages/emu/scripts/spike-model1/` (no xtrs source, no ROM
+bytes, no traces):
+
+- `build.sh` and `fugloy-step.c` (the xtrs build and driver) were superseded
+  in Task 2 by `scripts/install-xtrs.sh` (`pnpm xtrs:install`) and
+  `packages/emu/scripts/xtrs/fugloy-xtrs.c`, and removed. The driver keeps
+  xtrs's two copyright notices in its header, and they stay in
+  `tools/xtrs/src/LICENSE`. `fugloy-xtrs <rom> --trace <n>` prints the spike's
+  record: over 1,000,000 instructions it is byte-identical to
+  `fugloy-step`'s. The synced comparison is now the adapter's lockstep test
+  (`packages/emu/test/diff/xtrs-adapter.test.js`).
+- `ours.mjs`: our Model I in the same line format (`mame` argument: MAME's reset
+  state).
+- `boot.lua`, `key.lua` and `mame-to-lines.sh` (MAME's autoboot script, the
+  `MEM SIZE?` answer through `natkeyboard:post`, and the trace → line format
+  converter) were superseded in Task 3 by `packages/emu/scripts/mame-trace.lua`
+  (run by `recordMameTrace`, `packages/emu/test/diff/mame-trace.js`),
+  `scripts/install-mame.sh` (`pnpm mame:install`) and
+  `pnpm mame:trace lines <trace>`, which prints a recorded trace in the same
+  line format; they were removed. "MAME trace format" below describes what
+  replaced them.
+- `fielddiff.py`: the field-by-field comparison.
+
+The ROM, the MAME ROM set, the built binaries and the traces stay in the
+gitignored `tools/` and `fixtures/real/`.
+
+## Step 1: the user's answer
+
+Asked on 2026-10-20 before installing anything. Answer: **"Both"** —
+`brew install mame` (MAME 0.289), and building xtrs from source at a pinned
+commit in `tools/xtrs/`. Nothing else was installed: xtrs was built without
+X11, readline or XQuartz.
+
+## xtrs
+
+- **Canonical repository:** https://github.com/TimothyPMann/xtrs (Tim Mann's
+  page, tim-mann.org/xtrs.html, says xtrs "is now hosted on GitHub" there).
+  **Pinned commit `3a2180c063811a715faa28d39a94739c33e0abd0`** (2025-08-19,
+  "Fixed minor typos (#41)"), the head of the default branch on 2026-10-20.
+- **Licence:** `LICENSE` has two parts. Clarendon Hill Software (1992): use, copy
+  and redistribute with the notice kept; "may be modified ... but modified versions
+  must retain this notice". Tim Mann (1996–2020): MIT. **A modification
+  patch may be committed to this repository** as long as it keeps both notices. The
+  ROM is not part of xtrs, so it is still never committed.
+- **Build (headless, no X11):**
+  `git clone https://github.com/TimothyPMann/xtrs.git tools/xtrs/src && git -C tools/xtrs/src checkout 3a2180c…`,
+  then the spike's `build.sh` (now `pnpm xtrs:install`, which also clones and
+  applies the Task 2 patch), which builds out of tree into
+  `tools/xtrs/build/`. It assembles the three built-in ROM stand-ins
+  (`fakerom`, `esfrom`, `xtrsrom4p`) with our `tools/zmac/zmac -P`, runs
+  `compile_rom`, and compiles every object except `main.o`, `trs_xinterface.o`
+  and the GTK files with `cc -O2 -D_DARWIN_C_SOURCE`. It does **not** define
+  `KBWAIT`; the Makefile does. It also builds the driver (the spike's `fugloy-step.c`, now
+  `packages/emu/scripts/xtrs/fugloy-xtrs.c`).
+  **In the spike no xtrs source file was modified** (Task 2's patch adds
+  exported setters and an interrupt entry, below): the driver holds the stubs that
+  `trs_xinterface.c` and `main.c` would have given (screen, mouse, grafyx, HRG,
+  `trs_get_event`, `trs_model`, `trs_paused`, `trs_autodelay`, `program_name`),
+  and `z80.c` is compiled with `-Dmem_write=fg_mem_write
+  -Dmem_write_word=fg_mem_write_word`, which routes every CPU write (the
+  interrupt push included) through a logger in the driver.
+- **Headless:** no display at all; the X interface is replaced, not run.
+- **Three things in xtrs that had to change for determinism** (all handled in the driver):
+  1. **The 40 Hz timer is real time** (`trs_interrupt.c`, `trs_timer_event` is a
+     `SIGALRM` handler re-armed with `setitimer`). The driver ignores `SIGALRM` and
+     calls `trs_timer_event` itself every 44,352 T-states (1.77408 MHz / 40, the same
+     period as our `rtcInterval`), with a phase argument. (Since the final review,
+     2026-10-22: it makes the three calls `trs_timer_event` makes when the timer is
+     on, `trs_timer_interrupt(1)`, `trs_disk_motoroff_interrupt(trs_disk_motoroff())`
+     and `trs_kb_heartbeat()`, and not the function itself, whose re-arming divides by
+     `timer_hz`, which only `trs_timer_init` in the unlinked `main.c` sets: 0 here, a
+     trap on x86-64 and undefined behaviour anywhere.)
+  2. **`KBWAIT`** (`trs_keyboard.c`, `trs_next_key`) blocks in `trs_get_event(TRUE)`
+     until an interrupt when the ROM waits for a key. With a timer driven from
+     T-states that would never return, so it is compiled out.
+  3. `z80_reset` calls `srand(time(NULL))`. The seed is not used for `LD A,R`
+     (`do_ld_a_r` reads `REG_R`), so it does no harm.
+- **Single step:** `z80_run(0)` runs one instruction, then takes an NMI or IRQ due
+  at its end. The interrupt response therefore counts with the instruction
+  *before* it; in our `Machine.step` it counts with the instruction after it.
+  The lockstep adapter has to shift by one, as trsjs's did.
+- **RAM at power-on:** `memory[]` is a static array, so it is all `00`. That covers
+  RAM `$4000`–`$FFFF` (48K always) and video RAM. xtrs applies the bit-6 gate
+  when a byte is written (`mem_write`, `!trs_lowercase`) and returns the stored
+  byte on a read. The driver sets `trs_lowercase = 0` (xtrs's default is 1).
+- **CPU reset state:** AF `FFFF`, SP `FFFF`, IX `0000`, IY `0000`, PC `0000`, IFF 0, IM 0.
+- **T-states:** cumulative, `z80_state.t_count` (64-bit), read before each step.
+- **Memory writes:** logged by the `fg_mem_write` wrapper (up to 16 per
+  instruction), as `wADDR=VV` after each record. 33,098 of the first 200,000
+  instructions write.
+- **Keyboard reads:** the ROM reads the matrix through `mem_read` →
+  `trs_kb_mem_read`. The same `-D` trick on `mem_read` in `z80.c` can log reads
+  of `$3800`–`$3BFF` and `$37E0`. Setting a key: `keystate[]` and
+  `change_keystate` are `static` in `trs_keyboard.c`, and the public
+  `queue_key` path adds a 4,000 T-state "stretch" (`STRETCH_AMOUNT`) and a
+  heartbeat. Exact-T-state key bits (`key <row> <bit>`) therefore need **one
+  small patch**, an exported setter for `keystate[]`. **Decision:** Task 2
+  commits it as a patch file beside the driver (the licence allows it, with
+  both notices kept), and `pnpm xtrs:install` applies it with `git apply` to the
+  pinned checkout. Task 2 does not use `queue_key` and its 4,000 T-state stretch.
+- **Speed:** 3,000,000 instructions in 0.884 s (3,393,450 instructions/s), and
+  in 0.928 s on a second run (3,234,125/s). Both runs print one text line per
+  instruction to a file.
+- **Determinism:** two runs of 3,000,000 instructions are byte-identical.
+
+## MAME
+
+- **Version:** `brew install mame` installed **MAME 0.289** (`mame -version`:
+  `0.289 (unknown)`; `/opt/homebrew/Cellar/mame/0.289/bin/mame`, SHA-256
+  `02621c77445ec0934e684d46baaa7731af4dbf50d20476e3c860e2ab40432139`).
+- **`trs80l2`'s ROMs** (`mame -listroms trs80l2`; driver `trs/trs80.cpp`):
+
+  | BIOS | file | size | CRC | SHA-1 |
+  |---|---|---|---|---|
+  | `level2` (default, "Radio Shack Level II Basic") | `rom-a.z1` | 4096 | `37c59db2` | `e8f8f6a4…4969` |
+  | | `rom-b.z2` | 4096 | `05818718` | `43c538ca…00c1` |
+  | | `rom-c.z3` | 4096 | `306e5d66` | `1e1abcfb…2369` |
+  | `rsl2` ("R/S L2 Basic") | `rom-a_alt.z1` | 4096 | `be46faf5` | `0e63fc11…128b` |
+  | | `rom-b_alt.z2` | 4096 | `6c791c2d` | `2a38e0a2…2aee` |
+  | | `rom-c_alt.z3` | 4096 | `55b3ad13` | `6279f6a6…c339` |
+  | (both) character generator | `mcm6670p.z29` | 1024 | `0033f2b9` | `0d2cd419…eda7` |
+
+- **The user's ROM splits exactly into the `rsl2` set:** its three 4K pieces
+  (`dd bs=4096 skip=0/1/2`) have CRC and SHA-1 equal to `rom-a_alt.z1`,
+  `rom-b_alt.z2` and `rom-c_alt.z3`. It is not the default `level2` set, so
+  every run needs `-bios rsl2`. The character generator is not among the
+  user's files. A 1,024-byte file of zeros named `mcm6670p.z29` lets MAME run
+  with a `WRONG CHECKSUMS ... might not run correctly` warning. With
+  `-video none` the character generator is never seen. The set lives in
+  `tools/mame/roms/trs80l2/` (gitignored; `git check-ignore` confirms
+  `/tools/`). `trs80l2` lists no `ramoption`; its RAM is fixed.
+- **Headless run:**
+  `mame trs80l2 -rompath tools/mame/roms -bios rsl2 -video none -sound none -nothrottle -debug -debugger none -autoboot_script boot.lua -autoboot_delay 0 -seconds_to_run N -skip_gameinfo -nvram_directory … -cfg_directory …`
+  (the spike's `boot.lua`; Task 3's recorder runs `packages/emu/scripts/mame-trace.lua`
+  the same way, adding `-snapshot_directory` and the other output directories inside
+  a scratch working directory, and `-noreadconfig`)
+- **Per-instruction record: the debugger's `trace` command does it, issued from Lua.**
+  `-debugscript` with `-debugger none` produced no trace. The Lua autoboot (`boot.lua`)
+  script did: `manager.machine.debugger:command('trace <file>,maincpu,noloop,{tracelog "%04X %04X %04X %04X %04X %04X %04X %04X %d %d\n",pc,af,bc,de,hl,ix,iy,sp,iff1,totalcycles}')`
+  then `command('go')`. `noloop` keeps every repeat of a loop. The trace starts
+  at PC `0000`, `totalcycles` 0, with the state before each instruction. MAME
+  also writes its disassembly line after each record. No Lua hook on each
+  instruction was needed or tried. Lua notifier subscriptions
+  (`emu.add_machine_stop_notifier`, `add_machine_frame_notifier`) must be kept in
+  a global. Otherwise they are garbage-collected and never fire.
+- **T-states:** `totalcycles` is cumulative.
+- **Memory writes and keyboard reads:** debugger watchpoints with a logging action,
+  written in order into the same trace file after the instruction's record:
+  `wpset 3c00,c400,w,1,{tracelog "  W %04X=%02X\n",wpaddr,wpdata; g}`,
+  `wpset 3800,400,r,1,{tracelog "  K %04X=%02X\n",wpaddr,wpdata; g}` (51,285
+  writes and 14,227 matrix reads in the first emulated second), and the same on
+  `37e0,4,r` for the interrupt latch (no reads during the boot). No interrupt
+  was taken in this spike (below), so it saw no "interrupt taken" record and
+  took one to show only as a PC jump to `$0038` with the return address pushed
+  (two `W` lines at SP−1 and SP−2). Task 3 found that MAME's tracer does mark a
+  maskable interrupt, and an NMI it does not ("MAME trace format", below).
+- **Keyboard input:** `manager.machine.natkeyboard:post("\n")` from a frame
+  notifier at 2 emulated seconds answered `MEM SIZE?`, and the screen read
+  `R/S L2 BASIC` / `READY` / `>_`.
+- **RAM at power-on:** read through Lua before instruction 0: `$4000`–`$FFFF`
+  all `00` (49,152 bytes), and video RAM `$3C00`–`$3FFF` all `00` (1,024 bytes).
+- **CPU reset state:** AF `0040`, SP `0000`, IX `FFFF`, IY `FFFF`, PC `0000`, IFF 0.
+- **Speed:** 13 emulated seconds traced took 29.55 s wall (16.86 s user) for
+  3,072,080 instructions, about 104,000 instructions/s. The trace file is
+  203,766,687 bytes, about 66 bytes per instruction with the disassembly lines.
+  A 10-million-instruction session is therefore about 1.6 minutes and about
+  660 MB of text. These are **extrapolated** from the 3,072,080-instruction
+  run; no 10-million run was made. Untraced, the same run takes 1.31 s wall.
+- **Determinism:** a second traced run gave a byte-identical record.
+
+## Comparison with our Model I
+
+Tools: `fugloy-step` for xtrs (now `fugloy-xtrs --trace`), and `ours.mjs`, which steps
+`new Machine({ model: 1 })` and prints the same line (index, PC, AF, BC, DE,
+HL, IX, IY, SP, IFF1, cycles before the instruction), and `fielddiff.py`, which
+compares the records field by field (`ours.mjs` and `fielddiff.py` are in `packages/emu/scripts/spike-model1/`;
+MAME's side is now `pnpm mame:trace lines <trace>`). Our power-on: RAM `00`, video RAM `20`
+(`clearVideoRAM`), and AF `0000`, SP `FFFF`, IX `0000`, IY `0000`. Our machine
+also applies the bit-6 gate on the write.
+
+| pair, first 3,000,000 instructions | PC | T-states | other registers |
+|---|---|---|---|
+| xtrs vs ours, unsynced | 0 differ | 0 differ | AF rows 0–1 (reset AF); D at rows 8272–8279 (`00` vs `20`) |
+| xtrs vs ours, synced (xtrs AF set to `0000`, its video RAM written with `20`) | 0 | 0 | **0 — the records are byte-identical** |
+| MAME vs ours, unsynced | 0 | 0 | AF, IX, IY, SP from row 0 (reset state); D at rows 8272–8279 |
+| MAME vs ours, synced (ours set to AF `0040`, SP `0000`, IX/IY `FFFF`, video RAM `00`) | 0 | 0 | F only, 5,112 rows |
+
+So the first 1,000 instructions agree on PC and T-states with no syncing at
+all. Every register matches as well once the reset state is copied.
+
+What the differences are:
+
+1. **Reset register state.** It differs on all three machines (above). The Z80
+   leaves most registers undefined at reset. The harness should copy one
+   machine's state into the other at instruction 0. Young's "The Undocumented
+   Z80 Documented" (v0.91, §2.4 "Power on defaults", p. 9) says, quoted
+   exactly (Task 4; [4] is its footnote mark): "Matt[4] has done some
+   excellent research on this. He found that AF and SP are always set to
+   FFFFh after a reset, and all other registers are undefined (different depending on how long the CPU has been
+   powered off, different for different Z80 chips)." xtrs follows it; MAME
+   (AF `0040`, SP `0000`) and we (AF `0000`) do not. Nothing in the harness
+   rests on it: lockstep syncs xtrs from our state, and a trace starts our
+   machine in MAME's (Ruling 4).
+2. **Power-on video RAM** (`D` at instruction 8272, `LD D,(HL)` at `$0486` with
+   HL `$3C00`, the character under the cursor). xtrs and MAME read `00`; we read
+   `20` because we fill video RAM with spaces. Real video RAM powers on random,
+   so the run fixes one fill. Ruling 4's "same RAM fill" has to include video RAM.
+3. **F bits 3 and 5 during a repeating LDIR (MAME only).** All 5,112 rows are
+   at `$067F` (5,088) and `$007E` (24), both `LDIR`. They come right after an
+   iteration that repeated, and the XOR is always in `$28` (bits 3/5). MAME
+   gives `0044` where we and xtrs give `0064` (row 8, `$067F`), and `0085` where
+   we give `00A5` (row 7814, `$007E`). When the instruction
+   repeats, MAME's bits 3/5 follow PC's high byte: `$06` and `$00` both give 0.
+   We and xtrs take them from A plus the byte moved, as for a finished LDIR, which
+   Young describes. Where the block instruction ends (BC = 0), all agree. This
+   matches the later finding that an interrupted block instruction takes X/Y from
+   PC (the Z80Decoder "Undocumented Flags" research, which MAME's core
+   appears to follow). It is a **known-class candidate** for Task 4. Which side
+   is right must be cited from MAME's `z80.cpp` source and that research before
+   a class is added or our core changed (Ruling 6).
+
+Not exercised: the 40 Hz timer and interrupts. The ROM keeps interrupts off
+(IFF1 0 at every one of the 3,000,000 instructions on all three) through the
+boot to `MEM SIZE?`, so the timer's phase, `$37E0` read-to-clear, and when each
+reference takes the IRQ are untested. The first session past `READY`
+(Tasks 2–3) is where they meet.
+
+Our rate in the same scratch loop (string per instruction): 537,351 and 578,332
+instructions/s.
+
+## MAME trace format (Task 3)
+
+Recorded by `recordMameTrace` (`packages/emu/test/diff/mame-trace.js`) and
+replayed by `openTrace`; `pnpm mame:trace record|lines` runs them from
+the command line, and `pnpm diff --model 1 --reference mame --trace <file>`
+compares a trace (Task 4 moved `compare` there). Traces go to the gitignored `tools/mame/traces/` by default.
+
+**What MAME writes.** `packages/emu/scripts/mame-trace.lua`, the autoboot
+script, saves the power-on memory (`save <file>,0,10000`, before the first
+instruction), then starts `trace <fifo>,maincpu,noloop,{tracelog "T …"; temp0 = temp0 + 1}`
+with one `T` line per instruction (the state before it: PC AF BC DE HL AF' BC'
+DE' HL' IX IY SP I R IFF1 IFF2 IM, `totalcycles`, and the byte at PC), and
+watchpoints that add `W addr value` for every CPU write (`wpset 0,10000,w`) and
+`R addr value` for every read of the keyboard matrix (`3800,400`) and the
+interrupt latch (`37e0,4`), in order after the instruction's line. MAME adds
+its disassembly after each `T` line. A register point, `rpset temp0 >= #<N+1>`,
+writes `E`, saves the memory at that point and runs the debugger's `exit`, so a
+run stops at exactly N + 1 records (MAME's debugger reads numbers as hex: the
+`#` makes it decimal). The text goes through a FIFO; nothing of it is kept.
+
+**Interrupts.** The spike saw none, and its note said the trace does not mark
+them. It does: a synthetic ROM (DI, IM 1, EI, a loop; a handler reading
+`$37E0`; run on trs80l2 with a scratch ROM set) shows MAME's tracer writing
+`   (interrupted at XXXX, IRQ 0)` before each maskable response, then the push
+(`W` at SP−1 and SP−2) and the next `T` line at `$0038` with IFF1 and IFF2 0 and
+R one higher. The recorder takes the marker and checks it against that
+signature (IM 1, the push of the return address, PC `$0038`, interrupts off),
+and refuses (ends the trace with the reason) an IRQ in another mode. The
+response costs 13 T-states (NOP ending at 44,353, the `$0038` record at
+44,366). NMIs are not marked: the recorder infers one from a `T` line at
+`$0066` after the return address was pushed by an instruction that is not a
+CALL, with IFF1 0 (11 T-states). In the synthetic run the first three 40 Hz
+interrupts were taken at the boundaries at T 44,353, 88,709 and 133,061 (our
+tick is due at 44,352, 88,704, 133,056). MAME's CPU clock is 1,774,083 Hz
+(`mame -listxml trs80l2`), ours 1,774,080: if MAME times 40 Hz in emulated
+seconds, its period is 44,352.08 of its T-states against our 44,352, and the
+two drift apart by about a T-state every 13 ticks (not measured; a long
+session with interrupts on will show it as `irqTime`).
+
+**HALT is an NMI in MAME's trs80l2.** The same synthetic ROM with a HALT: MAME
+pushes HALT+1 and jumps to `$0066` at once (HALT 4, NMI 11 T-states); there is
+no halted state in the trace. xtrs resets on HALT, and ours halts until an
+interrupt. Three answers; Task 4 must decide which the Model I does, with a
+citation.
+
+**The file.** Binary, little-endian: a 4,096-byte JSON header (format
+`fugloy-mame-trace`, version 1, the MAME version, BIOS, the ROM's SHA-256, the
+instructions asked for, records written, `complete`, the `reason` a recording
+ended short, `verified`, the keys posted), MAME's power-on memory (64K), its
+memory at the last record (64K), then one record per instruction. A record is
+delta-coded against the one before: a 16-bit mask (bits 0–11: which of PC AF BC
+DE HL AF' BC' DE' HL' IX IY SP changed, then those words; bit 12: I; bit 13:
+IFF1/IFF2/IM; bit 14: a response before this instruction, 1 IRQ or 2 NMI;
+bit 15: access counts follow), R, the cycles since the last record (LEB128),
+and the step's writes then its reads as `addr16 value8`. A record's writes are
+its step's under compare.js's rule that a response counts with the instruction
+after it: the push moves from the instruction before (where MAME's text puts
+it) to the record that carries the response. The 100,000-instruction boot is
+924,308 bytes of records, 9.2 bytes an instruction (MAME's text with
+disassembly was 66), so 10 million instructions are about 92 MB.
+
+**A program and held keys (Task 5).** A session loads a `.CMD` at READY, as
+`m.load.cmd` does on ours, and holds keys on the matrix. `recordMameTrace`'s
+`matrix` (key events as compare.js's `keyEvents` makes them, in T-states) goes to
+the Lua as `$FUGLOY_MAME_MATRIX` and sets or clears each key's field on MAME's
+`:LINE0`–`:LINE7` at the first frame at or after its time; MAME applies a field
+at its next frame update, so a press is seen about two frames (33 ms) after its
+time and a release one frame after, and a hold lasts whole frames (measured on
+the trace's keyboard reads: held 25 or 30 ms, a key shows for one 16.7 ms frame;
+35 ms, two). `load` goes as `$FUGLOY_MAME_LOAD` (the load's cycle, the entry, and
+the program's runs of bytes, `loadRuns`, none below `$3C00`): a register point at
+the first boundary at or after that cycle writes `L <PC>`, loads each run with the
+debugger's `load` (no watchpoint sees it), writes `M`, sets the PC to the entry,
+and starts the record count there, so the trace holds the boot and then the
+instructions asked for. The header gains `matrix` (the event count) and `load`
+(`TraceLoad`: the record the load came before, the cycle, the program's SHA-256,
+the entry, the PC it replaced, the runs); `openTrace(path, { program })` refuses a
+missing or different program, and `follow.beforeStep` loads it into ours with
+`m.load.cmd` before that record's step, the step MAME ran at the entry. Our 40 Hz
+can be put on MAME's schedule for a run (`mameTimer`, `test/diff/mame-clock.js`:
+tick n at cycle floor((n/40 s) / attoseconds-per-cycle), as MAME's scheduler runs
+it), so a session with interrupts on shows `irqTime` only for a real timer fault.
+
+**Checks.** A complete recording is verified: the power-on memory with every
+recorded write applied must equal MAME's memory at the end at `$3C00`–`$FFFF`,
+or the recorder rejects it (a lost write). A recording that ends early (MAME
+exits or is killed, the time cap `-seconds_to_run` is reached, the file cannot
+be written, an interrupt it cannot decode) keeps what it has, with the reason
+in its header; a file cut short later is found when its records run out before
+the header's count. A comparison then ends with
+`MAME's trace ends after <n> of <N> instructions (<reason>), so the run proves nothing past that point.`
+and the CLI exits 3. MAME runs with `-nothrottle`, no video or sound,
+`-noreadconfig`, from a scratch working directory with its snapshot, NVRAM,
+configuration, diff, state and input directories inside it; two recordings of
+20,000 instructions are byte-identical files.
+
+**Replaying.** `openTrace` gives a Reference with no `syncFrom`: its `follow`
+starts our Model I in MAME's power-on state (the registers of record 0, video
+RAM and RAM from the saved memory), makes our CPU take a maskable interrupt at
+exactly the steps MAME took one (where ours had no request, or had one MAME did
+not take, the step diverges in `irqTime`), and answers our reads of
+`$3800`–`$3BFF` with MAME's recorded bytes (a read on one side only diverges in
+`keys`). After a difference a known class explains, our machine adopts the
+trace's registers and writes. Keys for MAME are posted with
+`natkeyboard:post` at the first frame at or after their time
+(`manager.machine.time:as_double()`; `time.seconds` is whole seconds only).
+
+**What the first MAME comparisons found** (for Task 4, Ruling 6; nothing was
+added to `known.js` or changed in `src/`):
+
+1. The repeating-LDIR F bits 3/5 class above: in the 100,000-instruction boot
+   every flag difference is at `ED B0` (`$067F`, `$007E`), XOR within `$28`,
+   with BC ≠ 0 after the step; the existing `flags 3 and 5 (X/Y)` class counts
+   them (5,112).
+2. **EX (SP),HL's write order.** At instruction 13,603 (`$287D`) MAME writes H
+   to SP+1 and then L to SP; ours (and xtrs, through `mem_write_word`) writes L
+   first. Same bytes, same addresses. The MAME tests run with a test-only patch
+   that writes in MAME's order until Task 4 cites which order the Z80 uses.
+3. **The bit-6 gate.** MAME stores the byte the CPU wrote to video RAM; ours
+   stores bit 6 as NOT bit 5 (no lowercase), as xtrs does. At the end of the
+   boot they differ in bit 6 only (`MEM SIZE`: MAME `$0D`, ours `$4D`); the
+   ROM's own reads of video RAM never saw the difference in 700,000
+   instructions. Task 4 compares video RAM through the gate.
+4. **ENTER at `MEM SIZE?`** (posted at T 400,000): 700,000 instructions, our
+   machine reading MAME's keyboard bytes, reach `READY` on both with only
+   class 1, and differences 2 and 3.
+
+**What Task 4 decided** (each cited in `packages/emu/test/diff/known.js` and the
+commits):
+
+- Class 1 was ours to fix: a repeating LDIR/LDDR/CPIR/CPDR takes F bits 5 and 3
+  from PC bits 13 and 11 (Banks's Z80Decoder research, Helcmanovsky's Z80 Block
+  Flags Test on real Z80s, MAME's `z80.lst`); Young §4.2 predates it. Our core
+  does it now (`e7: take a repeating LDIR/LDDR/CPIR/CPDR's flags 3 and 5 from
+  PC`), ZEXDOC and ZEXALL still pass, and against xtrs (which keeps Young's
+  rule) the 5,112 rows are the class `repeating LDIR/LDDR/CPIR/CPDR: flags 3
+  and 5 from PC`.
+- Difference 2 was ours too: the Z80 writes (SP+1) first (UM0080's (4, 3, 4,
+  3, 5); MAME; floooh/chips's cycle-stepped core). Fixed (`e7: write EX
+  (SP),rr's high byte first, as the Z80 does`), the test-only patch is gone,
+  and xtrs's and trsjs's order is the class `EX (SP),rr: the reference writes
+  (SP) before (SP+1)`.
+- Difference 3: video RAM is compared through the gate (the Handbook, p. 34:
+  bit 6 is NOR(bit 5, bit 7) from Z30), after every step that writes it and at
+  the end. MAME's CPU also reads the byte as written; following a trace, our
+  read takes MAME's byte where it is ours but for the gate, counted as a
+  reference fix (the boot's one, `LD D,(HL)` at instruction 8,272). The trace's
+  power-on video RAM is loaded into ours through the gate.
+- Found by Task 4: xtrs counts IN A,(n) as 10 T-states, IN r,(C) as 11 and
+  INI/IND/OUTI/OUTD as 15, one less than Zilog's 11, 12 and 16 (a class); and
+  MAME's 40 Hz, 1/40 s of 1,774,083 Hz, drifts from our 44,352 T-states: with
+  interrupts on, a synthetic loop shows `irqTime` at instruction 110,781
+  (about fifteen ticks), never excused (Ruling 4). MAME's Lua cannot set the
+  CPU clock (`device.set_clock_scale` is not exposed in 0.289).
+
+## Recommendation: Rulings 2 and 4
+
+- **Ruling 2 is confirmed.** xtrs can be the lockstep reference. Its core runs
+  one instruction per `z80_run(0)` call under a small driver we own. That driver
+  holds the stubs, the timer driven by T-states, the write logger, and the
+  pipe protocol Task 2 adds. One patch is needed: an exported `keystate[]`
+  setter, for keys at exact T-states. It is committed as a patch file, and
+  `pnpm xtrs:install` applies it. A second, optional patch is a read hook in
+  `trs_memory.c` for keyboard reads and latch reads (or the same `-D` rename on
+  `mem_read`). The licence lets us commit them with both notices kept. The
+  install script should still check the pinned commit and the SHA-256 of the
+  patched tree. Two conditions are mandatory: no `KBWAIT`, and no `SIGALRM`
+  timer. The interrupt response counts with the instruction before it, which
+  the adapter must shift. MAME stays the trace reference. Its debugger `trace`
+  + `wpset` actions, started from a Lua autoboot script, give PC, registers,
+  `totalcycles`, writes and keyboard reads at about 104,000 instructions/s.
+  That is fast enough (about 1.6 minutes per 10 million instructions, extrapolated from the 3M run). Task 3
+  should stream or compact the text (66 bytes per instruction with disassembly).
+  It must also find interrupt boundaries in the trace (Task 3: MAME marks a
+  maskable one, which the recorder checks against the jump to `$0038` with the
+  push; an NMI it infers from the jump to `$0066`).
+- **Ruling 4 is confirmed, with two revisions.** (a) "The same RAM fill" means
+  RAM **and video RAM** (MAME: all `00`), **plus the CPU's reset registers**
+  (MAME: AF `0040`, SP `0000`, IX/IY `FFFF`). Our machine is set to these at
+  instruction 0 of a MAME session. Without them, D differs at instruction 8272
+  and IX, IY and SP differ from row 0. (b) Keyboard input for MAME sessions is
+  posted with `natkeyboard:post`. Our machine follows the trace's `K` records
+  for the bytes read. The repeating-block F bits 3/5 must be settled (Ruling 6)
+  before MAME sessions can show zero unexplained divergence. They appear from
+  instruction 8 of every boot.

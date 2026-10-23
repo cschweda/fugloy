@@ -276,6 +276,16 @@ describe('m.keyboard ROM keyboard-scan hook', () => {
       expect(m.system.cpu.afterPrefix).toBe(false);
     });
 
+    it('writes no flags, as a RET: an SCF or CCF after it keeps F\'s bits 3 and 5 (Q)', () => {
+      const m = eiRom();
+      m.keyboard.feed('A');
+      m.run({ until: (mm) => mm.cpu.regs.pc === 0x002a });
+      m.step();
+      m.system.cpu.flagsWritten = true;
+      m.step();
+      expect(m.system.cpu.flagsWritten).toBe(false);
+    });
+
     it('does not stand in while the CPU is halted: the character stays fed and the halt idles 4 T-states', () => {
       const m = eiRom();
       m.keyboard.feed('A');

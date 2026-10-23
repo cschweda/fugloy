@@ -1,8 +1,18 @@
 /**
- * The known differences between @fugloy/emu and trsjs (emu phase 7, plan Ruling 2): each one a
- * place where trsjs is the inaccurate side, with the evidence for that. compare.js counts a
+ * The known differences between @fugloy/emu and its references (emu phase 7: trsjs for the Model
+ * III; xtrs and MAME for the Model I, Ruling 6): each one a place where the reference is the
+ * inaccurate side, with the evidence for that. Classes name the behaviour, not the reference, so
+ * any reference may need one (EX (SP),rr's write order is xtrs's and trsjs's). compare.js counts a
  * difference one of these explains (and resyncs the reference from our state) instead of
  * reporting it; `--strict` stops on it.
+ *
+ * Each reference declares the classes it needs (`Reference.classes`: their ids, in
+ * trsjs-adapter.js, xtrs-adapter.js and mame-trace.js), each found against that reference with its
+ * evidence, and compare.js applies only those (Ruling 3: passed in, never branched on the
+ * reference's name; declaredClasses below). So one reference's evidence never excuses another's
+ * difference: the general flag 3 and 5 class, whose evidence (ZEXALL) is about trsjs's rules, is
+ * trsjs's alone, and against MAME, which declares no step class, any flag 3 or 5 difference is a
+ * divergence.
  *
  * Three kinds:
  *
@@ -17,15 +27,45 @@
  *   with the reason the reference did not take it, and when our CPU takes it, makes the reference
  *   take it at the same boundary (`irq: 'force'`). Nothing is excused on that step: registers,
  *   T-states, and writes must then agree (up to the step classes), so the class can never hide
- *   another difference. It is counted on the step the request is taken.
+ *   another difference. It is counted on the step the request is taken. A reference that declares
+ *   none (xtrs, which keeps its request in its latch as ours does; a MAME trace) is never held back
+ *   or forced: it takes the request by its own rule, and taking it elsewhere is a divergence.
  * - **Reference fixes** make the reference run what the Z80 runs where trsjs skips it (a DD/FD
- *   the next instruction ignores), then compare the step normally. Also counted, never excusing.
+ *   the next instruction ignores), or, following a trace that cannot be rerun, make our read take
+ *   the byte the trace's CPU read (MAME's video bit 6), then compare the step normally. Also
+ *   counted, never excusing.
  *
  * Evidence:
  * - [ZEXALL] Frank Cringle's ZEXALL, which checks flag bits 3 and 5 for every instruction group;
  *   our core passes all 67 groups (`pnpm zex:install`, FUGLOY_ZEX=1; docs/fugloy-emu-spec.md §10).
  * - [Young] Sean Young, "The Undocumented Z80 Documented", version 0.91 (2005).
  * - [Zilog] Zilog, "Z80 CPU User Manual", UM008011-0816.
+ * - [Handbook] Radio Shack, "TRS-80 Micro Computer Technical Reference Handbook", 2nd ed. (1982),
+ *   the Model I's hardware (docs/reference/).
+ * - [Banks] David Banks, Z80Decoder wiki, "Undocumented Flags" (github.com/hoglet67/Z80Decoder),
+ *   with Peter Helcmanovsky's Z80 Block Flags Test run on real Z80s
+ *   (github.com/redcode/Z80/wiki/Z80-Block-Flags-Test).
+ * - The references' own source: xtrs at its pinned commit (tools/xtrs/src), MAME 0.289
+ *   (github.com/mamedev/mame, tag mame0289: src/devices/cpu/z80/z80.lst, src/mame/trs/), trsjs
+ *   1.6 (tools/trsjs/trsemu-1.6.js).
+ *
+ * Reference limitations that need no class (nothing in a run so far meets them; each would show
+ * as an unexplained divergence, never be excused):
+ * - xtrs's Model I resets on HALT (z80.c, `case 0x76`: "Z80 HALT output is tied to reset button
+ *   circuit", trs_reset(0)); MAME's trs80l2 turns HALT into an NMI (trs80.cpp, `halt_cb()` to the
+ *   "nmigate" input merger, "TODO: also causes SYSRES"); ours halts until an interrupt, as the
+ *   Z80 does (Zilog UM0080, HALT). The Handbook (p. 15) has HALT* "should never be low" in normal
+ *   running, so a program that halts is compared on our CPU's rule, and xtrs refuses to sync there.
+ * - xtrs takes no interrupt in IM 0 or IM 2 (z80.c do_int: `error("interrupt in im0 not
+ *   supported")`); MAME's recorder refuses one (mame-trace.js).
+ * - MAME's CPU clock is 10.6445 MHz / 6 = 1,774,083 Hz (trs80.cpp, the Handbook p. 14: "a little
+ *   over 1.774 MHz"), ours and xtrs's 1,774,080 (`CLOCK_MHZ_1` 1.77408); MAME times its 40 Hz
+ *   interrupt in emulated seconds (`set_periodic_int(..., attotime::from_hz(40))`), 44,352.08 of
+ *   its T-states to our 44,352, and raises it with HOLD_LINE (trs80_m.cpp rtc_interrupt), which
+ *   its acknowledge drops, where the Expansion Interface's line stays low until $37E0 is read
+ *   (Kitsz p. 137; ours and xtrs); its read of $37E0 also clears the disk bit (irq_status_r:
+ *   `m_irq = 0`). Following MAME, the drift is the divergence `irqTime` (Ruling 4), never excused;
+ *   with interrupts on it shows within about fifteen ticks (model1-devices.test.js).
  */
 
 /** Flag bit names, F's bit 7 to bit 0. */
@@ -35,7 +75,7 @@ const FLAG_BITS = ['S', 'Z', '5', 'H', '3', 'PV', 'N', 'C'];
 export const flagToken = (reg, name) => `${reg}.${name}`;
 
 /**
- * @typedef {import('./trsjs-adapter.js').Write} Write
+ * @typedef {import('./reference.js').Write} Write
  * @typedef {{
  *   a: number, f: number, b: number, c: number, d: number, e: number, h: number, l: number,
  *   a2: number, f2: number, b2: number, c2: number, d2: number, e2: number, h2: number, l2: number,
@@ -46,13 +86,18 @@ export const flagToken = (reg, name) => `${reg}.${name}`;
  * @typedef {{
  *   bytes: Uint8Array,
  *   execPc: number,
- *   ours: Side & { wasHalted: boolean, fBefore: number },
+ *   ours: Side & { wasHalted: boolean, fBefore: number, q: number, wz: number },
  *   theirs: Side,
  * }} StepContext
  *   bytes: four bytes of our memory at execPc as our CPU began the instruction it executed this
  *   step (after an interrupt response, the handler's first; four zeros, a NOP, for a halted step).
- *   ours.fBefore: our F before the step.
- * @typedef {{ id: string, name: string, evidence: string, explains(ctx: StepContext, diff: Set<string>): string[] | null }} StepClass
+ *   ours.fBefore: our F before the step; ours.q: our CPU's Q for the instruction it executed (F's
+ *   bits 5 and 3 an SCF or CCF keeps: 28H when the instruction before left the flags alone, else 0);
+ *   ours.wz: our MEMPTR after the step (a BIT n,(HL) shows its high byte in flags 3 and 5 and leaves
+ *   it; a BIT n,(IX+d) sets it to the address first).
+ * @typedef {{ id: string, name: string, evidence: string, common?: boolean, explains(ctx: StepContext, diff: Set<string>): string[] | null }} StepClass
+ *   common: the reference's everyday rule for flags 3 and 5, met within a few instructions in most
+ *   programs: `strict: true` passes it by, `strict: 'all'` stops on it too (compare.js).
  * @typedef {{ id: string, name: string, reason: 'DI' | 'EI' | 'prefix', evidence: string }} InterruptClass
  */
 
@@ -97,15 +142,171 @@ const isIndexedCb = (/** @type {Uint8Array} */ bytes) => (bytes[0] === 0xdd || b
 /** CPI, CPD, CPIR, CPDR (ED A1, A9, B1, B9). */
 const isBlockCompare = (/** @type {Uint8Array} */ bytes) => bytes[0] === 0xed && (bytes[1] & 0xe7) === 0xa1;
 
+/** LDIR, LDDR, CPIR, CPDR (ED B0, B8, B1, B9). */
+const isBlockRepeat = (/** @type {Uint8Array} */ bytes) => bytes[0] === 0xed && (bytes[1] & 0xf6) === 0xb0;
+
+/** IN A,(n) (DB), IN r,(C) (ED 40-78, x0), INI/IND/INIR/INDR and OUTI/OUTD/OTIR/OTDR (ED A2-BB, x2/x3). */
+const isTimedIo = (/** @type {Uint8Array} */ bytes) => bytes[0] === 0xdb
+  || (bytes[0] === 0xed && ((bytes[1] & 0xc7) === 0x40 || (bytes[1] & 0xe6) === 0xa2));
+
+/** SCF (37) or CCF (3F), alone or after a DD or FD. */
+const isScfCcf = (/** @type {Uint8Array} */ bytes) => bytes[0] === 0x37 || bytes[0] === 0x3f
+  || ((bytes[0] === 0xdd || bytes[0] === 0xfd) && (bytes[1] === 0x37 || bytes[1] === 0x3f));
+
+/**
+ * Our F bits 3 and 5 after an SCF or CCF follow Q's rule: (F before & q) | A (scf-ccf-a below).
+ * @param {StepContext} ctx
+ */
+const scfCcfOurs = (ctx) => (ctx.ours.regs.f & 0x28) === (((ctx.ours.fBefore & ctx.ours.q) | ctx.ours.regs.a) & 0x28);
+
+/**
+ * BIT n,(HL) (CB 46-7E, low bits 6) or BIT n,(IX+d) / BIT n,(IY+d) (DD/FD CB d 46-7E): the
+ * documented forms on memory, not the DD/FD CB d forms whose low bits are not 6.
+ */
+const isBitMem = (/** @type {Uint8Array} */ bytes) => (bytes[0] === 0xcb && (bytes[1] & 0xc7) === 0x46)
+  || ((bytes[0] === 0xdd || bytes[0] === 0xfd) && bytes[1] === 0xcb && (bytes[3] & 0xc7) === 0x46);
+
+/** EX (SP),HL (E3) or EX (SP),IX / EX (SP),IY (DD/FD E3). */
+const isExSp = (/** @type {Uint8Array} */ bytes) => bytes[0] === 0xe3 || ((bytes[0] === 0xdd || bytes[0] === 0xfd) && bytes[1] === 0xe3);
+
 /** @type {StepClass[]} */
 export const STEP_CLASSES = [
   {
+    id: 'block-xy',
+    name: 'repeating LDIR/LDDR/CPIR/CPDR: flags 3 and 5 from PC',
+    // An iteration that repeats leaves Y = PC bit 13 and X = PC bit 11 (PC the ED's address): David
+    // Banks, Z80Decoder wiki "Undocumented Flags", "LDxR / CPxR interrupted"; Peter Helcmanovsky's
+    // Z80 Block Flags Test, run on real Z80s; MAME 0.289 z80.lst `macro ldir` (`m_f.yx_val = PC >> 8`
+    // after `PC -= 2`), as our core does (z80cpu.js _xyRepeat). Young §4.2 (2005) gives the finished
+    // iteration's rule "at every iteration", which xtrs keeps (z80.c do_ldir: do_ldi's flags, then
+    // PC -= 2); trsjs's oped_b0 (trsemu-1.6.js) leaves bits 3 and 5 as they were. Explained only
+    // when our instruction repeated (our PC is back on the ED) and our F bits 3 and 5 are PC's bits
+    // 13 and 11; it takes these bits before the general class below.
+    evidence: 'Banks, Z80Decoder wiki, "LDxR / CPxR interrupted": YF = PC.13, XF = PC.11; Helcmanovsky\'s Z80 Block Flags Test on real Z80s; MAME 0.289 z80.lst `ldir`. Young §4.2 (2005) predates it; xtrs follows Young, trsjs leaves the bits alone.',
+    explains(ctx, diff) {
+      if (!isBlockRepeat(ctx.bytes) || ctx.ours.irq || ctx.ours.regs.pc !== ctx.execPc) return null;
+      if ((ctx.ours.regs.f & 0x28) !== ((ctx.execPc >> 8) & 0x28)) return null;
+      const t = ['f.5', 'f.3'].filter((k) => diff.has(k));
+      return t.length > 0 ? t : null;
+    },
+  },
+  {
+    id: 'scf-ccf-a',
+    name: 'SCF/CCF: the reference takes flags 3 and 5 from A alone',
+    // Patrik Rak's 2012 finding, as David Banks's Z80Decoder wiki ("Undocumented Flags",
+    // "SCF/CCF") gives it, checked there on the Zilog NMOS Z80 and its second sources: after an
+    // instruction that modified the flags, X and Y are A's bits 3 and 5; after one that left them
+    // alone (POP AF and EX AF,AF' among those, and a DD or FD before the SCF), F's own or-ed with
+    // A's. MAME 0.289 keeps it (z80.lst `scf`, `ccf`: `m_f.yx_val = (m_f.yx_val & Q) | A`), as our
+    // core does (z80cpu.js, `q`); found as 44 SCF steps of Pirate's Adventure against MAME. xtrs
+    // takes A's alone whatever came before (z80.c `case 0x37: /* scf */` and `case 0x3F: /* ccf */`:
+    // `REG_A & (UNDOC3_MASK|UNDOC5_MASK)`), the rule Banks gives for NEC's NMOS part. The Model I's
+    // parts list names only a "Z80 Microprocessor Circuit" (Z40; Technical Reference Handbook,
+    // 1982), so a given machine follows its CPU's maker; ours and MAME's follow Zilog's. ZEXALL
+    // cannot tell: its <daa,cpl,scf,ccf> group never sets F's bits 3 and 5 before the instruction
+    // (base F 04H, varied under D7H). Explained only for SCF or CCF when our F bits 3 and 5 are
+    // (F before & our q) | A and the reference's are its A's, each side on its own rule.
+    evidence: 'Rak (2012) via Banks, Z80Decoder wiki, "SCF/CCF": X/Y from A after an instruction that set the flags, else F | A, on the Zilog NMOS Z80 (A alone on NEC\'s); MAME 0.289 z80.lst `scf`; xtrs z80.c takes A alone. ZEXALL never sets F\'s bits 3 and 5 before SCF.',
+    explains(ctx, diff) {
+      if (!isScfCcf(ctx.bytes) || !scfCcfOurs(ctx)) return null;
+      if ((ctx.theirs.regs.f & 0x28) !== (ctx.theirs.regs.a & 0x28)) return null;
+      const t = ['f.5', 'f.3'].filter((k) => diff.has(k));
+      return t.length > 0 ? t : null;
+    },
+  },
+  {
+    id: 'scf-ccf-keep',
+    name: 'SCF/CCF: the reference leaves flags 3 and 5 as they were',
+    // Ours as the class above has it (Rak's finding, Banks's Zilog rule, MAME's Q). trsjs's op_37
+    // and op_3f (trsemu-1.6.js) set C, H and N and leave its f5 and f3 alone. Explained only for SCF
+    // or CCF when our F bits 3 and 5 are (F before & our q) | A and the reference's are F's before
+    // the step (both sides start a step equal: compare.js resyncs the reference after any
+    // difference), each side on its own rule; it takes these bits before the general class below.
+    evidence: 'Rak (2012) via Banks, Z80Decoder wiki, "SCF/CCF": X/Y from A after an instruction that set the flags, else F | A, on the Zilog NMOS Z80; MAME 0.289 z80.lst `scf`; trsjs\'s op_37 and op_3f (trsemu-1.6.js) leave them.',
+    explains(ctx, diff) {
+      if (!isScfCcf(ctx.bytes) || !scfCcfOurs(ctx)) return null;
+      if ((ctx.theirs.regs.f & 0x28) !== (ctx.ours.fBefore & 0x28)) return null;
+      const t = ['f.5', 'f.3'].filter((k) => diff.has(k));
+      return t.length > 0 ? t : null;
+    },
+  },
+  {
+    id: 'bit-mem-xy',
+    name: 'BIT n,(HL) and BIT n,(IX+d): the reference clears flags 3 and 5',
+    common: true,
+    // A BIT on memory shows MEMPTR's high byte in flags 3 and 5: BIT n,(HL) the latch as the
+    // instructions before left it, BIT n,(IX+d) and BIT n,(IY+d) the address, which they put there
+    // (boo_boo and Vladimir Kladov, "MEMPTR, esoteric register of the ZiLOG Z80 CPU", the rules
+    // emu spec §4 names; Patrik Rak's z80test, checked against a Zilog Z80, says BIT N,(HL) and BIT
+    // N,(IX+d) "depend on an internal register known as MEMPTR"). MAME 0.289 does the same (z80.cpp
+    // `bit_hl`: `m_f.yx_val = WZ_H`; `bit_xy`: `m_ea >> 8`), as our core does (z80cpu.js bitMem),
+    // and against MAME no BIT step differs in any of the thirteen Model I sessions. xtrs clears both
+    // for the memory forms: its do_test_bit as built (z80.c, the `#if 1` one) ends `(((op & 7) ==
+    // 6) ? 0 : (value & (UNDOC3_MASK | UNDOC5_MASK)))`, and its comment grants that by
+    // z80undoc.txt (Young's) it "gets UNDOC3 and UNDOC5 wrong". ZEXALL passes on both, so cannot
+    // tell. Explained only for BIT n,(HL) or BIT n,(IX+d)/(IY+d) (CB 46-7E, DD/FD CB d 46-7E) when
+    // our F bits 3 and 5 are our MEMPTR's high byte's and the reference's are both clear: not the
+    // DD/FD CB d forms whose low bits are not 6, which xtrs takes from the byte tested. Met within a
+    // few instructions in most programs, as trsjs's general class is (`common`).
+    evidence: 'MEMPTR (boo_boo and Kladov): BIT n,(HL) shows its high byte, BIT n,(IX+d) the address\'s; Rak\'s z80test (a Zilog Z80); MAME 0.289 z80.cpp bit_hl (WZ_H) and bit_xy (m_ea >> 8). xtrs z80.c do_test_bit (the `#if 1` branch) clears them for (op & 7) == 6.',
+    explains(ctx, diff) {
+      if (!isBitMem(ctx.bytes)) return null;
+      if ((ctx.ours.regs.f & 0x28) !== ((ctx.ours.wz >> 8) & 0x28) || (ctx.theirs.regs.f & 0x28) !== 0) return null;
+      const t = ['f.5', 'f.3'].filter((k) => diff.has(k));
+      return t.length > 0 ? t : null;
+    },
+  },
+  {
+    id: 'ex-sp-order',
+    name: 'EX (SP),rr: the reference writes (SP) before (SP+1)',
+    // The Z80 writes (SP+1) <- H, then (SP) <- L (EX (SP),HL's (4, 3, 4, 3, 5) T-states, Zilog
+    // UM0080 p. 127; MAME 0.289 z80.lst `macro ex_sp`, `@wm16_sp`; floooh/chips z80.h, cycle-stepped,
+    // commit 9e88298), as our core does. xtrs writes the word low byte first (z80.c `case 0xE3: /* ex
+    // (sp), hl */` and the DD/FD forms call mem_write_word, trs_memory.c: `mem_write(address++, value
+    // & 0xff); mem_write(address, value >> 8);`), and so does trsjs (trsemu-1.6.js ex_memsp ->
+    // store16: putbyte(mem, low) then putbyte(mem + 1, high)). Same bytes, same addresses. Explained
+    // only when the step's last two writes are ours (SP+1, SP) and the reference's the same two
+    // swapped, every write before them equal.
+    evidence: 'The Z80 writes (SP+1) before (SP): Zilog UM0080 p. 127 (4, 3, 4, 3, 5); MAME 0.289 z80.lst ex_sp; floooh/chips z80.h. xtrs (trs_memory.c mem_write_word) and trsjs (store16) write the low byte first.',
+    explains(ctx, diff) {
+      if (!diff.has('writes') || !isExSp(ctx.bytes)) return null;
+      const a = ctx.ours.writes;
+      const b = ctx.theirs.writes;
+      const n = a.length;
+      if (n < 2 || b.length !== n || !sameWrites(a.slice(0, n - 2), b.slice(0, n - 2))) return null;
+      const [h, l] = a.slice(n - 2);
+      if (h.addr !== ((l.addr + 1) & 0xffff)) return null;
+      return sameWrites([l, h], b.slice(n - 2)) ? ['writes'] : null;
+    },
+  },
+  {
+    id: 'io-cycles',
+    name: 'IN and block I/O: the reference counts one T-state less',
+    // Zilog UM0080: IN A,(n) 11 T-states (4, 3, 4), p. 295; IN r,(C) 12 (4, 4, 4), p. 296; INI,
+    // IND, OUTI, OUTD 16 (4, 5, 3, 4), and INIR/INDR/OTIR/OTDR 21 while they repeat; our core and
+    // @fugloy/z80's tables say the same. xtrs counts one less: z80.c `case 0xDB: /* in a, (port) */
+    // ... T_COUNT(10);`, `case 0x78: /* in a, (c) */ ... T_COUNT(11);` (and the other IN r,(C)),
+    // do_ini/do_ind/do_outi/do_outd `T_COUNT(15)`, their repeats `+ 5`. (OUT (n),A at 11 and OUT
+    // (C),r at 12 it counts right.) Explained only for those instructions, with no interrupt
+    // response in the step on either side, ours exactly one T-state more.
+    evidence: 'Zilog UM0080: IN A,(n) 11 T-states, IN r,(C) 12, INI/IND/OUTI/OUTD 16 (21 while repeating). xtrs z80.c counts 10, 11 and 15 (T_COUNT).',
+    explains(ctx, diff) {
+      if (!diff.has('cycles') || !isTimedIo(ctx.bytes) || ctx.ours.irq || ctx.theirs.irq) return null;
+      return ctx.ours.cycles - ctx.theirs.cycles === 1 ? ['cycles'] : null;
+    },
+  },
+  {
     id: 'xy',
     name: 'flags 3 and 5 (X/Y)',
-    // trsjs keeps the undocumented flag bits 3 and 5 by its own rules; our core passes every
-    // ZEXALL group, and ZEXALL (unlike ZEXDOC) checks those two bits for every instruction [ZEXALL].
-    // Young §2.3 and §4 describe the rules our core follows. Ruling 5 compares them bit by bit and
-    // this class counts them, so a run shows how often they differ.
+    common: true,
+    // trsjs keeps the undocumented flag bits 3 and 5 by its own rules, across the instruction set;
+    // our core passes every ZEXALL group, and ZEXALL (unlike ZEXDOC) checks those two bits for
+    // every instruction group [ZEXALL]. Young §2.3 and §4 describe the rules our core follows.
+    // Ruling 5 compares them bit by bit and this class counts them, so a run shows how often they
+    // differ. It explains any flag 3 or 5 difference on any instruction, so only trsjs, the
+    // reference its evidence is about, declares it; the Model I's references declare the exact
+    // instructions they differ on (the classes above), and a repeating block instruction's and
+    // SCF's and CCF's, which ZEXALL does not see, are the classes above's for trsjs too.
     evidence: 'ZEXALL checks flag bits 3 and 5 for every instruction group and our core passes all 67 groups; the rules are Young §2.3 and §4.',
     explains(ctx, diff) {
       const t = ['f.5', 'f.3', 'f2.5', 'f2.3'].filter((k) => diff.has(k));
@@ -247,6 +448,21 @@ export const REFERENCE_FIXES = [
     // step as the Z80 does (Reference.redoDroppedPrefix) and compares our step against that.
     evidence: 'Young §3.2 and §3.7: a DD or FD before an instruction that does not use HL, H, L or (HL) costs one M1 and leaves the instruction to run as usual (any other byte resets the prefix); trsjs\'s opx_default skips both bytes in 0 T-states.',
   },
+  {
+    id: 'video-read-gate',
+    name: 'video read: the reference returns bit 6 as written (no gate)',
+    // The Model I without the lowercase modification has seven video RAMs; the CPU reads bit 6
+    // from NOR gate Z30: "If Bit 5 (Z62, pin 12) and Bit 7 (Z63, pin 12) are low, then Bit 6 will
+    // be high" (TRS-80 Micro Computer Technical Reference Handbook, 2nd ed., 1982, p. 34, "Video
+    // RAMs"). Our memory and xtrs (trs_memory.c, mem_write: `if (!trs_lowercase) { if (value &
+    // 0xa0) value &= 0xbf; else value |= 0x40; }`) store the byte through the gate. MAME 0.289's
+    // trs80l2 maps $3C00-$3FFF as plain RAM (trs80.cpp, `map(0x3c00, 0x3fff).ram().share(...)`),
+    // so its CPU reads bit 6 as written. Following a trace (it cannot be rerun), a read of video
+    // RAM whose trace byte equals ours but for the gate returns the trace's byte, so both CPUs go
+    // on from what the trace's read; the step is then compared as usual (nothing is excused) and
+    // counted here. Any other difference in the byte is not touched.
+    evidence: 'TRS-80 Technical Reference Handbook (1982) p. 34: bit 6 of a video read is NOR(bit 5, bit 7) from Z30. xtrs applies it (trs_memory.c mem_write); MAME 0.289\'s trs80l2 maps video RAM as plain RAM (trs80.cpp).',
+  },
 ];
 
 /**
@@ -272,18 +488,45 @@ export function droppedPrefix(xx, before, after, step, writes, prefixedOps) {
 /** Every class's display name: step classes, interrupt classes, reference fixes. */
 export const CLASS_NAMES = [...STEP_CLASSES, ...INTERRUPT_CLASSES, ...REFERENCE_FIXES].map((c) => c.name);
 
+/** The names of the `common` step classes, which `strict: true` passes by. */
+export const COMMON_CLASSES = new Set(STEP_CLASSES.filter((c) => c.common === true).map((c) => c.name));
+
 /**
- * Explain a step's differences with the step classes.
+ * The known classes a reference declares (`Reference.classes`, ids from the tables above),
+ * resolved for compareRun: its step classes in this file's order, the reasons it may have a
+ * request held for (its interrupt classes), and its reference fixes. A reference must declare
+ * (an empty set is a declaration: it needs none), and an id this file does not have is refused,
+ * so a declaration that is missing or misspelt fails instead of explaining nothing or too much.
+ * @param {ReadonlySet<string> | undefined} ids
+ * @param {string} who the reference's name, for the sentence
+ * @returns {{ step: StepClass[], holds: Set<'DI' | 'EI' | 'prefix'>, fixes: Set<string> }}
+ */
+export function declaredClasses(ids, who) {
+  if (ids === undefined) throw new Error(`${who} declares no known classes (Reference.classes): a reference names the ones it needs (known.js), each with its evidence, or an empty set`);
+  const all = [...STEP_CLASSES, ...INTERRUPT_CLASSES, ...REFERENCE_FIXES];
+  for (const id of ids) if (!all.some((c) => c.id === id)) throw new Error(`${who} declares the known class ${id}, which known.js does not have`);
+  return {
+    step: STEP_CLASSES.filter((c) => ids.has(c.id)),
+    holds: new Set(INTERRUPT_CLASSES.filter((c) => ids.has(c.id)).map((c) => c.reason)),
+    fixes: new Set(REFERENCE_FIXES.filter((c) => ids.has(c.id)).map((c) => c.id)),
+  };
+}
+
+/**
+ * Explain a step's differences with the step classes the reference declares.
  * @param {StepContext} ctx
  * @param {Set<string>} diff from diffStep
+ * @param {readonly StepClass[]} stepClasses the reference's (declaredClasses), in this file's order
  * @returns {{ classes: string[], unexplained: string[] }} the names of the classes that explained something, and the fields none did
  */
-export function explainStep(ctx, diff) {
+export function explainStep(ctx, diff, stepClasses) {
   const left = new Set(diff);
   /** @type {string[]} */
   const classes = [];
-  for (const c of STEP_CLASSES) {
-    const t = c.explains(ctx, diff);
+  for (const c of stepClasses) {
+    // Each class sees what the ones before it left, so a field is counted under one class only.
+    if (left.size === 0) break;
+    const t = c.explains(ctx, left);
     if (t === null) continue;
     classes.push(c.name);
     for (const k of t) left.delete(k);

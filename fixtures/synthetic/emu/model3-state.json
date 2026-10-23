@@ -36,6 +36,7 @@
       "pendingEI": 0,
       "wz": 15617,
       "afterPrefix": false,
+      "flagsWritten": false,
       "cycles": 650026
     },
     "memory": {
