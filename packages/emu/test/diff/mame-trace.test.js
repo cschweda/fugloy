@@ -16,6 +16,7 @@ import { Machine } from '../../src/index.js';
 import { compareRun, formatReport, keyEvents, videoGate } from './compare.js';
 import { mameSkip, requireRom } from './gate.js';
 import { checkMame, checkRomSet, IRQ, loadRuns, MAME_CLOCK_HZ, MAME_ROMS, MAME_VERSION, openTrace, recordMameTrace, writeTrace } from './mame-trace.js';
+import { recordOurs, syntheticRom } from './own-trace.js';
 
 const dir = mkdtempSync(join(tmpdir(), 'fugloy-mame-test-'));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -64,86 +65,14 @@ describe('MAME refuses what it cannot trust (Review Focus 1)', () => {
 // --- Traces written from our own machine: the format and the follow plumbing, without MAME. ---
 
 /**
- * A 12K ROM: DI, LD SP,$8000, IM 1, EI, then a loop reading keyboard row 0 into $5000; the IM 1
- * handler at $0038 reads $37E0 into $5001.
+ * The synthetic ROM (own-trace.js): after DI, LD SP,$8000 and IM 1, EI, then a loop reading
+ * keyboard row 0 into $5000 (LD A,($3801) / LD ($5000),A / NOP / JR back); the IM 1 handler at
+ * $0038 reads $37E0 into $5001.
  */
-function syntheticRom() {
-  const rom = new Uint8Array(12288);
-  rom.set([0xf3, 0x31, 0x00, 0x80, 0xed, 0x56, 0xfb, 0x3a, 0x01, 0x38, 0x32, 0x00, 0x50, 0x00, 0x18, 0xf7], 0);
-  rom.set([0xf5, 0x3a, 0xe0, 0x37, 0x32, 0x01, 0x50, 0xf1, 0xfb, 0xed, 0x4d], 0x38);
-  return rom;
-}
-const ROM = syntheticRom();
+const ROM = syntheticRom([0xfb, 0x3a, 0x01, 0x38, 0x32, 0x00, 0x50, 0x00, 0x18, 0xf7]);
 const romPath = join(dir, 'synthetic.rom');
 writeFileSync(romPath, ROM);
 const newSynthetic = () => new Machine({ model: 1, roms: { level2: ROM } });
-
-/**
- * Records in the trace format from our machine, as MAME's would be: the state before each
- * instruction after any response, IFF1 set from EI on, the step's writes (the push first) and its
- * keyboard and latch reads.
- * @param {Machine} m @param {number} steps
- * @returns {{ start: Uint8Array, records: import('./mame-trace.js').TraceRecord[] }}
- */
-function recordOurs(m, steps) {
-  const sys = m.system;
-  const cpu = sys.cpu;
-  const mem = sys.memory;
-  const start = m.mem.read(0, 0x10000);
-  /** @type {import('./mame-trace.js').TraceRecord[]} */
-  const records = [];
-  /** @type {{ addr: number, value: number }[]} */
-  let writes = [];
-  /** @type {{ addr: number, value: number }[]} */
-  let reads = [];
-  /** @type {0 | 1} */
-  let kind = 0;
-  let inExec = false;
-  const w = mem.writeByte;
-  const r = mem.readByte;
-  const intr = cpu.interrupt;
-  const exec = cpu.executeInstruction;
-  mem.writeByte = (/** @type {number} */ a, /** @type {number} */ v) => { writes.push({ addr: a & 0xffff, value: v & 0xff }); w.call(mem, a, v); };
-  mem.readByte = (/** @type {number} */ a) => {
-    const v = r.call(mem, a);
-    if (inExec && ((a >= 0x3800 && a < 0x3c00) || (a >= 0x37e0 && a < 0x37e4))) reads.push({ addr: a, value: v });
-    return v;
-  };
-  cpu.interrupt = (/** @type {number | undefined} */ b) => {
-    const t = intr.call(cpu, b);
-    if (t) kind = IRQ;
-    return t;
-  };
-  cpu.executeInstruction = () => {
-    const x = m.cpu.regs;
-    const ei = cpu.pendingEI > 0;
-    const word = (/** @type {number} */ hi, /** @type {number} */ lo) => (hi << 8) | lo;
-    records.push({
-      w: [x.pc, word(x.a, x.f), word(x.b, x.c), word(x.d, x.e), word(x.h, x.l), word(x.a2, x.f2), word(x.b2, x.c2), word(x.d2, x.e2), word(x.h2, x.l2), x.ix, x.iy, x.sp],
-      i: x.i, r: x.r, iff1: x.iff1 || ei, iff2: x.iff2 || ei, im: x.im, total: cpu.cycles, kind, writes, reads,
-    });
-    inExec = true;
-    try {
-      return exec.call(cpu);
-    } finally {
-      inExec = false;
-    }
-  };
-  try {
-    for (let k = 0; k <= steps; k++) {
-      writes = [];
-      reads = [];
-      kind = 0;
-      m.step(1);
-    }
-  } finally {
-    delete mem.writeByte;
-    delete mem.readByte;
-    delete cpu.interrupt;
-    delete cpu.executeInstruction;
-  }
-  return { start, records };
-}
 
 /** A machine that pressed A (row 0 bit 1) and ran `steps` with its interrupts, as a trace. */
 function keyedTrace(steps = 20_000) {
@@ -382,6 +311,20 @@ describe('a trace that ends early says so, never "no divergence" (Review Focus 3
     expect(run.status).toBe(3);
     expect(run.stdout).toContain(SENTENCE(0, 1000, 'MAME exited with code 1: no such BIOS'));
     expect(run.stdout).not.toContain('divergence: none');
+  });
+
+  it('a MAME that writes nothing to the trace is stopped after the silence, never waited on, and its trace says why', async () => {
+    // Homebrew's 0.289 by its Cellar folder and -version, then silent (it never opens the trace).
+    const bin = script('silent/Cellar/mame/0.289/bin/mame', `case "$1" in -version) echo '${MAME_VERSION}';; *) exec sleep 600;; esac`);
+    const out = join(dir, 'silent.fmt');
+    const t0 = performance.now();
+    const rec = await recordMameTrace({ instructions: 100, out, bin, romDir: dir, skipRomCheck: true, silenceMs: 1000 });
+    expect(performance.now() - t0).toBeLessThan(10_000);
+    expect(rec).toEqual({ path: out, instructions: 0 });
+    const ref = openTrace(out);
+    expect(ref.header).toMatchObject({ complete: false, verified: false, records: 0, reason: 'MAME wrote nothing to the trace for 1 s, so the recorder stopped it' });
+    const r = compareRun({ machine: newSynthetic(), reference: ref, instructions: 100 });
+    expect(r.ended).toBe(SENTENCE(0, 100, 'MAME wrote nothing to the trace for 1 s, so the recorder stopped it'));
   });
 
   it('a complete trace shorter than the run', () => {

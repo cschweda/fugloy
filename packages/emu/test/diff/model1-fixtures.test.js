@@ -68,6 +68,16 @@ const BOOT = keyEvents([{ at: 0.5 * HZ, key: 'ENTER', hold: 0.1 * HZ }]);
 const XTRS = 'xtrs';
 const MAME = 'MAME 0.289 trace';
 
+const rom1 = configuredRom('model1');
+/** roms.model1 is Level II 1.3 (models.js's ROM_HASHES), the ROM the sessions' counts and the typing tests are about. */
+const level2v13 = rom1 !== null && ROM_HASHES[createHash('sha256').update(rom1).digest('hex')] === 'model1-level2-1.3';
+/**
+ * Why the sessions skip with their flag set: their exact class counts are Level II 1.3's, and
+ * another ROM runs other code, so it would only fail on them. With no roms.model1 they do not
+ * skip: requireRom fails them with its sentence, as every flagged test does (gate.js).
+ */
+const sessionSkip = rom1 === null || level2v13 ? null : 'roms.model1 is not Level II 1.3, for which the sessions\' class counts are pinned';
+
 /**
  * A key press `at` seconds after the load, held `hold` seconds (half a second by default, as a
  * player would: Rear Guard reads the keyboard only between the delays that blink its prompt).
@@ -189,11 +199,13 @@ const SESSIONS = [
     known: { [XTRS]: { [BIT_XY]: 8_265, [BLOCK_XY]: 96_922, [IO]: 1_597 }, [MAME]: { [VIDEO_READ]: 177 } },
   },
   {
-    // CLEAR to start, one player, then fire and move. It writes its credits in lowercase.
+    // CLEAR to start, one player (the 1 is taken), then fire and move: its play screen is the
+    // score and three ships ('[[[') on the top line, losing them one by one to GAME OVER at about
+    // 55 s. It writes its credits in lowercase.
     name: 'Super Nova (supnov3a.cmd)',
     program: fixture(/supnov3a\.cmd$/),
     keys: [press(9, 'CLEAR'), press(11, '1'), press(14, 'SPACE', 1), press(16, 'LEFT', 1), press(18, 'RIGHT', 1), press(20, 'SPACE', 1)],
-    screens: ['SOFTWARE CO.', 'NUMBER OF PLAYERS (1 OR 2) ?'],
+    screens: ['SOFTWARE CO.', 'NUMBER OF PLAYERS (1 OR 2) ?', '0.[[[', 'GAME OVER PLAYER 1'],
     known: { [XTRS]: { [BIT_XY]: 655, [BLOCK_XY]: 2_210_006, [IO]: 2_025 }, [MAME]: { [VIDEO_READ]: 3 } },
   },
 ];
@@ -310,7 +322,7 @@ async function mameSession(s) {
   }
 }
 
-describe.skipIf(xtrsSkip !== null)(`the Model I sessions against xtrs${xtrsSkip === null ? '' : ` (skipped: ${xtrsSkip})`}`, { timeout: 1_200_000 }, () => {
+describe.skipIf(xtrsSkip !== null || sessionSkip !== null)(`the Model I sessions against xtrs${xtrsSkip === null && sessionSkip === null ? '' : ` (skipped: ${xtrsSkip ?? sessionSkip})`}`, { timeout: 1_200_000 }, () => {
   for (const s of SESSIONS) {
     it.skipIf(s.program === null)(`${s.name}: 10 million instructions in lockstep with no unexplained divergence`, () => {
       const { result, seen, videoEqual } = xtrsSession(s);
@@ -323,7 +335,7 @@ describe.skipIf(xtrsSkip !== null)(`the Model I sessions against xtrs${xtrsSkip 
   }
 });
 
-describe.skipIf(mameSkip !== null)(`the Model I sessions against MAME${mameSkip === null ? '' : ` (skipped: ${mameSkip})`}`, { timeout: 1_800_000, concurrent: true }, () => {
+describe.skipIf(mameSkip !== null || sessionSkip !== null)(`the Model I sessions against MAME${mameSkip === null && sessionSkip === null ? '' : ` (skipped: ${mameSkip ?? sessionSkip})`}`, { timeout: 1_800_000, concurrent: true }, () => {
   for (const s of SESSIONS) {
     it.skipIf(s.program === null)(`${s.name}: the boot and 10 million instructions past the load, following MAME, with no unexplained divergence`, async () => {
       const { result, seen, videoEqual, header } = await mameSession(s);
@@ -381,10 +393,9 @@ function driverLog(m) {
   return log;
 }
 
-const rom1 = configuredRom('model1');
 /** Why the typing tests skip: they are about Level II 1.3's keyboard driver (KEYBOU is 1.3's). */
 const typingSkip = rom1 === null ? 'no roms.model1'
-  : ROM_HASHES[createHash('sha256').update(rom1).digest('hex')] === 'model1-level2-1.3' ? null
+  : level2v13 ? null
     : 'roms.model1 is not Level II 1.3, whose keyboard driver these tests are about';
 
 describe.skipIf(typingSkip !== null)(`typing at 20 characters a second under Level II 1.3, on ours${typingSkip === null ? '' : ` (skipped: ${typingSkip})`}`, { timeout: ROM_TEST_TIMEOUT }, () => {

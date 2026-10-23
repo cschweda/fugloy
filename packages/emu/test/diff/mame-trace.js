@@ -23,7 +23,6 @@ import { closeSync, constants, createReadStream, existsSync, mkdirSync, mkdtempS
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { crc32 } from 'node:zlib';
 import { parseCmd } from '../../src/loaders/cmd-format.js';
 import { configuredRom } from '../rom.js';
 
@@ -52,10 +51,40 @@ export const ROM_SETS = {
 /** The character generator; not among the user's files, so a placeholder of zeros stands in (CRC 0033f2b9 is the driver's). */
 export const CHARGEN = { name: 'mcm6670p.z29', size: 1024, crc: '0033f2b9' };
 
+/**
+ * How long MAME may write nothing to the trace before the recorder stops it (Review Focus 5: fail
+ * clearly rather than hang). MAME writes about 70,000 records a second from power-on, so a minute
+ * of silence is a MAME that hangs or never opened the trace, never a slow one.
+ */
+export const MAME_SILENCE_MS = 60_000;
+
 const INSTALL = '`pnpm mame:install`';
 const BREW = '`brew install mame`';
 
-const hexCrc = (/** @type {Uint8Array} */ b) => (crc32(b) >>> 0).toString(16).padStart(8, '0');
+/** The CRC-32 table (the reflected IEEE 802.3 polynomial, EDB88320H). */
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+
+/**
+ * CRC-32 as zip, zlib and MAME's ROM listings compute it. Computed here, not with node:zlib's
+ * `crc32`, which only Node 22.2 and later have: this module loads on any Node 22 (`engines`), and
+ * every test file that imports it with it.
+ * @param {Uint8Array} bytes
+ */
+function crc32(bytes) {
+  let c = 0xffffffff;
+  for (let k = 0; k < bytes.length; k++) c = CRC_TABLE[(c ^ bytes[k]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+const hexCrc = (/** @type {Uint8Array} */ b) => crc32(b).toString(16).padStart(8, '0');
 
 /** The CRCs of a 12K Level II ROM's three 4K pieces. @param {Uint8Array} rom */
 export function pieceCrcs(rom) {
@@ -406,13 +435,15 @@ const CALLS = new Set([0xcd, 0xc4, 0xcc, 0xd4, 0xdc, 0xe4, 0xec, 0xf4, 0xfc]);
  *
  * Resolves with the path and the instructions recorded, which are fewer than asked when MAME
  * stopped early: the file's header then says why, and a comparison against it reports that
- * sentence. Rejects (a sentence) when MAME or the ROM set is not the pinned one, or when MAME's
+ * sentence. MAME stopped early includes a MAME that writes nothing to the trace for `silenceMs`
+ * (default MAME_SILENCE_MS): the recorder kills it and the trace ends there, with that reason.
+ * Rejects (a sentence) when MAME or the ROM set is not the pinned one, or when MAME's
  * memory at the end disagrees with the recorded writes (the trace lost something).
- * @param {{ instructions: number, keys?: { at: number, text: string }[], matrix?: { at: number, row: number, bit: number, down: boolean }[], load?: { program: Uint8Array, at: number }, out?: string, bin?: string, romDir?: string, rom?: Uint8Array, skipRomCheck?: boolean }} opts
+ * @param {{ instructions: number, keys?: { at: number, text: string }[], matrix?: { at: number, row: number, bit: number, down: boolean }[], load?: { program: Uint8Array, at: number }, out?: string, bin?: string, romDir?: string, rom?: Uint8Array, skipRomCheck?: boolean, silenceMs?: number }} opts
  *   skipRomCheck: tests only, to run a synthetic ROM set in `romDir` (the user's ROM is then not compared).
  * @returns {Promise<{ path: string, instructions: number, load?: TraceLoad }>}
  */
-export async function recordMameTrace({ instructions, keys = [], matrix = [], load, out, bin = 'mame', romDir = MAME_ROMS, rom, skipRomCheck = false }) {
+export async function recordMameTrace({ instructions, keys = [], matrix = [], load, out, bin = 'mame', romDir = MAME_ROMS, rom, skipRomCheck = false, silenceMs = MAME_SILENCE_MS }) {
   if (!Number.isInteger(instructions) || instructions < 1) throw new Error(`recordMameTrace: instructions must be a whole number above 0, not ${instructions}`);
   const mame = checkMame({ bin });
   let bios = 'rsl2';
@@ -594,9 +625,23 @@ export async function recordMameTrace({ instructions, keys = [], matrix = [], lo
 
   const stream = createReadStream(fifo, { highWaterMark: 1 << 20 });
   let rest = '';
+  /** When MAME last wrote to the trace (or started). */
+  let heard = Date.now();
+  /** @type {NodeJS.Timeout | undefined} */
+  let watchdog;
   try {
     await new Promise((resolve, reject) => {
+      // A MAME that writes nothing for silenceMs (hung, or stuck before it opened the trace) is
+      // killed, and the trace ends there with the reason, as any short trace does.
+      watchdog = setInterval(() => {
+        if (Date.now() - heard <= silenceMs) return;
+        stop ??= `MAME wrote nothing to the trace for ${silenceMs / 1000} s, so the recorder stopped it`;
+        child.kill('SIGKILL');
+        stream.destroy();
+        resolve(undefined);
+      }, Math.min(1000, silenceMs));
       stream.on('data', (chunk) => {
+        heard = Date.now();
         try {
           const text = rest + chunk.toString('latin1');
           const lines = text.split('\n');
@@ -662,6 +707,7 @@ export async function recordMameTrace({ instructions, keys = [], matrix = [], lo
     }
     throw e;
   } finally {
+    clearInterval(watchdog);
     closeSync(fd);
     rmSync(work, { recursive: true, force: true });
   }

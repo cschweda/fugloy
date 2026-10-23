@@ -138,7 +138,9 @@ export function modelDevices(model, lowercase) {
       model,
       lowercase,
       through: lowercase ? null : videoGate,
-      // The Expansion Interface's 40 Hz clock bit in the $37E0 latch (it has no mask).
+      // The Expansion Interface's 40 Hz clock bit in the $37E0 latch (it has no mask). Its disk
+      // bit (bit 6, the WD1771's INTRQ) also drives the line and is not followed here (held or
+      // mustTake): no Model I session mounts a disk, so none raises it; a disk session adds it.
       request: (sys) => sys.io.latch !== null && (sys.io.latch.bits & TIMER_BIT) !== 0,
       latch: true,
       videoEach: true,

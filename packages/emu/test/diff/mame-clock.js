@@ -31,7 +31,9 @@ export function mameTick(n) {
 /**
  * Put our Model I's 40 Hz on MAME's schedule from power-on. The machine must not have run (MAME
  * traces start at power-on). Our timer advances `nextRtcAt` by one period at each tick; here
- * each advance moves to MAME's next tick instead.
+ * each advance moves to MAME's next tick instead. Only that advance is taken: any other write
+ * (`reset()`, a restored save state, a debugger's) would put the timer off MAME's schedule in the
+ * middle of a run that follows it, so it throws, and the run fails loud rather than drifting.
  * @param {import('../../src/machine/machine.js').Machine} m
  */
 export function mameTimer(m) {
@@ -43,7 +45,11 @@ export function mameTimer(m) {
     configurable: true,
     get: () => mameTick(n),
     // stepInstruction's `nextRtcAt += rtcInterval` after a tick: on to MAME's next.
-    set: () => { n++; },
+    set: (/** @type {number} */ v) => {
+      const want = mameTick(n) + sys.rtcInterval;
+      if (v !== want) throw new Error(`mameTimer: the 40 Hz was set to T-state ${v}, where only its tick's own advance (${want}, after MAME's tick ${n}) keeps it on MAME's schedule; a reset or a restored state during a run that follows MAME is not supported`);
+      n++;
+    },
   });
   return m;
 }

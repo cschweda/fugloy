@@ -22,25 +22,19 @@ import { restoreState, serializeState } from '../../src/debug/state.js';
 import { ROM_TEST_TIMEOUT } from '../rom.js';
 import { compareRun, formatReport, modelDevices, ourRegs, videoGate } from './compare.js';
 import { mameSkip, requireRom, xtrsSkip } from './gate.js';
-import { CHARGEN, IRQ, openTrace, recordMameTrace, ROM_SETS, writeTrace } from './mame-trace.js';
+import { CHARGEN, openTrace, recordMameTrace, ROM_SETS, writeTrace } from './mame-trace.js';
+import { recordOurs, syntheticRom } from './own-trace.js';
 import { loadXtrs } from './xtrs-adapter.js';
-import { mameTimer } from './mame-clock.js';
+import { mameTick, mameTimer } from './mame-clock.js';
 
 const dir = mkdtempSync(join(tmpdir(), 'fugloy-m1dev-'));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 /**
- * A 12K ROM: DI / LD SP,$8000 / IM 1 / JP $4000; at $0038 the 40 Hz handler PUSH AF /
- * LD A,($37E0) (reads the latch, clearing the clock bit) / LD ($5001),A / POP AF / EI / RETI.
- * Programs go at $4000.
+ * The synthetic ROM (own-trace.js): DI / LD SP,$8000 / IM 1 / JP $4000, and at $0038 the 40 Hz
+ * handler, which reads the latch at $37E0 (clearing the clock bit) into $5001. Programs go at $4000.
  */
-function syntheticRom() {
-  const rom = new Uint8Array(12288);
-  rom.set([0xf3, 0x31, 0x00, 0x80, 0xed, 0x56, 0xc3, 0x00, 0x40], 0);
-  rom.set([0xf5, 0x3a, 0xe0, 0x37, 0x32, 0x01, 0x50, 0xf1, 0xfb, 0xed, 0x4d], 0x38);
-  return rom;
-}
-const ROM = syntheticRom();
+const ROM = syntheticRom([0xc3, 0x00, 0x40]);
 /** The handler's LD A,($37E0). */
 const LATCH_READ_PC = 0x0039;
 
@@ -332,68 +326,6 @@ describe('the Model I\'s devices against our own machine as the reference', () =
 });
 
 describe('the Model I\'s devices against a trace (our own machine recorded in MAME\'s format)', () => {
-  /**
-   * Records `steps` of `m` as MAME would: the state before each instruction after any response,
-   * the step's writes as attempted (MAME stores them as written: no gate), its keyboard and latch
-   * reads. @param {Machine} m @param {number} steps
-   */
-  function recordOurs(m, steps) {
-    const sys = m.system;
-    const cpu = sys.cpu;
-    const mem = sys.memory;
-    const start = m.mem.read(0, 0x10000);
-    /** @type {import('./mame-trace.js').TraceRecord[]} */
-    const records = [];
-    let writes = /** @type {{ addr: number, value: number }[]} */ ([]);
-    let reads = /** @type {{ addr: number, value: number }[]} */ ([]);
-    /** @type {0 | 1} */
-    let kind = 0;
-    let inExec = false;
-    const w = mem.writeByte;
-    const r = mem.readByte;
-    const intr = cpu.interrupt;
-    const exec = cpu.executeInstruction;
-    mem.writeByte = (/** @type {number} */ a, /** @type {number} */ v) => { writes.push({ addr: a & 0xffff, value: v & 0xff }); w.call(mem, a, v); };
-    mem.readByte = (/** @type {number} */ a) => {
-      const v = r.call(mem, a);
-      if (inExec && ((a >= 0x3800 && a < 0x3c00) || (a >= 0x37e0 && a < 0x37e4))) reads.push({ addr: a, value: v });
-      return v;
-    };
-    cpu.interrupt = (/** @type {number | undefined} */ b) => {
-      const t = intr.call(cpu, b);
-      if (t) kind = IRQ;
-      return t;
-    };
-    cpu.executeInstruction = () => {
-      const x = m.cpu.regs;
-      const ei = cpu.pendingEI > 0;
-      const word = (/** @type {number} */ hi, /** @type {number} */ lo) => (hi << 8) | lo;
-      records.push({
-        w: [x.pc, word(x.a, x.f), word(x.b, x.c), word(x.d, x.e), word(x.h, x.l), word(x.a2, x.f2), word(x.b2, x.c2), word(x.d2, x.e2), word(x.h2, x.l2), x.ix, x.iy, x.sp],
-        i: x.i, r: x.r, iff1: x.iff1 || ei, iff2: x.iff2 || ei, im: x.im, total: cpu.cycles, kind, writes, reads,
-      });
-      inExec = true;
-      try {
-        return exec.call(cpu);
-      } finally {
-        inExec = false;
-      }
-    };
-    try {
-      for (let k = 0; k <= steps; k++) {
-        writes = [];
-        reads = [];
-        kind = 0;
-        m.step(1);
-      }
-    } finally {
-      delete mem.writeByte;
-      delete mem.readByte;
-      delete cpu.interrupt;
-      delete cpu.executeInstruction;
-    }
-    return { start, records };
-  }
   /** A trace of `program` from power-on, written to `name`. @param {number[]} program @param {number} steps @param {string} name */
   function trace(program, steps, name) {
     const m = new Machine({ model: 1, roms: { level2: ROM } });
@@ -436,6 +368,27 @@ describe('the Model I\'s devices against a trace (our own machine recorded in MA
     expect(r.known).toEqual({ 'video read: the reference returns bit 6 as written (no gate)': 1 });
     expect(m.mem.read(0x5000, 1)[0]).toBe(0x0d); // ours went on from the trace's byte
     expect(m.mem.read(0x3c00, 1)[0]).toBe(0x4d); // and still stores through its gate
+  });
+
+  it('a video byte the trace read that differs from ours by more than the gate is not substituted: the read diverges', () => {
+    // The same raw trace ($0D read back from $3C00); ours holds $4D there, but just before the
+    // read (test-only) its byte is made $4C, which no gate makes of $0D. The fix (known.js,
+    // video-read-gate) must not touch it: our CPU reads its own byte, and A differs.
+    const m0 = new Machine({ model: 1, roms: { level2: ROM }, lowercase: true });
+    m0.mem.write(0x4000, VIDEO);
+    const t = recordOurs(m0, 40);
+    const path = join(dir, 'video-raw-far.fmt');
+    writeTrace(path, { header: {}, ...t });
+    const m = fresh();
+    m.mem.write(0x4000, VIDEO);
+    let poked = false;
+    // After the boot's four and the eight that write (instructions 0-11), before LD A,($3C00).
+    const progress = { every: 12, fn: () => { if (!poked) m.system.memory.videoRam[0] = 0x4c; poked = true; } };
+    const r = compareRun({ machine: m, reference: openTrace(path), instructions: 40, progress });
+    expect(r.divergence).toMatchObject({ index: 12, pc: 0x4014, fields: ['a'], known: null });
+    expect(r.divergence?.ours.regs.a).toBe(0x4c);
+    expect(r.divergence?.theirs.regs.a).toBe(0x0d);
+    expect(r.known).toEqual({});
   });
 
   it('planted: our gate inverted is caught at the first video write, against a trace', () => {
@@ -510,6 +463,23 @@ describe('the Model I\'s devices against a trace (our own machine recorded in MA
     // The boot's four, the four loads, then the LDIR's first iteration: instruction 8.
     expect(r.divergence).toMatchObject({ index: 8, pc: 0x400b, fields: ['f.3', 'f.5'], known: null });
     expect(r.known).toEqual({});
+  });
+});
+
+describe('mameTimer: our 40 Hz on MAME\'s schedule (mame-clock.js, test-only)', () => {
+  it('ticks where MAME\'s 1,774,083 Hz clock puts them: as ours for thirteen ticks, then a T-state later every thirteen or so', () => {
+    expect([1, 2, 13, 14, 27].map(mameTick)).toEqual([44_352, 88_704, 576_576, 620_929, 1_197_506]);
+    const m = mameTimer(new Machine({ model: 1, roms: { level2: ROM } }));
+    m.run({ cycles: 700_000 });
+    expect(m.system.nextRtcAt).toBe(mameTick(16));
+  });
+
+  it('a reset or a restored state during the run throws, rather than taking the timer off MAME\'s schedule', () => {
+    const m = mameTimer(new Machine({ model: 1, roms: { level2: ROM } }));
+    m.run({ cycles: 100_000 });
+    const state = serializeState(m.system);
+    expect(() => m.system.reset()).toThrow(/^mameTimer: the 40 Hz was set to T-state \d+, where only its tick's own advance \(\d+, after MAME's tick 3\) keeps it on MAME's schedule; a reset or a restored state during a run that follows MAME is not supported$/);
+    expect(() => restoreState(m.system, state)).toThrow(/^mameTimer: the 40 Hz was set to T-state/);
   });
 });
 
@@ -610,20 +580,17 @@ describe.skipIf(mameSkip !== null)(`the Model I's devices against MAME${mameSkip
   };
   // MAME runs from power-on, so the programs go in the ROM itself, at $0100, and the ROM jumps there.
   const LOOP_ROM = (() => {
-    const rom = syntheticRom();
-    rom.set([0xc3, 0x00, 0x01], 6); // JP $0100
+    const rom = syntheticRom([0xc3, 0x00, 0x01]); // JP $0100
     rom.set(LOOP, 0x100);
     return rom;
   })();
   const VIDEO_ROM = (() => {
-    const rom = syntheticRom();
-    rom.set([0xc3, 0x00, 0x01], 6);
+    const rom = syntheticRom([0xc3, 0x00, 0x01]); // JP $0100
     rom.set(VIDEO, 0x100);
     return rom;
   })();
   const SCF_ROM = (() => {
-    const rom = syntheticRom();
-    rom.set([0xc3, 0x00, 0x01], 6);
+    const rom = syntheticRom([0xc3, 0x00, 0x01]); // JP $0100
     rom.set(SCF, 0x100);
     return rom;
   })();
@@ -668,7 +635,7 @@ describe.skipIf(mameSkip !== null)(`the Model I's devices against MAME${mameSkip
     mameTimer(late);
     const get = /** @type {() => number} */ (Object.getOwnPropertyDescriptor(late.system, 'nextRtcAt')?.get);
     const set = /** @type {(v: number) => void} */ (Object.getOwnPropertyDescriptor(late.system, 'nextRtcAt')?.set);
-    Object.defineProperty(late.system, 'nextRtcAt', { configurable: true, get: () => get() + 1, set });
+    Object.defineProperty(late.system, 'nextRtcAt', { configurable: true, get: () => get() + 1, set: (v) => set(v - 1) });
     const d = compareRun({ machine: late, reference: openTrace(path), instructions: 200_000 }).divergence;
     expect(d?.fields).toEqual(['irqTime']);
   });
