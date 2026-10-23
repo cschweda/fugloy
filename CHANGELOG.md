@@ -39,6 +39,22 @@ creates and pushes the tag.
 
 ### Changed
 
+- The Model I differential's last four residuals (emu phase 7, the Model I sweep's Task 1,
+  2026-10-23; plan `docs/superpowers/plans/2026-10-23-emu-phase7-model1-sweep.md`). The MAME
+  recorder's silence watchdog takes a tick that comes more than one interval late for a stall of the
+  recorder itself (its event loop blocked, as a comparison beside recordings that run at once blocks
+  it), not for MAME's silence, and it ends with the trace, so it never stops a healthy recording and
+  a MAME slow to exit after its last record leaves its trace complete (one still running a minute
+  after it closed its trace is stopped, the trace as whole as it was). The repeating
+  LDIR/LDDR/CPIR/CPDR class is one per reference rule, as SCF/CCF's is, each holding the reference
+  to its own rule as well as ours to PC's: xtrs's to Young's n, the finished iteration's rule, which
+  it keeps at every iteration, and trsjs's to the bits it had. A reference value off its rule is
+  then a divergence against xtrs, and against trsjs its general flag 3 and 5 class counts it; every
+  session's block count is the same under the new names. `pnpm mame:trace lines` reads a trace that
+  loaded a program, given with `--program <file>`, and names that option when it is missing. Emu
+  spec §10 lists xtrs's interrupt after a lone DD or FD among the reference limitations no session
+  meets.
+
 - The differential harness's known classes are each reference's own (emu phase 7, the final
   review of the Model I half, 2026-10-22): a reference declares the classes it needs
   (`Reference.classes`, in `test/diff/`), each found against it with its evidence, and `compareRun`

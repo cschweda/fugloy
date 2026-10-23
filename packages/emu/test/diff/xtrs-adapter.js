@@ -64,7 +64,7 @@ const PAIRED_OPCODES = new Set(Array.from({ length: 256 }, (_, k) => k).filter((
  * it keeps its 40 Hz request in its latch as ours does (compare.js never holds it back or forces
  * it); and no reference fix, since it drops no DD/FD pair.
  */
-export const XTRS_CLASSES = new Set(['block-xy', 'scf-ccf-a', 'bit-mem-xy', 'ex-sp-order', 'io-cycles']);
+export const XTRS_CLASSES = new Set(['block-xy-n', 'scf-ccf-a', 'bit-mem-xy', 'ex-sp-order', 'io-cycles']);
 
 /** @param {Buffer | string} b */
 const sha256 = (b) => createHash('sha256').update(b).digest('hex');

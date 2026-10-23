@@ -292,6 +292,19 @@ function instrument(m, follow = null, devices = modelDevices(3, false), theirsVi
   return {
     log,
     machine: m,
+    /**
+     * A byte of our memory without a read's side effects (known.js, StepContext's peek): the
+     * $37E0 latch peeked, and, following a trace, read as a snapshot, so no trace keyboard byte is
+     * used up. @param {number} addr
+     */
+    peek(addr) {
+      snapshot = true;
+      try {
+        return mem.peekByte(addr & 0xffff);
+      } finally {
+        snapshot = false;
+      }
+    },
     step() {
       log.writes = [];
       log.irq = false;
@@ -509,6 +522,7 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
       const ctx = {
         bytes,
         execPc,
+        peek: ours.peek,
         ours: { regs: o, cycles: oursCycles, irq: oursIrq, writes: ours.log.writes, wasHalted, fBefore, q: cpu.q, wz: cpu.wz },
         theirs: { regs: s, cycles: t.cycles, irq: t.irq, writes: ref.writes() },
       };

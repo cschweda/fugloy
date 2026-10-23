@@ -17,10 +17,10 @@
  * Three kinds:
  *
  * - **Step classes** explain differences in one compared step. Each has a predicate over the step
- *   (the instruction our CPU executed, both machines' registers, T-states, and memory writes) and
- *   names the exact fields it explains: single flag bits, one register, the writes. A step is
- *   known only when the classes that apply explain every field that differs; anything left over
- *   is a divergence.
+ *   (the instruction our CPU executed, both machines' registers, T-states, and memory writes, and
+ *   our memory) and names the exact fields it explains: single flag bits, one register, the
+ *   writes. A step is known only when the classes that apply explain every field that differs;
+ *   anything left over is a divergence.
  * - **Interrupt classes** are timing: trsjs drops a 30 Hz request it cannot take at once, where
  *   the Z80 keeps the line asserted (the Model III's request is a level, latched in port $E0 until
  *   read) and takes it at the first boundary it may. compare.js keeps such a request as *held*,
@@ -58,6 +58,10 @@
  *   running, so a program that halts is compared on our CPU's rule, and xtrs refuses to sync there.
  * - xtrs takes no interrupt in IM 0 or IM 2 (z80.c do_int: `error("interrupt in im0 not
  *   supported")`); MAME's recorder refuses one (mame-trace.js).
+ * - xtrs takes a pending interrupt after a lone DD or FD (one before DD, FD or ED), which the Z80
+ *   does not (Young §3.7, §5.5; our CPU holds it, as held-prefix below says): xtrs-fugloy.patch's
+ *   z80_fugloy_interrupt passes over only EI. xtrs declares no interrupt class, so the comparator
+ *   does not hold it back there.
  * - MAME's CPU clock is 10.6445 MHz / 6 = 1,774,083 Hz (trs80.cpp, the Handbook p. 14: "a little
  *   over 1.774 MHz"), ours and xtrs's 1,774,080 (`CLOCK_MHZ_1` 1.77408); MAME times its 40 Hz
  *   interrupt in emulated seconds (`set_periodic_int(..., attotime::from_hz(40))`), 44,352.08 of
@@ -86,11 +90,15 @@ export const flagToken = (reg, name) => `${reg}.${name}`;
  * @typedef {{
  *   bytes: Uint8Array,
  *   execPc: number,
+ *   peek(addr: number): number,
  *   ours: Side & { wasHalted: boolean, fBefore: number, q: number, wz: number },
  *   theirs: Side,
  * }} StepContext
  *   bytes: four bytes of our memory at execPc as our CPU began the instruction it executed this
  *   step (after an interrupt response, the handler's first; four zeros, a NOP, for a halted step).
+ *   peek: a byte of our memory after the step, read without a read's side effects (the $37E0 latch
+ *   is not cleared, a trace's keyboard bytes are not used up); the byte a repeating CPIR or CPDR
+ *   compared is still at (HL) before it (blockN).
  *   ours.fBefore: our F before the step; ours.q: our CPU's Q for the instruction it executed (F's
  *   bits 5 and 3 an SCF or CCF keeps: 28H when the instruction before left the flags alone, else 0);
  *   ours.wz: our MEMPTR after the step (a BIT n,(HL) shows its high byte in flags 3 and 5 and leaves
@@ -145,6 +153,43 @@ const isBlockCompare = (/** @type {Uint8Array} */ bytes) => bytes[0] === 0xed &&
 /** LDIR, LDDR, CPIR, CPDR (ED B0, B8, B1, B9). */
 const isBlockRepeat = (/** @type {Uint8Array} */ bytes) => bytes[0] === 0xed && (bytes[1] & 0xf6) === 0xb0;
 
+/**
+ * Our side of a repeating LDIR, LDDR, CPIR or CPDR step (block-xy-n and block-xy-keep below): our
+ * instruction repeated (no interrupt response in the step, and our PC back on its ED) and our F
+ * bits 3 and 5 are PC's bits 13 and 11.
+ * @param {StepContext} ctx
+ */
+const blockOurs = (ctx) => isBlockRepeat(ctx.bytes) && !ctx.ours.irq && ctx.ours.regs.pc === ctx.execPc
+  && (ctx.ours.regs.f & 0x28) === ((ctx.execPc >> 8) & 0x28);
+
+/**
+ * The reference's F bits 3 and 5 by the rule for an iteration that ends (Young §4.2), from its n:
+ * Y (bit 5) is n's bit 1 and X (bit 3) its bit 3, where n is A plus the byte moved for LDIR and
+ * LDDR, and A less the byte compared less H for CPIR and CPDR (H the compare's borrow from bit 4),
+ * as our core's _xyBlock takes them for LDI and CPI; A is the reference's own. The byte moved is
+ * the reference's own too, its step's last write. The byte compared is the one at (HL) before the
+ * step, read from our memory (`peek`: HL after a CPIR iteration less one, after a CPDR one plus
+ * one), which the reference's equals, since the comparator keeps the two memories equal. -1, which
+ * no F's bits equal, for an LDIR or LDDR step of the reference that wrote nothing.
+ * @param {StepContext} ctx a repeating block step (blockOurs)
+ */
+function blockN(ctx) {
+  const a = ctx.theirs.regs.a;
+  let n;
+  if ((ctx.bytes[1] & 0x01) === 0) {
+    const w = ctx.theirs.writes;
+    if (w.length === 0) return -1;
+    n = a + w[w.length - 1].value;
+  } else {
+    const { h, l } = ctx.ours.regs;
+    // ED B1 counts HL up, B9 down.
+    const v = ctx.peek((((h << 8) | l) + ((ctx.bytes[1] & 0x08) === 0 ? -1 : 1)) & 0xffff);
+    n = a - v - ((a & 0x0f) < (v & 0x0f) ? 1 : 0);
+  }
+  n &= 0xff;
+  return ((n & 0x02) << 4) | (n & 0x08);
+}
+
 /** IN A,(n) (DB), IN r,(C) (ED 40-78, x0), INI/IND/INIR/INDR and OUTI/OUTD/OTIR/OTDR (ED A2-BB, x2/x3). */
 const isTimedIo = (/** @type {Uint8Array} */ bytes) => bytes[0] === 0xdb
   || (bytes[0] === 0xed && ((bytes[1] & 0xc7) === 0x40 || (bytes[1] & 0xe6) === 0xa2));
@@ -172,20 +217,39 @@ const isExSp = (/** @type {Uint8Array} */ bytes) => bytes[0] === 0xe3 || ((bytes
 /** @type {StepClass[]} */
 export const STEP_CLASSES = [
   {
-    id: 'block-xy',
-    name: 'repeating LDIR/LDDR/CPIR/CPDR: flags 3 and 5 from PC',
+    id: 'block-xy-n',
+    name: 'repeating LDIR/LDDR/CPIR/CPDR: the reference takes flags 3 and 5 from n, not PC',
     // An iteration that repeats leaves Y = PC bit 13 and X = PC bit 11 (PC the ED's address): David
     // Banks, Z80Decoder wiki "Undocumented Flags", "LDxR / CPxR interrupted"; Peter Helcmanovsky's
     // Z80 Block Flags Test, run on real Z80s; MAME 0.289 z80.lst `macro ldir` (`m_f.yx_val = PC >> 8`
     // after `PC -= 2`), as our core does (z80cpu.js _xyRepeat). Young §4.2 (2005) gives the finished
-    // iteration's rule "at every iteration", which xtrs keeps (z80.c do_ldir: do_ldi's flags, then
-    // PC -= 2); trsjs's oped_b0 (trsemu-1.6.js) leaves bits 3 and 5 as they were. Explained only
-    // when our instruction repeated (our PC is back on the ED) and our F bits 3 and 5 are PC's bits
-    // 13 and 11; it takes these bits before the general class below.
-    evidence: 'Banks, Z80Decoder wiki, "LDxR / CPxR interrupted": YF = PC.13, XF = PC.11; Helcmanovsky\'s Z80 Block Flags Test on real Z80s; MAME 0.289 z80.lst `ldir`. Young §4.2 (2005) predates it; xtrs follows Young, trsjs leaves the bits alone.',
+    // iteration's rule, from its n, "at every iteration", and xtrs keeps it: tools/xtrs/src/z80.c's
+    // do_ldir runs `do_ldi();` (line 1014) and then backs PC up, do_ldi taking them from `undoc =
+    // REG_A + moved;` (line 989), and do_cpir runs `do_cpi();` (line 606), whose flags take `result -
+    // H` (lines 537-543); do_lddr and do_cpdr run do_ldd and do_cpd the same way (the FASTMEM
+    // versions, which move a whole block in one step, are not built: scripts/install-xtrs.sh).
+    // Explained only when our instruction repeated (no interrupt response in the step, our PC back on
+    // the ED), our F bits 3 and 5 are PC's bits 13 and 11, and the reference's are n's (blockN), each
+    // side on its own rule; it takes these bits before the general class below.
+    evidence: 'Banks, Z80Decoder wiki, "LDxR / CPxR interrupted": YF = PC.13, XF = PC.11; Helcmanovsky\'s Z80 Block Flags Test on real Z80s; MAME 0.289 z80.lst `ldir`. Young §4.2 (2005) gives the iteration\'s n at every iteration, as xtrs\'s z80.c does (do_ldir runs do_ldi, do_cpir do_cpi).',
     explains(ctx, diff) {
-      if (!isBlockRepeat(ctx.bytes) || ctx.ours.irq || ctx.ours.regs.pc !== ctx.execPc) return null;
-      if ((ctx.ours.regs.f & 0x28) !== ((ctx.execPc >> 8) & 0x28)) return null;
+      if (!blockOurs(ctx) || (ctx.theirs.regs.f & 0x28) !== blockN(ctx)) return null;
+      const t = ['f.5', 'f.3'].filter((k) => diff.has(k));
+      return t.length > 0 ? t : null;
+    },
+  },
+  {
+    id: 'block-xy-keep',
+    name: 'repeating LDIR/LDDR/CPIR/CPDR: the reference leaves flags 3 and 5 as they were',
+    // Ours as the class above has it (Banks's research, Helcmanovsky's test, MAME's z80.lst).
+    // trsjs's oped_b0 and oped_b8 (trsemu-1.6.js) set H, N and P/V, and its oped_b1 and oped_b9 S, Z,
+    // H, N, P/V and C through cp's sub; none sets its f5 or f3. Explained only when ours is PC's (as
+    // above) and the reference's F bits 3 and 5 are F's before the step (both sides start a step
+    // equal: compare.js resyncs the reference after any difference), each side on its own rule; it
+    // takes these bits before the general class below.
+    evidence: 'Banks, Z80Decoder wiki, "LDxR / CPxR interrupted": YF = PC.13, XF = PC.11; Helcmanovsky\'s Z80 Block Flags Test on real Z80s; MAME 0.289 z80.lst `ldir`. trsjs\'s oped_b0, oped_b8, oped_b1 and oped_b9 (trsemu-1.6.js) leave them.',
+    explains(ctx, diff) {
+      if (!blockOurs(ctx) || (ctx.theirs.regs.f & 0x28) !== (ctx.ours.fBefore & 0x28)) return null;
       const t = ['f.5', 'f.3'].filter((k) => diff.has(k));
       return t.length > 0 ? t : null;
     },

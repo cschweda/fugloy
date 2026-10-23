@@ -99,7 +99,7 @@ const fixture = (/** @type {RegExp} */ pattern) => {
 };
 
 const BIT_XY = 'BIT n,(HL) and BIT n,(IX+d): the reference clears flags 3 and 5';
-const BLOCK_XY = 'repeating LDIR/LDDR/CPIR/CPDR: flags 3 and 5 from PC';
+const BLOCK_XY = 'repeating LDIR/LDDR/CPIR/CPDR: the reference takes flags 3 and 5 from n, not PC';
 const EX_SP = 'EX (SP),rr: the reference writes (SP) before (SP+1)';
 const IO = 'IN and block I/O: the reference counts one T-state less';
 const SCF_CCF = 'SCF/CCF: the reference takes flags 3 and 5 from A alone';

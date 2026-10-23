@@ -175,7 +175,7 @@ describe.skipIf(xtrsSkip !== null)(`xtrs adapter against @fugloy/emu's Model I${
     // The one EX (SP),HL of the boot (instruction 13,603, $287D): xtrs writes (SP) first; and the
     // LDIRs at $067F and $007E while they repeat: xtrs keeps Young's flags 3 and 5, ours and MAME's
     // take PC's (known.js), the 5,112 rows the spike found in MAME.
-    expect(r.known).toEqual({ 'EX (SP),rr: the reference writes (SP) before (SP+1)': 1, 'repeating LDIR/LDDR/CPIR/CPDR: flags 3 and 5 from PC': 5_112 });
+    expect(r.known).toEqual({ 'EX (SP),rr: the reference writes (SP) before (SP+1)': 1, 'repeating LDIR/LDDR/CPIR/CPDR: the reference takes flags 3 and 5 from n, not PC': 5_112 });
     expect(ref.cycles).toBe(m.cycles);
     expect(ref.peek(0x3c00, 0xc400)).toEqual(m.mem.read(0x3c00, 0xc400));
     // The boot reached MEM SIZE? on both.

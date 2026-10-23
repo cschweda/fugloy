@@ -4,13 +4,16 @@
  * `pnpm diff --model 1 --reference mame --trace <file>` (scripts/diff.mjs).
  *
  *   pnpm mame:trace record <instructions> [--out <file>] [--keys <script.json>]
- *   pnpm mame:trace lines <file> [--count N]
+ *   pnpm mame:trace lines <file> [--count N] [--program <file>]
  *
  * record: runs MAME 0.289 (`pnpm mame:install` first) from power-on for N instructions and writes
  * the trace (default tools/mame/traces/trace-<N>.fmt, gitignored). `--keys` names a JSON file of
  * `[{ "at": <T-states from power-on>, "text": "\r" }]`, posted through MAME's natural keyboard.
  * lines: `index PC AF BC DE HL IX IY SP IFF1 cycles`, the state before each
- * instruction, as the spike's packages/emu/scripts/spike-model1/fielddiff.py reads it.
+ * instruction, as the spike's packages/emu/scripts/spike-model1/fielddiff.py reads it. A trace that
+ * loaded a program (the tests record those) is read with that program, `--program` (openTrace
+ * checks it is the one, by its SHA-256); the load's record shows the PC the load replaced, as MAME
+ * wrote it (mame-trace.js, TraceLoad).
  *
  * Exit status: 0 done, 2 a usage or setup error, 3 a recording that ended before the instructions
  * asked for (it says why; the trace proves nothing past that point).
@@ -21,7 +24,7 @@ import { openTrace, recordMameTrace } from '../test/diff/mame-trace.js';
 
 const USAGE = [
   'usage: pnpm mame:trace record <instructions> [--out <file>] [--keys <script.json>]',
-  '       pnpm mame:trace lines <file> [--count N]',
+  '       pnpm mame:trace lines <file> [--count N] [--program <file>]',
   '(compare a trace with pnpm diff --model 1 --reference mame --trace <file>)',
 ].join('\n');
 
@@ -78,7 +81,15 @@ if (cmd === 'record') {
   fail('pnpm mame:trace compare moved: run pnpm diff --model 1 --reference mame --trace <file> [--instructions N]');
 } else if (cmd === 'lines') {
   if (pos.length !== 1) fail(USAGE);
-  const ref = openTrace(resolve(cwd, pos[0]));
+  let program;
+  if (typeof opt.program === 'string') {
+    try {
+      program = new Uint8Array(readFileSync(resolve(cwd, opt.program)));
+    } catch (e) {
+      fail(`cannot read the program ${opt.program}: ${/** @type {Error} */ (e).message}`);
+    }
+  }
+  const ref = openTrace(resolve(cwd, pos[0]), { program });
   const n = opt.count === undefined ? ref.header.records : count('--count', opt.count);
   const h2 = (/** @type {number} */ v) => v.toString(16).toUpperCase().padStart(2, '0');
   const h4 = (/** @type {number} */ v) => v.toString(16).toUpperCase().padStart(4, '0');

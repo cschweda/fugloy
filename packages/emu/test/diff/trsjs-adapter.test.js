@@ -69,7 +69,7 @@ describe.skipIf(trsjsSkip !== null)(`trsjs adapter against @fugloy/emu${trsjsSki
       'flags 3 and 5 (X/Y)': 2728,
       'interrupt held while DI: trsjs drops it': 1,
       'interrupt response: R not counted': 13,
-      'repeating LDIR/LDDR/CPIR/CPDR: flags 3 and 5 from PC': 1,
+      'repeating LDIR/LDDR/CPIR/CPDR: the reference leaves flags 3 and 5 as they were': 1,
     });
     // Video RAM and RAM agree at the end.
     expect(ref.peek(0x3c00, 0xc400)).toEqual(m.mem.read(0x3c00, 0xc400));

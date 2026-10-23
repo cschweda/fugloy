@@ -237,7 +237,7 @@ describe('a trace that loaded a program: our machine loads it at the same step',
     const { header, start, records } = loadedTrace(100, 100);
     const path = join(dir, 'loaded-refuse.fmt');
     writeTrace(path, { header, start, records });
-    expect(() => openTrace(path)).toThrow(`${path} loaded a program (SHA-256 ${sha(PROGRAM)}) at instruction 100; give the same program (openTrace's program, or pnpm diff's <program>)`);
+    expect(() => openTrace(path)).toThrow(`${path} loaded a program (SHA-256 ${sha(PROGRAM)}) at instruction 100; give the same program (openTrace's program, pnpm diff's <program>, or pnpm mame:trace lines --program <file>)`);
     const other = PROGRAM.slice();
     other[4] = 0x3d;
     expect(() => openTrace(path, { program: other })).toThrow(`${path} loaded another program (SHA-256 ${sha(PROGRAM)}) than the one given (${sha(other)})`);
@@ -263,12 +263,34 @@ describe('a trace that loaded a program: our machine loads it at the same step',
     expect(run.status).toBe(0);
     const without = diffTrace(path, ['--rom', romPath]);
     expect(without.status).toBe(2);
-    expect(without.stderr).toContain(`${path} loaded a program (SHA-256 ${sha(PROGRAM)}) at instruction ${header.load.at}; give the same program (openTrace's program, or pnpm diff's <program>)`);
+    expect(without.stderr).toContain(`${path} loaded a program (SHA-256 ${sha(PROGRAM)}) at instruction ${header.load.at}; give the same program (openTrace's program, pnpm diff's <program>, or pnpm mame:trace lines --program <file>)`);
     const plain = join(dir, 'cli-plain.fmt');
     writeTrace(plain, { header: {}, ...keyedTrace(100) });
     const stray = diffTrace(plain, [program, '--rom', romPath]);
     expect(stray.status).toBe(2);
     expect(stray.stderr).toContain(`${plain} loaded no program (pnpm mame:trace record records the ROM's boot and typed keys); pass none`);
+  });
+
+  it('pnpm mame:trace lines reads a trace that loaded a program, given it with --program, and names the option without it', () => {
+    const { header, start, records } = loadedTrace(100, 100);
+    const path = join(dir, 'lines-loaded.fmt');
+    writeTrace(path, { header, start, records });
+    const program = join(dir, 'lines-program.cmd');
+    writeFileSync(program, PROGRAM);
+    const run = spawnSync(process.execPath, [CLI, 'lines', path, '--program', program], { encoding: 'utf8' });
+    expect(run.stderr).toBe('');
+    expect(run.status).toBe(0);
+    const lines = run.stdout.trimEnd().split('\n');
+    expect(lines).toHaveLength(records.length);
+    expect(lines.every((l, k) => l.startsWith(`${k} `))).toBe(true);
+    // The load's record as MAME wrote it, with the PC the load replaced (TraceLoad); the next is
+    // the state after the program's first instruction, LD A,$42 at $5100.
+    const pc = (/** @type {string} */ l) => l.split(' ')[1];
+    expect(pc(lines[header.load.at])).toBe(header.load.pc.toString(16).toUpperCase().padStart(4, '0'));
+    expect(lines[header.load.at + 1]).toMatch(new RegExp(`^${header.load.at + 1} 5102 42`));
+    const without = spawnSync(process.execPath, [CLI, 'lines', path], { encoding: 'utf8' });
+    expect(without.status).toBe(2);
+    expect(without.stderr).toContain(`${path} loaded a program (SHA-256 ${sha(PROGRAM)}) at instruction ${header.load.at}; give the same program (openTrace's program, pnpm diff's <program>, or pnpm mame:trace lines --program <file>)`);
   });
 });
 
@@ -355,6 +377,72 @@ describe('a trace that ends early says so, never "no divergence" (Review Focus 3
     expect(full.stdout).toContain('our 40 Hz on MAME\'s clock (1,774,083 Hz): test-only, test/diff/mame-clock.js\n');
     expect(full.status).toBe(0);
   });
+});
+
+describe('the silence watchdog stops only a MAME that wrote nothing (the Model I sweep, Review Focus 3)', () => {
+  /**
+   * A stand-in for Homebrew's MAME 0.289 at `rel` (its Cellar folder and -version) that records a
+   * whole trace: FUGLOY_MAME_RECORDS records, each one's PC its index, and no memory writes, so its
+   * start and end memory (64K of zeros) agree with the records and the recording verifies. Before
+   * the records it writes lines the recorder reads and ignores for `busy` seconds, so it is never
+   * silent; after closing the trace it takes `exit` seconds to exit (as one process, so a SIGKILL
+   * ends it), as MAME does while it shuts down.
+   * @param {string} rel @param {{ busy?: number, exit?: number }} opts
+   */
+  const wholeTrace = (rel, { busy = 0, exit = 0 }) => script(rel, [
+    `case "$1" in -version) echo '${MAME_VERSION}'; exit 0;; esac`,
+    'head -c 65536 /dev/zero > "$FUGLOY_MAME_START"',
+    'cp "$FUGLOY_MAME_START" "$FUGLOY_MAME_END"',
+    '{',
+    `  end=$(( $(date +%s) + ${busy} ))`,
+    '  while [ "$(date +%s)" -lt "$end" ]; do i=0; while [ $i -lt 200 ]; do echo "W 0000 00"; i=$((i+1)); done; done',
+    '  i=0',
+    '  while [ $i -lt "$FUGLOY_MAME_RECORDS" ]; do',
+    '    printf "T %04X 0000 0000 0000 0000 0000 0000 0000 0000 FFFF FFFF 0000 00 00 0 0 0 %d 00\\n" $i $((i * 4))',
+    '    i=$((i+1))',
+    '  done',
+    '  echo E',
+    '} > "$FUGLOY_MAME_TRACE"',
+    `exec sleep ${exit}`,
+  ].join('\n'));
+  const whole = { complete: true, verified: true, records: 11, reason: null };
+
+  it('a busy recorder does not take MAME for silent', async () => {
+    const bin = wholeTrace('busy/Cellar/mame/0.289/bin/mame', { busy: 4 });
+    const out = join(dir, 'busy.fmt');
+    const recording = recordMameTrace({ instructions: 10, out, bin, romDir: dir, skipRomCheck: true, silenceMs: 1000 });
+    // The recorder's own event loop blocked for 2.5 s while MAME writes on, as another session's
+    // synchronous compareRun blocks it when recordings run at once (outside the timers phase, so
+    // the watchdog's tick comes before the trace's waiting data when the loop runs again).
+    setTimeout(() => setImmediate(() => {
+      const t = Date.now();
+      while (Date.now() - t < 2_500);
+    }), 500);
+    expect(await recording).toEqual({ path: out, instructions: 10 });
+    const ref = openTrace(out);
+    expect(ref.header).toMatchObject(whole);
+    ref.close?.();
+  }, 30_000);
+
+  it('the watchdog ends with the stream: a MAME slow to exit after its last record leaves the trace complete', async () => {
+    const bin = wholeTrace('slow-exit/Cellar/mame/0.289/bin/mame', { exit: 3 });
+    const out = join(dir, 'slow-exit.fmt');
+    expect(await recordMameTrace({ instructions: 10, out, bin, romDir: dir, skipRomCheck: true, silenceMs: 1000 })).toEqual({ path: out, instructions: 10 });
+    const ref = openTrace(out);
+    expect(ref.header).toMatchObject(whole);
+    ref.close?.();
+  }, 30_000);
+
+  it('a MAME that never exits after its last record is stopped, not waited on, and its trace stays whole', async () => {
+    const bin = wholeTrace('stuck-exit/Cellar/mame/0.289/bin/mame', { exit: 600 });
+    const out = join(dir, 'stuck-exit.fmt');
+    const t0 = performance.now();
+    expect(await recordMameTrace({ instructions: 10, out, bin, romDir: dir, skipRomCheck: true, silenceMs: 1000 })).toEqual({ path: out, instructions: 10 });
+    expect(performance.now() - t0).toBeLessThan(10_000);
+    const ref = openTrace(out);
+    expect(ref.header).toMatchObject(whole);
+    ref.close?.();
+  }, 30_000);
 });
 
 describe.skipIf(mameSkip !== null)(`MAME's Model I as a trace${mameSkip === null ? '' : ` (skipped: ${mameSkip})`}`, { timeout: 180_000 }, () => {

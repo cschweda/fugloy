@@ -53,8 +53,9 @@ export const CHARGEN = { name: 'mcm6670p.z29', size: 1024, crc: '0033f2b9' };
 
 /**
  * How long MAME may write nothing to the trace before the recorder stops it (Review Focus 5: fail
- * clearly rather than hang). MAME writes about 70,000 records a second from power-on, so a minute
- * of silence is a MAME that hangs or never opened the trace, never a slow one.
+ * clearly rather than hang), and how long it may take to exit once it has closed the trace. MAME
+ * writes about 70,000 records a second from power-on, so a minute of silence is a MAME that hangs
+ * or never opened the trace, never a slow one.
  */
 export const MAME_SILENCE_MS = 60_000;
 
@@ -436,7 +437,11 @@ const CALLS = new Set([0xcd, 0xc4, 0xcc, 0xd4, 0xdc, 0xe4, 0xec, 0xf4, 0xfc]);
  * Resolves with the path and the instructions recorded, which are fewer than asked when MAME
  * stopped early: the file's header then says why, and a comparison against it reports that
  * sentence. MAME stopped early includes a MAME that writes nothing to the trace for `silenceMs`
- * (default MAME_SILENCE_MS): the recorder kills it and the trace ends there, with that reason.
+ * (default MAME_SILENCE_MS): the recorder kills it and the trace ends there, with that reason. A
+ * recorder too busy to read the trace (its event loop blocked past a tick of the watchdog, as
+ * recordings beside a comparison are) does not take that for MAME's silence, and the watchdog ends
+ * with the trace, so a MAME slow to exit after its last record leaves the trace whole (one still
+ * there `silenceMs` later is stopped, its trace as whole as it was).
  * Rejects (a sentence) when MAME or the ROM set is not the pinned one, or when MAME's
  * memory at the end disagrees with the recorded writes (the trace lost something).
  * @param {{ instructions: number, keys?: { at: number, text: string }[], matrix?: { at: number, row: number, bit: number, down: boolean }[], load?: { program: Uint8Array, at: number }, out?: string, bin?: string, romDir?: string, rom?: Uint8Array, skipRomCheck?: boolean, silenceMs?: number }} opts
@@ -625,21 +630,35 @@ export async function recordMameTrace({ instructions, keys = [], matrix = [], lo
 
   const stream = createReadStream(fifo, { highWaterMark: 1 << 20 });
   let rest = '';
-  /** When MAME last wrote to the trace (or started). */
+  /** When MAME last wrote to the trace (or started), or the recorder last found itself stalled. */
   let heard = Date.now();
+  /** The watchdog's interval, and when it last ticked. */
+  const every = Math.min(1000, silenceMs);
+  let ticked = heard;
   /** @type {NodeJS.Timeout | undefined} */
   let watchdog;
   try {
     await new Promise((resolve, reject) => {
       // A MAME that writes nothing for silenceMs (hung, or stuck before it opened the trace) is
-      // killed, and the trace ends there with the reason, as any short trace does.
+      // killed, and the trace ends there with the reason, as any short trace does. A tick more than
+      // one interval late is a stall of the recorder itself, not MAME's silence: its event loop was
+      // blocked (another session's synchronous compareRun blocks it when recordings run at once, the
+      // Model I sweep's Review Focus 3), and MAME's lines may have waited in the FIFO all along,
+      // unread, so the count starts again.
       watchdog = setInterval(() => {
-        if (Date.now() - heard <= silenceMs) return;
+        const now = Date.now();
+        const late = now - ticked - every;
+        ticked = now;
+        if (late > every) {
+          heard = now;
+          return;
+        }
+        if (now - heard <= silenceMs) return;
         stop ??= `MAME wrote nothing to the trace for ${silenceMs / 1000} s, so the recorder stopped it`;
         child.kill('SIGKILL');
         stream.destroy();
         resolve(undefined);
-      }, Math.min(1000, silenceMs));
+      }, every);
       stream.on('data', (chunk) => {
         heard = Date.now();
         try {
@@ -659,6 +678,9 @@ export async function recordMameTrace({ instructions, keys = [], matrix = [], lo
         }
       });
       stream.on('end', () => {
+        // MAME closed the trace, so the watchdog, which watches the trace, ends with it: MAME
+        // writes nothing more to it while it exits, and that is no silence.
+        clearInterval(watchdog);
         if (rest !== '') onLine(rest);
         resolve(undefined);
       });
@@ -668,7 +690,12 @@ export async function recordMameTrace({ instructions, keys = [], matrix = [], lo
         try { closeSync(openSync(fifo, constants.O_WRONLY | constants.O_NONBLOCK)); } catch { /* no reader: the stream is done */ }
       });
     });
+    // A MAME that has not exited silenceMs after the trace ended is stuck in its shutdown, and is
+    // stopped rather than waited on for ever. Its trace is as whole as it was: mame-trace.lua saves
+    // the end memory before the exit that closes the trace.
+    const stuck = setTimeout(() => child.kill('SIGKILL'), silenceMs);
     const { code, signal } = /** @type {{ code: number | null, signal: string | null }} */ (await exited);
+    clearTimeout(stuck);
     if (pending !== null) emit(pending);
     flush();
     header.records = count;
@@ -832,7 +859,7 @@ export function openTrace(path, { program } = {}) {
   if (load !== null) {
     if (program === undefined) {
       closeSync(fd);
-      throw new Error(`${path} loaded a program (SHA-256 ${load.sha256}) at instruction ${load.at}; give the same program (openTrace's program, or pnpm diff's <program>)`);
+      throw new Error(`${path} loaded a program (SHA-256 ${load.sha256}) at instruction ${load.at}; give the same program (openTrace's program, pnpm diff's <program>, or pnpm mame:trace lines --program <file>)`);
     }
     const sha = createHash('sha256').update(program).digest('hex');
     if (sha !== load.sha256) {
