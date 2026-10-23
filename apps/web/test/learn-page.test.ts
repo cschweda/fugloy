@@ -125,9 +125,9 @@ describe('the page helpers', () => {
     expect(lessonMessage('The program stopped because you changed the model. Press Run to run the source on this one.')).toBe(
       "The program stopped because you changed the model. Press Run ▶ to run the lesson's program on this one.",
     );
-    // A Model I lesson's HALT (the stub cannot give the Model I's reset to BASIC).
+    // A Model I lesson's HALT (a reset to BASIC needs a ROM, and a lesson has none: "one" is that ROM, not the stub).
     expect(lessonMessage(MODEL1_HALT(4))).toBe(
-      "Line 4 halts the CPU (HALT), and a Model I answers a HALT with a reset to BASIC (its HALT line drives the reset switch's NMI), which Fugløy's stub ROM cannot do. Lessons run without one, so end the program with a loop that waits, such as WAIT: JR WAIT.",
+      "Line 4 halts the CPU (HALT), and a Model I answers a HALT with a reset to BASIC (its HALT line drives the reset switch's NMI), which needs a ROM, and none is loaded. Lessons run without one, so end the program with a loop that waits, such as WAIT: JR WAIT.",
     );
     expect(EXPLAIN_PROMPT).toBe('Run the program, then click a line to read what it does.');
   });

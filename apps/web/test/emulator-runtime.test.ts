@@ -354,7 +354,7 @@ describe("a Model I HALT, which the machine answers with the reset switch's NMI"
     expect(runner.stopLine).toBe(4);
     expect(runner.stopReason).toBe(MODEL1_HALT(4));
     expect(MODEL1_HALT(4)).toBe(
-      "Line 4 halts the CPU (HALT), and a Model I answers a HALT with a reset to BASIC (its HALT line drives the reset switch's NMI), which Fugløy's stub ROM cannot do. Add a Model I ROM in the Run tab, or end the program with a loop that waits, such as WAIT: JR WAIT.",
+      "Line 4 halts the CPU (HALT), and a Model I answers a HALT with a reset to BASIC (its HALT line drives the reset switch's NMI), which needs a ROM, and none is loaded. Add a Model I ROM in the Run tab, or end the program with a loop that waits, such as WAIT: JR WAIT.",
     );
     // Never the trap's sentence for the NMI's $0066 (NMIENTRY, or "inside the Model I ROM").
     expect(runner.stopReason).not.toMatch(/\$0066|NMIENTRY|inside the Model I ROM/);

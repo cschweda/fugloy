@@ -102,9 +102,14 @@ export const MAX_FRAME_SECONDS = 1 / 30;
  */
 export const haltRaisesNmi = (model: Model): boolean => model === 1;
 
-/** Why a stub run on the Model I stopped at the program's HALT on `line` (its advice as romAdvice words it, which the Learn page rewords). */
+/**
+ * Why a stub run on the Model I stopped at the program's HALT on `line`. Its advice is worded as
+ * romAdvice words it, "Add a Model I ROM in the Run tab, or ...", which the Learn page rewords to
+ * "Lessons run without one, so ...", so "one" there must read as the ROM the sentence just said is
+ * needed and not loaded, not as the stub ROM.
+ */
 export const MODEL1_HALT = (line: number): string =>
-  `Line ${line} halts the CPU (HALT), and a Model I answers a HALT with a reset to BASIC (its HALT line drives the reset switch's NMI), which Fugløy's stub ROM cannot do. Add a Model I ROM in the Run tab, or end the program with a loop that waits, such as WAIT: JR WAIT.`;
+  `Line ${line} halts the CPU (HALT), and a Model I answers a HALT with a reset to BASIC (its HALT line drives the reset switch's NMI), which needs a ROM, and none is loaded. Add a Model I ROM in the Run tab, or end the program with a loop that waits, such as WAIT: JR WAIT.`;
 
 const hex4 = (n: number): string => `$${n.toString(16).toUpperCase().padStart(4, '0')}`;
 

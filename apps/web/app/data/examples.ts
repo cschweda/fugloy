@@ -72,9 +72,10 @@ export const EXAMPLES: readonly Example[] = [
     mainBuild: 'elimin8d.cmd',
     // Programs to try runs elimin8a, the Model I cassette build. elimin8d runs RST 38H into the Level II
     // ROM's EI / RET at $4012, after which the 40 Hz is taken in IM 0 after every return and the latch at
-    // $37E0 is never read, so on a cassette Level II Model I it never draws its title (emu spec §11, the
-    // Model I sweep). elimin8a reaches its title and plays (emu's test/integration/model1-programs.test.js,
-    // and the Model I sessions, test/diff/model1-fixtures.test.js).
+    // $37E0 is never read, so on Fugløy's Model I (48K, with the Expansion Interface) it never draws its
+    // title (emu spec §11, the Model I sweep, where it stands Open: neither reference can follow those
+    // interrupts, so the claim rests on our latch model). elimin8a reaches its title and plays (emu's
+    // test/integration/model1-programs.test.js, and the Model I sessions, test/diff/model1-fixtures.test.js).
     tryBuild: 'elimin8a.cmd',
     builds: ['elimin8d.cmd', 'elimin8f.cmd', 'elimin8g.cmd', 'elimin8h.cmd', 'elimin8c.cmd', 'elimin8e.cmd', 'elimin8a.cmd'],
     rights: RIGHTS,
