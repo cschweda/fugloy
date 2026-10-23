@@ -46,7 +46,7 @@ import { compareRun, keyEvents } from './compare.js';
 import { mameSkip, requireRom, xtrsSkip } from './gate.js';
 import { mameTimer } from './mame-clock.js';
 import { openTrace, recordMameTrace } from './mame-trace.js';
-import { BOOT, explain, HZ, INSTRUCTIONS, level2v13, LOAD_AT, mameSession, press, rom1, screenOf, sessionSkip, toLoad, xtrsSession } from './model1-session.js';
+import { BOOT, explain, HZ, INSTRUCTIONS, level2v13, LOAD_AT, mameSession, press, rom1, screenOf, SESSION_BUILDS, SESSION_FILES, sessionSkip, sweepPrograms, toLoad, xtrsSession } from './model1-session.js';
 import { loadXtrs } from './xtrs-adapter.js';
 
 const EXAMPLES = fileURLToPath(new URL('../../../../examples/', import.meta.url));
@@ -172,6 +172,28 @@ const SESSIONS = [
     known: { [XTRS]: { [BIT_XY]: 655, [BLOCK_XY]: 2_210_006, [IO]: 2_025 }, [MAME]: { [VIDEO_READ]: 3 } },
   },
 ];
+
+// The sweep leaves out the thirteen sessions' programs (model1-session.js keeps the two lists it
+// leaves out by hand, SESSION_BUILDS and SESSION_FILES). A session is named by its path under
+// examples/ (the four builds) or by "Title (file.cmd)" (the fixtures/real/ programs), so this is where
+// the lists meet SESSIONS: a session added, renamed or dropped without them fails at once, with or
+// without the fixtures folder and with or without a reference or a ROM.
+describe('the sessions and the sweep', () => {
+  const fileOf = (/** @type {string} */ name) => /\(([^()]+)\)$/.exec(name)?.[1] ?? null;
+  const builds = SESSIONS.filter((s) => fileOf(s.name) === null).map((s) => s.name).sort();
+  const files = SESSIONS.map((s) => fileOf(s.name)).filter((f) => f !== null).sort();
+
+  it("the sweep leaves out exactly the sessions' programs, by file name", () => {
+    expect(builds).toEqual([...SESSION_BUILDS].sort());
+    expect(files).toEqual([...SESSION_FILES].sort());
+    expect(builds.length + files.length).toBe(SESSIONS.length);
+  });
+
+  it('and the sweep lists none of them', () => {
+    const listed = sweepPrograms().map((p) => p.name);
+    for (const f of [...builds, ...files]) expect(listed, f).not.toContain(f.split('/').pop());
+  });
+});
 
 describe.skipIf(xtrsSkip !== null || sessionSkip !== null)(`the Model I sessions against xtrs${xtrsSkip === null && sessionSkip === null ? '' : ` (skipped: ${xtrsSkip ?? sessionSkip})`}`, { timeout: 1_200_000 }, () => {
   for (const s of SESSIONS) {

@@ -86,10 +86,13 @@ export const press = (at, key, hold = 0.5) => ({ at, key, hold });
 export const GENERIC = [press(6, 'ENTER'), press(9, '1'), press(12, 'ENTER'), press(14, 'SPACE', 1), press(16, 'LEFT', 1), press(18, 'RIGHT', 1), press(20, 'UP'), press(22, 'SPACE', 1)];
 
 const EXAMPLES = fileURLToPath(new URL('../../../../examples/', import.meta.url));
-/** The examples/ builds the thirteen sessions play (model1-fixtures.test.js), by path under examples/. */
-const SESSION_BUILDS = new Set(['eliminator/elimin8a.cmd', 'eliminator/elimin8c.cmd', 'sea-dragon/seadrg01.cmd', 'rear-guard/reargrd5.cmd']);
-/** The fixtures/real/ programs the thirteen sessions play, by file name. */
-const SESSION_FILES = new Set(['spcwarp1.cmd', 'spcwarp3.cmd', 'asylum16.cmd', 'asylum32.cmd', 'crzpnt01.cmd', 'dthmz5k1.cmd', 'pirate.cmd', 'volcano.cmd', 'supnov3a.cmd']);
+/**
+ * The examples/ builds the thirteen sessions play (model1-fixtures.test.js), by path under examples/.
+ * Kept by hand beside that file's SESSIONS, which a test there checks them against.
+ */
+export const SESSION_BUILDS = new Set(['eliminator/elimin8a.cmd', 'eliminator/elimin8c.cmd', 'sea-dragon/seadrg01.cmd', 'rear-guard/reargrd5.cmd']);
+/** The fixtures/real/ programs the thirteen sessions play, by file name; kept and checked as SESSION_BUILDS is. */
+export const SESSION_FILES = new Set(['spcwarp1.cmd', 'spcwarp3.cmd', 'asylum16.cmd', 'asylum32.cmd', 'crzpnt01.cmd', 'dthmz5k1.cmd', 'pirate.cmd', 'volcano.cmd', 'supnov3a.cmd']);
 
 /**
  * The sweep's programs (model1-sweep-xtrs.test.js and model1-sweep-mame.test.js), the Model III

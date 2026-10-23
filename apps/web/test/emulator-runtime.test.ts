@@ -379,6 +379,49 @@ describe("a Model I HALT, which the machine answers with the reset switch's NMI"
     expect(machine.cpu.regs.sp).toBe(sp);
   });
 
+  it('Continue from a breakpoint on the HALT line stops the run at the HALT with the same sentence, before the NMI', () => {
+    const { clock, machine, result, runner } = runStub(HALTS, { model: 1 });
+    const halt = 0x5203;
+    expect(result.sourceMap.lineOf(halt)).toBe(4);
+    const sp = machine.cpu.regs.sp;
+    machine.debug.break(halt);
+    runner.start();
+    clock.frame();
+    // The frame ends before the HALT, at its breakpoint: paused, nothing stopped yet.
+    expect(runner.state).toBe('paused');
+    expect(runner.pausedBy).toEqual({ kind: 'break', id: machine.debug.breaks[0]!.id });
+    expect(runner.pc).toBe(halt);
+    expect(machine.cpu.halted).toBe(false);
+    expect(runner.stopReason).toBeNull();
+    // Continue runs the HALT past its own breakpoint, and the next slice (which ends when the CPU halts) stops there.
+    runner.continue();
+    expect(runner.state).toBe('running');
+    clock.frame();
+    expect(runner.state).toBe('stopped');
+    expect(runner.stopLine).toBe(4);
+    expect(runner.stopReason).toBe(MODEL1_HALT(4));
+    expect(machine.cpu.halted).toBe(true);
+    expect(runner.pc).toBe(0x5204);
+    expect(machine.cpu.regs.sp).toBe(sp);
+    expect(clock.pending()).toBe(0);
+  });
+
+  it('Continue after a step onto the HALT line, with a breakpoint on it, steps the HALT first and stops the run the same way', () => {
+    const { machine, runner } = runStub(HALTS, { model: 1 });
+    const sp = machine.cpu.regs.sp;
+    runner.step(); // DI
+    runner.step(); // LD A,1
+    machine.debug.break(0x5203);
+    expect(runner.pc).toBe(0x5203);
+    expect(runner.pausedBy).toEqual({ kind: 'step' });
+    runner.continue(); // stepPast: the HALT runs, which stops the run before Continue goes on
+    expect(runner.state).toBe('stopped');
+    expect(runner.stopLine).toBe(4);
+    expect(runner.stopReason).toBe(MODEL1_HALT(4));
+    expect(runner.pc).toBe(0x5204);
+    expect(machine.cpu.regs.sp).toBe(sp);
+  });
+
   it('on the Model III the same program waits at its HALT, as it always has: the run goes on', () => {
     const { clock, machine, runner } = runStub(HALTS);
     const sp = machine.cpu.regs.sp;

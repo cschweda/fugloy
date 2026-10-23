@@ -297,6 +297,39 @@ describe('the known classes', () => {
     expect(explains('halt-nmi-next', at(0x8028, { wasHalted: false }))).toBeNull();
     expect(explains('halt-nmi-next', at(0x8028, { execPc: 0x0038 }))).toBeNull();
     expect(explains('halt-nmi-next', at(0x8028, { irq: true }))).toBeNull();
+    // A maskable interrupt on the reference's side, though not on ours: not explained either.
+    const theirsIrq = at(0x8028);
+    theirsIrq.theirs.irq = true;
+    expect(explains('halt-nmi-next', theirsIrq)).toBeNull();
+    // Only a step whose writes differ at all.
+    expect(STEP_CLASSES.find((c) => c.id === 'halt-nmi-next').explains(at(0x8028), new Set(['cycles']))).toBeNull();
+    // The push must be at the same two addresses on both sides (either byte moved: not explained) ...
+    for (const k of [0, 1]) {
+      const elsewhere = at(0x8028);
+      elsewhere.theirs.writes[k] = { ...elsewhere.theirs.writes[k], addr: elsewhere.theirs.writes[k].addr - 0x10 };
+      expect(explains('halt-nmi-next', elsewhere), `write ${k} at another address`).toBeNull();
+    }
+    // ... a word's two bytes, the high byte at the address above the low byte's (two writes at the
+    // same addresses on both sides, far apart, with the right values for the rule, are no push) ...
+    const apart = stepCtx([0x31, 0x00, 0x06], [{ addr: 0xffb0, value: 0x80 }, { addr: 0xffa0, value: 0x27 }], [{ addr: 0xffb0, value: 0x80 }, { addr: 0xffa0, value: 0x28 }]);
+    apart.ours.wasHalted = true;
+    apart.execPc = 0x0066;
+    expect(explains('halt-nmi-next', apart)).toBeNull();
+    // ... and as many writes on both sides: a reference with no write at all, one write more on either side.
+    const none = at(0x8028);
+    none.theirs.writes.length = 0;
+    expect(explains('halt-nmi-next', none)).toBeNull();
+    const oursMore = at(0x8028, { after: [{ addr: 0x5000, value: 1 }] });
+    oursMore.theirs.writes.pop();
+    expect(explains('halt-nmi-next', oursMore)).toBeNull();
+    const theirsMore = at(0x8028);
+    theirsMore.theirs.writes.push({ addr: 0x5000, value: 1 });
+    expect(explains('halt-nmi-next', theirsMore)).toBeNull();
+    // Fewer than two writes of ours is no push at all.
+    const lone = at(0x8028);
+    lone.ours.writes.length = 1;
+    lone.theirs.writes.length = 1;
+    expect(explains('halt-nmi-next', lone)).toBeNull();
     // Any other write must be equal.
     const other = at(0x8028, { after: [{ addr: 0x5000, value: 1 }] });
     expect(explains('halt-nmi-next', other)).toEqual(['writes']);
