@@ -5,7 +5,7 @@
  *
  *   pnpm diff <program> [--model 3|1] [--reference trsjs|xtrs] [--lowercase] [--keys <script.json>]
  *             [--instructions N] [--from-cycle C] [--rom <file>] [--strict | --strict-all]
- *   pnpm diff --model 1 --reference mame --trace <file> [--instructions N] [--rom <file>] [--strict | --strict-all]
+ *   pnpm diff [<program>] --model 1 --reference mame --trace <file> [--instructions N] [--rom <file>] [--strict | --strict-all]
  *
  * The Model III (`--model 3`, the default) is compared against trsjs, the Model I (`--model 1`)
  * against xtrs (the default for it) or MAME. A lockstep run boots the model's ROM from
@@ -18,8 +18,12 @@
  * `--rom` names the ROM file in place of fugloy.mcp.json's.
  *
  * MAME is compared from a trace of its run from power-on (Ruling 4), recorded with
- * `pnpm mame:trace record <instructions> [--keys …]`; our Model I follows it from power-on. N
- * defaults to the trace's length.
+ * `pnpm mame:trace record <instructions> [--keys …]` (the ROM's boot and keys typed through MAME's
+ * keyboard); our Model I follows it from power-on, with its 40 Hz on MAME's schedule (MAME's
+ * 1,774,083 Hz clock; test/diff/mame-clock.js, test-only), which the report names. N defaults to
+ * the trace's length. A trace that loaded a program (the tests record those:
+ * test/diff/model1-fixtures.test.js) is compared with that program named as <program>; recording
+ * one from the command line is not supported yet (emu spec §11, phase 7).
  *
  * `--strict` stops on a known difference as well, except flag bits 3 and 5 (which differ within a
  * few instructions in most programs); `--strict-all` stops on those too.
@@ -40,11 +44,12 @@ import { bootToReady, waitFor } from '../test/integration/boot-helpers.js';
 import { compareRun, formatReport, keyEvents } from '../test/diff/compare.js';
 import { loadTrsjs } from '../test/diff/trsjs-adapter.js';
 import { loadXtrs } from '../test/diff/xtrs-adapter.js';
-import { openTrace } from '../test/diff/mame-trace.js';
+import { mameTimer } from '../test/diff/mame-clock.js';
+import { MAME_CLOCK_HZ, openTrace } from '../test/diff/mame-trace.js';
 
 const USAGE = [
   'usage: pnpm diff <program> [--model 3|1] [--reference trsjs|xtrs] [--lowercase] [--keys <script.json>] [--instructions N] [--from-cycle C] [--rom <file>] [--strict | --strict-all]',
-  '       pnpm diff --model 1 --reference mame --trace <file> [--instructions N] [--rom <file>] [--strict | --strict-all]',
+  '       pnpm diff [<program>] --model 1 --reference mame --trace <file> [--instructions N] [--rom <file>] [--strict | --strict-all]',
 ].join('\n');
 
 /**
@@ -102,7 +107,7 @@ function parseArgs(argv) {
   if (o.lowercase && o.model !== 1) fail('--lowercase is the Model I\'s modification (--model 1)');
   if (o.reference === 'mame') {
     if (o.trace === null) fail(`MAME is compared from a trace of its run from power-on: record one with pnpm mame:trace record <instructions>, then pass it with --trace\n${USAGE}`);
-    if (o.program !== null || o.keys !== null || o.fromCycle !== 0) fail('a MAME trace is its own session from power-on (its program and keys are in the trace); pass no program, --keys or --from-cycle');
+    if (o.keys !== null || o.fromCycle !== 0) fail('a MAME trace brings its own keys and is compared from power-on: pass no --keys or --from-cycle (record a trace from the ROM\'s boot and typed keys with pnpm mame:trace record <instructions> --keys <script.json>; a trace that loaded a program is recorded by the tests, test/diff/model1-fixtures.test.js, and compared here with that program named)');
     if (o.lowercase) fail('MAME\'s trs80l2 is compared without the lowercase modification');
   } else {
     if (o.trace !== null) fail('--trace is for --reference mame');
@@ -128,19 +133,25 @@ function readOrFail(path, what) {
 }
 
 if (opts.reference === 'mame') {
+  // The program a trace loaded, if one is named: openTrace checks it is that one.
+  const program = opts.program === null ? undefined : new Uint8Array(readOrFail(opts.program, 'program'));
   let ref;
   try {
-    ref = openTrace(resolve(cwd, /** @type {string} */ (opts.trace)));
+    ref = openTrace(resolve(cwd, /** @type {string} */ (opts.trace)), { program });
   } catch (e) {
     fail(/** @type {Error} */ (e).message);
   }
+  if (program !== undefined && (ref.header.load ?? null) === null) fail(`${opts.trace} loaded no program (pnpm mame:trace record records the ROM's boot and typed keys); pass none`);
   const rom = romFor();
   if (rom === null) fail('no Model I ROM: name one as roms.model1 in fugloy.mcp.json (docs/fugloy-mcp-spec.md §3), or pass --rom');
-  const m = new Machine({ model: 1, roms: { level2: rom } });
+  // Our 40 Hz on MAME's schedule, as the sessions run it (the controller's ruling on the clock).
+  const m = mameTimer(new Machine({ model: 1, roms: { level2: rom } }));
   const instructions = opts.instructions ?? Math.max(1, ref.header.requested);
   const result = compareRun({ machine: m, reference: ref, instructions, strict: opts.strict, model: 1 });
   ref.close?.();
-  process.stdout.write(`trace: ${opts.trace} (MAME ${ref.header.mame}, bios ${ref.header.bios || '?'}), compared from power-on\n`);
+  const load = ref.header.load ?? null;
+  process.stdout.write(`trace: ${opts.trace} (MAME ${ref.header.mame}, bios ${ref.header.bios || '?'}), compared from power-on${load === null ? '' : `, ${opts.program} loaded before instruction ${load.at}`}\n`);
+  process.stdout.write(`our 40 Hz on MAME's clock (${MAME_CLOCK_HZ.toLocaleString('en-US')} Hz): test-only, test/diff/mame-clock.js\n`);
   process.stdout.write(formatReport(result));
   process.exit(result.divergence !== null ? 1 : result.ended !== undefined ? 3 : 0);
 }

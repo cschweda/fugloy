@@ -786,7 +786,7 @@ export function openTrace(path, { program } = {}) {
   if (load !== null) {
     if (program === undefined) {
       closeSync(fd);
-      throw new Error(`${path} loaded a program (SHA-256 ${load.sha256}) at instruction ${load.at}; pass it to openTrace as program`);
+      throw new Error(`${path} loaded a program (SHA-256 ${load.sha256}) at instruction ${load.at}; give the same program (openTrace's program, or pnpm diff's <program>)`);
     }
     const sha = createHash('sha256').update(program).digest('hex');
     if (sha !== load.sha256) {

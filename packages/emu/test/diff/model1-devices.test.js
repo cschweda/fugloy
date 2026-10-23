@@ -523,7 +523,8 @@ describe('pnpm diff: --model and --reference', () => {
     [['p.cmd', '--reference', 'sim'], '--reference takes trsjs, xtrs or mame, not sim'],
     [['p.cmd', '--lowercase'], '--lowercase is the Model I\'s modification (--model 1)'],
     [['--model', '1', '--reference', 'mame'], 'MAME is compared from a trace of its run from power-on: record one with pnpm mame:trace record <instructions>, then pass it with --trace'],
-    [['p.cmd', '--model', '1', '--reference', 'mame', '--trace', 't.fmt'], 'a MAME trace is its own session from power-on (its program and keys are in the trace); pass no program, --keys or --from-cycle'],
+    [['--model', '1', '--reference', 'mame', '--trace', 't.fmt', '--keys', 'k.json'], 'a MAME trace brings its own keys and is compared from power-on: pass no --keys or --from-cycle (record a trace from the ROM\'s boot and typed keys with pnpm mame:trace record <instructions> --keys <script.json>; a trace that loaded a program is recorded by the tests, test/diff/model1-fixtures.test.js, and compared here with that program named)'],
+    [['--model', '1', '--reference', 'mame', '--trace', 't.fmt', '--from-cycle', '5'], 'a MAME trace brings its own keys and is compared from power-on: pass no --keys or --from-cycle'],
     [['p.cmd', '--model', '1', '--trace', 't.fmt'], '--trace is for --reference mame'],
   ])('%j: exits 2 with a sentence', (args, sentence) => {
     const r = run(args);

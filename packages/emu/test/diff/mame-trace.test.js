@@ -308,7 +308,7 @@ describe('a trace that loaded a program: our machine loads it at the same step',
     const { header, start, records } = loadedTrace(100, 100);
     const path = join(dir, 'loaded-refuse.fmt');
     writeTrace(path, { header, start, records });
-    expect(() => openTrace(path)).toThrow(`${path} loaded a program (SHA-256 ${sha(PROGRAM)}) at instruction 100; pass it to openTrace as program`);
+    expect(() => openTrace(path)).toThrow(`${path} loaded a program (SHA-256 ${sha(PROGRAM)}) at instruction 100; give the same program (openTrace's program, or pnpm diff's <program>)`);
     const other = PROGRAM.slice();
     other[4] = 0x3d;
     expect(() => openTrace(path, { program: other })).toThrow(`${path} loaded another program (SHA-256 ${sha(PROGRAM)}) than the one given (${sha(other)})`);
@@ -320,6 +320,26 @@ describe('a trace that loaded a program: our machine loads it at the same step',
     expect(loadRuns(PROGRAM).map((r) => [r.addr, r.bytes.length])).toEqual([[0x3c00, 1], [0x5100, 15]]);
     const low = Uint8Array.from([0x01, 0x03, 0xff, 0x3b, 0x00, 0x02, 0x02, 0x00, 0x60]);
     expect(() => loadRuns(low)).toThrow('the program writes $3BFF, below $3C00; a MAME session loads only RAM and video RAM');
+  });
+
+  it('pnpm diff compares such a trace with its program named, refuses it without, and refuses a program for a trace that loaded none', () => {
+    const { header, start, records } = loadedTrace();
+    const path = join(dir, 'cli-loaded.fmt');
+    writeTrace(path, { header, start, records });
+    const program = join(dir, 'program.cmd');
+    writeFileSync(program, PROGRAM);
+    const run = diffTrace(path, [program, '--rom', romPath]);
+    expect(run.stdout).toContain(`compared from power-on, ${program} loaded before instruction ${header.load.at}`);
+    expect(run.stdout).toContain('divergence: none');
+    expect(run.status).toBe(0);
+    const without = diffTrace(path, ['--rom', romPath]);
+    expect(without.status).toBe(2);
+    expect(without.stderr).toContain(`${path} loaded a program (SHA-256 ${sha(PROGRAM)}) at instruction ${header.load.at}; give the same program (openTrace's program, or pnpm diff's <program>)`);
+    const plain = join(dir, 'cli-plain.fmt');
+    writeTrace(plain, { header: {}, ...keyedTrace(100) });
+    const stray = diffTrace(plain, [program, '--rom', romPath]);
+    expect(stray.status).toBe(2);
+    expect(stray.stderr).toContain(`${plain} loaded no program (pnpm mame:trace record records the ROM's boot and typed keys); pass none`);
   });
 });
 
@@ -352,6 +372,18 @@ describe('a trace that ends early says so, never "no divergence" (Review Focus 3
     expect(r.ended).toBe(SENTENCE(r.instructions, 1000, `the file is cut short: it holds ${r.instructions + 1} of the 1001 records its header lists`));
   });
 
+  it('a trace with no records (MAME stopped before the first): the sentence, and pnpm diff exits 3 with it', () => {
+    const path = join(dir, 'empty.fmt');
+    writeTrace(path, { header: { complete: false, reason: 'MAME exited with code 1: no such BIOS', requested: 1000 }, start: new Uint8Array(65536), records: [] });
+    const r = compareRun({ machine: newSynthetic(), reference: openTrace(path), instructions: 1000 });
+    expect(r).toMatchObject({ instructions: 0, divergence: null, known: {} });
+    expect(r.ended).toBe(SENTENCE(0, 1000, 'MAME exited with code 1: no such BIOS'));
+    const run = diffTrace(path, ['--instructions', '1000', '--rom', romPath]);
+    expect(run.status).toBe(3);
+    expect(run.stdout).toContain(SENTENCE(0, 1000, 'MAME exited with code 1: no such BIOS'));
+    expect(run.stdout).not.toContain('divergence: none');
+  });
+
   it('a complete trace shorter than the run', () => {
     const t = keyedTrace(100);
     const path = join(dir, 'short.fmt');
@@ -374,9 +406,10 @@ describe('a trace that ends early says so, never "no divergence" (Review Focus 3
     expect(run.status).toBe(3);
     expect(run.stdout).toContain(SENTENCE(100, 1000, 'MAME stopped at its time limit of 6 emulated seconds'));
     expect(run.stdout).not.toContain('divergence: none');
-    // The whole trace compared: 0.
+    // The whole trace compared: 0. The report names the schedule our 40 Hz ran on.
     const full = diffTrace(path, ['--instructions', '100', '--rom', romPath]);
     expect(full.stdout).toContain('divergence: none');
+    expect(full.stdout).toContain('our 40 Hz on MAME\'s clock (1,774,083 Hz): test-only, test/diff/mame-clock.js\n');
     expect(full.status).toBe(0);
   });
 });

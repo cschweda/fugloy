@@ -391,6 +391,9 @@ export function compareRun({ machine: m, reference: ref, instructions, keys = []
   /** @type {import('./mame-trace.js').Follow | null} A trace reference: our machine follows it (Ruling 4). */
   const follow = /** @type {any} */ (ref).follow ?? null;
   if (follow !== null && keys.length > 0) throw new Error('compareRun: a trace reference brings its own keys (the bytes its keyboard reads returned); pass none');
+  // A trace with no instruction to follow (MAME stopped before its first record, or the file holds
+  // no more than its header) ends the run at once with its sentence, like any trace cut short.
+  if (follow !== null && !follow.has(0)) return { instructions: 0, divergence: null, known: {}, ended: follow.ended(0, instructions), ...tag };
   const sys = m.system;
   const cpu = sys.cpu;
   // Following a trace on the Model I that declares it, our video reads may take the trace's byte
