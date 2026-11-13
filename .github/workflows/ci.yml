@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, staging]
   pull_request:
 
 jobs:
@@ -57,6 +57,10 @@ jobs:
       - run: pnpm --filter @fugloy/web test:seo
       # On test:seo's build: no page prefetches or preloads a lazily loaded part (Source ✎, Run ▶, emu), and the first screen still preloads its page.
       - run: pnpm --filter @fugloy/web test:prefetch
+      # Still on test:seo's plain build (the script refuses the browser checks' one): the first screens stay inside their budgets.
+      - run: pnpm --filter @fugloy/web size:first-screen
+      - run: pnpm --filter @fugloy/web size:first-screen -- --page learn
+      - run: pnpm --filter @fugloy/web size:first-screen -- --page invaders
       # Timing limits in listing-perf.spec.ts apply only with FUGLOY_PERF=1, so a slow runner cannot fail the build.
       - run: pnpm --filter @fugloy/web test:e2e
       - if: failure()

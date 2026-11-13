@@ -1,7 +1,7 @@
 // Editing the open program: each edit is a new hint file (utils/edits), applied
 // by re-analyzing. Undo and redo are two stacks of hint files, so undo restores
 // the previous file exactly and can never disagree with it. DOM-free.
-import { computed, shallowRef, watch } from 'vue';
+import { computed, effectScope, shallowRef, watch } from 'vue';
 import type { ComputedRef } from 'vue';
 import { applyHints, OpenError, parseHints, withHintFile, writeHints } from '@fugloy/disasm';
 import type { HintFile, Session } from '@fugloy/disasm';
@@ -37,14 +37,18 @@ export function createEditing(wb: Workbench): Editing {
   const past = shallowRef<readonly HintFile[]>([]);
   const future = shallowRef<readonly HintFile[]>([]);
 
-  // Another program, another history. (No stop handle: lives as long as the workbench.)
-  watch(
-    wb.openCount,
-    () => {
-      past.value = [];
-      future.value = [];
-    },
-    { flush: 'sync' },
+  // Another program, another history. In a scope of its own: the first caller is the workbench page's
+  // setup, and a watcher made there would stop when that page is left, while these stacks live on;
+  // undo in the next program would then apply the last one's hint file, and the save would store it.
+  effectScope(true).run(() =>
+    watch(
+      wb.openCount,
+      () => {
+        past.value = [];
+        future.value = [];
+      },
+      { flush: 'sync' },
+    ),
   );
 
   /** Moves the session to `file`; the cursor stays on its address, since it is one. */

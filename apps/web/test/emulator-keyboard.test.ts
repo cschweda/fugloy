@@ -52,4 +52,42 @@ describe('attachKeyboard', () => {
     el.dispatchEvent(key('keydown', 'a', 'KeyA'));
     expect(down()).toBe(0);
   });
+
+  // The TRS-80's : and @ are unshifted keys that a US keyboard types with Shift.
+  it("types a character the keyboard needs Shift for without the TRS-80's SHIFT, and keeps Shift otherwise", () => {
+    const m = new Machine({ roms: { level2: stubRom(3) } });
+    const el = new EventTarget() as unknown as HTMLElement;
+    const detach = attachKeyboard(el, () => m);
+    const k = m.system.keyboard as unknown as { read(select: number): number };
+    const SHIFT_ROW = 0x80;
+    const send = (type: string, key_: string, code: string): void => void el.dispatchEvent(key(type, key_, code));
+
+    send('keydown', 'Shift', 'ShiftLeft');
+    expect(k.read(SHIFT_ROW)).toBe(0x01); // Shift alone is the TRS-80's SHIFT
+    send('keydown', ':', 'Semicolon');
+    expect(k.read(0x20)).toBe(0x04); // the : key
+    expect(k.read(SHIFT_ROW)).toBe(0x00); // unshifted, so not *
+    send('keyup', ':', 'Semicolon');
+    expect(k.read(0x20)).toBe(0x00);
+    expect(k.read(SHIFT_ROW)).toBe(0x01); // Shift is still held
+    send('keydown', '"', 'Quote');
+    expect(k.read(0x10)).toBe(0x04); // the 2 key
+    expect(k.read(SHIFT_ROW)).toBe(0x01); // SHIFT+2, the character's own
+    send('keyup', 'Shift', 'ShiftLeft'); // Shift released first
+    expect(k.read(0x10)).toBe(0x04);
+    send('keyup', "'", 'Quote');
+    expect(k.read(0xff)).toBe(0x00);
+
+    // Shift with the space bar and the arrows stays SHIFT (games read it).
+    send('keydown', 'Shift', 'ShiftRight');
+    send('keydown', ' ', 'Space');
+    send('keydown', 'ArrowLeft', 'ArrowLeft');
+    expect(k.read(SHIFT_ROW)).toBe(0x01);
+    el.dispatchEvent(new Event('blur'));
+    expect(k.read(0xff)).toBe(0x00);
+    send('keydown', ':', 'Semicolon'); // nothing remembered a Shift across the blur
+    send('keyup', ':', 'Semicolon');
+    expect(k.read(0xff)).toBe(0x00);
+    detach();
+  });
 });

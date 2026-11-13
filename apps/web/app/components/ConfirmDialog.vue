@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // A yes/no question in a native modal <dialog> (never window.confirm).
-import { nextTick, ref, useId, watch } from 'vue';
+import { nextTick, onMounted, ref, useId, watch } from 'vue';
 
 const props = withDefaults(defineProps<{ open: boolean; title: string; message: string; confirmLabel: string; testid?: string; cancelLabel?: string; noEscape?: boolean; hideConfirm?: boolean; focusCancel?: boolean }>(), { testid: 'confirm-dialog', cancelLabel: 'Cancel', noEscape: false, hideConfirm: false, focusCancel: false });
 // focusCancel: for a destructive confirm (Replace), the safe button takes the first focus, so Enter does not destroy.
@@ -23,18 +23,20 @@ function onClose(): void {
   if (d !== null && !d.open) d.showModal();
 }
 
-watch(
-  () => props.open,
-  async (open) => {
-    const d = dialog.value;
-    if (d === null) return;
-    if (open && !d.open) {
-      d.showModal();
-      await nextTick();
-      (props.focusCancel ? no : yes).value?.focus();
-    } else if (!open && d.open) d.close();
-  },
-);
+async function sync(open: boolean): Promise<void> {
+  const d = dialog.value;
+  if (d === null) return;
+  if (open && !d.open) {
+    d.showModal();
+    await nextTick();
+    (props.focusCancel ? no : yes).value?.focus();
+  } else if (!open && d.open) d.close();
+}
+watch(() => props.open, sync);
+// A question still open when its page is left and come back to (its state outlives the page) shows again.
+onMounted(() => {
+  if (props.open) void sync(true);
+});
 </script>
 
 <template>
