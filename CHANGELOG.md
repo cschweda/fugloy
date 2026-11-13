@@ -102,6 +102,28 @@ creates and pushes the tag.
 
 ### Fixed
 
+- The web site, from an audit of the whole app (2026-11-12):
+  - Undo could apply the last program's hints to the next one, and the save then stored them over
+    that program's own: the watcher that empties the undo history on opening a program stopped when
+    the workbench page was first left (for Learn, Manuals or About). It now outlives the page.
+  - The TRS-80's `:` and `@` could not be typed from a keyboard that needs Shift for them (a US one):
+    the held Shift made `:` a `*`. The physical Shift is lifted from the matrix while a character
+    key is down; alone, or with the arrows or the space bar, it is still the TRS-80's SHIFT.
+  - A program that ends within one frame (it returns to the stub ROM, or halts on the Model I) left
+    its last output off the tube; the final slice is now drawn. After Continue, the Run's sentence
+    returns in place of "Paused at…".
+  - A file dropped on the Source ✎ editor was pasted into the source and opened by the page as well;
+    the editor now leaves file drops to the page. A question dialog still open when its page was left
+    shows again on return. The marking keys (`c d w s t`) pressed from the Hints or Source page show
+    the listing they change. Back up says so when it fails. A save that an undo overtook is compared
+    again. Restore no longer starts saving a listing assembled from a source.
+  - Learn: a lesson marked done in one tab was dropped when another tab marked one later.
+  - Served with long-lived caching for the hashed files in `/_nuxt/`, no framing by other sites
+    (`frame-ancestors 'none'`, `X-Frame-Options`), a `Permissions-Policy`, the example programs as
+    `application/octet-stream`, and `fugloy.netlify.app` redirected to `app.fugloy.dev`.
+  - Nuxt 4.6.4, for the advisories fixed in 4.6.3. CI runs on `staging` too and holds the first
+    screens to their size budgets. The SEO test skips a stale build instead of failing to load.
+
 - The web workbench: Programs to try's Eliminator runs `elimin8a.cmd`, the Model I cassette build,
   which reaches its title and plays (the manifest's new `tryBuild`; emu's
   `test/integration/model1-programs.test.js` and the Model I sessions). It ran `elimin8d.cmd`, the

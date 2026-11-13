@@ -180,11 +180,16 @@ function buildRun(deps: RunDeps): Run {
   /** What the current runner is, while there is one. */
   const kind = ref<'on' | 'program'>('program');
   const frameListeners = new Set<(r: Runner) => void>();
+  /** What the Run said when its program started, to say again when a pause ends. */
+  let runningSentence: string | null = null;
   const debug = createDebug({
     sources,
     say: (text, isProblem = false) => say(text, isProblem),
     state: (s) => {
-      if (runner.value !== null) state.value = s;
+      if (runner.value === null) return;
+      // Continue, a long Step Over or Run to Here: the pause's sentence no longer holds, so the Run's own returns.
+      if (s === 'running' && state.value === 'paused' && runningSentence !== null) say(runningSentence);
+      state.value = s;
     },
     now: deps.runner?.now,
     wb,
@@ -211,6 +216,8 @@ function buildRun(deps: RunDeps): Run {
   function onStop(r: Runner): void {
     debug.stopped(r);
     if (runner.value !== r) return;
+    // The runner draws no frame for the slice that ended the run: show what that slice put on the screen.
+    for (const cb of frameListeners) cb(r);
     state.value = 'stopped';
     if (r.stopReason !== null) say(r.stopReason, true);
     else if (!problem.value) say(STOPPED);
@@ -386,6 +393,7 @@ function buildRun(deps: RunDeps): Run {
       showListing(false);
     }
     say(out.message, out.problem);
+    runningSentence = out.problem ? null : out.message;
     if (out.runner === null) return;
     startRunner(out.runner, 'program', model);
     if (out.stepper !== null) debug.attach({ kit, runner: out.runner, stepper: out.stepper, result: out.result, inactive: out.inactive, sourceId: source.id, text });

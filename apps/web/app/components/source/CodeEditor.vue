@@ -97,6 +97,9 @@ function extensions(): Extension[] {
     lineNumbers(),
     props.changeMarks === true ? changeMarks : [],
     highlightActiveLineGutter(),
+    // A dropped file is the page's to take (a program or a hint file to open), not text to paste here:
+    // CodeMirror would insert it at the drop point and the page would then open it as well.
+    EditorView.domEventHandlers({ drop: (e) => (e.dataTransfer?.files.length ?? 0) > 0 }),
     lintGutter(),
     history(),
     drawSelection(),

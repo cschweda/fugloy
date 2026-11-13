@@ -116,7 +116,11 @@ export function createPersistence(wb: Workbench, deps: PersistenceDeps = {}): Pe
       if (wb.session.value?.hash === p.hash) savedText.value = p.text;
     } catch {
       failed.value = true;
+      return;
     }
+    // The text may have changed while this was being written (an undo back to what was stored before
+    // schedules nothing): compare again against what is stored now.
+    check();
   }
 
   async function flush(): Promise<void> {
@@ -345,7 +349,8 @@ export function createPersistence(wb: Workbench, deps: PersistenceDeps = {}): Pe
     flush,
     async refresh() {
       const s = wb.session.value;
-      if (s === null) return;
+      // A listing assembled from a source is never saved (as on open).
+      if (s === null || wb.origin.value !== null) return;
       generation++;
       restored.value = false;
       savedText.value = null;

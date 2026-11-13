@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { effectScope } from 'vue';
 import { formatRow, listingRows, openProgram, withHintFile, withHintText, writeHints } from '@fugloy/disasm';
 import type { Session } from '@fugloy/disasm';
 import { applyEdit, applyHintLines } from '../app/utils/edits';
@@ -206,6 +207,19 @@ describe('useEditing', () => {
     expect(ed.apply({ op: 'name', addr: 0x4b9e, name: 'LD' })).toContain('reserved');
     expect(wb.session.value).toBe(before);
     expect(ed.canUndo.value).toBe(false);
+  });
+
+  it('opening another program starts a new history after the page that made the editing is gone', async () => {
+    const wb = createWorkbench({ readExample });
+    await wb.openExample('sea-dragon');
+    // The workbench page's setup is the first caller; leaving the page stops its scope.
+    const page = effectScope();
+    const ed = page.run(() => createEditing(wb))!;
+    expect(ed.apply({ op: 'name', addr: 0x4b9e, name: 'INIT' })).toBeNull();
+    page.stop();
+    await wb.openExample('rear-guard');
+    expect(ed.canUndo.value).toBe(false);
+    expect(ed.canRedo.value).toBe(false);
   });
 
   it('opening another program starts a new history', async () => {
