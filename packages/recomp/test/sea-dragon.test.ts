@@ -119,6 +119,10 @@ describe("Sea Dragon's port", () => {
     expect(r.drops).toEqual([{ at: 0x4bac, continuation: 'SUB_4BAD' }]);
     expect(r.standins).toEqual([{ addr: 0x0060, name: 'DELAY', sites: [0x4eac, 0x4ebc, 0x4ec6, 0x5512, 0x5f71, 0x6022] }]);
     expect(r.rom).toEqual([{ addr: 0x0000, value: 0xf3 }, { addr: 0x0003, value: gameStubRom(3)[0x0003] }]);
+    // read on Fugløy's game stub ROM, as the trace says: no byte of anyone's ROM
+    expect(r.romFrom).toBe('stub');
+    const { trace: _, ...untraced } = OPTIONS;
+    expect(ok(port(SEA_DRAGON, untraced)).report.romFrom).toBeUndefined();
   });
 
   it("carries none of the game's code bytes: no IR code byte is in DATA, and the cells' bytes as loaded are in CELLS", async () => {

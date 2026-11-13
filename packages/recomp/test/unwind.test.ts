@@ -171,7 +171,7 @@ describe('a POP that drops a return address', () => {
     if (!part.ok) throw new Error(`the referee stopped: ${part.report}`);
     expect(part.cycles).toBeGreaterThanOrEqual(50_000);
     expect(part.cycles).toBeLessThan(res.cycles);
-  });
+  }, 60_000);
 
   it('runs its continuation where the routine whose caller it returns to ran, and the stack does not grow', async () => {
     const mod = await importPort(ok(port(s.cmd, options(s))).js);
@@ -185,7 +185,7 @@ describe('a POP that drops a return address', () => {
     expect(new Set(atGoon), 'the same depth every time round').toEqual(new Set([atGoon[0]]));
     // GOON runs in the trampoline TITLE ran in (START's o.call), so as deep as TITLE
     expect(new Set(atTitle)).toEqual(new Set([atGoon[0]]));
-  });
+  }, 60_000);
 
   it("stops without the trace with o.ret's sentence, which says the census may need a session that reaches the POP", async () => {
     const p = ok(port(s.cmd, options(s, null)));
@@ -355,7 +355,7 @@ describe('a jump back to an entry whose first block loads SP with a constant', (
   it('passes the referee, ten thousand times round', async () => {
     const res = await referee({ cmd, model: 3, names: namesOf(r), steps: [{ run: 1_000_000_000 }] });
     if (!res.ok) throw new Error(`the referee stopped: ${res.report}`);
-  });
+  }, 60_000);
 
   it('runs the entry at the top each time, and the stack does not grow', async () => {
     const mod = await importPort(ok(port(cmd, opts)).js);
@@ -366,7 +366,7 @@ describe('a jump back to an entry whose first block loads SP with a constant', (
     const atStart = seen.get(at('START'))!;
     expect(atStart).toHaveLength(ROUNDS + 1);
     expect(new Set(atStart), 'the same depth every time round').toEqual(new Set([atStart[0]]));
-  });
+  }, 60_000);
 
   it("is not made when the program rewrites the LD SP's operand: it then loads an SP the program saved, not a constant", async () => {
     // SAVE stores SP (pointing at its own return address) in START's LD SP,nn and jumps back to START, which

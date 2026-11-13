@@ -242,9 +242,49 @@ START:  LD      A,42H
   });
 });
 
+describe("the mode register: port $EC's latch on the Model III, port $FF's low bits on the Model I", () => {
+  // The 32-column bit set: bit 2 of port $EC on the Model III, bit 3 (MODESEL) of port $FF on the Model I
+  const modes = (model: Model): AsmResult => assembled(program(model === 3 ? `
+START:  LD      A,04H
+        OUT     (0ECH),A
+PARK:   JR      PARK` : `
+START:  LD      A,08H
+        OUT     (0FFH),A
+PARK:   JR      PARK`), model);
+  // A port whose OUT writes one wrong bit: the alternate character set (bit 3) on the Model III, the
+  // cassette motor (bit 2) on the Model I; no register differs
+  const wrong = (model: Model) => (js: string): string => {
+    const out = model === 3 ? 'z.out(0xEC, z.a);' : 'z.out(0xFF, z.a);';
+    expect(js).toContain(out);
+    return js.replace(out, model === 3 ? 'z.out(0xEC, z.a | 0x08);' : 'z.out(0xFF, z.a | 0x04);');
+  };
+
+  for (const model of MODELS) {
+    it(`passes a program that sets it, on ${modelName(model)}`, async () => {
+      passed(await judge(modes(model), model, [{ run: 100_000 }]));
+    });
+
+    it(`stops a port whose OUT writes a wrong bit into it, in the mode, at the block after the write, on ${modelName(model)}`, async () => {
+      const r = modes(model);
+      const res = failed(await judge(r, model, [{ run: 100_000 }], wrong(model)));
+      expect(res.field).toBe('mode');
+      expect(res.at.block).toBe(r.symbol('PARK')!.value);
+      expect(res.report).toMatch(model === 3 ? /^mode register: port \$0C, emu \$04, at the start of the block at \$7004/ : /^mode register: port \$0C, emu \$08, at the start of the block at \$7004/);
+    });
+  }
+
+  it("starts the port with emu's at the entry, as it does the registers", () => {
+    const m = new Machine({ model: 3, roms: { level2: stub(3).rom } });
+    m.system.io.modeRegister = 0x0c;
+    const z = createZ({ model: 3 });
+    setZ(z, emuState(m), memOf(m));
+    expect(z.modeRegister).toBe(0x0c);
+  });
+});
+
 describe('self-modifying code', () => {
   const sentence = (written: number, by: number): string =>
-    `self-modifying code: $${hex(written, 4)} written by the instruction at $${hex(by, 4)} (M1 does not translate it)`;
+    `self-modifying code: $${hex(written, 4)} written by the instruction at $${hex(by, 4)} (the trace does not name it; run the census over a session that reaches this)`;
 
   for (const model of MODELS) {
     it(`a store into its own next instruction is refused, naming both addresses, on ${modelName(model)}`, async () => {

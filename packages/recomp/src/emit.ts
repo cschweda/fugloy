@@ -361,7 +361,7 @@ export function emit(input: EmitInput): Emitted {
           return null;
         }
         const text = renderInstruction(ins, symbols);
-        if (text.trim().toUpperCase() === 'EI') refused.push(`${addr(at)}: EI enables interrupts, which a port does not take (M1)`);
+        if (text.trim().toUpperCase() === 'EI') refused.push(`${addr(at)}: EI enables interrupts, which a port does not take`);
         const note = comments.get(at);
         const read = patch === undefined ? [] : cellsOf(patch.cells).map(addr);
         const rewritten = read.length === 0 ? '' : `  ; rewritten as it runs: read from ${read.join(', ')}`;
@@ -402,7 +402,7 @@ export function emit(input: EmitInput): Emitted {
       const tick = (cycles: number): Stmt => line(`z.tick(${t + cycles}, ${rr + tr.r}); ${q}`);
       const notTaken = tr.cyclesNotTaken ?? tr.cycles;
       if (tr.targetExpr !== undefined && tr.flow === 'jump' && tr.targets === undefined) {
-        errors.push(`${addr(at)}: ${renderInstruction(ins, symbols)} jumps to an address computed as it runs, which M1 does not translate (a hint naming its targets is for a later milestone).`);
+        errors.push(`${addr(at)}: ${renderInstruction(ins, symbols)} jumps to an address computed as it runs, which a port does not translate: its targets are not known before it runs.`);
         return null;
       }
       switch (tr.flow) {
@@ -487,7 +487,7 @@ export function emit(input: EmitInput): Emitted {
           return null;
         }
         const text = renderInstruction(v.ins, symbols);
-        if (text.trim().toUpperCase() === 'EI') refused.push(`${addr(at)}: EI enables interrupts, which a port does not take (M1)`);
+        if (text.trim().toUpperCase() === 'EI') refused.push(`${addr(at)}: EI enables interrupts, which a port does not take`);
         const body = ending(tr, v.ins, at, `${addr(at)}  ${text}${note === undefined ? '' : `  ; ${note}`}`, 0, 0, undefined);
         if (body === null) return null;
         cases.push({ value: v.value, body });

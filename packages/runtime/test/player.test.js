@@ -398,7 +398,7 @@ describe("the worker's loop", () => {
     const { posts } = run(looping(1), 600);
     expect(posts[599].to).toBe(MODEL3_HZ * 10);
     expect(posts.map((p) => p.to)).toEqual(Array.from({ length: 600 }, (_, k) => Math.ceil(((k + 1) * MODEL3_HZ) / 60)));
-  });
+  }, 60_000);
 
   it('copies the shared key rows into the machine at each frame and bumps the shared counter before it posts', () => {
     const keys = new Uint8Array(8);

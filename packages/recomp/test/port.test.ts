@@ -267,8 +267,8 @@ START:  LD      A,1
         RET`), 1);
     const p = portOk(withEi, 1);
     expect(p.report.refused).toEqual([
-      '$7002: EI enables interrupts, which a port does not take (M1)',
-      '$7004: EI enables interrupts, which a port does not take (M1)',
+      '$7002: EI enables interrupts, which a port does not take',
+      '$7004: EI enables interrupts, which a port does not take',
     ]);
     const without = assembled(program(`
 START:  LD      A,1
@@ -306,7 +306,7 @@ THERE:  RET`), 3);
     const p = ported(r, 3);
     expect(p.ok).toBe(false);
     if (p.ok) return;
-    expect(p.errors).toEqual([expect.stringMatching(/^\$7003: JP \(HL\) jumps to an address computed as it runs/)]);
+    expect(p.errors).toEqual(['$7003: JP (HL) jumps to an address computed as it runs, which a port does not translate: its targets are not known before it runs.']);
   });
 
   it("throws o.unknown's sentence at a transfer to an address no block starts, naming it, its source, the routine and the block", async () => {

@@ -3,8 +3,9 @@
  * the program CALLs one of these addresses, its port calls `o.standin` (ops.js), which pushes the
  * return address as the CALL does, runs the stand-in here, and pops the address as the routine's RET
  * does. Each stand-in leaves the machine as the routine leaves it on @fugloy/emu: its T-states and R
- * increments, the registers and flags it changes, nothing else. It is Fugløy's own code, written from
- * what the routine is documented to do and the timing measured on emu; no ROM byte of Tandy's is here.
+ * increments, the registers and flags it changes, nothing else. It is Fugløy's own code, written to match
+ * the routine's effect and its timing measured on emu; for $DELAY, `STANDINS_Z` below is the same short
+ * delay loop the ROM has, at the ROM's addresses.
  *
  * `STANDINS_Z` is the same routines as Z80 source for @fugloy/asm, at the ROM's own addresses, laid out
  * as the ROM lays them out, so the emulator running them takes the ROM's time. The referee's game stub
@@ -60,9 +61,9 @@ export function standins(model) {
 
 /**
  * The Model III's stand-ins as Z80 source for @fugloy/asm, at the ROM's addresses, with no END (it is
- * appended to another source, the stub ROM's). Fugløy's own: a delay loop written from the routine's
- * documented behaviour to take the time measured above, the JP at $0060 and the loop at $01FB being
- * where the ROM has them, so a CALL takes the same T-states on this as on the ROM.
+ * appended to another source, the stub ROM's). Fugløy's own: the same short delay loop the ROM has, at
+ * the ROM's addresses (the JP at $0060, the loop at $01FB), written to match the routine's timing measured
+ * above, so a CALL takes the same T-states on this as on the ROM.
  */
 export const STANDINS_Z = `; Fugløy's stand-ins for the Model III ROM routines a ported game calls, at the ROM's own
 ; addresses so that each takes the ROM's time (@fugloy/runtime's rom.js). Fugløy's own code.

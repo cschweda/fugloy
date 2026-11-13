@@ -67,16 +67,21 @@ port needs no ROM.
 `packages/recomp/test/sea-dragon.test.ts` referees the port against
 `@fugloy/emu` through the three recorded games, Novice, Expert and two
 players, from the title to GAME OVER and back to the title, on Fugløy's game
-stub ROM in CI: every block's registers, flags, T-states, R and MEMPTR, every
-byte written, video RAM and the sound at every frame, with no difference
+stub ROM in CI: every block's registers, flags, T-states, R, MEMPTR and mode
+register, every byte written, video RAM and the sound at every frame, with no
+difference
 (273,482,246 T-states in all, about 2 minutes 15 seconds of play, refereed in
 about 12 seconds). Locally the same games pass on the Model III ROM too. What
 that does not cover: `seadrg01.cmd` on the Model III only (not the other builds
 or the Model I); no interrupts (the game enables none); the paths the three
 games take, not every path through the game, so a path they never take may
-write into code or drop a return address the trace does not name, and the port
-then stops with a sentence, or read a ROM byte the trace does not name, which
-the port reads as `$00` without stopping.
+write into code the trace does not name, and the port then stops with a
+sentence; drop a return address the trace does not name, and the port stops
+with a sentence at the next `RET` that finds the wrong address, if there is
+one, and otherwise runs on with JavaScript frames left behind until the stack is
+next reset (the untested `POP AF` pair at `$550A`/`$550B` jumps into a copy of
+the main loop, with no `RET` at that level); or read a ROM byte the trace does
+not name, which the port reads as `$00` without stopping.
 
 To play the port in a browser:
 

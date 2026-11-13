@@ -159,7 +159,11 @@ export function TITLE_LOOP(z) {
   write updates and the instruction reads. Sea Dragon's `LD A,(IY+n)` at `$49BF` has its
   displacement `n` (the byte `DATA_49C1`) rewritten for each column, so it becomes
   `z.a = z.mem[(z.iy + signed(z.mem[0x49C1])) & 0xffff]`: the displacement is read at run time.
-  A site the recompiler cannot express this way is an error naming it, with a hint to add.
+  As M2 built it: a rewritten operand (a displacement, an immediate, a word, a `JP`'s target) is
+  read from memory when its instruction runs; a swapped opcode (Sea Dragon swaps three) is a choice
+  between the instructions the trace saw there, each translated ahead of time, as
+  `switch (z.mem[site])`, and a value the trace did not see stops the port with a sentence. Anything
+  else is still an error naming the site, with a hint to add.
 - Interrupts: a program that enables them gets a check at each block end for a pending heartbeat,
   as the plan says. Sea Dragon runs with interrupts off, so its port has none.
 
@@ -178,9 +182,10 @@ The hardware half of an emulator without the instruction interpreter:
 - **Sound**: writes to the cassette port (`$FF`) with their T-state, turned into a square wave
   (WebAudio), as `@fugloy/emu`'s `m.sound` ring records them.
 - **Ports**: `$EC` (the Model III's mode: 32/64 columns), `$FF`, and the rest as the program needs.
-- **ROM stand-ins**: Fugløy's own code for each ROM routine a program calls, written from the
-  routine's documented behaviour (`packages/disasm/data/symbols`' citations), with the same effect
-  on registers, memory and T-states. Sea Dragon needs one: `$0060` (`$DELAY`, a BC-counted delay).
+- **ROM stand-ins**: Fugløy's own code for each ROM routine a program calls, with the same effect
+  on registers, memory and T-states. Sea Dragon needs one: `$0060` (`$DELAY`, a BC-counted delay),
+  as built in M2 the same short delay loop the ROM has, at the ROM's addresses, written to match the
+  routine's timing measured on the emulator.
   The same stand-ins, assembled as Z80 by `@fugloy/asm` into a stub ROM at the same addresses, let
   the emulator run the original in CI without the user's ROM, so the referee runs everywhere; the
   real ROM is the referee locally as well.
@@ -194,7 +199,8 @@ The hardware half of an emulator without the instruction interpreter:
 
 - The same scripted keys, delivered at the same emulated T-state, to `@fugloy/emu` running the
   original and to the port. At every block end the port's registers and the memory it wrote are
-  compared with the emulator stepped to the same point; at every frame boundary, video RAM. The
+  compared with the emulator stepped to the same point (from M2 the mode register too, port `$EC`'s
+  latch, which the player draws the screen from); at every frame boundary, video RAM. The
   first difference names the block, the instruction and the field, as `pnpm diff` names a step.
 - This reuses the differential harness's ideas (`packages/emu/test/diff/`) but not its code:
   that harness compares two emulators instruction by instruction; this compares an emulator with
@@ -253,11 +259,11 @@ later choice; until then "upgraded and updated" means presentation and feel, not
   ports to one module of 430,623 bytes: 28 routines, every one structured (none labelled), 846
   blocks over them (110 of the 736 translated in more than one routine), the four rewritten
   displacements and the rewritten `JP` target read from memory, the three swapped opcodes each a
-  `switch` between the two instructions seen (the design's call 1), the drop an unwind to a
+  `switch` between the two instructions seen (the M2 plan's first "Claude's call"), the drop an unwind to a
   continuation routine, the three jumps back to the entry a stack reset, the six `$DELAY` calls on
   the runtime's stand-in, the two ROM bytes in the module, and none of the game's code bytes. The
   referee, which now also compares the sound (every port `$FF` write, its T-state and byte) at every
-  frame, finds no difference in any of the three games (84,124,477, 57,536,697 and 131,821,072
+  frame and the mode register at every block, finds no difference in any of the three games (84,124,477, 57,536,697 and 131,821,072
   T-states; refereed in 3.8, 2.4 and 5.3 s locally) in the suite CI runs
   (`packages/recomp/test/sea-dragon.test.ts`), and none locally on the user's Model III ROM booted
   to READY (where the ROM's `$0003` differs from the module's, and no register depends on it). The

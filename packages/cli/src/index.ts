@@ -41,6 +41,8 @@ export interface Io {
   writeFile(path: string, text: string): Promise<void>;
   /** Writes bytes, for `fugloy asm`'s .CMD; an Io without it cannot assemble. */
   writeBytes?(path: string, bytes: Uint8Array): Promise<void>;
+  /** Makes a directory and its parents, as `mkdir -p` does (one already there is fine), for `fugloy port -o`. */
+  makeDirectory?(path: string): Promise<void>;
   fileExists(path: string): Promise<boolean>;
   /** Whether stdout is a terminal; `--color` colors only there. */
   stdoutIsTerminal?: boolean;

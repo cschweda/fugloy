@@ -68,12 +68,17 @@ export function allNamesOf(r: AsmResult): Map<number, string[]> {
 
 // ---- the CPU state, on emu and on the runtime
 
-/** Every register, F, R, MEMPTR, the interrupt state, Q and the T-states: what a port and emu must agree on. */
+/**
+ * Every register, F, R, MEMPTR, the interrupt state, Q, the T-states and the mode register (`mode`: port
+ * $EC's latch on the Model III, port $FF's D0-D3 on the Model I; emu's io.js `modeRegister`, the runtime's
+ * `z.modeRegister`): what a port and emu must agree on.
+ */
 export interface State {
   a: number; f: number; b: number; c: number; d: number; e: number; h: number; l: number;
   ix: number; iy: number; sp: number; i: number; r: number; wz: number;
   af_: number; bc_: number; de_: number; hl_: number;
   iff1: boolean; iff2: boolean; im: number; q: number; cycles: number;
+  mode: number;
 }
 
 export const cpuOf = (m: Machine): Z80CPU => m.system.cpu;
@@ -90,6 +95,7 @@ export function emuState(m: Machine): State {
     // emu's Q: the instruction just run wrote the flags (z80cpu.js, executeInstruction)
     q: cpu.flagsWritten ? 1 : 0,
     cycles: cpu.cycles,
+    mode: m.system.io.modeRegister,
   };
 }
 
@@ -99,16 +105,18 @@ export function zState(z: Z): State {
     ix: z.ix, iy: z.iy, sp: z.sp, i: z.i, r: z.r, wz: z.wz,
     af_: z.af_, bc_: z.bc_, de_: z.de_, hl_: z.hl_,
     iff1: z.iff1, iff2: z.iff2, im: z.im, q: z.q, cycles: z.cycles,
+    mode: z.modeRegister,
   };
 }
 
-/** Give `z` the state `s` and the 64K `mem`. */
+/** Give `z` the state `s` (the mode register too) and the 64K `mem`. */
 export function setZ(z: Z, s: State, mem: Uint8Array): void {
   Object.assign(z, { a: s.a, f: s.f, b: s.b, c: s.c, d: s.d, e: s.e, h: s.h, l: s.l });
   z.ix = s.ix;
   z.iy = s.iy;
   Object.assign(z, { sp: s.sp, i: s.i, r: s.r, wz: s.wz, af_: s.af_, bc_: s.bc_, de_: s.de_, hl_: s.hl_ });
   Object.assign(z, { iff1: s.iff1, iff2: s.iff2, im: s.im, q: s.q, cycles: s.cycles });
+  z.modeRegister = s.mode;
   z.mem.set(mem);
 }
 

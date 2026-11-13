@@ -491,7 +491,7 @@ tests skip; with `FUGLOY_REQUIRE_ZMAC=1`, as in CI, they fail instead.
 pnpm install
 pnpm test          # vitest, all packages
 pnpm typecheck     # tsc project references plus the test sources
-pnpm build         # emits dist for z80, disasm, asm, and cli (run it before pnpm fugloy)
+pnpm build         # emits dist for z80, disasm, asm, recomp, and cli (run it before pnpm fugloy)
 pnpm fixtures      # regenerates fixtures/synthetic from the writers
 pnpm symbols       # validates data/symbols/*.json, regenerates the tables module and COMPARISON.md
 pnpm zmac:install  # builds the pinned zmac into tools/ for the round-trip tests

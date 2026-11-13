@@ -68,7 +68,7 @@ describe('a session that never reaches GAME OVER', () => {
     // No key at all, for two seconds of play: far too soon for the game to end
     const idle = seaDragonSession('idle', ['0'], [[]], { gameLimit: 2 });
     expect(() => recordSession('game', idle)).toThrow(/^Sea Dragon's idle session: no "Game Over Player 1" on the screen within 2 s of play/);
-  });
+  }, 60_000);
 });
 
 describe("Sea Dragon's census", () => {

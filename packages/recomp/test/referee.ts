@@ -15,8 +15,9 @@
  *     locally a test may pass the user's ROM bytes (`rom: <bytes>`), which emu boots to BASIC's READY
  *     before the load (helpers.ts, `bootToReady`), as a user loads a program and as Sea Dragon's sessions
  *     start on the user's ROM (controller Ruling 5), and port() is given the stand-ins.
- *   - The port's `Z` takes emu's registers and 64K at that moment, so the stub's bytes, the screen,
- *     RETURNED on the stack and whatever the loader left in the registers are the same on both. Then
+ *   - The port's `Z` takes emu's registers, its mode register and its 64K at that moment, so the stub's
+ *     bytes, the screen, RETURNED on the stack and whatever the loader left in the registers are the same
+ *     on both. Then
  *     every address the .CMD loads, and every address of the program's code and DATA (its run
  *     addresses, from the IR), is put back to what a new `Z` holds and the runtime's `load` writes the
  *     port's DATA: the port runs on the memory a standalone port would have, with none of the program's
@@ -30,11 +31,14 @@
  *     register as something else on the port, and the first register or byte it changes stops the run.
  *   - The port runs with `z.at` replaced. At each block start emu is stepped, an instruction at a time,
  *     until its T-states reach the port's; then emu's T-states must equal the port's, emu's PC the
- *     block's address, and every register, F, R, MEMPTR, the interrupt state and Q must be equal, and
- *     every byte either machine wrote since the last block start. At the first block start at or after
- *     each frame (1/60 s of the model's clock, emu's `clockHz`), all of video RAM and the sound: every
- *     write to port $FF since the frame before (emu's `m.sound`, the runtime's `z.sound`), the same
- *     T-state and byte, write for write. At the end, the 64K and the sound.
+ *     block's address, and every register, F, R, MEMPTR, the interrupt state, Q and the mode register
+ *     (port $EC's latch on the Model III, port $FF's D0-D3 on the Model I: the 32-column bit and the
+ *     alternate character set, which the browser player draws the screen from) must be equal, and every
+ *     byte either machine wrote since the last block start. At the first block start at or after each
+ *     frame (1/60 s of the model's clock, emu's `clockHz`), all of video RAM and the sound: every write to
+ *     port $FF since the frame before (emu's `m.sound`, the runtime's `z.sound`), the same T-state and
+ *     byte, write for write. At the end, the sound and every byte above the ROM space, less the
+ *     exceptions below.
  *   - A `check.json` step applies at the first block start at or after its T-state (the T-states of the
  *     `run` steps before it, counted from the program's entry), on both machines: a key to both
  *     keyboards; `row` and `cell` checked on both, `pcIn` on emu's PC. The run ends at the first block
@@ -53,13 +57,14 @@
  *     HALT, a RET elsewhere) stops the run with the port's sentence; for a device, emu is stepped
  *     through the block to the same access, which names the instruction.
  *
- * The memory compared is the 64K above the ROM space, the keyboard ($3800-$3BFF) as each machine reads it
- * from the keys held (at a byte of the program's code that is not a cell, the port must hold what `load`
- * left there), with one exception: the Model I's Expansion Interface, $37E0-$37EF, whose 40 Hz interrupt
- * latch emu sets as time passes. The ROM space is never compared: a write there is lost on both machines,
- * and the port's ROM is the module's by definition (see above). The runtime does not model it and throws a sentence at any read or
- * write there, so no port can differ there silently. A relocated program's end-of-run compare also
- * leaves out the bytes its loader left behind (see `leftBehind` below), and nothing else.
+ * The memory compared is everything above the ROM space, the keyboard ($3800-$3BFF) as each machine reads
+ * it from the keys held (at a byte of the program's code that is not a cell, the port must hold what
+ * `load` left there), but for the Model I's Expansion Interface, $37E0-$37EF, whose 40 Hz interrupt latch
+ * emu sets as time passes: the runtime does not model the Expansion Interface and throws a sentence at any
+ * read or write there, so no port can differ there silently. The ROM space is never compared: a write
+ * there is lost on both machines, and the port's ROM is the module's by definition (see above). A
+ * relocated program's end-of-run compare also leaves out the bytes its loader left behind (see
+ * `leftBehind` below), and nothing else.
  */
 import { Machine, parseCmd } from '@fugloy/emu';
 import { decodeAt, formatInstruction } from '@fugloy/z80';
@@ -118,7 +123,7 @@ export interface RefereeOptions {
  * what differed or was refused, both values, the block and the instruction; `at`, the block start where
  * the referee stopped (`routine` is the port's routine running it; after the program returned, '' and
  * the stub's RETURNED); `field`, what differed: a register as the runtime names it (`a` … `hl_`, `wz`,
- * `iff1`, `q`), `pc`, `cycles`, `mem[$XXXX]`, `sound` (a write to port $FF), `code` (self-modifying
+ * `iff1`, `q`), `mode` (the mode register), `pc`, `cycles`, `mem[$XXXX]`, `sound` (a write to port $FF), `code` (self-modifying
  * code), `refusal`, `port` (no port could be made), `entry` (emu never reached the port's entry), or a
  * step's `row N`, `cell $XXXX` or `pcIn`.
  */
@@ -135,12 +140,15 @@ const REGISTERS: readonly (readonly [keyof State, string, 8 | 16 | 'flag'])[] = 
   ['ix', 'IX', 16], ['iy', 'IY', 16], ['sp', 'SP', 16], ['i', 'I', 8], ['r', 'R', 8], ['wz', 'MEMPTR', 16],
   ['af_', "AF'", 16], ['bc_', "BC'", 16], ['de_', "DE'", 16], ['hl_', "HL'", 16],
   ['iff1', 'IFF1', 'flag'], ['iff2', 'IFF2', 'flag'], ['im', 'IM', 'flag'], ['q', 'Q', 'flag'],
+  // The one device state the runtime keeps: port $EC's latch on the Model III, port $FF's D0-D3 on the
+  // Model I (the 32-column bit, the alternate character set), which a player draws the screen from
+  ['mode', 'mode register', 8],
 ];
 const FLAG_BITS = ['C', 'N', 'P/V', '3', 'H', '5', 'Z', 'S'];
 
 const VIDEO = 0x3c00;
 const KEYBOARD = { start: 0x3800, end: 0x3bff };
-/** The Model I's Expansion Interface (see the header): the one range left out of every memory compare. */
+/** The Model I's Expansion Interface (see the header): left out of every memory compare, as the ROM space is. */
 const EXPANSION = { start: 0x37e0, end: 0x37ef };
 /** How far emu is stepped looking for the access or instruction a refusal names. */
 const SEARCH_LIMIT = 1_000_000;
@@ -325,7 +333,7 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
   const since = (t: number): number => t - start.cycles;
   const instructionAt = (pc: number): string => `${$4(pc)}, ${formatInstruction(decodeAt(startMem, pc))}`;
   const selfModSentence = (s: { addr: number; pc: number }): string =>
-    `self-modifying code: ${$4(s.addr)} written by the instruction at ${$4(s.pc)} (M1 does not translate it)`;
+    `self-modifying code: ${$4(s.addr)} written by the instruction at ${$4(s.pc)} (the trace does not name it; run the census over a session that reaches this)`;
   const codeReadNote = (): string =>
     codeRead === null ? '' : ` Emu's instruction at ${$4(codeRead.pc)} read ${$4(codeRead.addr)}, a byte of the program's code, as data (the run's first such read); the port carries no code bytes.`;
 
@@ -391,7 +399,7 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
   const compareRange = (from: number, to: number): void => {
     for (let a = from; a < to; a++) compareByte(a);
   };
-  /** The end-of-run compare: the 64K, but the bytes a relocated program's loader left behind (see `leftBehind`), and the sound. */
+  /** The end-of-run compare: every byte `compareByte` compares (above the ROM space), but the bytes a relocated program's loader left behind (see `leftBehind`), and the sound. */
   const compareEnd = (): void => {
     for (let a = 0; a < 0x10000; a++) if (!leftBehind[a]) compareByte(a);
     compareSound();
@@ -533,7 +541,7 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
   /**
    * Step emu through the refused block to the access or instruction the refusal names; the sentence's end.
    * For the write guard's refusal, emu's own write into the code stops the run (stepEmu's Stop) with
-   * M1's sentence, naming the instruction.
+   * the self-modifying-code sentence, naming the instruction.
    */
   function findOnEmu(message: string): string {
     if (GUARD.test(message)) {
@@ -581,7 +589,7 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
     return device === null ? '' : `; emu's instruction at ${instructionAt(hit)}, made the same access`;
   }
 
-  // The program returned to the stub's RETURNED: emu to the same T-state, the steps not yet due, the 64K.
+  // The program returned to the stub's RETURNED: emu to the same T-state, the steps not yet due, the end's compare.
   try {
     catchUp();
     compareCpu(returned);

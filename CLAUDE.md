@@ -306,7 +306,9 @@ references waits (emu spec §12).
   models no interrupts, cassette, disk, printer or Model 4. M2 adds Fugløy's own
   stand-ins for ROM routines (`src/rom.js`: `standins(model)`, the Model III's
   `$DELAY` at `$0060`, called by `o.standin`; `STANDINS_Z`, the same as Z80
-  source for the referee's game stub ROM; no Tandy byte), `load`'s write guard
+  source for the referee's game stub ROM: the same short delay loop the ROM
+  has, at the ROM's addresses, written to match the routine's measured timing),
+  `load`'s write guard
   over the module's `CODE` (a write into code that is not one of its `CELLS`
   throws), the module's `ROM` bytes stored straight into memory by `load`, and
   `o.unwind`/`o.reset` with the top-level trampoline `o.top` for a dropped return
@@ -363,7 +365,10 @@ references waits (emu spec §12).
   rewritten `JP nn` goes to each target seen, a swapped opcode is a `switch` on
   its cell over the instructions seen, a dropped return address ends its block
   with `o.unwind` and starts a continuation routine, and the trace's ROM reads
-  are the module's `ROM`; an entry whose first block loads SP with a constant
+  are the module's `ROM` (the report's `romFrom` says which ROM they were read
+  on; a `"user"` trace's module carries that ROM's bytes, not for publishing); a
+  trace whose `entered` is not empty is refused, naming each range and the
+  `entry` hint to add; an entry whose first block loads SP with a constant
   (not a trace cell) makes a jump back to it `o.reset`. The census
   (`tools/census.ts`, `pnpm census <cmd> --hints … --model 3 --sessions
   sea-dragon -o <trace.json>`; test code, it needs emu) plays scripted
@@ -372,7 +377,8 @@ references waits (emu spec §12).
   `STANDINS_Z`) and writes the trace; Sea Dragon's is committed as
   `examples/sea-dragon/seadrg01.trace.json`, and `census.test.ts` fails when it
   is stale. The referee also compares the sound (port `$FF` writes) at every
-  frame (`sounds` counts them), boots a user's ROM to READY before the
+  frame (`sounds` counts them) and the mode register (`mode`: port `$EC`'s latch,
+  port `$FF`'s D0-D3 on the Model I) at every block start, boots a user's ROM to READY before the
   load, and gives the port the ROM space a standalone port has (the module's
   `ROM`, `$00` elsewhere; never compared), so a ROM byte read that the trace
   missed stops the run at the register it reaches. `test/sea-dragon.test.ts` referees

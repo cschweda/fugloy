@@ -213,6 +213,15 @@ T2:     INC     C
         INC     C
         JP      NEXT`);
 
+/** Goes to THERE by a RET to an address it pushed: no CALL, JP or JR names THERE, so the disassembly does not reach it. */
+const PUSHED = program(`
+START:  LD      HL,THERE
+        PUSH    HL
+        RET
+THERE:  LD      A,5
+        LD      (5000H),A
+        RET`);
+
 /** Writes a RET over its own NOP at DONE, but only while ENTER is held: the census's session holds no key. */
 const UNSEEN = program(`
 START:  LD      A,(3840H)       ; ENTER is bit 0
@@ -274,6 +283,32 @@ describe('a rewritten operand, read from memory when its instruction runs', () =
     const unhinted = writeHints(skeletonHints(loadCmd(s.cmd), s.cmd));
     const p = port(s.cmd, { ...options(s), hints: unhinted });
     expect(p).toEqual({ ok: false, errors: [expect.stringMatching(new RegExp(`^\\${$4(s.at('JUMP'))}: JP .*'s target is rewritten to \\${$4(s.at('ODD'))}, where no block of the disassembly starts`))] });
+  });
+
+  it('a trace whose entered names code the hinted analysis lacks makes port() fail, naming the range and the hint to add; with the hint and a fresh trace it ports', () => {
+    // The census taken before the hint: THERE, which only a RET to a pushed address reaches, ran but is
+    // not code in the IR, so a port would carry its bytes as DATA (it did, silently, before port() read `entered`)
+    const before = synthetic(PUSHED);
+    const there = before.at('THERE');
+    expect(before.trace.entered).toEqual([[there, there + 5]]);
+    const sentence = (first: number, last: number): string =>
+      `${$4(first)}–${$4(last)}: the trace says the program ran these bytes, which are not code in the disassembly with this hint file, so a port would carry them as data; ` +
+      `add an entry hint at ${$4(first)} to the hint file and take the census again.`;
+    expect(port(before.cmd, options(before))).toEqual({ ok: false, errors: [sentence(there, there + 5)] });
+    // The same trace given with the hint: still refused, since it was taken before the hint
+    const hinted = synthetic(PUSHED, ['THERE']);
+    expect(port(before.cmd, { ...options(before), hints: hinted.hints })).toEqual({ ok: false, errors: [sentence(there, there + 5)] });
+    // The hint and a census taken with it: nothing entered, and it ports, THERE code and not carried
+    expect(hinted.trace.entered).toEqual([]);
+    const p = ok(port(hinted.cmd, options(hinted)));
+    expect(p.report.data).toEqual([]);
+    expect(p.js).toContain(`export const CODE = [\n  [0x7000, 0x${hex(there + 5, 4)}],\n];`);
+    // A rewritten JP's target only it reaches, the census taken before its entry hint: the same sentence;
+    // with the hint and a fresh census it ports (and passes the referee, above)
+    const jump = synthetic(JUMP);
+    const odd = jump.at('ODD');
+    expect(port(jump.cmd, options(jump))).toEqual({ ok: false, errors: [sentence(odd, odd + 1)] });
+    expect(ok(port(jump.cmd, options(synthetic(JUMP, ['ODD'])))).report.data).toEqual([{ addr: jump.at('TARGETS'), length: 4, kind: 'unknown' }]);
   });
 
   it('an immediate, and the low byte alone of a word: each read from its cell, and the referee passes', async () => {
@@ -349,10 +384,10 @@ describe('a write into code the trace does not name', () => {
     expect(s.trace.patches).toEqual([]);
   });
 
-  it("is refused by the referee with M1's sentence, naming both addresses", async () => {
+  it("is refused by the referee with its self-modifying-code sentence, naming both addresses", async () => {
     const res = failed(await judge(s, [{ press: 'ENTER' }, { run: 100_000 }]));
     expect(res.field).toBe('code');
-    expect(res.report).toContain(`self-modifying code: ${$4(s.at('DONE'))} written by the instruction at ${$4(s.at('POKE'))} (M1 does not translate it)`);
+    expect(res.report).toContain(`self-modifying code: ${$4(s.at('DONE'))} written by the instruction at ${$4(s.at('POKE'))} (the trace does not name it; run the census over a session that reaches this)`);
   });
 
   it("throws the guard's sentence at the write, in a standalone port", async () => {

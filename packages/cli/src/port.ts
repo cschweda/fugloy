@@ -5,8 +5,9 @@
  * its report (the entry, the loader left out, each routine, the data regions and their kinds, the code
  * the program rewrites, the return addresses it drops, the jumps back to its entry that discard the stack,
  * the ROM routines the runtime stands in for, the ROM bytes the module carries, and the places that refuse
- * if they run), into the program's directory or -o's. `--trace` reads a port trace (the census's,
- * docs/port-trace-format.md) and checks it was taken of this program. Exit 0 when it ported, 1 when the
+ * if they run), into the program's directory or -o's (made, with its parents, if it is not there).
+ * `--trace` reads a port trace (the census's, docs/port-trace-format.md) and checks it was taken of this
+ * program. Exit 0 when it ported, 1 when the
  * program cannot be ported (port()'s sentences on stderr, nothing written), the trace is malformed or of
  * another program, or a file cannot be read or written, 2 on a usage error.
  */
@@ -39,8 +40,8 @@ one) is refused with a sentence naming it.
   --trace <file>   a port trace taken of this program (the census's): the code
                    it rewrites, the return addresses it drops and the ROM
                    bytes it reads, which the port follows
-  -o <dir>         write the two files into this directory (default: the
-                   program's own)
+  -o <dir>         write the two files into this directory, made if it is not
+                   there (default: the program's own)
   --help           show this help
 `;
 
@@ -66,7 +67,8 @@ export function outputsOf(program: string, dir: string | undefined): { module: s
  * The report as text, one line an item: what was ported and for which machine, the entry, the loader left
  * out and the trace (when there are), whether it was compared with the emulator, the routines, the data
  * and their kinds; then, when there are any, the code the program rewrites, the return addresses it drops,
- * the jumps back to the entry that discard the stack, the stand-ins and the ROM bytes carried; the refusals.
+ * the jumps back to the entry that discard the stack, the stand-ins and the ROM bytes carried (with the ROM
+ * the trace read them on); the refusals.
  */
 export function formatReport(report: PortReport, about: { source: string; model: 1 | 3; module: string; trace?: string }): string {
   const $4 = (n: number): string => `$${hex4(n)}`;
@@ -76,9 +78,10 @@ export function formatReport(report: PortReport, about: { source: string; model:
     `Entry: ${report.entry}`,
     ...(report.loader === undefined ? [] : [`Loader: ${report.loader.note}`]),
     ...(about.trace === undefined ? [] : [`Trace: ${about.trace}`]),
-    about.trace === undefined
-      ? 'This port was not compared with the emulator. It was made with no trace, so a write into the program\'s code stops it with a sentence; a read of its own code, or of a ROM byte, reads $00 without stopping.'
-      : 'This port was not compared with the emulator. A write into the program\'s code that the trace does not name stops it with a sentence; a read of its own code, or of a ROM byte the trace does not name, reads $00 without stopping.',
+    (about.trace === undefined
+      ? 'This port was not compared with the emulator. It was made with no trace, so a write into the program\'s code stops it with a sentence. A read of the program\'s own code, or of a ROM byte, reads $00 without stopping.'
+      : 'This port was not compared with the emulator. A write into the program\'s code that the trace does not name stops it with a sentence. A read of the program\'s own code reads $00 without stopping, except at a byte the program rewrites, which holds its byte, and a read of a ROM byte the trace does not name reads $00 too.') +
+      (report.loader === undefined ? '' : ' The bytes the loader left behind (the file\'s copy of the program where it loads, and the loader) read $00 too.'),
     '',
   ];
   const labelled = report.routines.filter((r) => r.labelled).length;
@@ -120,6 +123,13 @@ export function formatReport(report: PortReport, about: { source: string; model:
   }
   if (report.rom.length > 0) {
     out.push(`ROM bytes the program reads, carried in the module: ${report.rom.length}`);
+    if (report.romFrom !== undefined) {
+      out.push(
+        report.romFrom === 'stub'
+          ? '  read on Fugløy\'s game stub ROM (the trace\'s "rom" is "stub")'
+          : '  read on the user\'s ROM (the trace\'s "rom" is "user"): the module carries bytes of that ROM, so it is not for publishing',
+      );
+    }
     for (const r of report.rom) out.push(`  ${$4(r.addr)}  $${hex2(r.value)}`);
     out.push('');
   }
@@ -207,6 +217,15 @@ export async function runPort(argv: string[], io: Io): Promise<number> {
     for (const error of result.errors) io.stderr(`fugloy port: ${path}: ${error}\n`);
     io.stderr(`fugloy port: ${plural(result.errors.length, 'error')}; nothing written\n`);
     return 1;
+  }
+  // -o's directory, and its parents, if they are not there yet
+  if (values.output !== undefined && io.makeDirectory !== undefined) {
+    try {
+      await io.makeDirectory(values.output);
+    } catch (e) {
+      io.stderr(`fugloy port: cannot make ${values.output}: ${(e as Error).message}\n`);
+      return 1;
+    }
   }
   for (const [file, text] of [
     [outputs.module, result.js],

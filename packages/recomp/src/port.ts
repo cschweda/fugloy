@@ -125,6 +125,11 @@ export interface PortReport {
   resets: { at: number; note: string }[];
   /** The ROM bytes the program reads as data (the trace's ROM reads), by address: the module's `ROM`, which `load` puts in memory. */
   rom: { addr: number; value: number }[];
+  /**
+   * With a trace, the ROM its sessions ran on, so where `rom`'s bytes came from (the trace's `rom`): `stub`,
+   * Fugløy's game stub ROM, or `user`, the user's ROM, whose bytes the module then carries (not for publishing).
+   */
+  romFrom?: 'stub' | 'user';
 }
 
 /** A POP that drops a return address, or the last of several in a row: its block ends with it. */
@@ -425,6 +430,16 @@ export function prepare(cmd: Uint8Array, opts: PortOptions): { ok: true; prepare
   }
   if (trace !== undefined && trace.model !== opts.model) {
     return { ok: false, errors: [`the trace was taken on the Model ${trace.model === 1 ? 'I' : 'III'}, and the port is for the Model ${opts.model === 1 ? 'I' : 'III'}.`] };
+  }
+  // Code the census saw run that the hinted analysis does not decode: a port would carry its bytes as DATA
+  // and translate none of it, so it is refused until a hint decodes it and a census taken with that hint
+  // finds nothing entered
+  if (trace !== undefined && trace.entered.length > 0) {
+    return {
+      ok: false,
+      errors: trace.entered.map(([first, last]) =>
+        `${addr(first)}–${addr(last)}: the trace says the program ran these bytes, which are not code in the disassembly with this hint file, so a port would carry them as data; add an entry hint at ${addr(first)} to the hint file and take the census again.`),
+    };
   }
   // A ROM read the module carries is stored straight into memory by `load`: it must be in the ROM's space
   const romTop = opts.model === 1 ? 0x3000 : 0x3800;
@@ -732,6 +747,7 @@ export function port(cmd: Uint8Array, opts: PortOptions): PortResult {
         .sort((x, y) => x.at - y.at),
       resets: out.resets,
       rom: (opts.trace?.romReads ?? []).map((r) => ({ addr: r.addr, value: r.value })),
+      ...(opts.trace === undefined ? {} : { romFrom: opts.trace.rom }),
     },
   };
 }

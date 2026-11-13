@@ -30,6 +30,8 @@ declare module '@fugloy/emu' {
       readonly cpu: Z80CPU;
       /** A read with no device side effect (memory.js, peekByte). */
       readonly memory: { peekByte(addr: number): number };
+      /** The ports (machine/io.js): `modeRegister` is port $EC's latch on the Model III, port $FF's D0-D3 on the Model I. */
+      readonly io: { modeRegister: number };
     };
     step(n?: number): { cycles: number; halted: boolean };
     /** T-states since the last reset. */
@@ -64,6 +66,8 @@ declare module '@fugloy/runtime' {
     af: number; bc: number; de: number; hl: number; ix: number; iy: number;
     iff1: boolean; iff2: boolean; im: number; q: number;
     cycles: number;
+    /** The mode register: port $EC's latch on the Model III, port $FF's D0-D3 on the Model I. */
+    modeRegister: number;
     mem: Uint8Array;
     /** The write guard `load` installs: 1 at each code byte a write throws at; null when none is installed. */
     guard: Uint8Array | null;

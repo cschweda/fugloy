@@ -28,11 +28,12 @@ async function seaDragon(): Promise<{ 'seadrg01.cmd': Uint8Array; 'seadrg01.hint
   return { 'seadrg01.cmd': await read('seadrg01.cmd'), 'seadrg01.hints': await read('seadrg01.hints'), 'seadrg01.trace.json': await read('seadrg01.trace.json') };
 }
 
-/** An Io over in-memory files, capturing output and what is written. */
-function capture(files: Record<string, Uint8Array | string> = {}): { io: Io; out: string[]; err: string[]; written: Map<string, string> } {
+/** An Io over in-memory files, capturing output, what is written and the directories made. */
+function capture(files: Record<string, Uint8Array | string> = {}): { io: Io; out: string[]; err: string[]; written: Map<string, string>; made: string[] } {
   const out: string[] = [];
   const err: string[] = [];
   const written = new Map<string, string>();
+  const made: string[] = [];
   const io: Io = {
     stdout: (s) => { out.push(s); },
     stderr: (s) => { err.push(s); },
@@ -42,9 +43,10 @@ function capture(files: Record<string, Uint8Array | string> = {}): { io: Io; out
       return typeof f === 'string' ? new TextEncoder().encode(f) : f;
     },
     writeFile: async (path, text) => { written.set(path, text); },
+    makeDirectory: async (path) => { made.push(path); },
     fileExists: async () => false,
   };
-  return { io, out, err, written };
+  return { io, out, err, written, made };
 }
 
 /** A program the port refuses: JP (HL) jumps to an address computed as it runs. */
@@ -76,8 +78,10 @@ describe('fugloy port', () => {
   });
 
   it('writes into -o and names the files after the program; --model 1 makes a Model I port', async () => {
-    const { io, written } = capture({ 'blank.cmd': await chapter1(1) });
+    const { io, written, made } = capture({ 'blank.cmd': await chapter1(1) });
     expect(await run(['port', 'blank.cmd', '--model', '1', '-o', 'out'], io)).toBe(0);
+    // -o's directory is made first (with its parents), in case it is not there
+    expect(made).toEqual(['out']);
     expect([...written.keys()]).toEqual(['out/blank.port.js', 'out/blank.port.txt']);
     expect(written.get('out/blank.port.js')).toContain('export const MODEL = 1;');
     expect(written.get('out/blank.port.txt')).toContain('for the Model I');
@@ -107,7 +111,7 @@ describe('fugloy port', () => {
         'game.cmd, ported for the Model III by @fugloy/recomp 0.1.0',
         'Module: game.port.js (imports @fugloy/runtime/ops)',
         'Entry: START',
-        "This port was not compared with the emulator. It was made with no trace, so a write into the program's code stops it with a sentence; a read of its own code, or of a ROM byte, reads $00 without stopping.",
+        "This port was not compared with the emulator. It was made with no trace, so a write into the program's code stops it with a sentence. A read of the program's own code, or of a ROM byte, reads $00 without stopping.",
         '',
         'Routines: 2 (1 labelled)',
         '  $7000  START  3 blocks  labelled',
@@ -121,6 +125,16 @@ describe('fugloy port', () => {
         '',
       ].join('\n'),
     );
+  });
+
+  it('says which ROM the carried ROM bytes were read on: a trace taken on the user\'s ROM makes a module not for publishing', () => {
+    const report = (romFrom: 'stub' | 'user'): string =>
+      formatReport(
+        { entry: 'START', entryAddr: 0x7000, routines: [], data: [], refused: [], standins: [], cells: [], drops: [], resets: [], rom: [{ addr: 0x0003, value: 0x15 }], romFrom },
+        { source: 'game.cmd', model: 3, module: 'game.port.js', trace: 'game.trace.json' },
+      );
+    expect(report('stub')).toContain('\nROM bytes the program reads, carried in the module: 1\n  read on Fugløy\'s game stub ROM (the trace\'s "rom" is "stub")\n  $0003  $15\n');
+    expect(report('user')).toContain('\nROM bytes the program reads, carried in the module: 1\n  read on the user\'s ROM (the trace\'s "rom" is "user"): the module carries bytes of that ROM, so it is not for publishing\n  $0003  $15\n');
   });
 
   it("a hint file's names and notes reach the module", async () => {
@@ -181,7 +195,10 @@ describe('fugloy port', () => {
     expect(report).toBe(formatReport(p.report, { source: 'seadrg01.cmd', model: 3, module: 'seadrg01.port.js', trace: 'seadrg01.trace.json' }));
     expect(report).toContain('\nLoader: The file\'s transfer routine at $8881 (15 bytes) moves the program to where it runs; the port does not translate it, and starts at $497F with its data already at its run addresses.\n');
     expect(report).toContain('\nTrace: seadrg01.trace.json\n');
-    expect(report).toContain("\nThis port was not compared with the emulator. A write into the program's code that the trace does not name stops it with a sentence; a read of its own code, or of a ROM byte the trace does not name, reads $00 without stopping.\n");
+    expect(report).toContain(
+      "\nThis port was not compared with the emulator. A write into the program's code that the trace does not name stops it with a sentence. A read of the program's own code reads $00 without stopping, except at a byte the program rewrites, which holds its byte, and a read of a ROM byte the trace does not name reads $00 too. " +
+        "The bytes the loader left behind (the file's copy of the program where it loads, and the loader) read $00 too.\n",
+    );
     expect(report).toMatch(/\nRoutines: \d+ \(0 labelled\)\n/);
     expect(report).toContain('\nCode the program rewrites, read as it runs: 8 sites, 9 bytes\n');
     expect(report).toContain('\n  $49C1  displacement of the instruction at $49BF; 9 values seen\n');
@@ -189,7 +206,7 @@ describe('fugloy port', () => {
     expect(report).toContain('\n  $5174  opcode, a choice between NOP and LD (HL),A; 2 values seen\n');
     expect(report).toContain('\nPOPs that drop a return address: 1\n  $4BAC  goes on in SUB_4BAD\n');
     expect(report).toMatch(/\nJumps back to the entry that discard the stack: 3\n  \$4CC6: .+\n  \$602D: .+\n  \$6042: .+\n/);
-    expect(report).toContain('\nROM bytes the program reads, carried in the module: 2\n  $0000  $F3\n  $0003  $00\n');
+    expect(report).toContain('\nROM bytes the program reads, carried in the module: 2\n  read on Fugløy\'s game stub ROM (the trace\'s "rom" is "stub")\n  $0000  $F3\n  $0003  $00\n');
     expect(report).toContain('Refused if they run: none');
     expect(report).toMatch(/\n  \$[0-9A-F]{4}  \d+ bytes? +unknown\n/);
     expect(out.join('')).toMatch(/^seadrg01\.port\.js: \d+ routines \(0 labelled\), entry L497F; the report is seadrg01\.port\.txt\n$/);
@@ -279,6 +296,12 @@ describe('fugloy port', () => {
       expect(r.status, r.stderr).toBe(0);
       expect(await readFile(join(dir, 'blank.port.js'), 'utf8')).toMatch(/^import \* as o from '@fugloy\/runtime\/ops';$/m);
       expect(await readFile(join(dir, 'blank.port.txt'), 'utf8')).toMatch(/^blank\.cmd, ported for the Model III/);
+      // -o into a directory that is not there yet: made, with its parents
+      const deep = join(dir, 'new', 'deeper');
+      const o = spawnSync(process.execPath, [bin, 'port', join(dir, 'blank.cmd'), '--model', '3', '-o', deep], { encoding: 'utf8' });
+      expect(o.status, o.stderr).toBe(0);
+      expect(await readFile(join(deep, 'blank.port.js'), 'utf8')).toMatch(/^import \* as o from '@fugloy\/runtime\/ops';$/m);
+      expect(existsSync(join(deep, 'blank.port.txt'))).toBe(true);
       await writeFile(join(dir, 'jp.cmd'), jpHl());
       const b = spawnSync(process.execPath, [bin, 'port', join(dir, 'jp.cmd'), '--model', '3'], { encoding: 'utf8' });
       expect(b.status).toBe(1);

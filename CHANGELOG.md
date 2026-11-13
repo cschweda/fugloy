@@ -150,7 +150,7 @@ creates and pushes the tag.
   `DATA` and none of its code bytes. A referee (`packages/recomp/test/referee.ts`) runs a port
   beside emu on Fugløy's stub ROM and compares the two at every block start (the T-states, PC,
   every register, F, R, MEMPTR, Q and the interrupt state, every byte written), video RAM every
-  frame and the 64K at the end; it refuses self-modifying code and names the first difference's
+  frame and the 64K at the end (from M2, below, every byte above the ROM space); it refuses self-modifying code and names the first difference's
   block, field and instruction. Every Learn lesson and Build Space Invaders chapter, 19 programs on
   the Model III and the Model I (38 runs), is ported and refereed through its `check.json` in CI
   (`packages/recomp/test/learn.test.ts`, about 61 s locally): all match. Their ports hold 129
@@ -175,21 +175,24 @@ creates and pushes the tag.
   they run, makes each of the three swapped opcodes a choice between the two instructions the census
   saw, follows the title loop's dropped return address (`$4BAC POP AF`) by leaving the routine the
   game left, and carries the two ROM bytes the game reads as data (`$0000`, `$0003`) in the module's
-  `ROM`; a jump back to an entry whose first block loads SP with a constant discards the stack. The
+  `ROM` (the report's `romFrom` names the ROM the trace read them on); a trace whose `entered` names
+  code the hinted disassembly does not decode is refused, naming each range and the `entry` hint to
+  add, rather than carried as data; a jump back to an entry whose first block loads SP with a constant discards the stack. The
   runtime gains Fugløy's own stand-in for the ROM's `$DELAY` (`$0060`), a write guard that stops a
   standalone port at a write into code the trace does not name, and `load`'s `ROM` bytes. The port is
   430,623 bytes: 28 routines, none labelled, 846 blocks over them (110 of the 736 translated in more
   than one routine), nothing refused. The referee now also compares the sound (every write to port
-  `$FF`, its T-state and byte, at every frame), and `packages/recomp/test/sea-dragon.test.ts` referees
+  `$FF`, its T-state and byte, at every frame) and the mode register (port `$EC`'s latch, which the
+  player draws the screen from) at every block start, and `packages/recomp/test/sea-dragon.test.ts` referees
   the port through all three games in CI with no difference: 84,124,477, 57,536,697 and 131,821,072
   T-states (about 2¼ minutes of play), refereed in 3.8, 2.4 and 5.3 s locally, about 22 to 25 million
   T-states a second; locally, on the Model III ROM booted to READY, the same three games pass too.
   The CLI gains `--trace` (`fugloy port <program.cmd> --model 1|3 [--hints <file>] [--trace <file>]
   [-o <dir>]`; a trace of another program, or a malformed one, exits 1 with its sentence), and its
   report lists the loader left out, each data region's kind, the rewritten code, the drops, the
-  resets, the stand-ins and the ROM bytes, and says that a write into code the trace does not name
-  stops the port, while a read of its own code or of a ROM byte the trace does not name reads `$00`
-  without stopping. The referee gives a port the ROM space a standalone port has (the module's `ROM`,
+  resets, the stand-ins and the ROM bytes with the ROM they were read on, and says that a write into
+  code the trace does not name stops the port, while a read of its own code (but a byte it rewrites)
+  or of a ROM byte the trace does not name reads `$00` without stopping; `-o` makes its directory. The referee gives a port the ROM space a standalone port has (the module's `ROM`,
   `$00` elsewhere) and counts the sound it compared. Limits: `seadrg01.cmd` on the Model III only; a port takes no interrupts (Sea
   Dragon enables none); the three games are the paths those sessions take, not every path through
   the game, and what the census cannot see is listed in the trace format's document; a block
