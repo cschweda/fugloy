@@ -1,19 +1,19 @@
 /**
  * @fugloy/runtime, M2 Task 9: the player's parts that need no browser. The clock that paces a port
- * (frame.js): a wait when the port is ahead of real time, none when it is behind, and after a stall no
- * running fast to catch up. The sound (sound.js): the cassette port's writes as a square wave at absolute
- * sample positions, and when each frame's samples play. The keys (keys.js): emu's browser mapping, the
- * workbench's Shift rule, and a key pressed and released between two of the worker's copies held for one
- * whole frame. The worker's loop (worker.js's `play`, its posting and waiting injected) over a small
- * synthetic port. Sea Dragon's port through the same loop, against emu, is @fugloy/recomp's
- * test/player.test.ts (controller Ruling 3).
+ * (frame.js): a wait when the port is ahead of real time, none when it is behind, after a stall (or two)
+ * no running fast to catch up, a backwards clock moving the origin, and no wait past MAX_WAIT_MS. The
+ * sound (sound.js): the cassette port's writes as a square wave at absolute sample positions, and when
+ * each frame's samples play. The keys (keys.js): emu's browser mapping, the workbench's Shift rule, and a
+ * key pressed and released at once held in the worker's copies for MIN_HOLD_FRAMES frames. The worker's
+ * loop (worker.js's `play`, its posting and waiting injected) over a small synthetic port; Sea Dragon's
+ * port through the same loop, against emu, is @fugloy/recomp's test/player.test.ts (controller Ruling 3).
  */
 import { readFileSync } from 'node:fs';
 import { Machine } from '@fugloy/emu';
 import { describe, expect, it } from 'vitest';
 import { platformHits } from '../../emu/test/platform-scan.js';
-import { BEHIND_LIMIT_MS, createClock, frameHook, frameLength } from '../src/player/frame.js';
-import { BROWSER_KEYS, KeyTracker } from '../src/player/keys.js';
+import { BEHIND_LIMIT_MS, MAX_WAIT_MS, createClock, frameHook, frameLength } from '../src/player/frame.js';
+import { BROWSER_KEYS, KeyTracker, MIN_HOLD_FRAMES } from '../src/player/keys.js';
 import { createAudioSchedule, samples } from '../src/player/sound.js';
 import { START, begin, play } from '../src/player/worker.js';
 import { createZ } from '../src/index.js';
@@ -77,6 +77,40 @@ describe('the clock', () => {
     expect(past.clock.due(0)).toBe(0);
     // The origin moved here: 1 ms of emulated time is 1 ms ahead
     expect(past.clock.due(SECOND / 1000)).toBeCloseTo(1, 9);
+  });
+  it('moves its origin when now goes backwards, rather than ask for a wait of seconds', () => {
+    const { time, clock } = testClock();
+    expect(clock.due(0)).toBe(0);
+    time.ms = -5000; // a clock that is not monotonic
+    const t = frameLength(MODEL3_HZ);
+    expect(clock.due(t)).toBe(0);
+    expect(clock.due(t + frameLength(MODEL3_HZ))).toBeCloseTo(1000 / 60, 9);
+  });
+
+  it('never asks for a wait longer than MAX_WAIT_MS', () => {
+    const { clock } = testClock();
+    expect(MAX_WAIT_MS).toBe(2000);
+    // The longest block, a $DELAY of BC = 0 (1,966,095 T-states), plus a frame: under a second, all of it
+    expect(clock.due(1966095 + frameLength(MODEL3_HZ))).toBeCloseTo(((1966095 + 33792) * 1000) / MODEL3_HZ, 9);
+    expect(clock.due(10 * SECOND)).toBe(MAX_WAIT_MS);
+  });
+
+  it('after two stalls in a row runs at normal speed from each, with no catching up', () => {
+    const { time, clock } = testClock();
+    expect(clock.due(0)).toBe(0);
+    time.ms += 2000;
+    const first = frameLength(MODEL3_HZ);
+    expect(clock.due(first)).toBe(0);
+    // A quarter of a second runs at normal speed
+    time.ms += 250;
+    expect(clock.due(first + SECOND / 4)).toBeCloseTo(0, 9);
+    // and the second stall, three seconds
+    time.ms += 3000;
+    const second = first + SECOND / 4 + frameLength(MODEL3_HZ);
+    expect(clock.due(second)).toBe(0);
+    expect(clock.due(second + SECOND / 4)).toBeCloseTo(250, 9);
+    time.ms += 1000;
+    expect(clock.due(second + SECOND)).toBeCloseTo(0, 9);
   });
 });
 
@@ -143,8 +177,10 @@ describe('the keys', () => {
       tracker.update();
       return worker.seen;
     };
+    /** `n` of the worker's copies; the rows each saw. */
+    const copies = (n) => Array.from({ length: n }, () => copy());
     const ev = (key, code, mods = {}) => ({ key, code, ...mods });
-    return { rows, tracker, copy, ev };
+    return { rows, tracker, copy, copies, worker, ev };
   }
 
   it("maps every browser key as emu's own browser mapping does", () => {
@@ -174,20 +210,20 @@ describe('the keys', () => {
   });
 
   it("gives : without SHIFT for Shift+; and keeps the TRS-80's SHIFT for Shift alone and with the arrows and space bar", () => {
-    const { rows, tracker, copy, ev } = tracked();
+    const { rows, tracker, copies, ev } = tracked();
     expect(tracker.down(ev('Shift', 'ShiftLeft'))).toBe(true);
     expect(rows[7]).toBe(0x01);
     expect(tracker.down(ev(':', 'Semicolon'))).toBe(true);
     expect(rows[5]).toBe(0x04); // the : key
     expect(rows[7]).toBe(0x00); // unshifted, so not *
-    copy();
+    copies(MIN_HOLD_FRAMES);
     tracker.up(ev(':', 'Semicolon'));
     expect(rows[5]).toBe(0x00);
     expect(rows[7]).toBe(0x01); // Shift is still held
     tracker.down(ev('"', 'Quote'));
     expect(rows[4]).toBe(0x04); // the 2 key
     expect(rows[7]).toBe(0x01); // SHIFT+2, the character's own
-    copy();
+    copies(MIN_HOLD_FRAMES);
     tracker.up(ev('Shift', 'ShiftLeft'));
     expect(rows[4]).toBe(0x04);
     expect(rows[7]).toBe(0x01);
@@ -214,31 +250,61 @@ describe('the keys', () => {
     expect([...rows]).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
   });
 
-  it('holds a key pressed and released between two frames in the rows for one whole frame', () => {
-    const { rows, tracker, copy, ev } = tracked();
+  it('holds a key pressed and released at once in the rows the worker copies for MIN_HOLD_FRAMES frames (150 ms)', () => {
+    expect(MIN_HOLD_FRAMES).toBe(9);
+    const { rows, tracker, copy, copies, ev } = tracked();
     copy();
     tracker.down(ev(' ', 'Space'));
     tracker.up(ev(' ', 'Space'));
     // Not yet seen by the worker: still down
     expect(rows[6]).toBe(0x80);
-    // The worker's next copy has it down, and the one after has it up: one whole frame
-    expect(copy()[6]).toBe(0x80);
+    // The worker's next nine copies have it down, and the one after has it up
+    expect(copies(MIN_HOLD_FRAMES).map((r) => r[6])).toEqual(Array(MIN_HOLD_FRAMES).fill(0x80));
     expect(rows[6]).toBe(0x00);
     expect(copy()[6]).toBe(0x00);
   });
 
-  it('lets go at once of a key the worker has seen down, and a blur lets go of a held-over key too', () => {
-    const { rows, tracker, copy, ev } = tracked();
+  it('holds it for MIN_HOLD_FRAMES - 1 copies at the least when the page reads the counter between a copy and its store', () => {
+    const { rows, tracker, copies, worker, ev } = tracked();
+    copies(3);
+    // The worker copies the rows (without the key) but has not yet stored its count: the page reads 3
+    const missed = rows.slice();
+    tracker.down(ev('ArrowRight', 'ArrowRight'));
+    tracker.up(ev('ArrowRight', 'ArrowRight'));
+    worker.frame++; // the store
+    tracker.update();
+    expect(missed[6]).toBe(0x00);
+    const seen = copies(MIN_HOLD_FRAMES).map((r) => r[6]);
+    expect(seen).toEqual([...Array(MIN_HOLD_FRAMES - 1).fill(0x40), 0x00]);
+  });
+
+  it('lets go at once of a key held MIN_HOLD_FRAMES frames, and a blur lets go of a held-over key too', () => {
+    const { rows, tracker, copies, ev } = tracked();
     tracker.down(ev('ArrowUp', 'ArrowUp'));
-    copy();
+    copies(MIN_HOLD_FRAMES - 1);
     tracker.up(ev('ArrowUp', 'ArrowUp'));
-    expect(rows[6]).toBe(0x00);
+    expect(rows[6]).toBe(0x08); // eight frames: held over
+    tracker.down(ev('ArrowUp', 'ArrowUp'));
+    copies(MIN_HOLD_FRAMES);
+    tracker.up(ev('ArrowUp', 'ArrowUp'));
+    expect(rows[6]).toBe(0x00); // nine frames: let go at once
     tracker.down(ev('Enter', 'Enter'));
     tracker.up(ev('Enter', 'Enter'));
     expect(rows[6]).toBe(0x01);
     tracker.blur();
     expect(rows[6]).toBe(0x00);
-    expect(copy()[6]).toBe(0x00);
+  });
+
+  it('takes another hold from its options', () => {
+    const rows = new Uint8Array(8);
+    let frame = 0;
+    const tracker = new KeyTracker(rows, () => frame, { minHold: 1 });
+    tracker.down({ key: ' ', code: 'Space' });
+    tracker.up({ key: ' ', code: 'Space' });
+    expect(rows[6]).toBe(0x80);
+    frame = 1;
+    tracker.update();
+    expect(rows[6]).toBe(0x00);
   });
 });
 

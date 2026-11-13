@@ -18,10 +18,11 @@
  * its shortcuts. A blur releases every key.
  *
  * The worker copies the rows once a frame, so a key pressed and released between two copies would never
- * be seen. A KeyTracker therefore holds a key that is let go before the worker has copied the rows with it
- * down: the worker counts its frames in shared memory (frame.js, `frameHook`), and a released key stays in
- * the rows until that count has moved past the count at its press, that is until one copy has had it
- * down. The page calls `update()` at each frame the worker posts, which lets such keys go.
+ * be seen; and a game reads its keys once a pass of its own loop, which is longer than a frame, so a key
+ * down for one copy can still fall between two of the game's reads. A KeyTracker therefore holds a key that
+ * is let go early: the worker counts its frames in shared memory (frame.js, `frameHook`), and a released
+ * key stays in the rows until that count is `MIN_HOLD_FRAMES` past the count at its press. The page calls
+ * `update()` at each frame the worker posts, which lets such keys go. A key held longer is let go at once.
  */
 import { KEY_TABLE } from '../keys.js';
 
@@ -52,6 +53,17 @@ export const BROWSER_KEYS = (() => {
   return map;
 })();
 
+/**
+ * The fewest frames a key is held, however briefly it was pressed: 9, 150 ms. Measured on Sea Dragon's port
+ * in play (a scripted game at each skill, the gaps between the reads of row $3840 at MOVE_PLAYER's $5192
+ * and the fire check's, which run once a pass of the game's loop): 86-127 ms at Novice, 54-92 ms at Expert.
+ * Nine frames are 18% above the longest. The worker stores its count just after it copies the rows, so the
+ * page can read a count one behind a copy that missed the press; the key is then down for eight copies at
+ * the least, 133 ms, still above it. (Where the game reads no keys at all, while it starts a game or loses
+ * a ship, about one to two seconds, no hold would help, as on the machine.)
+ */
+export const MIN_HOLD_FRAMES = 9;
+
 /** The TRS-80's SHIFT: row 7, bit 0 (emu's keyboard.js:21). */
 const SHIFT_ROW = 7;
 const SHIFT_BIT = 0x01;
@@ -73,10 +85,12 @@ export class KeyTracker {
    * @param {Uint8Array} rows the eight rows the worker copies (shared memory in a browser), written here
    * @param {() => number} frame the worker's frame count (frame.js's shared counter), read when a key goes
    *   down and when it is let go
+   * @param {{ minHold?: number }} [opts] the fewest frames a key is held (`MIN_HOLD_FRAMES` by default)
    */
-  constructor(rows, frame) {
+  constructor(rows, frame, { minHold = MIN_HOLD_FRAMES } = {}) {
     this.rows = rows;
     this.frame = frame;
+    this.minHold = minHold;
   }
 
   /**
@@ -101,8 +115,8 @@ export class KeyTracker {
   }
 
   /**
-   * A key went up. Returns true when it was one the tracker took. A key the worker has not yet seen down is
-   * held over until it has (`update`).
+   * A key went up. Returns true when it was one the tracker took. A key down for fewer than `minHold` of the
+   * worker's frames is held over until it has been (`update`).
    * @param {KeyEvent} e
    * @returns {boolean}
    */
@@ -114,17 +128,17 @@ export class KeyTracker {
     const held = this.#down.get(e.code);
     if (held === undefined || held.released) return false;
     held.released = true;
-    if (this.frame() > held.pressed) this.#down.delete(e.code);
+    if (this.frame() >= held.pressed + this.minHold) this.#down.delete(e.code);
     this.#write();
     return true;
   }
 
-  /** The worker has posted a frame: let go of the keys held over that it has now seen down. */
+  /** The worker has posted a frame: let go of the keys held over that have now been down `minHold` frames. */
   update() {
     const now = this.frame();
     let changed = false;
     for (const [code, held] of this.#down) {
-      if (held.released && now > held.pressed) {
+      if (held.released && now >= held.pressed + this.minHold) {
         this.#down.delete(code);
         changed = true;
       }

@@ -205,11 +205,13 @@ creates and pushes the tag.
   in a Web Worker (`@fugloy/runtime/player`): a port's functions never yield, so the worker blocks
   with `Atomics.wait` to keep the original's speed (the emulated clock against real time; more than a
   quarter of a second behind, after a background tab or a stall, it moves its origin instead of
-  running fast to catch up), reads the keyboard matrix from memory it shares with the page, and posts
+  running fast to catch up, as it does for a clock that goes backwards, and it never waits more than
+  two seconds at once), reads the keyboard matrix from memory it shares with the page, and posts
   each 1/60 s of the model's clock the 1K of video RAM and the frame's writes to port `$FF`. The page
   draws the screen on a canvas with the runtime's renderer, maps keys as the workbench does (a key let
-  go before the worker has seen it is held until its next frame; Shift with `;` types the TRS-80's
-  `:`), and plays the cassette port's levels as a square wave through WebAudio, quietly, from the
+  go early is held for nine frames, 150 ms, from its press, so a quick tap is still seen by a game that
+  reads its keys once a pass of its loop: Sea Dragon's reads of its controls in play are up to 127 ms
+  apart at Novice, 92 ms at Expert; Shift with `;` types the TRS-80's `:`), and plays the cassette port's levels as a square wave through WebAudio, quietly, from the
   first key or click, dropping a frame of sound rather than letting the delay grow. `pnpm play` writes
   `.play/<name>/` (gitignored: the port, the runtime's files, `index.html` and a manifest with the
   game's name, authors, public-domain line, keys and start state) and serves it on localhost with
@@ -222,11 +224,14 @@ creates and pushes the tag.
   posting 600 screens, each equal to the emulator's video RAM at the same T-state, with the same sound
   (`packages/recomp/test/player.test.ts`, in CI). Checked in headless Chromium: the page is
   cross-origin isolated; 10.135 s of emulated time in 10.131 s of real time (100.0%); the title
-  animates; ENTER, `1`, `0` start a game; the sub moves left and right and fires; a game played to
+  animates; ENTER, `1`, `0` start a game, typed as instant taps too; the sub moves left and right,
+  held and on instant taps of the arrows; a game played to
   GAME OVER returns to the title; after the page and its worker were stopped for a minute the game
   went on at normal speed (0.25 s of game in the first 0.257 s); audio buffers with sound in them were
-  scheduled and none dropped; no console errors. Not checked: anyone listening to the sound, and a
-  tab in a real browser's background (headless Chromium kept the page visible). The player is not on
+  scheduled and none dropped; no console errors. Not checked: anyone listening to the sound; a
+  tab in a real browser's background (headless Chromium kept the page visible, so the minute was a
+  stopped process instead); and that SPACE fires (no shot could be told apart on the screen in the
+  checks). A second, independent look at the page, in another headless browser, saw the title drawn. The player is not on
   the site: the bundle, the arcade page and the site's headers are M3.
 
 - A Full screen button in Run ▶'s machine row; Esc leaves it (and the browser's own exit); keys keep

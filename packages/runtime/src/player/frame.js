@@ -27,11 +27,21 @@ export const frameLength = (clockHz) => clockHz / FRAME_RATE;
 export const BEHIND_LIMIT_MS = 250;
 
 /**
+ * The longest single wait the clock asks for, in milliseconds: 2,000. Between two of its checks a port runs
+ * one frame and at most one block, and its longest block, a `$DELAY` of BC = 0 (rom.js), is under a second
+ * (1,966,095 T-states on the Model III), so a wait past a second more than that is a fault of the clock's
+ * input, not time the port is owed.
+ */
+export const MAX_WAIT_MS = 2000;
+
+/**
  * @typedef {object} Clock
  * @property {(cycles: number) => number} due The milliseconds the port is ahead of real time at emulated
  *   T-state `cycles`, which the worker waits; 0 when it is behind. More than a quarter of a second behind
  *   (a background tab, a stalled machine), the clock moves its origin to now and `cycles`, so the game
- *   goes on at normal speed from there and never runs fast to catch up the time it lost.
+ *   goes on at normal speed from there and never runs fast to catch up the time it lost. A `now` earlier
+ *   than the last one seen (a clock that is not monotonic, which `performance.now` is) moves the origin
+ *   too, and no wait is longer than `MAX_WAIT_MS`.
  */
 
 /**
@@ -45,11 +55,17 @@ export const BEHIND_LIMIT_MS = 250;
 export function createClock({ clockHz, now, cycles = 0 }) {
   let originMs = now();
   let originT = cycles;
+  let last = originMs;
   return {
     due(t) {
       const real = now();
+      if (real < last) {
+        originMs = real;
+        originT = t;
+      }
+      last = real;
       const ahead = ((t - originT) * 1000) / clockHz - (real - originMs);
-      if (ahead > 0) return ahead;
+      if (ahead > 0) return Math.min(ahead, MAX_WAIT_MS);
       if (ahead < -BEHIND_LIMIT_MS) {
         originMs = real;
         originT = t;
