@@ -182,7 +182,8 @@ describe('the module', () => {
     if (!p.ok) throw new Error(p.errors.join(' '));
     // The entry is nothing's target, so the disassembler has no symbol for it either
     expect(p.report.routines.map((x) => x.name)).toEqual(['START', 'ONE', 'TWO', 'THREE'].map((n) => `SUB_${hex(r.symbol(n)!.value, 4)}`));
-    expect(p.js).toMatch(/case 0x7000:.*\n\s+z\.at\(0x7000\);/);
+    // Structured (Task 6): the routine's first statement is its first block's z.at
+    expect(p.js).toMatch(/export function SUB_7000\(z, ret\) \{\n {2}z\.at\(0x7000\);\n/);
   });
 
   it('turns a hint file\'s note at a routine into its JSDoc', () => {

@@ -233,9 +233,10 @@ later choice; until then "upgraded and updated" means presentation and feel, not
   `check.json` names, the Model III and the Model I (38 runs), are assembled, ported with their own
   labels as names, and refereed through their check steps in the suite CI runs
   (`packages/recomp/test/learn.test.ts`, about 61 s locally): all 38 match emu at every block start
-  and every frame. Their ports hold 129 routines and 717 blocks on each model, 572,788 bytes of
-  JavaScript in all; as of Task 5 every routine is labelled (a `switch` over its blocks), and the
-  plan's Task 6 structures them into loops and conditionals. None of the programs writes into its
+  and every frame. Their ports hold 129 routines and 717 blocks on each model; Task 6 writes all 129
+  as structured code (loops, `if`/`else`, `break` and `continue`), none labelled (a `switch` over its
+  blocks, kept for a routine whose loop is entered other than at its head), 486,570 bytes of
+  JavaScript in all (572,788 as labelled blocks). None of the programs writes into its
   own code, and no port lists a place that refuses as it runs. The CLI has `fugloy port <program.cmd>
   --model 1|3 [--hints <file>] [-o <dir>]` (no `--trace` yet; the model is named). Known limits:
   EI's one-instruction delay is not modelled (no Learn program has EI); the referee does not compare

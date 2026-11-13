@@ -234,4 +234,41 @@ SHOW:   LD      DE,3C00H
 MSG:    DB      'HELLO'
         END     START
 `,
+  // Task 6's: an if/else whose arms meet again, run both ways, and a loop left from inside a loop within it
+  'an if/else diamond, both arms taken in turn': program(`
+START:  LD      B,6
+        LD      C,0
+NEXT:   LD      A,B
+        CP      3
+        JR      C,SMALL         ; B below 3: the else arm
+        INC     C               ; B 3 or more: the then arm
+        JR      JOIN
+SMALL:  DEC     C
+JOIN:   DJNZ    NEXT            ; the arms meet here
+        LD      A,C
+        LD      (5000H),A
+        RET`),
+  'a loop inside a loop, left from the inner one': program(`
+START:  LD      E,0
+        LD      C,4
+OUTER:  LD      B,3
+INNER:  INC     E
+        LD      A,E
+        CP      10
+        JR      Z,DONE          ; leaves both loops, the tenth time round
+        DJNZ    INNER
+        DEC     C
+        JR      NZ,OUTER
+DONE:   LD      (5000H),A
+        RET`),
+  'a loop entered in its middle (irreducible)': program(`
+START:  LD      A,0
+        LD      B,3
+        OR      A
+        JR      Z,SECOND        ; into the loop below its head
+FIRST:  INC     A
+SECOND: DEC     B
+        JR      NZ,FIRST
+        LD      (5000H),A
+        RET`),
 };

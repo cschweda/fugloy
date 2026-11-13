@@ -154,12 +154,15 @@ creates and pushes the tag.
   block, field and instruction. Every Learn lesson and Build Space Invaders chapter, 19 programs on
   the Model III and the Model I (38 runs), is ported and refereed through its `check.json` in CI
   (`packages/recomp/test/learn.test.ts`, about 61 s locally): all match. Their ports hold 129
-  routines and 717 blocks on each model, all still a labelled `switch` over their blocks. The CLI
+  routines and 717 blocks on each model, and all 129 are structured code (`while (true)` loops,
+  `if`/`else`, `break` and `continue`, from the blocks' dominators and natural loops), none a labelled
+  `switch` over its blocks, which stays only for a routine whose loop is entered other than at its
+  head (486,570 bytes of JavaScript over the 38 ports, from 572,788 as labelled blocks). The CLI
   gains `fugloy port <program.cmd> --model 1|3 [--hints <file>] [-o <dir>]`, which writes
   `<name>.port.js` and its report, `<name>.port.txt`, and exits 1 with the sentences when the
   program cannot be ported. Not yet: EI's one-instruction delay, a comparison of sound and
-  cassette writes, self-modifying code (refused), and structured loops and conditionals in the
-  output (the next task).
+  cassette writes, and self-modifying code (refused); a block reached from two routines is
+  translated in each.
 
 - A Full screen button in Run ▶'s machine row; Esc leaves it (and the browser's own exit); keys keep
   reaching the TRS-80, and focus is kept. The first screen is 252,262 B gzip of its 252,775 B budget.

@@ -5,11 +5,14 @@
  * a routine's start is its JSDoc. Each instruction is one statement (a line, with its address and its
  * assembly as a comment); each block begins `z.at(addr);` and ends with its tick and `z.q`.
  *
- * Within a routine the blocks are the labelled cases of `for (;;) switch (b)`. A transfer to one of
- * them sets `b`; a transfer into another routine's start returns that routine (the trampoline,
- * `o.call`, runs it next with the same return address); a transfer anywhere else throws
- * `o.unknown`'s sentence. A CALL runs its callee through `o.call`, and a RET checks with `o.ret` that
- * it returns where its CALL said.
+ * Within a routine, the blocks are structured code where its control flow allows (structure.ts):
+ * `while (true)` loops, `if`/`else`, and `break` and `continue`, labelled from addresses alone where they
+ * must name their loop or block. Where it does not (an irreducible loop), the blocks are the labelled
+ * cases of `for (;;) switch (b)`, and a transfer to one of them sets `b`. Either way, each block is
+ * written once and runs its statements, tick and `z.q` in the same order. A transfer into another
+ * routine's start returns that routine (the trampoline, `o.call`, runs it next with the same return
+ * address); a transfer anywhere else throws `o.unknown`'s sentence. A CALL runs its callee through
+ * `o.call`, and a RET checks with `o.ret` that it returns where its CALL said.
  *
  * Time (Ruling 3): a block ticks its instructions' T-states and R at its end, on each path a
  * conditional transfer takes, and also just before an instruction that reads the time (`readsTime`),
@@ -21,6 +24,8 @@ import { renderInstruction } from '@fugloy/disasm';
 import type { SymbolTable } from '@fugloy/disasm';
 import type { Instruction } from '@fugloy/z80';
 import type { Routine, Routines } from './routines.js';
+import { structure } from './structure.js';
+import type { Code, Exit } from './structure.js';
 import { translate } from './translate.js';
 import type { Translation } from './translate.js';
 
@@ -49,6 +54,8 @@ export interface Emitted {
   js: string;
   /** Each routine's function name, by its start. */
   routineNames: ReadonlyMap<number, string>;
+  /** By each routine's start: true when its blocks are the labelled cases of a `switch`, false when structured. */
+  labelled: ReadonlyMap<number, boolean>;
   /** The places that throw a sentence when they run: transfers to no block, HALTs. */
   refused: string[];
   /** What cannot be translated at all: the port is refused. */
@@ -181,44 +188,65 @@ export function emit(input: EmitInput): Emitted {
   w.doc('The routine the program starts at.');
   w.line(0, `export const ENTRY = ${routineNames.get(input.entry)!};`);
 
+  const labelled = new Map<number, boolean>();
   for (const r of routines.routines) {
     w.line(0, '');
-    emitRoutine(r);
+    labelled.set(r.start, emitRoutine(r));
   }
 
   // A block two routines share is translated, and so reported, in each
-  return { js: `${w.lines.join('\n')}\n`, routineNames, refused: [...new Set(refused)], errors: [...new Set(errors)] };
+  return { js: `${w.lines.join('\n')}\n`, routineNames, labelled, refused: [...new Set(refused)], errors: [...new Set(errors)] };
 
-  function emitRoutine(r: Routine): void {
+  /** Write the routine `r`, structured where its control flow allows; true when it stays labelled. */
+  function emitRoutine(r: Routine): boolean {
     const name = routineNames.get(r.start)!;
     const own = new Set(r.blocks.map((b) => b.start));
     const doc = notes.get(r.start) ?? [];
     w.doc(doc.length === 0 ? `${name} (${addr(r.start)})` : `${name} (${addr(r.start)}).`, doc);
     w.line(0, `export function ${name}(z, ret) {`);
-    w.line(2, `let b = ${word(r.start)};`);
-    w.line(2, 'for (;;) switch (b) {');
+
+    // Every block's statements, in address order (so errors and refusals are found as before)
+    const blocks = new Map<number, Stmt[]>();
+    let failed = false;
     for (const block of r.blocks) {
-      w.tagged(4, `case ${word(block.start)}:`, nameOf(block.start));
-      w.line(6, `z.at(${word(block.start)});`);
-      emitBlock(block.start, block.end);
+      const code = blockCode(block.start, block.end);
+      if (code === null) failed = true;
+      else blocks.set(block.start, code);
     }
-    w.line(2, '}');
+
+    const structured = failed ? null : structuredBody(r.start, blocks);
+    if (structured === null) {
+      w.line(2, `let b = ${word(r.start)};`);
+      w.line(2, 'for (;;) switch (b) {');
+      for (const [start, code] of blocks) {
+        w.tagged(4, `case ${word(start)}:`, nameOf(start));
+        write(code, 6, 'switch');
+      }
+      w.line(2, '}');
+    } else {
+      write(structured.body, 2, 'structured', labelsUsed(structured.body));
+      for (const at of structured.unreachable) w.comment(2, `${addr(at)}: no transfer reaches the block here, so it is not written.`);
+    }
     w.line(0, '}');
+    return structured === null;
 
     /** The statement that goes to `to` from the transfer at `from`: another block, another routine, or nowhere. */
-    function go(to: number, from: number, ins: Instruction): string {
-      if (to !== r.start && routines.starts.has(to)) return `return ${routineNames.get(to)!};`;
-      if (own.has(to)) return `b = ${word(to)}; continue;`;
+    function go(to: number, from: number, ins: Instruction): Stmt {
+      if (to !== r.start && routines.starts.has(to)) return { k: 'line', code: `return ${routineNames.get(to)!};`, leaves: true };
+      if (own.has(to)) return { k: 'go', to };
       return nowhere(to, from, ins);
     }
 
     /** The statement for a transfer to an address no block starts: it throws `o.unknown`'s sentence. */
-    function nowhere(to: number, from: number, ins: Instruction): string {
+    function nowhere(to: number, from: number, ins: Instruction): Stmt {
       refused.push(`${addr(from)}: ${renderInstruction(ins, symbols)} goes to ${addr(to)}, where no block of the port starts; the port throws there when it runs.`);
-      return `throw o.unknown(z, ${word(to)}, ${word(from)});`;
+      return { k: 'line', code: `throw o.unknown(z, ${word(to)}, ${word(from)});`, leaves: true };
     }
 
-    function emitBlock(start: number, end: number): void {
+    /** The block's statements, from `z.at` to its transfer; null when it cannot be translated (the error is recorded). */
+    function blockCode(start: number, end: number): Stmt[] | null {
+      const out: Stmt[] = [{ k: 'at', addr: start }];
+      const line = (code: string): Stmt => ({ k: 'line', code });
       let t = 0;
       let rr = 0;
       let qPrev: 0 | 1 | null = null;
@@ -226,29 +254,29 @@ export function emit(input: EmitInput): Emitted {
         const ins = instructions.get(at);
         if (ins === undefined) {
           errors.push(`${addr(at)}: the block at ${addr(start)} has no instruction here.`);
-          return;
+          return null;
         }
         let tr: Translation;
         try {
           tr = translate(ins, at, { qPrev });
         } catch (e) {
           errors.push((e as Error).message);
-          return;
+          return null;
         }
         const next = (at + ins.length) & 0xffff;
         const text = renderInstruction(ins, symbols);
         const note = comments.get(at);
         const comment = `${addr(at)}  ${text}${note === undefined ? '' : `  ; ${note}`}`;
         // A note at the routine's start is its JSDoc; any other is a comment where it is
-        for (const line of at === r.start ? [] : (notes.get(at) ?? [])) w.comment(6, line);
+        for (const text of at === r.start ? [] : (notes.get(at) ?? [])) out.push({ k: 'note', text });
         if (tr.readsTime && (t !== 0 || rr !== 0)) {
-          w.line(6, `z.tick(${t}, ${rr});`);
+          out.push(line(`z.tick(${t}, ${rr});`));
           t = 0;
           rr = 0;
         }
         const last = at + ins.length > end;
         if (!last) {
-          statements(6, tr.lines, comment);
+          out.push(...statements(tr.lines, comment));
           t += tr.cycles;
           rr += tr.r;
           qPrev = tr.writesFlags ? 1 : 0;
@@ -258,92 +286,295 @@ export function emit(input: EmitInput): Emitted {
 
         // The block's last instruction: its tick, Q, and where it goes
         const q = `z.q = ${tr.writesFlags ? 1 : 0};`;
-        const tick = (cycles: number): string => `z.tick(${t + cycles}, ${rr + tr.r}); ${q}`;
+        const tick = (cycles: number): Stmt => line(`z.tick(${t + cycles}, ${rr + tr.r}); ${q}`);
         const notTaken = tr.cyclesNotTaken ?? tr.cycles;
         if (tr.targetExpr !== undefined && tr.flow === 'jump') {
           errors.push(`${addr(at)}: ${text} jumps to an address computed as it runs, which M1 does not translate (a hint naming its targets is for a later milestone).`);
-          return;
+          return null;
         }
         switch (tr.flow) {
           case 'next':
-            statements(6, tr.lines, comment);
-            w.line(6, tick(tr.cycles));
-            w.line(6, go(next, at, ins));
+            out.push(...statements(tr.lines, comment), tick(tr.cycles), go(next, at, ins));
             break;
           case 'jump': {
             const target = tr.target!;
             if (tr.cond === undefined) {
-              statements(6, tr.lines, comment);
-              w.line(6, tick(tr.cycles));
-              w.line(6, go(target, at, ins));
+              out.push(...statements(tr.lines, comment), tick(tr.cycles), go(target, at, ins));
               break;
             }
-            conditional(tr, comment, [tick(tr.cycles), go(target, at, ins)]);
-            w.line(6, tick(notTaken));
-            w.line(6, go(next, at, ins));
+            out.push(...conditional(tr, comment, [tick(tr.cycles), go(target, at, ins)]), tick(notTaken), go(next, at, ins));
             break;
           }
           case 'call': {
             const target = tr.target!;
             const known = routines.starts.has(target);
-            const callee = known ? `o.call(z, ${routineNames.get(target)!}, ${word(next)});` : nowhere(target, at, ins);
+            const callee = known ? line(`o.call(z, ${routineNames.get(target)!}, ${word(next)});`) : nowhere(target, at, ins);
             if (tr.cond === undefined) {
-              statements(6, tr.lines, comment);
-              w.line(6, tick(tr.cycles));
-              w.line(6, callee);
+              out.push(...statements(tr.lines, comment), tick(tr.cycles), callee);
               if (!known) break;
             } else {
-              conditional(tr, comment, [tick(tr.cycles), callee], [tick(notTaken)]);
+              out.push(...conditional(tr, comment, [tick(tr.cycles), callee], [tick(notTaken)]));
             }
-            w.line(6, go(next, at, ins));
+            out.push(go(next, at, ins));
             break;
           }
           case 'return': {
-            const back = `o.ret(z, ret, ${word(at)}); return;`;
+            const back: Stmt = { k: 'line', code: `o.ret(z, ret, ${word(at)}); return;`, leaves: true };
             if (tr.cond === undefined) {
-              statements(6, tr.lines, comment);
-              w.line(6, tick(tr.cycles));
-              w.line(6, back);
+              out.push(...statements(tr.lines, comment), tick(tr.cycles), back);
               break;
             }
-            conditional(tr, comment, [tick(tr.cycles), back]);
-            w.line(6, tick(notTaken));
-            w.line(6, go(next, at, ins));
+            out.push(...conditional(tr, comment, [tick(tr.cycles), back]), tick(notTaken), go(next, at, ins));
             break;
           }
           case 'halt':
-            statements(6, tr.lines, comment);
-            w.line(6, tick(tr.cycles));
-            w.line(6, `throw o.halt(z, ${word(at)});`);
+            out.push(...statements(tr.lines, comment), tick(tr.cycles), { k: 'line', code: `throw o.halt(z, ${word(at)});`, leaves: true });
             refused.push(`${addr(at)}: HALT waits for an interrupt, which a port does not take; the port throws there when it runs.`);
             break;
         }
-        return;
+        return out;
       }
+      return out;
     }
 
     /** A conditional transfer: its statements, then `if (cond) { taken; then }`, and `else { otherwise }` when given. */
-    function conditional(tr: Translation, comment: string, then: string[], otherwise?: string[]): void {
-      if (tr.lines.length > 0) {
-        statements(6, tr.lines, comment);
-        w.line(6, `if (${tr.cond!}) {`);
-      } else w.line(6, `if (${tr.cond!}) {`, comment);
-      for (const line of [...(tr.taken ?? []), ...then]) w.line(8, line);
-      if (otherwise === undefined) w.line(6, '}');
-      else {
-        w.line(6, '} else {');
-        for (const line of otherwise) w.line(8, line);
-        w.line(6, '}');
-      }
+    function conditional(tr: Translation, comment: string, then: Stmt[], otherwise?: Stmt[]): Stmt[] {
+      const taken = [...(tr.taken ?? []).map((code): Stmt => ({ k: 'line', code })), ...then];
+      const branch: Stmt = { k: 'if', cond: tr.cond!, then: taken, ...(otherwise === undefined ? {} : { else: otherwise }) };
+      if (tr.lines.length > 0) return [...statements(tr.lines, comment), branch];
+      return [{ ...branch, comment }];
     }
 
-    /** An instruction's statements, on one line with its comment, or a loop's over several. */
-    function statements(indent: number, lines: readonly string[], comment: string): void {
-      if (lines.length === 0) w.comment(indent, comment);
-      else if (lines.some((l) => l.includes('{') || l.includes('}'))) {
-        w.line(indent, lines[0]!, comment);
-        for (const line of lines.slice(1)) w.line(indent, line);
-      } else w.line(indent, lines.join(' '), comment);
+    /** The routine's body as structured statements, or null when its control flow does not allow them. */
+    function structuredBody(start: number, code: ReadonlyMap<number, Stmt[]>): { body: Stmt[]; unreachable: number[] } | null {
+      const succ = new Map([...code].map(([at, stmts]) => [at, gos(stmts)]));
+      const s = structure({ start, succ });
+      if (!s.ok) return null;
+      const body = tidied(compose(s.code, s.exits, code));
+      return body === null ? null : { body, unreachable: s.unreachable };
     }
   }
+
+  /**
+   * Write statements at `indent`. In a `switch`, a block starts with its `case` (written by the caller)
+   * and a transfer within the routine sets `b`; structured, `z.at` carries the block's name, and a loop
+   * carries its label only when a `break` or `continue` names it.
+   */
+  function write(stmts: readonly Stmt[], indent: number, mode: 'switch' | 'structured', labels: ReadonlySet<string> = new Set(), loop: string | null = null): void {
+    for (const s of stmts) {
+      switch (s.k) {
+        case 'line':
+          w.line(indent, s.code, s.comment);
+          break;
+        case 'note':
+          w.comment(indent, s.text);
+          break;
+        case 'at':
+          if (mode === 'switch') w.line(indent, `z.at(${word(s.addr)});`);
+          else w.tagged(indent, `z.at(${word(s.addr)});`, nameOf(s.addr));
+          break;
+        case 'go':
+          w.line(indent, `b = ${word(s.to)}; continue;`);
+          break;
+        case 'if':
+          w.line(indent, `if (${s.cond}) {`, s.comment);
+          write(s.then, indent + 2, mode, labels, loop);
+          if (s.else !== undefined) {
+            w.line(indent, '} else {');
+            write(s.else, indent + 2, mode, labels, loop);
+          }
+          w.line(indent, '}');
+          break;
+        case 'loop':
+          w.line(indent, `${labels.has(s.label) ? `${s.label}: ` : ''}while (true) {`);
+          write(s.body, indent + 2, mode, labels, s.label);
+          w.line(indent, '}');
+          break;
+        case 'labelled':
+          w.line(indent, `${s.label}: {`);
+          write(s.body, indent + 2, mode, labels, loop);
+          w.line(indent, '}');
+          break;
+        case 'jump':
+          w.line(indent, s.loop && s.label === loop ? `${s.how};` : `${s.how} ${s.label};`);
+          break;
+      }
+    }
+  }
+}
+
+/**
+ * A routine's code before it is written. `line` is code built by the emitter or the translator (with its
+ * comment, free text, which the Writer sanitizes); `leaves` marks one that never completes (a return or a
+ * throw). `go` is a transfer to a block of the routine, which the structure decides; `loop`, `labelled`
+ * and `jump` are the structure's, labelled from addresses alone.
+ */
+type Stmt =
+  | { k: 'line'; code: string; comment?: string; leaves?: true }
+  | { k: 'note'; text: string }
+  | { k: 'at'; addr: number }
+  | { k: 'go'; to: number }
+  | { k: 'if'; cond: string; comment?: string; then: Stmt[]; else?: Stmt[] }
+  | { k: 'loop'; label: string; body: Stmt[] }
+  | { k: 'labelled'; label: string; body: Stmt[] }
+  | { k: 'jump'; how: 'break' | 'continue'; label: string; loop: boolean };
+
+const loopLabel = (at: number): string => `loop_${hex(at, 4)}`;
+const toLabel = (at: number): string => `to_${hex(at, 4)}`;
+
+/** An instruction's statements, on one line with its comment, or a loop's over several; none, its comment alone. */
+function statements(lines: readonly string[], comment: string): Stmt[] {
+  if (lines.length === 0) return [{ k: 'note', text: comment }];
+  if (lines.some((l) => l.includes('{') || l.includes('}'))) {
+    return [{ k: 'line', code: lines[0]!, comment }, ...lines.slice(1).map((code): Stmt => ({ k: 'line', code }))];
+  }
+  return [{ k: 'line', code: lines.join(' '), comment }];
+}
+
+/** The blocks a block's statements go to, one per transfer, in the order they are written. */
+function gos(stmts: readonly Stmt[]): number[] {
+  return stmts.flatMap((s) => (s.k === 'go' ? [s.to] : s.k === 'if' ? [...gos(s.then), ...gos(s.else ?? [])] : []));
+}
+
+/** The structure's code as statements: each block's, its transfers written as the structure says. */
+function compose(code: Code, exits: ReadonlyMap<number, ReadonlyMap<number, Exit>>, blocks: ReadonlyMap<number, Stmt[]>): Stmt[] {
+  const resolve = (stmts: readonly Stmt[], how: ReadonlyMap<number, Exit>): Stmt[] =>
+    stmts.flatMap((s): Stmt[] => {
+      if (s.k === 'if') return [{ ...s, then: resolve(s.then, how), ...(s.else === undefined ? {} : { else: resolve(s.else, how) }) }];
+      if (s.k !== 'go') return [s];
+      const e = how.get(s.to)!;
+      switch (e.kind) {
+        case 'inline':
+          return compose(e.code, exits, blocks);
+        case 'continue':
+          return [{ k: 'jump', how: 'continue', label: loopLabel(e.header), loop: true }];
+        case 'break-loop':
+          return [{ k: 'jump', how: 'break', label: loopLabel(e.header), loop: true }];
+        case 'break':
+          return [{ k: 'jump', how: 'break', label: toLabel(e.follow), loop: false }];
+      }
+    });
+  return code.flatMap((p): Stmt[] => {
+    if (p.kind === 'block') return resolve(blocks.get(p.addr)!, exits.get(p.addr)!);
+    if (p.kind === 'loop') return [{ k: 'loop', label: loopLabel(p.header), body: compose(p.body, exits, blocks) }];
+    return [{ k: 'labelled', label: toLabel(p.follow), body: compose(p.body, exits, blocks) }];
+  });
+}
+
+const jumpKey = (s: { how: string; label: string }): string => `${s.how} ${s.label}`;
+
+/**
+ * Statements made plainer without changing what they do, until nothing changes: a `break` or `continue`
+ * that falling off its list reaches anyway is dropped; an `if` whose arm ends by breaking a labelled block
+ * that falling off its list also reaches takes the statements after it as its `else`; a labelled block
+ * nothing breaks is unwrapped. Null when the result could fall off the routine's end (a check: the
+ * structure's code never does), so the routine stays labelled.
+ */
+function tidied(body: Stmt[]): Stmt[] | null {
+  let out = body;
+  for (let pass = 0; pass < 16; pass++) {
+    const before = JSON.stringify(out);
+    const tidy1 = tidy(out, new Set());
+    out = unwrap(tidy1, labelsUsed(tidy1));
+    if (JSON.stringify(out) === before) break;
+  }
+  if (completes(out) || !safeIfs(out)) return null;
+  return out;
+}
+
+/** `list` tidied, where falling off its end does what each jump in `fall` does. */
+function tidy(list: readonly Stmt[], fall: ReadonlySet<string>): Stmt[] {
+  let out = [...list];
+  for (let i = out.length - 2; i >= 0; i--) {
+    const s = out[i]!;
+    const end = s.k === 'if' && s.else === undefined ? s.then[s.then.length - 1] : undefined;
+    if (s.k === 'if' && end?.k === 'jump' && end.how === 'break' && !end.loop && fall.has(jumpKey(end))) {
+      out = [...out.slice(0, i), { ...s, else: out.slice(i + 1) }];
+    }
+  }
+  out = out.map((s, i): Stmt => {
+    const f = i === out.length - 1 ? fall : new Set<string>();
+    switch (s.k) {
+      case 'if': {
+        const then = tidy(s.then, f);
+        const other = s.else === undefined ? [] : tidy(s.else, f);
+        return other.length === 0 ? { k: 'if', cond: s.cond, ...(s.comment === undefined ? {} : { comment: s.comment }), then } : { ...s, then, else: other };
+      }
+      case 'loop':
+        return { ...s, body: tidy(s.body, new Set([`continue ${s.label}`])) };
+      case 'labelled':
+        return { ...s, body: tidy(s.body, new Set([...f, `break ${s.label}`])) };
+      default:
+        return s;
+    }
+  });
+  while (out.length > 0) {
+    const last = out[out.length - 1]!;
+    if (last.k !== 'jump' || !fall.has(jumpKey(last))) break;
+    out.pop();
+  }
+  return out;
+}
+
+/** The labels a jump names: every labelled block's, and a loop's when the jump is not in it alone. */
+function labelsUsed(stmts: readonly Stmt[], loop: string | null = null, used = new Set<string>()): Set<string> {
+  for (const s of stmts) {
+    if (s.k === 'jump' && !(s.loop && s.label === loop)) used.add(s.label);
+    else if (s.k === 'if') {
+      labelsUsed(s.then, loop, used);
+      labelsUsed(s.else ?? [], loop, used);
+    } else if (s.k === 'loop') labelsUsed(s.body, s.label, used);
+    else if (s.k === 'labelled') labelsUsed(s.body, loop, used);
+  }
+  return used;
+}
+
+/** Labelled blocks that no jump names, replaced by their statements. */
+function unwrap(stmts: readonly Stmt[], used: ReadonlySet<string>): Stmt[] {
+  return stmts.flatMap((s): Stmt[] => {
+    if (s.k === 'labelled') return used.has(s.label) ? [{ ...s, body: unwrap(s.body, used) }] : unwrap(s.body, used);
+    if (s.k === 'loop') return [{ ...s, body: unwrap(s.body, used) }];
+    if (s.k === 'if') return [{ ...s, then: unwrap(s.then, used), ...(s.else === undefined ? {} : { else: unwrap(s.else, used) }) }];
+    return [s];
+  });
+}
+
+/** Whether a jump in `stmts` breaks the loop or block `label`. */
+function breaks(stmts: readonly Stmt[], label: string): boolean {
+  return stmts.some((s) =>
+    (s.k === 'jump' && s.how === 'break' && s.label === label) ||
+    (s.k === 'if' && (breaks(s.then, label) || breaks(s.else ?? [], label))) ||
+    ((s.k === 'loop' || s.k === 'labelled') && breaks(s.body, label)));
+}
+
+/** Whether running `stmts` can complete, going on to what follows them (judged by the last). */
+function completes(stmts: readonly Stmt[]): boolean {
+  const last = stmts[stmts.length - 1];
+  if (last === undefined) return true;
+  switch (last.k) {
+    case 'line':
+      return last.leaves !== true;
+    case 'note':
+    case 'at':
+      return true;
+    case 'go':
+    case 'jump':
+      return false;
+    case 'if':
+      return last.else === undefined || completes(last.then) || completes(last.else);
+    case 'loop':
+      return breaks(last.body, last.label);
+    case 'labelled':
+      return completes(last.body) || breaks(last.body, last.label);
+  }
+}
+
+/** No `go` is left, and an `if` with no `else` before other statements never runs on into them from its arm. */
+function safeIfs(stmts: readonly Stmt[]): boolean {
+  return stmts.every((s, i) => {
+    if (s.k === 'go') return false;
+    if (s.k === 'if') return (s.else !== undefined || i === stmts.length - 1 || !completes(s.then)) && safeIfs(s.then) && safeIfs(s.else ?? []);
+    if (s.k === 'loop' || s.k === 'labelled') return safeIfs(s.body);
+    return true;
+  });
 }

@@ -82,7 +82,7 @@ export function port(cmd: Uint8Array, opts: PortOptions): PortResult {
     js: out.js,
     report: {
       entry: out.routineNames.get(entry)!,
-      routines: routines.routines.map((r) => ({ name: out.routineNames.get(r.start)!, addr: r.start, blocks: r.blocks.length, labelled: true })),
+      routines: routines.routines.map((r) => ({ name: out.routineNames.get(r.start)!, addr: r.start, blocks: r.blocks.length, labelled: out.labelled.get(r.start)! })),
       data: data.map(([at, bytes]) => ({ addr: at, length: bytes.length })),
       refused: out.refused,
     },

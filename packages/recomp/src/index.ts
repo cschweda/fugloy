@@ -10,3 +10,5 @@ export { port } from './port.js';
 export type { PortOptions, PortReport, PortResult } from './port.js';
 export { routinesOf } from './routines.js';
 export type { Routine, Routines } from './routines.js';
+export { structure } from './structure.js';
+export type { Code, Exit, Flow, Piece, Structured } from './structure.js';

@@ -37,9 +37,10 @@ The module imports the runtime's helpers as `o` from `opts.runtimeImport` and ex
 | `ENTRY` | the entry routine |
 | each routine, by name | `NAME(z, ret)`: a routine is the entry or a CALL or RST target; its blocks are those reached from its start by jumps and falling through (the address after a CALL included) without entering another routine's start. Named from `opts.names`, else the disassembler's symbols, else `SUB_XXXX`, made a JavaScript identifier; a hint note at its start is its JSDoc. |
 
-Inside a routine the blocks are the labelled cases of `for (;;) switch (b)`, in address order (structured
-code replaces them in a later task). One instruction is one statement, with its address and assembly as a
-comment. Each block begins `z.at(addr);` and ends with `z.tick(t, r); z.q = 0|1;`: its T-states and R
+Inside a routine the blocks are structured code where the control flow allows (see *Structure* below):
+`while (true)` loops, `if`/`else`, `break` and `continue`, each block written once, in place. Where it does
+not, they are the labelled cases of `for (;;) switch (b)`, in address order. One instruction is one
+statement, with its address and assembly as a comment. Each block begins `z.at(addr);` and ends with `z.tick(t, r); z.q = 0|1;`: its T-states and R
 increments, on each path a conditional transfer takes (`cyclesNotTaken` when not taken), and Q, whether its
 last instruction wrote the flags. A block also ticks just before an instruction that reads the time
 (`readsTime`), so `z.cycles` and `z.r` there are its own start; a repeating instruction's loop ticks each
@@ -47,7 +48,7 @@ iteration that repeats itself. Where the block goes:
 
 | Transfer | Statement |
 |---|---|
-| to a block of the same routine (its own start included) | `b = 0x7006; continue;` |
+| to a block of the same routine (its own start included) | structured: the block's code in place, `continue` to a loop's head, or `break` to the code after a loop or a labelled block; labelled: `b = 0x7006; continue;` |
 | into another routine's start | `return OTHER;` (the trampoline runs `OTHER` next, with the same `ret`) |
 | a CALL or RST of a routine | the push of the return address, the tick, then `o.call(z, CALLEE, 0x7005);` and on to the block after it |
 | a RET | the pop (into MEMPTR, as emu), the tick, then `o.ret(z, ret, 0x7010); return;`: a sentence if it popped anything but `ret` |
@@ -59,11 +60,64 @@ an instruction `@fugloy/z80` decodes only as `DB`, a hint file that does not par
 region, and an entry that is not code.
 
 `report`: `entry` (the entry routine's name), `routines` (`name`, `addr`, `blocks`, and `labelled`: true
-while the blocks are a `switch`), `data` (`DATA`'s addresses and lengths) and `refused` (each place that
+when the blocks are a `switch`, false when the routine is structured), `data` (`DATA`'s addresses and lengths) and `refused` (each place that
 throws when it runs, one sentence each).
 
 `@fugloy/runtime`'s `load(z, port)` writes `DATA` into memory and `runPort(z, port)` runs `ENTRY` until it
 returns (see its README).
+
+### Structure
+
+`structure(flow)` (`src/structure.ts`) decides a routine's shape from its control flow alone: its start and,
+for each block, the blocks of the routine its code transfers to, one per transfer (`port()` takes them from
+the code it writes, so a CALL that throws has no transfer to the block after it). After Ramsey's "Beyond
+Relooper" (2022): the blocks in reverse postorder from the start, their dominators, and the dominator tree.
+
+- A transfer backward in that order must go to a block that dominates its source, a loop's head; it is
+  `continue`. Otherwise the flow is irreducible (a loop entered other than at its head), `structure` says
+  which jump (`{ ok: false, why }`), and the routine stays labelled.
+- A loop's head is written as `while (true)`, and the blocks it leaves to (a block outside the loop whose
+  immediate dominator is inside) come after it, each after the outermost loop it leaves: the first is
+  reached by `break`, the others by breaking a labelled block around the loop (`to_XXXX`).
+- Any other block is written where the one transfer that reaches it is, or, when two or more reach it (where
+  an `if`/`else`'s arms meet), after a labelled block around its dominator's code, reached by `break`.
+- No block is written twice. A block no transfer reaches (the one after a CALL to an address no block
+  starts) is left out, with a comment saying so.
+
+The emitter then makes it plainer without changing what runs: a `break` or `continue` that falling off the
+end reaches anyway is dropped, an `if` whose arm ends by breaking a labelled block that the code after it
+also reaches takes that code as its `else`, a labelled block nothing breaks is unwrapped, and a `break` or
+`continue` names its loop (`loop_XXXX`) only when it is not the innermost. Labels come from addresses
+alone. Every block still begins with `z.at(addr)`, once each time it runs, and runs its statements, tick and
+`z.q` in the same order as labelled: the referee, which compares at each `z.at`, judges it.
+
+```js
+export function START(z, ret) {
+  z.at(0x7000); // START
+  z.hl = 0x3C00;                                    // $7000  LD HL,3C00H
+  z.bc = 0x0400;                                    // $7003  LD BC,0400H
+  z.tick(20, 2); z.q = 0;
+  while (true) {
+    z.at(0x7006); // FILL
+    z.write(z.hl, 0xBF);                            // $7006  LD (HL),0BFH
+    …
+    if ((z.f & 0x40) === 0) {                       // $700C  JR NZ,FILL
+      z.wz = 0x7006;
+      z.tick(42, 6); z.q = 0;
+      continue;
+    }
+    z.tick(37, 6); z.q = 0;
+    break;
+  }
+  while (true) {
+    z.at(0x700E); // WAIT
+    z.wz = 0x700E;                                  // $700E  JR WAIT
+    z.tick(12, 1); z.q = 0;
+  }
+}
+```
+
+(Lesson 1, White out, as ported.)
 
 ## translate
 
@@ -186,9 +240,9 @@ compare video RAM at least once a frame. All 38 pass, in about 61 s on one core 
 (chapter 8, 236 million T-states, about 12.5 s; about 19 million T-states a second). It needs neither zmac
 nor a user's ROM, so it runs in CI with the rest of the suite.
 
-The 38 ports, as of M1's Task 5 (before structured control flow): 129 routines and 717 blocks on each model,
-every routine `labelled` (a `switch` over its blocks), 572,788 bytes of JavaScript in all; the largest is
-chapter 12's, 45,320 bytes (1,204 lines, 18 routines). No port lists a place that refuses as it runs, and no
+The 38 ports: 129 routines and 717 blocks on each model, all 129 structured and none `labelled` (as of M1's
+Task 6), 486,570 bytes of JavaScript in all (572,788 when every routine was a `switch`, in Task 5); the
+largest is chapter 12's, 38,481 bytes (976 lines, 18 routines). No port lists a place that refuses as it runs, and no
 program writes into its own code (the referee would have stopped it).
 
 `fugloy port <program.cmd> --model 1|3 [--hints <file>] [-o <dir>]` (`packages/cli`) writes a port and its
@@ -207,7 +261,8 @@ shares its address with another included), the refusals, and the steps it refuse
 
 `test/port.test.ts` assembles programs with `@fugloy/asm` (a straight line, a DJNZ count, conditional JP
 and JR both ways, CALL and RET three deep with CALL cc and RET cc both ways, two routines jumping into each
-other a thousand times, a table read with `LD A,(HL)`, a `.CMD` of two blocks) and runs each on emu (the stub
+other a thousand times, a table read with `LD A,(HL)`, a `.CMD` of two blocks, an if/else diamond run both
+ways, a loop left from a loop inside it, and a loop entered below its head) and runs each on emu (the stub
 ROM booted and the program loaded, as the Learn checks do) and as its port on the runtime, from emu's
 registers and 64K at the entry, on the Model III and the Model I. Every block must start where emu starts an
 instruction at the same T-state with the same R; at the end every register, F, R, MEMPTR, Q, the interrupt
@@ -215,6 +270,12 @@ state, the T-states and the 64K must be equal. It also checks that `DATA` is exa
 and `load` writes nothing else, that the module is the same when ported twice, that two routines jumping into
 each other leave the JavaScript stack as deep as it was, and the sentences for a `JP (HL)`, an unknown target,
 a RET to the wrong address and a device the runtime does not model.
+
+`test/structure.test.ts` checks the shapes: the straight line, DJNZ, diamond and nested-loop programs have
+no `switch`, every routine structured, and pass the referee on both models; the loops, the diamond's
+`if`/`else` and the nested loop's labelled `break` read as quoted; the loop entered below its head stays a
+`switch`, labelled in its report, and passes the referee; lesson 1's port has no `switch` and its loops read
+as loops; and in every Learn port a routine is `labelled` exactly when its text has a `switch`.
 
 `test/translate.test.ts` runs every one of the 800 instructions from 64 seeded states each (four of them
 edges where SP and the operands wrap at `$FFFF`/`$0000`) on emu's core over a flat 64K bus and its
