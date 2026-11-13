@@ -32,6 +32,20 @@ declare module '@fugloy/emu' {
       readonly memory: { peekByte(addr: number): number };
     };
     step(n?: number): { cycles: number; halted: boolean };
+    /** T-states since the last reset. */
+    readonly cycles: number;
+    /** `until` as a function too: checked after each instruction (M2's sessions run to a block start with it). */
+    run(opts: { cycles?: number; until?: 'halt' | ((m: Machine) => boolean) }): { reason: string; cycles: number };
+    /** The debugger parts the census (tools/census.ts) uses: the memory hooks and coverage (debug/debugger.js). */
+    readonly debug: {
+      readonly hooks: {
+        /** Each data read (never an instruction fetch), with the start of the instruction making it. */
+        onMemRead: ((addr: number, value: number, pc: number) => void) | null;
+        /** Each memory write, with the byte it replaced and the start of the instruction making it. */
+        onMemWrite: ((addr: number, value: number, prev: number, pc: number) => void) | null;
+      };
+      readonly coverage: { enable(): void; disable(): void; readonly bits: Uint8Array };
+    };
   }
 }
 

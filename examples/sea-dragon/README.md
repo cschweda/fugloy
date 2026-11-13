@@ -24,6 +24,7 @@ software archives:
 | `seadrg02.cmd`–`seadrg04.cmd` | The same game at `$8000`, with the stub at `$B681` |
 | `seadrg06.cmd`–`seadrg11.cmd` | Builds that load the game where it runs |
 | `seadrg01.hints` | The two hint lines Fugløy proposes for `seadrg01.cmd`, under the skeleton `--write-hints` writes, then names and block comments for the game's main routines and data: an annotated listing |
+| `seadrg01.trace.json` | The port trace (`docs/port-trace-format.md`) of `seadrg01.cmd`: what three scripted games on `@fugloy/emu` (Novice, Expert, two players, from the title to GAME OVER, on Fugløy's game stub ROM) saw it rewrite in its own code, run that the disassembly does not reach, drop from the stack, and read from the ROM. `pnpm census examples/sea-dragon/seadrg01.cmd --hints examples/sea-dragon/seadrg01.hints --model 3 --sessions sea-dragon -o examples/sea-dragon/seadrg01.trace.json` rewrites it, and a test fails when the committed copy is stale |
 | `seadrg01.labels.json` | The label and coverage file `@fugloy/emu` wrote while running `seadrg01.cmd` from `$497F` through the title screen and ENTER: which bytes ran, which were only read, and which subroutines were called and how often (`packages/emu/scripts/sea-dragon-labels.mjs` rewrites it, given the Model III ROM) |
 
 A build numbered 05 also exists. It was rebuilt with Zeta Microcomputer

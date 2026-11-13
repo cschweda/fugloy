@@ -12,3 +12,5 @@ export { routinesOf } from './routines.js';
 export type { Routine, Routines } from './routines.js';
 export { structure } from './structure.js';
 export type { Code, Exit, Flow, Piece, Structured } from './structure.js';
+export { TRACE_VERSION, formatTrace, parseTrace } from './trace.js';
+export type { PortTrace, TracePatch } from './trace.js';

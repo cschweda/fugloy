@@ -199,7 +199,8 @@ high byte before the low.
   at `$0038` and the port carries on without it. `port()` lists each EI in the report's `refused` (`$XXXX: EI
   enables interrupts, which a port does not take (M1)`) and still returns `ok: true`.
 - **Self-modifying code.** M1 translates none, and `port()` does not look for it: the referee finds it, as a
-  write by emu into a byte of the program's code, and refuses the run. A port of a program that patches its
+  write by emu into a byte of the program's code, and refuses the run (M2's census writes down where a
+  program does it, in a trace; see *The trace and the census*). A port of a program that patches its
   own code, run without the referee, would run the unpatched code.
 - **A block reached from two routines** is translated in each, so its statements appear twice.
 - What the runtime does not model (interrupts, the devices it lists).
@@ -271,6 +272,36 @@ routine `''` and block `RETURNED`):
 It does not compare the port's sound or cassette records (writes to port `$FF`, `z.sound`) with emu's: no
 Learn program uses IN or OUT. Milestone M2 adds the comparison for Sea Dragon's sound.
 
+## The trace and the census
+
+What a program does that its bytes do not say, the code bytes it rewrites, code it reaches only through a
+rewritten jump, the return addresses it drops and the ROM bytes it reads as data, is found by watching it run:
+a **port trace**, a small JSON file ([`docs/port-trace-format.md`](../../docs/port-trace-format.md)). `src/trace.ts`
+exports the `PortTrace` type, `parseTrace(text, programSha256)` (pure; a sentence for text that is not a
+trace, another format version, or a trace taken of another program) and `formatTrace(trace)`, the file's
+text. `port()` does not read one yet (M2 Task 4 on).
+
+The census (`tools/census.ts`, which needs `@fugloy/emu`, so it lives in `tools/`, run with `tsx` and
+typechecked with the tests, never in `src/`) plays a program's scripted sessions, each on a fresh machine from
+the program's entry (after a relocated program's loader has moved it), and watches with `m.debug`: coverage
+for the bytes that ran, a write hook for each byte written (and the return addresses each CALL pushes), and a
+read hook for the `POP` that takes one off the stack and for the ROM bytes read as data.
+
+```sh
+pnpm census examples/sea-dragon/seadrg01.cmd --hints examples/sea-dragon/seadrg01.hints --model 3 --sessions sea-dragon -o examples/sea-dragon/seadrg01.trace.json
+```
+
+runs it on the game stub ROM (`test/game-rom.ts`) and writes the trace; the file is committed. Sea Dragon's
+sessions are in `test/sessions/sea-dragon.ts`: `novice`, `expert` and `two-players`, each from the title
+(`BY: Wayne`), ENTER, the number of players and each player's skill, then a repeating pattern of key chords
+held 0.2 s each until `Game Over Player 1` (`Player 2`) and on until the title returns: 84,124,477,
+57,536,697 and 113,034,001 T-states on the game stub ROM. `recordSession(rom, session)` plays one and
+returns it as the referee's steps (each key pressed and released at the start of one of the port's blocks,
+so the referee applies it at the same instruction; a `row` check at the title, each prompt and GAME OVER; a
+last `run` to the session's end). Sea Dragon's trace: nine rewritten cells at eight sites (`$49C1`, `$4F41`,
+`$509B`–`$509C`, `$5174`, `$525E`, `$5AD0`, `$5ADD`, `$5AEA`), `$50C1`–`$50E9` entered (behind the rewritten
+`JP` at `$509A`), one drop (`$4BAC POP AF`) and two ROM reads (`$0000`, `$0003`).
+
 ## The Learn programs
 
 `test/learn.test.ts` is milestone M1's proof: every lesson (seven) and every Build Space Invaders chapter
@@ -327,6 +358,13 @@ it taken and not taken, pass the referee on the game stub ROM and, locally when 
 Model III ROM, on that ROM (skipped otherwise); the stand-in run one count short is stopped in `cycles`; the
 game stub is the plain stub but for the stand-in's ten bytes; `IN A,(00H)` reads as on emu; and a CALL to a
 ROM address with no stand-in (`$0050`, or `$0060` on the Model I) is still refused and throws when it runs.
+
+`test/census.test.ts` (M2) plays Sea Dragon's three sessions on the game stub ROM: each shows the title and
+reaches its GAME OVER, `recordSession` gives the same steps twice, and the census, which plays the same
+games to the same lengths, finds the eight rewritten sites with their writers (the opcode cells with their
+two values each), `$50C1`–`$50E9` entered, the drop at `$4BAC` alone and the ROM reads of `$0000` (`$F3`) and
+`$0003`; the committed `seadrg01.trace.json` must equal what the census writes now; `parseTrace` refuses a
+trace of another program, another version, or lists out of order. It needs no ROM of the user's.
 
 `test/structure.test.ts` checks the shapes: the straight line, DJNZ, diamond and nested-loop programs have
 no `switch`, every routine structured, and pass the referee on both models; the loops, the diamond's
