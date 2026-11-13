@@ -20,7 +20,10 @@
  * any other: a choice on a cell, not on a block, so the routine stays structured around it (inside a
  * case, a `break` or `continue` always names its loop). A CALL runs its callee through
  * `o.call`, and a RET checks with `o.ret` that it returns where its CALL said. A CALL to a ROM routine
- * the runtime stands in for (`standins`) is `o.standin`.
+ * the runtime stands in for (`standins`) is `o.standin`. A POP that drops a return address (`drops`, the
+ * last of several in a row) ends its block: its statements, the block's tick and Q, then `throw
+ * o.unwind(n, CONTINUATION, at)`, the routine the port goes on with n routines up. With `reset`, a
+ * transfer into the entry's start from another routine is `throw o.reset(ENTRY)`.
  *
  * Time (Ruling 3): a block ticks its instructions' T-states and R at its end, on each path a
  * conditional transfer takes, and also just before an instruction that reads the time (`readsTime`),
@@ -31,7 +34,7 @@ import type { Ir } from '@fugloy/disasm';
 import { renderInstruction } from '@fugloy/disasm';
 import type { SymbolTable } from '@fugloy/disasm';
 import type { Instruction } from '@fugloy/z80';
-import type { VariantSite } from './port.js';
+import type { Drop, VariantSite } from './port.js';
 import type { Routine, Routines } from './routines.js';
 import { structure } from './structure.js';
 import type { Code, Exit } from './structure.js';
@@ -69,6 +72,13 @@ export interface EmitInput {
   patched: ReadonlyMap<number, { cells: Cells; targets?: number[] }>;
   /** By instruction address: the instructions whose opcode the program rewrites, each the start and whole of its block. */
   variants: ReadonlyMap<number, VariantSite>;
+  /** By the address of its last POP, each run of POPs that drops return addresses: the end of its block. */
+  drops: ReadonlyMap<number, Drop>;
+  /**
+   * When the entry's first block loads SP with a constant before it touches the stack: that LD SP's address.
+   * A transfer back to the entry then unwinds every routine (`o.reset`).
+   */
+  reset?: number;
 }
 
 export interface Emitted {
@@ -83,6 +93,8 @@ export interface Emitted {
   standinSites: ReadonlyMap<number, ReadonlySet<number>>;
   /** What cannot be translated at all: the port is refused. */
   errors: string[];
+  /** The transfers back to the entry written as `o.reset`, by address, each with a sentence. */
+  resets: { at: number; note: string }[];
 }
 
 const hex = (n: number, width: number): string => n.toString(16).toUpperCase().padStart(width, '0');
@@ -181,6 +193,9 @@ export function emit(input: EmitInput): Emitted {
   }
 
   const refused: string[] = [];
+  const resets = new Map<number, string>();
+  /** By continuation, the POPs it follows. */
+  const continues = new Map([...input.drops.values()].map((d) => [d.continuation, d.pops]));
   const standinSites = new Map<number, Set<number>>();
   const errors: string[] = [];
   const w = new Writer();
@@ -238,14 +253,24 @@ export function emit(input: EmitInput): Emitted {
   }
 
   // A block two routines share is translated, and so reported, in each
-  return { js: `${w.lines.join('\n')}\n`, routineNames, labelled, refused: [...new Set(refused)], standinSites, errors: [...new Set(errors)] };
+  return {
+    js: `${w.lines.join('\n')}\n`,
+    routineNames,
+    labelled,
+    refused: [...new Set(refused)],
+    standinSites,
+    errors: [...new Set(errors)],
+    resets: [...resets].sort(([x], [y]) => x - y).map(([at, note]) => ({ at, note })),
+  };
 
   /** Write the routine `r`, structured where its control flow allows; true when it stays labelled. */
   function emitRoutine(r: Routine): boolean {
     const name = routineNames.get(r.start)!;
     const own = new Set(r.blocks.map((b) => b.start));
     const doc = notes.get(r.start) ?? [];
-    w.doc(doc.length === 0 ? `${name} (${addr(r.start)})` : `${name} (${addr(r.start)}).`, doc);
+    const after = continues.get(r.start);
+    const from = after === undefined ? '' : `: the program goes on here after the POP${after.length === 1 ? '' : 's'} at ${after.map(addr).join(' and ')} dropped ${after.length === 1 ? 'a return address' : `${after.length} return addresses`}`;
+    w.doc(doc.length === 0 ? `${name} (${addr(r.start)})${from}` : `${name} (${addr(r.start)})${from}.`, doc);
     w.line(0, `export function ${name}(z, ret) {`);
 
     // Every block's statements, in address order (so errors and refusals are found as before)
@@ -275,6 +300,12 @@ export function emit(input: EmitInput): Emitted {
 
     /** The statement that goes to `to` from the transfer at `from`: another block, another routine, or nowhere. */
     function go(to: number, from: number, ins: Instruction): Stmt {
+      if (to === input.entry && to !== r.start && input.reset !== undefined) {
+        const entry = routineNames.get(to)!;
+        const ld = renderInstruction(instructions.get(input.reset)!, symbols);
+        resets.set(from, `${addr(from)}: ${renderInstruction(ins, symbols)} goes back to the entry, ${entry}, whose first block loads SP with a constant (${ld} at ${addr(input.reset)}) before any CALL, RET, PUSH or POP: the port unwinds every routine running and runs ${entry} from the top.`);
+        return { k: 'line', code: `throw o.reset(${entry});`, comment: 'the stack is discarded: every routine is left', leaves: true };
+      }
       if (to !== r.start && routines.starts.has(to)) return { k: 'line', code: `return ${routineNames.get(to)!};`, leaves: true };
       if (own.has(to)) return { k: 'go', to };
       return nowhere(to, from, ins);
@@ -366,9 +397,18 @@ export function emit(input: EmitInput): Emitted {
         return null;
       }
       switch (tr.flow) {
-        case 'next':
+        case 'next': {
+          const drop = input.drops.get(at);
+          if (drop !== undefined) {
+            // The POP dropped the return address of the CALL that ran this routine (of each, for several)
+            const levels = drop.levels === 1 ? 'a routine' : `${drop.levels} routines`;
+            const leave: Stmt = { k: 'line', code: `throw o.unwind(${drop.levels}, ${routineNames.get(drop.continuation)!}, ${word(at)});`, comment: `a return address dropped: on at ${addr(drop.continuation)}, ${levels} up`, leaves: true };
+            out.push(...statements(tr.lines, comment), tick(tr.cycles), leave);
+            break;
+          }
           out.push(...statements(tr.lines, comment), tick(tr.cycles), go(next, at, ins));
           break;
+        }
         case 'jump': {
           if (tr.targets !== undefined) {
             // The unseen target's sentence names the byte rewritten: the high byte's when it alone is

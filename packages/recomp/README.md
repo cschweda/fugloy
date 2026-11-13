@@ -53,7 +53,7 @@ The module imports the runtime's helpers as `o` from `opts.runtimeImport` and ex
 | `CODE` | the program's code as `[first, last]` address ranges (inclusive), in address order: the IR's code regions at run addresses, a relocated program's loader left out. None of their bytes is carried; `load` installs a write guard over them. |
 | `CELLS` | the trace's cells as `[address, byte]`, in address order, each with its byte as the program loads it: a rewritten operand's initial value, which the program treats as data, or a swapped opcode's, the stored state of its choice. Empty with no trace. These are the only code bytes a port holds. |
 | `ENTRY` | the entry routine: the file's transfer address, or for a relocated program the hint file's entry (below) |
-| each routine, by name | `NAME(z, ret)`: a routine is the entry or a CALL or RST target; its blocks are those reached from its start by jumps and falling through (the address after a CALL included) without entering another routine's start. Named from `opts.names`, else the disassembler's symbols, else `SUB_XXXX`, made a JavaScript identifier; a hint note at its start is its JSDoc. |
+| each routine, by name | `NAME(z, ret)`: a routine is the entry, a CALL or RST target, or a continuation (the instruction after a `POP` that drops a return address, M2: below); its blocks are those reached from its start by jumps and falling through (the address after a CALL included) without entering another routine's start. Named from `opts.names`, else the disassembler's symbols, else `SUB_XXXX`, made a JavaScript identifier; a hint note at its start is its JSDoc. |
 
 Inside a routine the blocks are structured code where the control flow allows (see *Structure* below):
 `while (true)` loops, `if`/`else`, `break` and `continue`, each block written once, in place. Where it does
@@ -68,6 +68,8 @@ iteration that repeats itself. Where the block goes:
 |---|---|
 | to a block of the same routine (its own start included) | structured: the block's code in place, `continue` to a loop's head, or `break` to the code after a loop or a labelled block; labelled: `b = 0x7006; continue;` |
 | into another routine's start | `return OTHER;` (the trampoline runs `OTHER` next, with the same `ret`) |
+| into the entry's start, when the entry's first block loads SP with a constant before any CALL, RET, PUSH or POP (M2) | the tick, then `throw o.reset(L497F);`: the program discards its whole stack, so every routine running is left and the top-level trampoline runs the entry. Listed in `report.resets`. A jump from the entry routine to its own start stays a jump within it |
+| on from a `POP` the trace says dropped a return address (M2) | the `POP`'s ordinary statement, the block's tick and Q, then `throw o.unwind(1, SUB_4BAD, 0x4BAC);` (below) |
 | a CALL or RST of a routine | the push of the return address, the tick, then `o.call(z, CALLEE, 0x7005);` and on to the block after it |
 | a CALL of a ROM routine in `opts.standins` | the tick, then `o.standin(z, 0x0060, 0x4EAF); // $4EAC  CALL 0060H  ; $DELAY, the runtime's stand-in` (which pushes the return address itself, runs the stand-in and pops it) and on to the block after it; a CALL cc keeps its MEMPTR statement and runs `o.standin` on its taken path. Listed in `report.standins`, not `refused` |
 | a RET | the pop (into MEMPTR, as emu), the tick, then `o.ret(z, ret, 0x7010); return;`: a sentence if it popped anything but `ret` |
@@ -123,6 +125,29 @@ be in the analysis with them, at the same address and length, and otherwise name
 instruction it would displace.
 `report.cells` gives each opcode cell its `variants`, the instructions by value.
 
+**A dropped return address.** A program may throw away the return address a CALL pushed: Sea Dragon's
+title loop calls `TITLE_FRAME`, which on ENTER goes to `$4BAC POP AF`, and the title loop is left for good.
+The census lists such a `POP` in the trace's `drops`. `port()` ends the `POP`'s block with it and starts a
+routine, the continuation, at the instruction after it (named as any routine is: `opts.names`, the
+disassembler's symbols, else `SUB_XXXX`; Sea Dragon's is `SUB_4BAD`); the `POP`'s block ends `throw
+o.unwind(1, SUB_4BAD, 0x4BAC);` after its tick. The trampoline running the routine is the one whose return
+address the program dropped: it rethrows the unwind with one level fewer, and the trampoline above it, with
+none left, goes on with the continuation, with its own `ret`, as the Z80 goes on a level up. `POP`s in a row
+that each drop one end one block after the last, `o.unwind(2, …)`, and leave two trampolines. A drop the
+trace names where the port translates no `POP` (another instruction, a swapped opcode's site, the loader)
+refuses the port with a sentence; one that reaches the top-level trampoline with levels left (the program
+popped the address the port was started with) throws a sentence as the port runs. A drop the trace does not
+list (Sea Dragon's two `POP AF` at `$550A`/`$550B` never ran) leaves the port expecting the address, and its
+next `RET` throws `o.ret`'s sentence, which says the census may need a session that reaches the `POP`.
+
+The entry needs no trace for its own case (Ruling 10): when its first block loads SP with a constant before
+any CALL, RET, PUSH or POP (Sea Dragon's `DI / LD SP,4495H` at `$497F`), a transfer back to it from another
+routine discards the whole Z80 stack, so it is `throw o.reset(ENTRY)`, which every trampoline but the
+top-level one passes on, and that one runs the entry with the return address the port started with. Sea
+Dragon goes back to `$497F` at GAME OVER (`$6042`), on SHIFT+BREAK from inside nested calls (`$4CC6`) and at
+`$602D`; before this each game left its frames behind for good. An entry that touches the stack first, or
+never loads SP, gets an ordinary `return ENTRY;`.
+
 **A relocated program.** When the file loads a program at one address and a loader moves it to where it
 runs (Sea Dragon's `seadrg01.cmd`: loaded at `$5200`, moved to `$497F` by 15 bytes at `$8881`), the hint
 file's `relocate` line has `@fugloy/disasm` analyse it at its run addresses. `ENTRY` is then the routine at
@@ -145,8 +170,11 @@ data from the code's references), `refused` (each place that throws when it runs
 `sites`, the addresses of its CALLs in order) and `cells` (M2: each of the trace's cells, in address order:
 its `addr`, the `instruction` it is a byte of, its `kind`, `disp`, `imm`, `word` or `opcode`, the
 `values` the trace saw written, and for an opcode its `variants`, each instruction the port chooses between,
-as assembly, by value; `CELLS` holds each one's initial byte). A rewritten JP's unseen target and a swapped
-opcode's unseen value throw only if they are ever reached, so they are not in `refused`.
+as assembly, by value; `CELLS` holds each one's initial byte), `drops` (M2: each of the trace's drops, in
+address order: the `POP`'s `at` and the `continuation` routine's name, the same for `POP`s in a row) and
+`resets` (each transfer back to an entry that reloads SP, written `o.reset`, in address order: its `at` and a
+one-sentence `note`). A rewritten JP's unseen target and a swapped opcode's unseen value throw only if they
+are ever reached, so they are not in `refused`.
 
 `@fugloy/runtime`'s `load(z, port)` writes `DATA` and `CELLS` into memory and installs the write guard over
 `CODE`, and `runPort(z, port)` runs `ENTRY` until it returns (see its README).
@@ -354,7 +382,8 @@ rewritten jump, the return addresses it drops and the ROM bytes it reads as data
 a **port trace**, a small JSON file ([`docs/port-trace-format.md`](../../docs/port-trace-format.md)). `src/trace.ts`
 exports the `PortTrace` type, `parseTrace(text, programSha256)` (pure; a sentence for text that is not a
 trace, another format version, or a trace taken of another program) and `formatTrace(trace)`, the file's
-text. `port()` reads it as `opts.trace` (rewritten operands from M2 Task 4; see *port*).
+text. `port()` reads it as `opts.trace` (rewritten operands from M2 Task 4, swapped opcodes from Task 5,
+dropped return addresses from Task 6; see *port*).
 
 The census (`tools/census.ts`, which needs `@fugloy/emu`, so it lives in `tools/`, run with `tsx` and
 typechecked with the tests, never in `src/`) plays a program's scripted sessions, each on a fresh machine from
@@ -472,6 +501,17 @@ cell with a case per value and no `switch (b)`, carries the cell alone in `CELLS
 a session that runs both variants; a third value in the cell throws `o.variant`'s sentence. Sea Dragon with
 its hint file and trace ports: nine cells at eight sites, a `switch` at each of `$5174`, `$525E` and `$5AEA`,
 no routine labelled, nothing refused.
+
+`test/unwind.test.ts` (M2) ports a title loop shaped like Sea Dragon's (a loop calls a routine that jumps into
+another routine, whose `POP AF` drops the return address, carries on, and returns to the loop's caller),
+with a trace its census took: its report lists the drop and the continuation, it passes the referee ten
+thousand times round, and run alone the JavaScript stack is as deep at the continuation every time, as deep as
+the routine whose caller it returns to; without the trace its `RET` throws `o.ret`'s sentence. Two `POP`s in
+a row unwind two trampolines and continue after the second; a drop with no routine left throws as the port
+runs; a drop where there is no `POP` refuses the port. A program that jumps back to an entry that reloads SP
+from three calls deep, ten thousand times, passes the referee and runs the entry at the same depth each time;
+an entry that touches the stack first gets no reset. Sea Dragon's port lists its drop (`$4BAC`, continuing in
+`SUB_4BAD`) and its three resets, with no routine labelled.
 
 `test/structure.test.ts` checks the shapes: the straight line, DJNZ, diamond and nested-loop programs have
 no `switch`, every routine structured, and pass the referee on both models; the loops, the diamond's

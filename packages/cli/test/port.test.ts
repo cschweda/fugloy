@@ -90,6 +90,8 @@ describe('fugloy port', () => {
         refused: ['the transfer at $7002 goes to $0060, where no block of the program starts.'],
         standins: [],
         cells: [],
+        drops: [],
+        resets: [],
       },
       { source: 'game.cmd', model: 3, module: 'game.port.js' },
     );

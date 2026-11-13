@@ -16,7 +16,14 @@
  * site): one instruction per value the trace saw there and the value as loaded, each decoded here from
  * the bytes as loaded with the cell's byte replaced and translated ahead of time; the site is a block of
  * its own whose successors are every variant's, and any the analysis did not reach is given to it as a
- * root. The module's `CODE` lets the runtime refuse a write into any other code byte.
+ * root. The module's `CODE` lets the runtime refuse a write into any other code byte. A POP the trace says
+ * dropped a return address (its `drops`) ends its block (several in a row, the last of them), which
+ * throws `o.unwind`, and the instruction after it starts a routine (a continuation), which the port goes
+ * on with a routine up.
+ *
+ * With or without a trace, when the entry's first block loads SP with a constant before any CALL, RET, PUSH
+ * or POP, a transfer back to the entry discards the program's whole stack: the port throws `o.reset`, which
+ * leaves every routine running and runs the entry from the top-level trampoline.
  */
 import { analyze, applyHints, buildIr, detectFormat, emptyAnnotations, endsPath, loadCmd, parseHints, programHash, renderInstruction, targetOf } from '@fugloy/disasm';
 import type { Analysis, Annotations, BasicBlock, Ir, Successor } from '@fugloy/disasm';
@@ -47,8 +54,9 @@ export interface PortOptions {
   standins?: ReadonlyMap<number, string>;
   /**
    * The program's trace (trace.ts, `parseTrace`), from the census of sessions it was played in: the code
-   * bytes it rewrites. Without one, the port assumes the program rewrites none, and a standalone port
-   * throws at a write into its code.
+   * bytes it rewrites and the return addresses it drops. Without one, the port assumes the program
+   * rewrites none and drops none: a standalone port throws at a write into its code, and at the RET after
+   * a POP that dropped one.
    */
   trace?: PortTrace;
 }
@@ -100,6 +108,27 @@ export interface PortReport {
    * instruction runs. The module carries each one's byte as loaded (`CELLS`), and no other code byte.
    */
   cells: PortCell[];
+  /**
+   * The trace's drops, by address: each POP that drops a return address, and the routine the port goes on
+   * with after it (after the last of several in a row), a routine up for each.
+   */
+  drops: { at: number; continuation: string }[];
+  /**
+   * The transfers back to the entry that discard the program's stack (the entry's first block loads SP with
+   * a constant before it touches the stack), by address, each with a sentence: the port leaves every
+   * routine running and runs the entry from the top.
+   */
+  resets: { at: number; note: string }[];
+}
+
+/** A POP that drops a return address, or the last of several in a row: its block ends with it. */
+export interface Drop {
+  /** How many return addresses: the POPs in a row that end the block. */
+  levels: number;
+  /** Their addresses, in order. */
+  pops: number[];
+  /** The address after the last: a routine's start. */
+  continuation: number;
 }
 
 export type PortResult = { ok: true; js: string; report: PortReport } | { ok: false; errors: string[] };
@@ -126,6 +155,10 @@ export interface Prepared {
   patched: ReadonlyMap<number, { cells: Cells; targets?: number[] }>;
   /** By instruction address, the instructions whose opcode the program rewrites: each a block of its own. */
   variants: ReadonlyMap<number, VariantSite>;
+  /** By the address of the last POP of each, the trace's drops: each ends its block. */
+  drops: ReadonlyMap<number, Drop>;
+  /** When the entry's first block loads SP with a constant before it touches the stack: that LD SP's address. */
+  reset?: number;
 }
 
 const addr = (n: number): string => `$${n.toString(16).toUpperCase().padStart(4, '0')}`;
@@ -501,7 +534,7 @@ export function prepare(cmd: Uint8Array, opts: PortOptions): { ok: true; prepare
   }
   if (variantErrors.length > 0) return { ok: false, errors: variantErrors };
 
-  const ported = ir.blocks
+  const joined = ir.blocks
     .filter((b) => !loaderBlocks.has(b.start))
     .map((b): BasicBlock => {
       const chosen = variantSucc.get(b.start);
@@ -509,7 +542,11 @@ export function prepare(cmd: Uint8Array, opts: PortOptions): { ok: true; prepare
       const last = [...matched.patched].find(([at, p]) => p.targets !== undefined && at >= b.start && at + analysis.pass1.instructions.get(at)!.length - 1 === b.end);
       return last === undefined ? b : { ...b, succ: [...b.succ, ...last[1].targets!.map((to) => ({ kind: 'jump' as const, to }))] };
     });
-  const routines = routinesOf({ ...ir, blocks: ported }, entry);
+  const cut = cutDrops(joined, trace?.drops ?? [], analysis, variants);
+  if (!cut.ok) return { ok: false, errors: cut.errors };
+  const ported = cut.blocks;
+  const routines = routinesOf({ ...ir, blocks: ported }, entry, [...cut.drops.values()].map((d) => d.continuation));
+  const reset = variants.has(entry) ? undefined : reloadsSp(blocks.get(entry)!, analysis.pass1.instructions);
   // The regions are run addresses, so their bytes come from the analysis image, not the file's.
   const bytes = analysis.space.image.bytes;
   // What the analysis reached as data: the bytes the hint file types (bytes, words, string, a table). The
@@ -536,7 +573,84 @@ export function prepare(cmd: Uint8Array, opts: PortOptions): { ok: true; prepare
       else code.push({ start: a, end: a });
     }
   }
-  return { ok: true, prepared: { analysis, ir, entry, ...(loader === undefined ? {} : { loader }), loaderBlocks, routines, code, data, cells: matched.cells, patched: matched.patched, variants } };
+  return { ok: true, prepared: { analysis, ir, entry, ...(loader === undefined ? {} : { loader }), loaderBlocks, routines, code, data, cells: matched.cells, patched: matched.patched, variants, drops: cut.drops, ...(reset === undefined ? {} : { reset }) } };
+}
+
+/**
+ * The blocks with each POP the trace says dropped a return address ending its own, and the instruction
+ * after it starting the next (a continuation, given no successor from the POP's block, which throws);
+ * POPs in a row end one block, after the last. By the last POP's address, each such run. Sentences for a
+ * drop at an address where the port translates no POP: no instruction, another instruction, a swapped
+ * opcode's site, or the loader's code.
+ */
+function cutDrops(
+  blocks: readonly BasicBlock[],
+  traced: readonly { at: number }[],
+  analysis: Analysis,
+  variants: ReadonlyMap<number, VariantSite>,
+): { ok: true; blocks: BasicBlock[]; drops: Map<number, Drop> } | { ok: false; errors: string[] } {
+  const { instructions } = analysis.pass1;
+  const dropped = new Set(traced.map((d) => d.at));
+  const drops = new Map<number, Drop>();
+  const found = new Set<number>();
+  const out: BasicBlock[] = [];
+  for (const b of blocks) {
+    if (variants.has(b.start) || ![...dropped].some((a) => a >= b.start && a <= b.end)) {
+      out.push(b);
+      continue;
+    }
+    let start = b.start;
+    let pops: number[] = [];
+    for (let a = b.start; a <= b.end; ) {
+      const ins = instructions.get(a)!;
+      const next = a + ins.length;
+      if (dropped.has(a) && ins.mnemonic === 'POP') {
+        found.add(a);
+        pops.push(a);
+        // Another POP that drops follows in the block: the run goes on to it
+        if (next <= b.end && dropped.has(next) && instructions.get(next)?.mnemonic === 'POP') {
+          a = next;
+          continue;
+        }
+        out.push({ start, end: next - 1, succ: [] });
+        drops.set(a, { levels: pops.length, pops, continuation: next & 0xffff });
+        pops = [];
+        start = next;
+      }
+      a = next;
+    }
+    if (start <= b.end) out.push({ ...b, start });
+  }
+  const starts = new Set(out.map((b) => b.start));
+  const errors: string[] = [];
+  for (const at of [...dropped].sort((x, y) => x - y)) {
+    if (found.has(at)) continue;
+    const ins = instructions.get(at);
+    const said = `${addr(at)}: the trace says a POP here dropped a return address, but`;
+    if (variants.has(at)) errors.push(`${said} the program rewrites the opcode there, and a port does not follow a drop at a swapped opcode.`);
+    else if (ins?.mnemonic === 'POP') errors.push(`${said} the POP there is not in code the port translates (a relocated program's loader).`);
+    else errors.push(`${said} the disassembly decoded ${ins === undefined ? 'no instruction' : renderInstruction(ins, analysis.symbols)} here, not a POP the port translates.`);
+  }
+  for (const d of drops.values()) {
+    if (!starts.has(d.continuation)) errors.push(`${addr(d.pops[d.pops.length - 1]!)}: the POP drops a return address, and the port would go on at ${addr(d.continuation)}, where no block of the disassembly starts.`);
+  }
+  return errors.length > 0 ? { ok: false, errors } : { ok: true, blocks: out, drops };
+}
+
+/**
+ * The address of the `LD SP,nn` in the block `b` (the entry's first) when it comes before any instruction
+ * that touches the stack (a CALL, RST, RET, PUSH, POP or EX (SP),rr); undefined otherwise.
+ */
+function reloadsSp(b: BasicBlock, instructions: ReadonlyMap<number, Instruction>): number | undefined {
+  for (let a = b.start; a <= b.end; ) {
+    const ins = instructions.get(a);
+    if (ins === undefined) return undefined;
+    const [to, from] = ins.operands;
+    if (ins.mnemonic === 'LD' && to?.kind === 'reg16' && to.reg === 'SP' && from?.kind === 'imm16') return a;
+    if (ins.flow.kind === 'call' || ins.flow.kind === 'return' || ins.mnemonic === 'PUSH' || ins.mnemonic === 'POP' || ins.operands.some((o) => o.kind === 'ind' && o.reg === 'SP')) return undefined;
+    a += ins.length;
+  }
+  return undefined;
 }
 
 /** The blocks reached from `from` by any transfer the IR knows (a CALL's included), `from` among them. */
@@ -557,7 +671,7 @@ function reachedFrom(from: number, blocks: ReadonlyMap<number, BasicBlock>): Set
 export function port(cmd: Uint8Array, opts: PortOptions): PortResult {
   const p = prepare(cmd, opts);
   if (!p.ok) return p;
-  const { analysis, ir, entry, loader, routines, data, code, cells, patched, variants } = p.prepared;
+  const { analysis, ir, entry, loader, routines, data, code, cells, patched, variants, drops, reset } = p.prepared;
   const bytes = analysis.space.image.bytes;
   const out = emit({
     model: opts.model,
@@ -577,6 +691,8 @@ export function port(cmd: Uint8Array, opts: PortOptions): PortResult {
     cells: cells.map((c) => [c.addr, bytes[c.addr]!] as const),
     patched,
     variants,
+    drops,
+    ...(reset === undefined ? {} : { reset }),
   });
   if (out.errors.length > 0) return { ok: false, errors: out.errors };
   return {
@@ -593,6 +709,10 @@ export function port(cmd: Uint8Array, opts: PortOptions): PortResult {
         .sort(([x], [y]) => x - y)
         .map(([at, sites]) => ({ addr: at, name: opts.standins!.get(at)!, sites: [...sites].sort((x, y) => x - y) })),
       cells,
+      drops: [...drops.values()]
+        .flatMap((d) => d.pops.map((at) => ({ at, continuation: out.routineNames.get(d.continuation)! })))
+        .sort((x, y) => x.at - y.at),
+      resets: out.resets,
     },
   };
 }

@@ -5,7 +5,7 @@
  * program rewrites, its trace's cells, each as `[address, byte as loaded]`), `ENTRY` (the routine the
  * program starts at) and each routine by name.
  */
-import { call } from './ops.js';
+import { top } from './ops.js';
 
 /**
  * @typedef {{
@@ -59,6 +59,8 @@ export function load(z, mod) {
  * Run the port from its entry until the entry returns. The address it must return to is the one on
  * top of the stack as it starts: the address the stub ROM pushes before it hands over to a program
  * (its RETURNED, apps/web/app/utils/emulator/stub-rom.z), so the runtime needs none of the stub's bytes.
+ * It runs in the top-level trampoline (ops.js, `top`): an unwind no routine's trampoline took ends there,
+ * and a reset (a jump back to an entry that reloads SP) runs the entry again with the same return address.
  * A RET to any other address, and anything else the port cannot follow, throws a sentence.
  * @param {import('./z.js').Z} z the machine, its registers and memory as at the program's entry
  * @param {PortModule} mod
@@ -66,6 +68,6 @@ export function load(z, mod) {
  */
 export function runPort(z, mod) {
   sameModel(z, mod);
-  call(z, mod.ENTRY, z.read16(z.sp));
+  top(z, mod.ENTRY, z.read16(z.sp));
   return { reason: 'returned' };
 }

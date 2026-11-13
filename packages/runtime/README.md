@@ -122,13 +122,22 @@ whose bytes the port carries): a write to a code byte that is not one of the cel
 `self-modifying code: $XXXX written (the trace does not name it; run the census over a session that reaches
 this)` at the write, where the program would otherwise go on running code the port no longer matches. The
 guard is one byte an address, checked on a write to RAM; a module with no `CODE`, and a `Z` no port was loaded
-into, have none. `runPort(z, port)` runs `ENTRY` until it
+into, have none. `runPort(z, port)` runs `ENTRY`, in the top-level trampoline (`o.top`), until it
 returns to the address on top of the stack as it starts: the one Fugløy's stub ROM pushes (its `RETURNED`)
 before it hands over to a program, so the runtime needs none of the stub's bytes. Both refuse a port for the
 other model.
 
+A program that drops a return address (M2: a `POP` its trace lists) leaves routines the port is running: the
+port throws `o.unwind(n, CONTINUATION, at)`, which is not an `Error`. Each trampoline it reaches with levels
+left rethrows it with one fewer (its routine is one the program left); the next, at none, goes on with
+`CONTINUATION` in place of the routine it was running, with its own return address. `o.reset(ENTRY)` (a jump
+back to an entry that reloads SP) passes every trampoline but the top-level one, which runs `ENTRY` again.
+Neither gets a place added, and neither is caught as an error.
+
 Anything a port cannot follow throws a sentence naming the address: a RET to an address other than the one
-after its CALL, a transfer to an address no block starts, a rewritten JP holding a target its trace did not
+after its CALL (`… (a port follows a RET only back to its CALL) (if a POP dropped a return address here, the
+census needs a session that reaches it)`), an unwind that reaches the top-level trampoline with levels left
+(`the POP at $XXXX drops a return address that no CALL of the port's pushed …`), a transfer to an address no block starts, a rewritten JP holding a target its trace did not
 see, a HALT, a device the runtime does not model, a write into the port's code that its trace does not name. The
 trampoline (`o.call`) adds the routine and the block it happened in, once:
 `the port does not model $FE (an I/O port; …) (in READ, in the block at $7006)`.
@@ -152,8 +161,10 @@ trampoline (`o.call`) adds the routine and the block it happened in, once:
 | `rld rrd (z)` | the nibble rotates through `(HL)` |
 | `ldi ldd cpi cpd ini ind outi outd (z)` | one iteration of a block instruction (a translated LDIR loops `ldi`) |
 | `push (z, v)`, `pop (z)`, `exsp (z, v)`, `exx (z)` | the stack (PUSH writes the high byte first; EX (SP),rr writes `(SP+1)` before `(SP)`) and EXX |
-| `call (z, routine, ret)` | CALL: runs `routine`, whose RET must return to `ret`, then each routine it returns (jumps into) in turn, until one returns nothing: a trampoline, so routines that jump into each other never grow the JavaScript stack |
-| `ret (z, expected, at)` | RET: throws a sentence when the popped address (in `z.wz`) is not `expected` |
+| `call (z, routine, ret)` | CALL: runs `routine`, whose RET must return to `ret`, then each routine it returns (jumps into) in turn, until one returns nothing: a trampoline, so routines that jump into each other never grow the JavaScript stack. An unwind it catches with levels left goes on up with one fewer; at none it runs the unwind's routine next |
+| `top (z, routine, ret)` | the top-level trampoline `runPort` runs `ENTRY` in: `call`'s, but a reset ends here and runs its routine, and an unwind with levels left throws a sentence |
+| `unwind (levels, to, at)`, `reset (to)` | what a port throws to leave routines (M2): `levels` return addresses dropped by the `POP`(s) ending at `at`, going on with `to`; or a jump back to an entry that reloads SP, leaving every routine but the top-level trampoline's. Not `Error`s |
+| `ret (z, expected, at)` | RET: throws a sentence when the popped address (in `z.wz`) is not `expected`; it says the census may need a session that reaches a `POP` that dropped one |
 | `standin (z, addr, ret)` | a CALL to a ROM routine the runtime stands in for (below): pushes `ret` as the CALL does, runs the stand-in, pops `ret` into MEMPTR as the RET does, and leaves Q 0; the two stack bytes stay written, as on emu. A sentence for an address with no stand-in on the model |
 | `unknown (z, target, from[, known, cell])`, `halt (z, at)` | the sentences (as `Error`s, which the port throws) for a transfer to an address no block starts and for a HALT. With `known` and `cell` (M2), a JP whose target the program rewrites: the targets the trace saw and the address of the byte rewritten, named with the value it holds instead |
 | `variant (z, cell, known, instruction)` | the sentence (an `Error`, which the port throws) for an instruction whose opcode the program rewrites (M2) holding a value the port has no translation for: the cell, the instruction as loaded (its assembly), the value the cell holds (`z.mem[cell]`) and the values the port knows |
