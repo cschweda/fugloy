@@ -37,9 +37,8 @@ export function createProgress(
     }
   }
 
-  function loadDone(): void {
-    if (doneLoaded) return;
-    doneLoaded = true;
+  /** Adds the stored done marks to the set. */
+  function readDone(): void {
     try {
       const raw = store()?.getItem(DONE);
       if (!raw) return;
@@ -48,6 +47,12 @@ export function createProgress(
     } catch {
       /* corrupt or unreadable: none */
     }
+  }
+
+  function loadDone(): void {
+    if (doneLoaded) return;
+    doneLoaded = true;
+    readDone();
   }
 
   return {
@@ -86,7 +91,9 @@ export function createProgress(
       return new Set(doneSet);
     },
     markDone(slug) {
-      loadDone();
+      // Read again: another tab may have marked a lesson since this one loaded, and writing only this tab's set would drop it.
+      doneLoaded = true;
+      readDone();
       doneSet.add(slug);
       try {
         store()?.setItem(DONE, JSON.stringify([...doneSet]));

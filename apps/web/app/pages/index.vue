@@ -66,7 +66,7 @@ useHead({
         image: `${SITE_ORIGIN}/og-image.png`,
         offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
         license: 'https://spdx.org/licenses/MIT.html',
-        codeRepository: 'https://github.com/cschweda/fugloy',
+        sameAs: 'https://github.com/cschweda/fugloy',
       }),
     },
   ],
