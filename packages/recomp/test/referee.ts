@@ -35,7 +35,12 @@
  *     both machines as they stopped.
  *   - A write by emu into a byte of the program's code (every byte the .CMD loads but the port's DATA)
  *     stops the run, whichever instruction makes it (a store, a block move, a push, an interrupt's
- *     push) and whether or not that byte runs again: M1 translates no self-modifying code.
+ *     push) and whether or not that byte runs again: M1 translates no self-modifying code. From M2 a
+ *     trace (`trace`, given to port() too) names the code bytes the program rewrites (its cells): a
+ *     write to one is allowed, and the byte is compared with the port's like any byte written (the port
+ *     holds each cell's initial value from `load` and reads it when its instruction runs). The port's
+ *     own write guard (`load`'s) refuses a write into any other code byte as the port runs; emu is then
+ *     stepped through the block to its write, and the run stops with the same sentence as above.
  *   - What the port refuses as it runs (a device the runtime does not model, a transfer to no block, a
  *     HALT, a RET elsewhere) stops the run with the port's sentence; for a device, emu is stepped
  *     through the block to the same access, which names the instruction.
@@ -54,6 +59,7 @@ import { port } from '../src/index.js';
 import { prepare } from '../src/port.js';
 import { RUNTIME, cpuOf, emuState, hex, importPort, memOf, runTo, setZ, stub, zState } from './helpers.js';
 import type { Model, State } from './helpers.js';
+import type { PortTrace } from '../src/index.js';
 import { gameStubRom } from './game-rom.js';
 
 /** The word at `addr` on emu, low byte first, read without a device's side effect. */
@@ -91,6 +97,8 @@ export interface RefereeOptions {
   rom?: 'stub' | 'game' | Uint8Array;
   /** For the referee's own tests: rewrites the port's module text before it runs, to plant a bug. */
   transform?: (js: string) => string;
+  /** The program's trace (M2), given to `port()`: its cells are code bytes the program may write. */
+  trace?: PortTrace;
 }
 
 /**
@@ -134,6 +142,8 @@ const PLACED = / \(in ([A-Za-z0-9_$]+), in the block at \$([0-9A-F]{4})\)$/;
 const DEVICE = /^the port does not model \$([0-9A-F]{2,4}) \((an I\/O port|the Model I's Expansion Interface)/;
 /** The address a control refusal names (ops.js: unknown, halt, ret). */
 const NAMED_AT = /^the (?:transfer|HALT|RET) at \$([0-9A-F]{4})\b/;
+/** The runtime's write guard refusing a write into the port's code (z.js, codeWriteError). */
+const GUARD = /^self-modifying code: \$[0-9A-F]{4} written \(the trace does not name it/;
 
 /**
  * Thrown from `z.at` to stop the port where a comparison failed; an Error, so the trampoline names the
@@ -200,7 +210,11 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
 
   const rom = opts.rom ?? 'stub';
   const standinNames = new Map(rom === 'stub' ? [] : [...standins(model)].map(([at, s]) => [at, s.name]));
-  const portOptions = { model, names, runtimeImport: RUNTIME, standins: standinNames, ...(opts.hints === undefined ? {} : { hints: opts.hints }) };
+  const portOptions = {
+    model, names, runtimeImport: RUNTIME, standins: standinNames,
+    ...(opts.hints === undefined ? {} : { hints: opts.hints }),
+    ...(opts.trace === undefined ? {} : { trace: opts.trace }),
+  };
   const p = port(cmd, portOptions);
   const prepared = prepare(cmd, portOptions);
   if (!p.ok || !prepared.ok) return { ok: false, report: (p.ok ? [] : p.errors).join(' '), at: { routine: '', block: parseCmd(cmd).entry, cycles: 0 }, field: 'port' };
@@ -235,6 +249,9 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
   for (const b of parseCmd(cmd).blocks) for (let k = 0; k < b.data.length; k++) loaded[(b.addr + k) & 0xffff] = 1;
   const code = new Uint8Array(0x10000);
   for (const r of prepared.prepared.code) code.fill(1, r.start, r.end + 1);
+  /** The trace's cells: code bytes the program may write, compared like any other byte written. */
+  const cell = new Uint8Array(0x10000);
+  for (const c of p.report.cells) cell[c.addr] = 1;
   const inData = new Uint8Array(0x10000);
   for (const d of p.report.data) for (let k = 0; k < d.length; k++) inData[(d.addr + k) & 0xffff] = 1;
   const length = new Uint8Array(0x10000);
@@ -248,7 +265,8 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
   const leftBehind = new Uint8Array(0x10000);
   for (let a = 0; a < 0x10000; a++) if (loaded[a] && !code[a] && !inData[a]) leftBehind[a] = 1;
 
-  // ---- the port: emu's registers and 64K, but the program's bytes as a standalone port has them
+  // ---- the port: emu's registers and 64K, but the program's bytes as a standalone port has them (Ruling 1:
+  // set straight into its memory before `load`, so the write guard `load` installs never sees them)
   const z = createZ({ model });
   const fresh = z.mem.slice();
   setZ(z, start, startMem);
@@ -272,7 +290,7 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
   const emuRead = cpu.readMemory;
   cpu.writeMemory = (addr: number, v: number): void => {
     const a = addr & 0xffff;
-    if (code[a] && selfModifying === null) selfModifying = { addr: a, pc: instrPc };
+    if (code[a] && !cell[a] && selfModifying === null) selfModifying = { addr: a, pc: instrPc };
     mark(a);
     emuWrite(addr, v);
   };
@@ -330,17 +348,19 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
   };
 
   /**
-   * One address, the port's against emu's: the port must hold emu's byte, but at a code byte what `load`
-   * left there; the keyboard as each machine reads it; the Model I's Expansion Interface not at all.
+   * One address, the port's against emu's: the port must hold emu's byte, but at a code byte that is not
+   * one of the trace's cells what `load` left there; the keyboard as each machine reads it; the Model I's
+   * Expansion Interface not at all.
    */
   const compareByte = (a: number): void => {
     if (model === 1 && a >= EXPANSION.start && a <= EXPANSION.end) return;
     const keyboard = a >= KEYBOARD.start && a <= KEYBOARD.end;
     const pv = keyboard ? z.read(a) : z.mem[a]!;
     const ev = emuMem.peekByte(a);
-    const want = code[a] ? fresh[a]! : ev;
+    const carried = code[a] && !cell[a];
+    const want = carried ? fresh[a]! : ev;
     if (pv === want) return;
-    const note = code[a] ? ` (a byte of the program's code, where the port holds what load left, ${$2(want)})` : '';
+    const note = carried ? ` (a byte of the program's code, where the port holds what load left, ${$2(want)})` : '';
     throw new Stop(`mem[${$4(a)}]`, `${$4(a)}: port ${$2(pv)}, emu ${$2(ev)}${note}`);
   };
   const compareWritten = (): void => {
@@ -462,8 +482,16 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
     }
   }
 
-  /** Step emu through the refused block to the access or instruction the refusal names; the sentence's end. */
+  /**
+   * Step emu through the refused block to the access or instruction the refusal names; the sentence's end.
+   * For the write guard's refusal, emu's own write into the code stops the run (stepEmu's Stop) with
+   * M1's sentence, naming the instruction.
+   */
   function findOnEmu(message: string): string {
+    if (GUARD.test(message)) {
+      for (let n = 0; n < SEARCH_LIMIT; n++) stepEmu();
+      return `; emu wrote no byte of the program's code in the next ${SEARCH_LIMIT.toLocaleString('en-US')} instructions`;
+    }
     const device = DEVICE.exec(message);
     const named = NAMED_AT.exec(message);
     if (device === null && named === null) return '';

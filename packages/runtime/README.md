@@ -37,6 +37,7 @@ z.out(0xff, 1);                      // z.sound is [{ t: 7, v: 1 }]
 | `af bc de hl ix iy` | 16-bit accessors over the pairs above; a setter takes the low 16 bits |
 | `iff1 iff2`, `im`, `q` | interrupt flip-flops (booleans), mode (0–2), and Q (1 when the last instruction of the block that just ended wrote the flags, for SCF and CCF) |
 | `mem` | the 64K, a `Uint8Array(65536)`; the host fills ROM and data directly, which skips the map below |
+| `guard` | the write guard `load` installs (M2): a `Uint8Array(65536)`, 1 at each byte of the port's code that is not one of its `CELLS`, where `write` throws; `null`, as a `Z` starts, guards nothing |
 | `read(addr)` `write(addr, v)` | one byte through the memory map; the address is taken to 16 bits |
 | `read16(addr)` `write16(addr, v)` | a word, low byte first, each byte through the map |
 | `in(port)` `out(port, v)` | the ports below |
@@ -59,7 +60,7 @@ the screen blank (spaces, on the Model I and III), and the rest of the 64K zero.
 | `$3000`–`$37FF` | ROM (as above) | nothing: reads `$FF`, writes lost; `$37E0`–`$37EF`, the Expansion Interface, **throws** a sentence on a read or a write |
 | `$3800`–`$3BFF` | the keyboard: a read is the OR of the rows the low byte selects; writes lost | the same |
 | `$3C00`–`$3FFF` | video RAM: `mem` | video RAM with no bit 6: a write stores `(v & $BF) \| (v & $A0 ? 0 : $40)`, as it will read |
-| `$4000`–`$FFFF` | RAM (48K) | the same |
+| `$4000`–`$FFFF` | RAM (48K); with a port loaded, a write to a byte of its code that is not one of its cells **throws** (`guard`) | the same |
 
 `'flat'` has none of this: all 64K is RAM. A Model I gate applies on the write because emu's does, so `mem`
 holds what emu's video RAM holds.
@@ -88,7 +89,9 @@ fails loud with a sentence naming it.
 It mirrors `@fugloy/emu`, which is the oracle, and cites emu's lines where it does. The tests build emu
 beside a `Z` and compare the two: every address after the same writes, the video gate for every byte value,
 the keyboard reads, the ports and the 32-column bit for every value, the R counter, the sound stamps, and the
-key table for every name emu's `m.keyboard.press` accepts, and port `$00`'s read. `test/rom.test.js` holds
+key table for every name emu's `m.keyboard.press` accepts, and port `$00`'s read. `test/guard.test.js` holds `load`'s write guard to its rule: a cell takes a write, any other code byte
+throws its sentence (a word write and a push at the byte they write first), data and the rest of memory take
+writes, and a `Z` with no port loaded has no guard. `test/rom.test.js` holds
 `$DELAY`'s stand-in to its measured time and registers for BC = 1, 2, 3, 256, 8192 and 0 (from four R
 values, bit 7 kept), and `o.standin` to the CALL's push and the RET's pop; `@fugloy/recomp`'s
 `test/standin.test.ts` runs the same calls beside emu on the game stub ROM and, locally, the user's ROM.
@@ -102,7 +105,7 @@ import { createZ, load, runPort } from '@fugloy/runtime';
 import * as port from './invaders.port.js';   // what @fugloy/recomp's port() wrote
 
 const z = createZ({ model: port.MODEL });
-load(z, port);                                // DATA, through z.write
+load(z, port);                                // DATA and CELLS, through z.write; the write guard over CODE
 runPort(z, port);                             // { reason: 'returned' }
 ```
 
@@ -112,13 +115,21 @@ Space Invaders chapter, ported for the Model III and the Model I, runs on this r
 `@fugloy/emu` runs the original through its `check.json` (`@fugloy/recomp`'s `test/learn.test.ts`).
 
 `load(z, port)` writes the port's `DATA` through `z.write`, as emu's `.CMD` loader writes a program through
-its memory, so the Model I's video RAM takes its bit 6 here too. `runPort(z, port)` runs `ENTRY` until it
+its memory, so the Model I's video RAM takes its bit 6 here too, and its `CELLS` (M2: the code bytes the
+program rewrites, each with its byte as loaded, which the instructions they are operands of read when they
+run). Then it installs the write guard over the port's `CODE` (its code's `[first, last]` ranges, none of
+whose bytes the port carries): a write to a code byte that is not one of the cells throws
+`self-modifying code: $XXXX written (the trace does not name it; run the census over a session that reaches
+this)` at the write, where the program would otherwise go on running code the port no longer matches. The
+guard is one byte an address, checked on a write to RAM; a module with no `CODE`, and a `Z` no port was loaded
+into, have none. `runPort(z, port)` runs `ENTRY` until it
 returns to the address on top of the stack as it starts: the one Fugløy's stub ROM pushes (its `RETURNED`)
 before it hands over to a program, so the runtime needs none of the stub's bytes. Both refuse a port for the
 other model.
 
 Anything a port cannot follow throws a sentence naming the address: a RET to an address other than the one
-after its CALL, a transfer to an address no block starts, a HALT, a device the runtime does not model. The
+after its CALL, a transfer to an address no block starts, a rewritten JP holding a target its trace did not
+see, a HALT, a device the runtime does not model, a write into the port's code that its trace does not name. The
 trampoline (`o.call`) adds the routine and the block it happened in, once:
 `the port does not model $FE (an I/O port; …) (in READ, in the block at $7006)`.
 
@@ -144,7 +155,7 @@ trampoline (`o.call`) adds the routine and the block it happened in, once:
 | `call (z, routine, ret)` | CALL: runs `routine`, whose RET must return to `ret`, then each routine it returns (jumps into) in turn, until one returns nothing: a trampoline, so routines that jump into each other never grow the JavaScript stack |
 | `ret (z, expected, at)` | RET: throws a sentence when the popped address (in `z.wz`) is not `expected` |
 | `standin (z, addr, ret)` | a CALL to a ROM routine the runtime stands in for (below): pushes `ret` as the CALL does, runs the stand-in, pops `ret` into MEMPTR as the RET does, and leaves Q 0; the two stack bytes stay written, as on emu. A sentence for an address with no stand-in on the model |
-| `unknown (z, target, from)`, `halt (z, at)` | the sentences (as `Error`s, which the port throws) for a transfer to an address no block starts and for a HALT |
+| `unknown (z, target, from[, known, cell])`, `halt (z, at)` | the sentences (as `Error`s, which the port throws) for a transfer to an address no block starts and for a HALT. With `known` and `cell` (M2), a JP whose target the program rewrites: the targets the trace saw and the address of the word it is read from, named with the value it holds instead |
 
 `@fugloy/recomp`'s translator writes the calls, and its test runs every instruction both as translated
 statements here and on emu's core, and requires the two equal.

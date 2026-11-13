@@ -1,7 +1,8 @@
 /**
  * A program's routines as the text of one JavaScript module: its port. The module imports the
- * runtime's helpers as `o` and exports `MODEL`, `DATA` (the program's non-code bytes), `ENTRY`, and
- * one function per routine, named from the caller's names, else the disassembler's symbols; a note at
+ * runtime's helpers as `o` and exports `MODEL`, `DATA` (the program's non-code bytes), `CODE` (its code's
+ * address ranges, none of whose bytes it carries), `CELLS` (the code bytes the program rewrites, each with
+ * its byte as loaded), `ENTRY`, and one function per routine, named from the caller's names, else the disassembler's symbols; a note at
  * a routine's start is its JSDoc. Each instruction is one statement (a line, with its address and its
  * assembly as a comment); each block begins `z.at(addr);` and ends with its tick and `z.q`.
  *
@@ -11,7 +12,9 @@
  * cases of `for (;;) switch (b)`, and a transfer to one of them sets `b`. Either way, each block is
  * written once and runs its statements, tick and `z.q` in the same order. A transfer into another
  * routine's start returns that routine (the trampoline, `o.call`, runs it next with the same return
- * address); a transfer anywhere else throws `o.unknown`'s sentence. A CALL runs its callee through
+ * address); a transfer anywhere else throws `o.unknown`'s sentence. A rewritten operand (`patched`) is
+ * read from its cell in memory; a JP whose target is rewritten goes to whichever of the trace's targets
+ * it holds, as a chain of `if`s, and throws `o.unknown`'s sentence for any other. A CALL runs its callee through
  * `o.call`, and a RET checks with `o.ret` that it returns where its CALL said. A CALL to a ROM routine
  * the runtime stands in for (`standins`) is `o.standin`.
  *
@@ -28,7 +31,7 @@ import type { Routine, Routines } from './routines.js';
 import { structure } from './structure.js';
 import type { Code, Exit } from './structure.js';
 import { translate } from './translate.js';
-import type { Translation } from './translate.js';
+import type { Cells, Translation } from './translate.js';
 
 export interface EmitInput {
   model: 1 | 3;
@@ -53,6 +56,12 @@ export interface EmitInput {
   standins: ReadonlyMap<number, string>;
   /** The program's non-code bytes, in address order. */
   data: readonly (readonly [number, Uint8Array])[];
+  /** The program's code as [first, last] address ranges, in address order (`CODE`). */
+  code: readonly (readonly [number, number])[];
+  /** The code bytes the program rewrites, each with its byte as loaded, in address order (`CELLS`). */
+  cells: readonly (readonly [number, number])[];
+  /** By instruction address: the operands it reads from memory, and for a rewritten JP nn the targets it may hold. */
+  patched: ReadonlyMap<number, { cells: Cells; targets?: number[] }>;
 }
 
 export interface Emitted {
@@ -75,7 +84,7 @@ const addr = (n: number): string => `$${hex(n & 0xffff, 4)}`;
 
 /**
  * Names a module cannot give a routine: JavaScript's reserved words and the globals it may not shadow,
- * every binding the module itself uses (the `o` import, `MODEL`, `DATA`, `ENTRY`, the global
+ * every binding the module itself uses (the `o` import, `MODEL`, `DATA`, `CODE`, `CELLS`, `ENTRY`, the global
  * `Uint8Array` `DATA` is built with), and the parameters and local of a routine (`z`, `ret`, `b`).
  */
 const RESERVED = new Set([
@@ -84,7 +93,7 @@ const RESERVED = new Set([
   'let', 'new', 'null', 'package', 'private', 'protected', 'public', 'return', 'static', 'super', 'switch', 'this', 'throw',
   'true', 'try', 'typeof', 'var', 'void', 'while', 'with', 'yield', 'arguments', 'eval', 'undefined', 'NaN', 'Infinity',
   'globalThis', 'Uint8Array', 'then',
-  'o', 'MODEL', 'DATA', 'ENTRY', 'z', 'ret', 'b',
+  'o', 'MODEL', 'DATA', 'CODE', 'CELLS', 'ENTRY', 'z', 'ret', 'b',
 ]);
 
 /**
@@ -201,6 +210,16 @@ export function emit(input: EmitInput): Emitted {
   }
   w.line(0, '];');
   w.line(0, '');
+  w.doc("The program's code, as [first, last] addresses: the port carries none of its bytes, and `load` refuses a write into it but at CELLS.");
+  w.line(0, 'export const CODE = [');
+  for (let k = 0; k < input.code.length; k += 4) w.line(2, `${input.code.slice(k, k + 4).map(([a, b]) => `[${word(a)}, ${word(b)}]`).join(', ')},`);
+  w.line(0, '];');
+  w.line(0, '');
+  w.doc("The code bytes the program rewrites (its trace's cells), as [address, byte as loaded]: their instructions read them as they run.");
+  w.line(0, 'export const CELLS = [');
+  for (const [at, v] of input.cells) w.line(2, `[${word(at)}, 0x${hex(v, 2)}],`, nameOf(at) === undefined ? undefined : `${addr(at)} ${nameOf(at)!}`);
+  w.line(0, '];');
+  w.line(0, '');
   w.doc('The routine the program starts at.');
   w.line(0, `export const ENTRY = ${routineNames.get(input.entry)!};`);
 
@@ -253,6 +272,17 @@ export function emit(input: EmitInput): Emitted {
       return nowhere(to, from, ins);
     }
 
+    /**
+     * A JP whose target the program rewrites: `if (z.wz === target)` for each target the trace saw, in
+     * address order, each the transfer there; for any other, `o.unknown`'s sentence naming the targets
+     * and the word the target is read from (`cell`).
+     */
+    function choose(expr: string, targets: readonly number[], from: number, ins: Instruction, cell: number): Stmt {
+      let rest: Stmt = { k: 'line', code: `throw o.unknown(z, ${expr}, ${word(from)}, [${targets.map(word).join(', ')}], ${word(cell)});`, leaves: true };
+      for (const t of [...targets].reverse()) rest = { k: 'if', cond: `${expr} === ${word(t)}`, then: [go(t, from, ins)], else: [rest] };
+      return rest;
+    }
+
     /** The statement for a transfer to an address no block starts: it throws `o.unknown`'s sentence. */
     function nowhere(to: number, from: number, ins: Instruction): Stmt {
       refused.push(`${addr(from)}: ${renderInstruction(ins, symbols)} goes to ${addr(to)}, where no block of the port starts; the port throws there when it runs.`);
@@ -273,8 +303,9 @@ export function emit(input: EmitInput): Emitted {
           return null;
         }
         let tr: Translation;
+        const patch = input.patched.get(at);
         try {
-          tr = translate(ins, at, { qPrev });
+          tr = translate(ins, at, { qPrev, ...(patch === undefined ? {} : { cells: patch.cells, ...(patch.targets === undefined ? {} : { targets: patch.targets }) }) });
         } catch (e) {
           errors.push((e as Error).message);
           return null;
@@ -283,7 +314,9 @@ export function emit(input: EmitInput): Emitted {
         const text = renderInstruction(ins, symbols);
         if (text.trim().toUpperCase() === 'EI') refused.push(`${addr(at)}: EI enables interrupts, which a port does not take (M1)`);
         const note = comments.get(at);
-        const comment = `${addr(at)}  ${text}${note === undefined ? '' : `  ; ${note}`}`;
+        const read = patch === undefined ? [] : cellsOf(patch.cells).map(addr);
+        const rewritten = read.length === 0 ? '' : `  ; rewritten as it runs: read from ${read.join(', ')}`;
+        const comment = `${addr(at)}  ${text}${note === undefined ? '' : `  ; ${note}`}${rewritten}`;
         // A note at the routine's start is its JSDoc; any other is a comment where it is
         for (const text of at === r.start ? [] : (notes.get(at) ?? [])) out.push({ k: 'note', text });
         if (tr.readsTime && (t !== 0 || rr !== 0)) {
@@ -305,7 +338,7 @@ export function emit(input: EmitInput): Emitted {
         const q = `z.q = ${tr.writesFlags ? 1 : 0};`;
         const tick = (cycles: number): Stmt => line(`z.tick(${t + cycles}, ${rr + tr.r}); ${q}`);
         const notTaken = tr.cyclesNotTaken ?? tr.cycles;
-        if (tr.targetExpr !== undefined && tr.flow === 'jump') {
+        if (tr.targetExpr !== undefined && tr.flow === 'jump' && tr.targets === undefined) {
           errors.push(`${addr(at)}: ${text} jumps to an address computed as it runs, which M1 does not translate (a hint naming its targets is for a later milestone).`);
           return null;
         }
@@ -314,6 +347,10 @@ export function emit(input: EmitInput): Emitted {
             out.push(...statements(tr.lines, comment), tick(tr.cycles), go(next, at, ins));
             break;
           case 'jump': {
+            if (tr.targets !== undefined) {
+              out.push(...statements(tr.lines, comment), tick(tr.cycles), choose(tr.targetExpr!, tr.targets, at, ins, patch!.cells.word!));
+              break;
+            }
             const target = tr.target!;
             if (tr.cond === undefined) {
               out.push(...statements(tr.lines, comment), tick(tr.cycles), go(target, at, ins));
@@ -459,6 +496,12 @@ type Stmt =
   | { k: 'loop'; label: string; body: Stmt[] }
   | { k: 'labelled'; label: string; body: Stmt[] }
   | { k: 'jump'; how: 'break' | 'continue'; label: string; loop: boolean };
+
+/** The addresses of an instruction's rewritten bytes, from what translate reads. */
+function cellsOf(c: Cells): number[] {
+  const word = c.word === undefined ? [] : c.half === 'lo' ? [c.word] : c.half === 'hi' ? [c.word + 1] : [c.word, c.word + 1];
+  return [...(c.disp === undefined ? [] : [c.disp]), ...(c.imm === undefined ? [] : [c.imm]), ...word];
+}
 
 const loopLabel = (at: number): string => `loop_${hex(at, 4)}`;
 const toLabel = (at: number): string => `to_${hex(at, 4)}`;

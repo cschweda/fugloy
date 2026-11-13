@@ -58,6 +58,8 @@ declare module '@fugloy/runtime' {
     iff1: boolean; iff2: boolean; im: number; q: number;
     cycles: number;
     mem: Uint8Array;
+    /** The write guard `load` installs: 1 at each code byte a write throws at; null when none is installed. */
+    guard: Uint8Array | null;
     /** The address the last block began with (the default `at` records it). */
     block: number;
     at(addr: number): void;
@@ -80,6 +82,10 @@ declare module '@fugloy/runtime' {
   export interface PortModule {
     readonly MODEL: 1 | 3;
     readonly DATA: readonly (readonly [number, Uint8Array])[];
+    /** The program's code as [first, last] addresses: none of its bytes is carried. */
+    readonly CODE?: readonly (readonly [number, number])[];
+    /** The code bytes the program rewrites, as [address, byte as loaded]. */
+    readonly CELLS?: readonly (readonly [number, number])[];
     readonly ENTRY: Routine;
   }
   export function load(z: Z, mod: PortModule): void;

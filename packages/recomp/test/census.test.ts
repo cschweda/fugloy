@@ -95,9 +95,10 @@ describe("Sea Dragon's census", () => {
     expect(values(0x509c)).toEqual([0x50]);
   });
 
-  it('finds the code the disassembly does not reach ($50C1-$50E9, behind the rewritten JP), one drop, and two ROM reads', () => {
-    // $50E7 is the range's last instruction, JP 50C1H: its bytes run to $50E9, and the IR's code resumes at $50EA
-    expect(trace.entered).toEqual([[0x50c1, 0x50e9]]);
+  it('finds no code the disassembly does not reach, one drop, and two ROM reads', () => {
+    // $50C1-$50E9, which only the rewritten JP at $509A reaches, ran in every game; the hint file's entry
+    // at $50C1 (M2 Task 4) decodes it, so nothing that ran lies outside the hinted IR's code
+    expect(trace.entered).toEqual([]);
     expect(trace.drops.map((d) => d.at)).toEqual([0x4bac]);
     expect(trace.romReads).toEqual([
       { addr: 0x0000, value: 0xf3 },

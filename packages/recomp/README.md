@@ -25,8 +25,8 @@ else console.error(result.errors.join('\n'));               // sentences: why it
 `port(cmd, opts)` ports a `.CMD` program: `@fugloy/disasm` loads and analyses it (a hint file's text in
 `opts.hints` applied; `opts.names`, a map from address to name, given to its addresses, over the hint
 file's), its IR's blocks are grouped into routines, and each instruction is translated. The result is
-`{ ok: true, js, report }` or `{ ok: false, errors }`. The same program, model, names, hints and stand-ins
-give the same module, byte for byte.
+`{ ok: true, js, report }` or `{ ok: false, errors }`. The same program, model, names, hints, stand-ins and
+trace give the same module, byte for byte.
 
 `opts.standins` (M2) maps the address of a ROM routine `@fugloy/runtime` stands in for to its name:
 `new Map([...standins(model)].map(([addr, s]) => [addr, s.name]))`, from the runtime's `standins` (recomp
@@ -34,12 +34,24 @@ does not depend on the runtime, so it takes the names). On the Model III that is
 Model I has none in M2. Without it, any CALL into the ROM is refused, as in M1. `fugloy port` passes the
 model's.
 
+`opts.trace` (M2) is the program's port trace (`parseTrace`; see *The trace and the census*): the code bytes
+it rewrites, its **cells**. Each is matched to the byte of its instruction it is, from the IR's instruction at
+or before it and `@fugloy/z80`'s decoding of it: an index displacement, an immediate (a port number counts as
+one), a byte of a word operand, or the opcode. A rewritten operand is read from its cell in memory when its
+instruction runs (below); a cell that is a prefix byte, or lies in no decoded instruction, refuses the port
+with a sentence naming it, and so, until swapped opcodes are translated, does an opcode cell, each named
+with its instruction and the values the trace saw. A trace taken of another program or another model is
+refused. Without a trace the port assumes the program rewrites none of its code, and a standalone port
+throws at a write into it.
+
 The module imports the runtime's helpers as `o` from `opts.runtimeImport` and exports:
 
 | Export | |
 |---|---|
 | `MODEL` | 1 or 3 |
 | `DATA` | every non-code region of the loaded program as `[address, Uint8Array]`, in address order, at the addresses the program runs at. No code byte is in it, and nothing in the port decodes Z80. |
+| `CODE` | the program's code as `[first, last]` address ranges (inclusive), in address order: the IR's code regions at run addresses, a relocated program's loader left out. None of their bytes is carried; `load` installs a write guard over them. |
+| `CELLS` | the trace's cells as `[address, byte]`, in address order, each with its byte as the program loads it: a rewritten operand's initial value, which the program treats as data. Empty with no trace. These are the only code bytes a port holds. |
 | `ENTRY` | the entry routine: the file's transfer address, or for a relocated program the hint file's entry (below) |
 | each routine, by name | `NAME(z, ret)`: a routine is the entry or a CALL or RST target; its blocks are those reached from its start by jumps and falling through (the address after a CALL included) without entering another routine's start. Named from `opts.names`, else the disassembler's symbols, else `SUB_XXXX`, made a JavaScript identifier; a hint note at its start is its JSDoc. |
 
@@ -60,17 +72,36 @@ iteration that repeats itself. Where the block goes:
 | a CALL of a ROM routine in `opts.standins` | the tick, then `o.standin(z, 0x0060, 0x4EAF); // $4EAC  CALL 0060H  ; $DELAY, the runtime's stand-in` (which pushes the return address itself, runs the stand-in and pops it) and on to the block after it; a CALL cc keeps its MEMPTR statement and runs `o.standin` on its taken path. Listed in `report.standins`, not `refused` |
 | a RET | the pop (into MEMPTR, as emu), the tick, then `o.ret(z, ret, 0x7010); return;`: a sentence if it popped anything but `ret` |
 | to an address no block starts (a ROM routine with no stand-in, data) | `throw o.unknown(z, 0x0050, 0x7002);`, listed in `report.refused` |
+| a `JP nn` whose target the program rewrites | `z.wz = z.mem[0x509B] \| z.mem[0x509C] << 8; // $509A  JP L509D  ; rewritten as it runs: read from $509B, $509C`, the tick, then `if (z.wz === 0x509D) { … } else { if (z.wz === 0x50C1) { … } else { throw o.unknown(z, z.wz, 0x509A, [0x509D, 0x50C1], 0x509B); } }`: a transfer for each target (below), structured as a conditional jump's arms, and for any other value a sentence naming the JP, the value, the word it is read from and the targets the trace saw |
 | HALT | `throw o.halt(z, 0x7003);`, listed in `report.refused` |
 
 A `JP (HL)`, `JP (IX)` or `JP (IY)` refuses the port (`ok: false`, a sentence naming its address), as does
 an instruction `@fugloy/z80` decodes only as `DB`, a hint file that does not parse or apply, and an entry
 that is not code.
 
+**A rewritten operand** (M2) stays one statement on one line that reads its cell, with the cell's address in
+the code and the original assembly in the comment, `; rewritten as it runs: read from $XXXX` after it. A
+displacement is sign-extended as the decoder does it, `z.wz = (z.iy + ((z.mem[0x49C1] ^ 0x80) - 0x80)) &
+0xffff;`, with MEMPTR and the T-states as the unpatched instruction's; an immediate is `z.mem[0x7005]`; a word
+is `z.mem[lo] | z.mem[lo + 1] << 8` when both its bytes are cells, and when one alone is (a program may rewrite
+only the low byte), that byte from memory and the other the constant it was loaded with (`z.mem[0x7010] |
+0x5000`), since a code byte that is not a cell is not carried and cannot change. A rewritten `JP nn`'s
+targets are the words the trace attests (the low byte's values with the high byte's, or with the byte as
+loaded where it is not a cell; when both bytes took several values the trace cannot say which went
+together, and the port is refused rather than guess), and the word as loaded where a block starts there.
+Each must be a block of the IR (an `entry` hint decodes code only such a jump reaches, as `seadrg01.hints`
+does at `$50C1`); one that is not refuses the port, naming it. The targets are the jump's block's successors,
+so they join its routine and the routine stays structured. An instruction whose rewritten operand its
+statement cannot read so (a `JR`'s or `DJNZ`'s displacement, an `IN`/`OUT` port number, a `CALL`'s or a `JP
+cc`'s target) refuses the port with a sentence naming it.
+
 **A relocated program.** When the file loads a program at one address and a loader moves it to where it
 runs (Sea Dragon's `seadrg01.cmd`: loaded at `$5200`, moved to `$497F` by 15 bytes at `$8881`), the hint
 file's `relocate` line has `@fugloy/disasm` analyse it at its run addresses. `ENTRY` is then the routine at
-the hint file's `entry` inside the relocated range (none there, or more than one, refuses the port with a
-sentence saying so), `DATA` is sliced from the analysis image at the run addresses, and the loader, the
+the hint file's `entry` inside the relocated range (none there refuses the port with a sentence; of
+several, the one the program's code reaches from the file's transfer address, so that an entry hint for code
+only a rewritten jump reaches, such as Sea Dragon's `$50C1`, is not taken for the start; two or more reached
+refuse it), `DATA` is sliced from the analysis image at the run addresses, and the loader, the
 file's transfer routine and the blocks it reaches outside the relocated range, is not translated: the port
 starts at the program's own entry with its data already where the loader would have put it, and the
 module's first comment and `report.loader` say so. What the loader leaves in the registers is the host's
@@ -81,12 +112,15 @@ program: the loader's `addr`, `length` in bytes and a one-line `note`), `routine
 `blocks`, and `labelled`: true when the blocks are a `switch`, false when the routine is structured),
 `data` (`DATA`'s `addr`, `length` and `kind`: `data` for a region the hint file types as data, `unknown` for
 one the analysis did not reach, the string heuristic's guesses included, since the disassembler types no
-data from the code's references), `refused` (each place that throws when it runs, one sentence each) and
+data from the code's references), `refused` (each place that throws when it runs, one sentence each),
 `standins` (each ROM routine the port calls a stand-in for, in address order: its `addr`, `name` and the
-`sites`, the addresses of its CALLs in order).
+`sites`, the addresses of its CALLs in order) and `cells` (M2: each of the trace's cells, in address order:
+its `addr`, the `instruction` it is a byte of, its `kind`, `disp`, `imm`, `word` or `opcode`, and the
+`values` the trace saw written; `CELLS` holds each one's initial byte). A rewritten JP's unseen target throws
+only if it is ever taken, so it is not in `refused`.
 
-`@fugloy/runtime`'s `load(z, port)` writes `DATA` into memory and `runPort(z, port)` runs `ENTRY` until it
-returns (see its README).
+`@fugloy/runtime`'s `load(z, port)` writes `DATA` and `CELLS` into memory and installs the write guard over
+`CODE`, and `runPort(z, port)` runs `ENTRY` until it returns (see its README).
 
 ### Structure
 
@@ -170,7 +204,8 @@ it names no opcode byte.
 | `cond` | A conditional transfer's condition, a boolean JavaScript expression evaluated **after** `lines` (DJNZ's is `z.b !== 0`, over B after its decrement; the rest read `z.f`). True when taken. |
 | `taken` | Statements a conditional transfer runs after `lines` only when `cond` is true: CALL cc's push, RET cc's pop, JR cc's and DJNZ's MEMPTR. |
 | `target` | The address a transfer names (JP, JR, DJNZ, CALL, RST). |
-| `targetExpr` | A computed target, an expression evaluated after `lines` and `taken`: `z.hl`, `z.ix` or `z.iy` for JP (rr); `z.wz` for RET, RET cc, RETI and RETN, whose lines pop the return address into MEMPTR. |
+| `targetExpr` | A computed target, an expression evaluated after `lines` and `taken`: `z.hl`, `z.ix` or `z.iy` for JP (rr); `z.wz` for RET, RET cc, RETI and RETN, whose lines pop the return address into MEMPTR, and for a JP nn whose target is rewritten, whose lines read it into MEMPTR. |
+| `targets` | For a JP nn whose target is rewritten (`ctx.cells.word` and `ctx.targets` given): the targets it may hold, `ctx.targets`; `emit` writes a transfer to each and `o.unknown`'s sentence otherwise. |
 | `cycles` | The T-states the tick after the instruction adds: a conditional transfer's when taken; a repeating instruction's last iteration (16). |
 | `cyclesNotTaken` | The T-states when `cond` is false; present exactly when `cond` is (JP cc's and CALL cc's are their own, 10). |
 | `r` | The R increments the tick after the instruction adds: 1, or 2 with a prefix (DD CB and FD CB too); 0 for LD R,A, whose write replaces its fetches' increments. |
@@ -186,6 +221,12 @@ left the flags alone: 1 when the previous instruction in the same block wrote th
 0 when it did not, and `null` at a block's start, where the statement reads `z.q`, which the block before
 leaves (1 when its last instruction wrote the flags).
 
+`ctx.cells` (M2) gives the operands the program rewrites, by where they are: `disp`, a displacement's byte;
+`imm`, an immediate's; `word`, a word operand's low byte, with `half` `'lo'` or `'hi'` when only that byte of
+it is rewritten. Each is read from `z.mem` as described under *port*; `ctx.targets` are a rewritten `JP nn`'s.
+A cell the instruction's statements do not read throws a sentence naming it, so no rewritten operand is ever
+translated as the constant it was loaded with.
+
 MEMPTR (`z.wz`) is set wherever emu sets it: an indexed operand's statements set it to `IX+d` or `IY+d`
 first and use it as the address, BIT n,(HL) takes bits 5 and 3 from its high byte, and EX (SP),rr writes the
 high byte before the low.
@@ -198,10 +239,12 @@ high byte before the low.
 - **Interrupts.** A port takes none: on the Model I, with interrupts enabled, emu takes the 40 Hz interrupt
   at `$0038` and the port carries on without it. `port()` lists each EI in the report's `refused` (`$XXXX: EI
   enables interrupts, which a port does not take (M1)`) and still returns `ok: true`.
-- **Self-modifying code.** M1 translates none, and `port()` does not look for it: the referee finds it, as a
-  write by emu into a byte of the program's code, and refuses the run (M2's census writes down where a
-  program does it, in a trace; see *The trace and the census*). A port of a program that patches its
-  own code, run without the referee, would run the unpatched code.
+- **Self-modifying code.** A rewritten operand the trace names is read from memory (M2); a swapped opcode is
+  refused by `port()`, naming it, until it is translated. Any other write into code is refused where it
+  happens: by the referee, as a write by emu into a byte of the program's code, and in a standalone port by
+  `load`'s write guard, which throws `self-modifying code: $XXXX written (the trace does not name it; run the
+  census over a session that reaches this)` at the write, so a port never runs on with stale code. A path
+  the census's sessions never took may rewrite a byte the trace does not name; a longer session finds it.
 - **A block reached from two routines** is translated in each, so its statements appear twice.
 - What the runtime does not model (interrupts, the devices it lists).
 
@@ -211,7 +254,7 @@ A port is proved the same program by running it beside `@fugloy/emu`: `test/refe
 is a devDependency) exports
 
 ```ts
-const result = await referee({ cmd, model: 3, names, hints, steps: check.steps });
+const result = await referee({ cmd, model: 3, names, hints, trace, steps: check.steps });
 // { ok: true, cycles, blocks, frames }
 // { ok: false, report, at: { routine, block, cycles }, field }
 ```
@@ -226,7 +269,10 @@ for a relocated program, whose loader runs first), and there gives the port's `Z
 but with every byte the `.CMD` loads, and every byte of the program's code and `DATA` at its run addresses,
 put back as a standalone port has it: none of the code bytes (they read as `load` leaves them, 0 in RAM), and
 `DATA` written by `load`. The program's code is the IR's code regions at the run addresses (from `prepare`
-in `src/port.ts`, which `port()` is built on), less the loader's. Then
+in `src/port.ts`, which `port()` is built on), less the loader's. That is set straight into the port's
+memory before `load`, so the write guard `load` installs never fires on the referee's own set-up. `trace`
+(M2), given to `port()` too, names the code bytes the program rewrites: `load` puts their initial values in,
+emu may write them, and each is compared with the port's like any byte written. Then
 the port runs with `z.at` replaced. At each block start emu is stepped until its T-states reach the port's,
 and there must be equal: the T-states, emu's PC and the block's address, every register, F, R, MEMPTR, the
 interrupt state and Q, and every byte either machine wrote since the block before. At the first block start
@@ -263,7 +309,7 @@ routine `''` and block `RETURNED`):
 |---|---|
 | `cycles`, `pc`, `a` … `hl_`, `wz`, `iff1`, `iff2`, `im`, `q` | a difference at a block start: both values, the block before and emu's last instruction in it, and the first byte of the program's code emu read as data, if any (a port has no code bytes, so a program that reads its own code is stopped at the first register or byte that read changes) |
 | `mem[$XXXX]` | a byte either machine wrote that differs, or one the end's compare finds |
-| `code` | `self-modifying code: $XXXX written by the instruction at $YYYY (M1 does not translate it)`: emu wrote into a byte of the program's code, by any instruction, whether or not the byte runs again |
+| `code` | `self-modifying code: $XXXX written by the instruction at $YYYY (M1 does not translate it)`: emu wrote into a byte of the program's code that is not one of the trace's cells, by any instruction, whether or not the byte runs again. When the port's write guard refuses the write first, emu is stepped through the block to its own write, which this sentence names. |
 | `refusal` | what the port refused as it ran, in the port's sentence; for a device, emu is stepped through the block to the same access, which names the instruction |
 | `port` | `port()` refused the program: its sentences |
 | `entry` | emu did not reach `report.entryAddr` within 10 million instructions of the load |
@@ -279,7 +325,7 @@ rewritten jump, the return addresses it drops and the ROM bytes it reads as data
 a **port trace**, a small JSON file ([`docs/port-trace-format.md`](../../docs/port-trace-format.md)). `src/trace.ts`
 exports the `PortTrace` type, `parseTrace(text, programSha256)` (pure; a sentence for text that is not a
 trace, another format version, or a trace taken of another program) and `formatTrace(trace)`, the file's
-text. `port()` does not read one yet (M2 Task 4 on).
+text. `port()` reads it as `opts.trace` (rewritten operands from M2 Task 4; see *port*).
 
 The census (`tools/census.ts`, which needs `@fugloy/emu`, so it lives in `tools/`, run with `tsx` and
 typechecked with the tests, never in `src/`) plays a program's scripted sessions, each on a fresh machine from
@@ -300,17 +346,18 @@ Expert). `recordSession(rom, session)` plays one and
 returns it as the referee's steps (each key pressed and released at the start of one of the port's blocks,
 so the referee applies it at the same instruction; a `row` check at the title, each prompt and GAME OVER; a
 last `run` to the session's end). Sea Dragon's trace: nine rewritten cells at eight sites (`$49C1`, `$4F41`,
-`$509B`–`$509C`, `$5174`, `$525E`, `$5AD0`, `$5ADD`, `$5AEA`), `$50C1`–`$50E9` entered (behind the rewritten
-`JP` at `$509A`), one drop (`$4BAC POP AF`) and two ROM reads (`$0000`, `$0003`). What the census does not
+`$509B`–`$509C`, `$5174`, `$525E`, `$5AD0`, `$5ADD`, `$5AEA`), nothing entered (`$50C1`–`$50E9`, which only the
+rewritten `JP` at `$509A` reaches, ran in every game and was `entered` until the hint file's `entry` at
+`$50C1` decoded it), one drop (`$4BAC POP AF`) and two ROM reads (`$0000`, `$0003`). What the census does not
 see (a return address removed other than by `POP`, an address `POP`ped and pushed back, an interrupt's push)
 is listed in the format's "What the census does not detect".
 
 The census and the sessions both read the hint file: `entered` is what ran and is not code in the hinted IR,
 and every key a session presses (and every row it checks) waits for the start of one of the IR's blocks. So a
-change to `seadrg01.hints` that changes its code (hinting `$50C1`–`$50E9` as code, as Task 4 does, empties
-`entered` and adds block starts, which can move a key press and so a session's length) makes
-`census.test.ts`'s `entered` and staleness checks fail on purpose: update the `entered` assertion and run
-`pnpm census` again to rewrite the trace.
+change to `seadrg01.hints` that changes its code (as hinting `$50C1`–`$50E9` as code did: it emptied
+`entered`, and its new block starts could have moved a key press and so a session's length, though here none
+did) makes `census.test.ts`'s `entered` and staleness checks fail on purpose: update the `entered` assertion
+and run `pnpm census` again to rewrite the trace.
 
 ## The Learn programs
 
@@ -372,9 +419,21 @@ ROM address with no stand-in (`$0050`, or `$0060` on the Model I) is still refus
 `test/census.test.ts` (M2) plays Sea Dragon's three sessions on the game stub ROM: each shows the title and
 reaches its GAME OVER, `recordSession` gives the same steps twice, and the census, which plays the same
 games to the same lengths, finds the eight rewritten sites with their writers (the opcode cells with their
-two values each), `$50C1`–`$50E9` entered, the drop at `$4BAC` alone and the ROM reads of `$0000` (`$F3`) and
+two values each), nothing `entered`, the drop at `$4BAC` alone and the ROM reads of `$0000` (`$F3`) and
 `$0003`; the committed `seadrg01.trace.json` must equal what the census writes now; `parseTrace` refuses a
 trace of another program, another version, or lists out of order. It needs no ROM of the user's.
+
+`test/patch.test.ts` (M2) ports programs that rewrite their own operands, each with a trace its census took
+on the game stub ROM: a table summed through `LD A,(IX+d)` with d rewritten (-4 to -1) each time round, a `JP`
+whose target is rewritten byte by byte between two blocks (one reached only through it, hinted as an
+`entry`), and an `ADD A,n` with its immediate rewritten beside a `LD HL,nn` with its low byte alone. Each
+reads its cell (`z.mem[0x…]`) where the operand was, carries the cells in `CELLS` and no other code byte, and
+passes the referee. The `JP`'s cell given a third value throws naming the cell, the value and both targets;
+without the `entry` hint the port is refused, naming the target. A program that rewrites a byte only while
+ENTER is held, which its census never pressed, is refused by the referee with M1's sentence and, run alone,
+throws the guard's sentence at the write. Sea Dragon with its hint file and trace is refused for its three
+opcode cells alone, each named; with those left out of the trace it ports, 27 routines none labelled, its
+`JP` at `$509A` going to `$509D` or `$50C1`.
 
 `test/structure.test.ts` checks the shapes: the straight line, DJNZ, diamond and nested-loop programs have
 no `switch`, every routine structured, and pass the referee on both models; the loops, the diamond's

@@ -20,7 +20,8 @@
  *     $3C00-$3FFF  video RAM: `mem`. The stock Model I's has no bit 6, so a byte is stored as it will read
  *                  and show, bit 6 = NOT (bit 5 OR bit 7): the gate is on the WRITE (:185; the Technical
  *                  Reference Handbook, p. 34, as :23-31 cite it), and `mem` holds what emu's video RAM holds
- *     $4000-$FFFF  RAM: `mem` (48K, emu's default on both models)
+ *     $4000-$FFFF  RAM: `mem` (48K, emu's default on both models); with a port loaded, a write to a byte of
+ *                  its code that is not a rewritten operand throws a sentence (`guard`, which `load` installs)
  *   'flat' has none of this: all 64K is RAM.
  *
  *   Ports (machine/io.js; the port number is its low 8 bits, as readPort and writePort take it, :476-489):
@@ -55,6 +56,13 @@ const hex = (n, width) => n.toString(16).toUpperCase().padStart(width, '0');
  * @param {number} addr
  */
 const expansionError = (addr) => new Error(`the port does not model $${hex(addr, 4)} (the Model I's Expansion Interface)`);
+
+/**
+ * The sentence for a write into a port's code that its trace does not name (the write guard, `load`).
+ * @param {number} addr
+ */
+const codeWriteError = (addr) =>
+  new Error(`self-modifying code: $${hex(addr, 4)} written (the trace does not name it; run the census over a session that reaches this)`);
 
 /**
  * The sentence for an I/O port the port does not model.
@@ -122,6 +130,14 @@ export class Z {
      */
     this.mem = new Uint8Array(0x10000);
     this.mem.fill(0x20, VIDEO_BASE, model.ramBase);
+
+    /**
+     * The write guard `load` installs from a port's `CODE` and `CELLS` (run.js): 1 at each byte of the
+     * program's code that is not a rewritten operand, where `write` throws, since the port carries none of
+     * the code and a write there would leave it running stale code. Null, the default, guards nothing.
+     * @type {Uint8Array | null}
+     */
+    this.guard = null;
 
     /**
      * Every write to port $FF, raw, as { t, v }: `t` is `cycles` at the call (emu stamps the CPU's
@@ -251,6 +267,8 @@ export class Z {
     addr &= 0xffff;
     v &= 0xff;
     if (addr >= this.ramBase) {
+      // A port's code is in RAM: `load`'s guard refuses a write into it but at a rewritten operand
+      if (this.guard !== null && this.guard[addr] === 1) throw codeWriteError(addr);
       this.mem[addr] = v;
       return;
     }

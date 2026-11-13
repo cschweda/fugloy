@@ -711,13 +711,23 @@ export function standin(z, addr, returnAddr) {
 /**
  * The sentence for a transfer to an address where no block of the port starts: an address the
  * disassembly did not find as code (outside the program, such as a ROM routine, or inside its data).
- * The port's statement throws it.
+ * The port's statement throws it. For a JP whose target the program rewrites, `known` and `cell` are
+ * given: the targets the trace saw it hold, each a block of the port, and where its target word is; the
+ * sentence names the value it holds now, which is none of them.
  * @param {Machine} z
  * @param {number} target
  * @param {number} from the transfer's address
+ * @param {readonly number[]} [known] the targets the trace saw a rewritten JP hold
+ * @param {number} [cell] the address of that JP's target word
  * @returns {Error}
  */
-export function unknown(z, target, from) {
+export function unknown(z, target, from, known, cell) {
+  if (known !== undefined && cell !== undefined) {
+    const saw = known.length === 1 ? hex4(known[0]) : `${known.slice(0, -1).map(hex4).join(', ')} and ${hex4(known[known.length - 1])}`;
+    return new Error(
+      `the transfer at ${hex4(from)} goes to ${hex4(target)}: the program rewrote its target at ${hex4(cell)} to a value the trace did not see (it saw ${saw}); run the census over a session that reaches this`,
+    );
+  }
   return new Error(`the transfer at ${hex4(from)} goes to ${hex4(target)}, where no block of the port starts (the disassembly found no code there)`);
 }
 
