@@ -165,7 +165,7 @@ creates and pushes the tag.
   translated in each.
 
 - Part 2's milestone M2, Sea Dragon's port (plan
-  `docs/superpowers/plans/2026-11-13-part2-m2-sea-dragon-port.md`, Tasks 1–7 of 9, branch
+  `docs/superpowers/plans/2026-11-13-part2-m2-sea-dragon-port.md`, all nine tasks, branch
   `part2-m2`; in the repository only, nothing published). `examples/sea-dragon/seadrg01.cmd`, the
   Model III, ports with its hint file and a **port trace** (`docs/port-trace-format.md`): a census
   (`pnpm census`, `packages/recomp/tools/census.ts`) plays three scripted games on `@fugloy/emu`
@@ -194,8 +194,40 @@ creates and pushes the tag.
   Dragon enables none); the three games are the paths those sessions take, not every path through
   the game, and what the census cannot see is listed in the trace format's document; a block
   reached from two routines is translated in each. Release coupling: the CLI depends on the
-  unpublished `@fugloy/recomp` and now `@fugloy/runtime` too. Still to come in M2: playing the port
-  in a browser.
+  unpublished `@fugloy/recomp` and now `@fugloy/runtime` too.
+
+  The screen renderer and the TRS-80's glyph tables moved from the workbench into the runtime
+  (`@fugloy/runtime/screen`), which the workbench re-exports, so the workbench and a port draw the
+  screen with one renderer (the pixels pinned before the move are unchanged).
+
+  **Sea Dragon plays in a browser** (`pnpm play examples/sea-dragon/seadrg01.cmd --model 3 --hints
+  examples/sea-dragon/seadrg01.hints --trace examples/sea-dragon/seadrg01.trace.json`). The port runs
+  in a Web Worker (`@fugloy/runtime/player`): a port's functions never yield, so the worker blocks
+  with `Atomics.wait` to keep the original's speed (the emulated clock against real time; more than a
+  quarter of a second behind, after a background tab or a stall, it moves its origin instead of
+  running fast to catch up), reads the keyboard matrix from memory it shares with the page, and posts
+  each 1/60 s of the model's clock the 1K of video RAM and the frame's writes to port `$FF`. The page
+  draws the screen on a canvas with the runtime's renderer, maps keys as the workbench does (a key let
+  go before the worker has seen it is held until its next frame; Shift with `;` types the TRS-80's
+  `:`), and plays the cassette port's levels as a square wave through WebAudio, quietly, from the
+  first key or click, dropping a frame of sound rather than letting the delay grow. `pnpm play` writes
+  `.play/<name>/` (gitignored: the port, the runtime's files, `index.html` and a manifest with the
+  game's name, authors, public-domain line, keys and start state) and serves it on localhost with
+  `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`, which
+  shared memory needs; the folder is plain static files any host sending those two headers can serve.
+  The port starts with the registers the original has at its entry on Fugløy's game stub ROM (the
+  game reads R for its random numbers before it sets it; from the reset registers it goes another way
+  once play starts). Checked by test: the clock, the sound and the keys without a browser, and the
+  worker's loop over Sea Dragon's port for 600 frames (the title, ENTER, one player, Novice, and play)
+  posting 600 screens, each equal to the emulator's video RAM at the same T-state, with the same sound
+  (`packages/recomp/test/player.test.ts`, in CI). Checked in headless Chromium: the page is
+  cross-origin isolated; 10.135 s of emulated time in 10.131 s of real time (100.0%); the title
+  animates; ENTER, `1`, `0` start a game; the sub moves left and right and fires; a game played to
+  GAME OVER returns to the title; after the page and its worker were stopped for a minute the game
+  went on at normal speed (0.25 s of game in the first 0.257 s); audio buffers with sound in them were
+  scheduled and none dropped; no console errors. Not checked: anyone listening to the sound, and a
+  tab in a real browser's background (headless Chromium kept the page visible). The player is not on
+  the site: the bundle, the arcade page and the site's headers are M3.
 
 - A Full screen button in Run ▶'s machine row; Esc leaves it (and the browser's own exit); keys keep
   reaching the TRS-80, and focus is kept. The first screen is 252,262 B gzip of its 252,775 B budget.

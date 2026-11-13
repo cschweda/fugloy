@@ -76,5 +76,17 @@ or the Model I); no interrupts (the game enables none); the paths the three
 games take, not every path through the game, so a path they never take may
 write into code or drop a return address the trace does not name, and the port
 then stops with a sentence, or read a ROM byte the trace does not name, which
-the port reads as `$00` without stopping. Playing the port in a browser comes
-next.
+the port reads as `$00` without stopping.
+
+To play the port in a browser:
+
+```sh
+pnpm play examples/sea-dragon/seadrg01.cmd --model 3 --hints examples/sea-dragon/seadrg01.hints --trace examples/sea-dragon/seadrg01.trace.json
+```
+
+It writes `.play/seadrg01/` and prints a localhost address. The port runs in a
+Web Worker at the original's speed. The arrow keys move the sub and Space
+fires; at the title Enter starts a game (then 1 or 2 players, and 0 or 1 for
+each player's skill), and in play it fires the other shot. The sound starts
+with the first key or click. `packages/recomp/test/player.test.ts` checks the
+first ten seconds against `@fugloy/emu`, screen and sound, frame by frame.

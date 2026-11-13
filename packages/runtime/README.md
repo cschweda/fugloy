@@ -119,9 +119,9 @@ is what it writes.
 Interrupts (a port takes none), the ROM (but for the stand-ins above and the ROM bytes a port carries, its
 `ROM`), the cassette, the disk controller, the printer, the Model I's Expansion
 Interface (its interrupt latch, drive select, printer and disk controller at `$37E0`–`$37EF`), the Model I's
-RAM sizes other than 48K, the Model 4, and any sound output or display: a program's writes to video RAM and
-to port `$FF` are all there is, and playing them, or putting the pixels `@fugloy/runtime/screen` draws on a
-canvas, is a host's work. What the port cannot follow fails loud with a sentence naming it.
+RAM sizes other than 48K, and the Model 4. The machine itself makes no sound and shows nothing: a program's
+writes to video RAM and to port `$FF` are all there is, and the player below is the host that shows and
+plays them. What the port cannot follow fails loud with a sentence naming it.
 
 ## How it is checked
 
@@ -235,5 +235,31 @@ names (`opts.standins`) and lists the calls in its report.
 (`ORG 0060H` / `JP 01FBH`, and the loop at `01FBH`), so a CALL takes the ROM's time on it, and with no END:
 `@fugloy/recomp`'s referee appends it to Fugløy's stub ROM to run a game on emu in CI, where a call to the
 routine runs that code beside the port's stand-in. No byte of Tandy's ROM is in the runtime.
+
+## The player
+
+`@fugloy/runtime/player` (`src/player/`, M2) plays a port in a browser: the port in a Web Worker at the
+original's speed, the screen on a canvas, the keys, and the sound. A port is ordinary functions that never
+yield (Sea Dragon's entry never returns), so the worker running it cannot take a message while the game runs.
+So the page writes the keyboard matrix into a `SharedArrayBuffer` the worker reads, the worker posts the screen
+and the sound out (posting works from synchronous code), and it keeps time by blocking with `Atomics.wait`
+whenever emulated time is ahead of real time. All of it happens in `z.at`, which a port calls at every block's
+start.
+
+| File | |
+|---|---|
+| `frame.js` | `createClock({ clockHz, now })`: `due(cycles)`, the milliseconds the port is ahead of real time at T-state `cycles`, 0 when behind; more than 250 ms behind (`BEHIND_LIMIT_MS`: a background tab, a stalled machine) it moves its origin, so the game goes on at normal speed and never runs fast to catch up. `frameHook({ z, clock, keys, counter, post, wait })`: the `z.at` that, at the first block start at or after each frame (`frameLength(clockHz)`, `clockHz / 60` T-states, each boundary computed from the T-state count), copies the shared key rows into `z.keys`, stores the frame's number in the shared counter, posts `{ type: 'frame', frame, from, to, cycles, video, sound, mode }` (a copy of the 1K of video RAM, its buffer transferred; the port `$FF` writes since the frame before; the mode register) and waits `clock.due(z.cycles)` |
+| `sound.js` | `samples(records, from, to, clockHz, sampleRate)`: the writes as a square wave, a sample's level the last write's at or before it (bits 0–1: 0 the middle, 1 high, 2 low, 3 the middle, as xtrs plays the Model I's three-level network), every position from an absolute T-state so frames tile with no rounding carried, and silence for no writes. `createAudioSchedule({ lead, maxLatency })`: each frame starts where the last ended; one that would start in the past starts `lead` (50 ms) from now; one that would start more than `maxLatency` (200 ms) ahead is dropped, so the delay from a key to its sound never grows |
+| `keys.js` | `KeyTracker(rows, frame)`: `down(e)`, `up(e)`, `update()`, `blur()` over `{ key, code, ctrlKey, metaKey, altKey }`. A key maps by the character it types, as emu's browser mapping does (`BROWSER_KEYS`; a lowercase letter is the bare key), remembered by its physical key; the workbench's Shift rule (a character key lifts the physical Shift, so Shift with `;` is the TRS-80's `:`; Shift alone or with the arrows or the space bar is SHIFT); Tab and keys with Ctrl, Cmd or Alt are never taken. A key let go before the worker's frame counter has moved past its press stays down until it has (`update`, at each frame the page receives): it is in the rows for one whole frame |
+| `worker.js` | `play({ mod, keys, counter, post, wait, now, start })`: a fresh `Z`, `load`, the start state (`begin`: SP `$FFFE` holding the stub's RETURNED, `$0016`, and the registers `start` gives), `z.at` the frame hook, `runPort`. At its end, the lines that wire it to a module worker's own `postMessage`, `Atomics.wait` and `performance.now` (run only in a worker); a refusal is posted as `{ type: 'error', message }` |
+| `page.js`, `index.html` | the page: reads `manifest.json`, shows the game's name, authors, rights and keys, starts the worker, draws each posted frame with `renderScreen` at the tube's shape, feeds key events on the canvas to a `KeyTracker`, and plays each frame's samples through WebAudio (a 20 Hz high-pass, a modest volume) from the first key or click. `globalThis.fugloyPlayer` holds the last frame, its T-state and video RAM, and counts of the audio buffers scheduled, dropped, and with sound in them |
+
+`frame.js`, `sound.js` and `keys.js` use no DOM and are tested without one (`test/player.test.js`, with a
+synthetic port in `play`); `@fugloy/recomp`'s `test/player.test.ts` runs `play` over Sea Dragon's port for 600
+frames against emu. The page and the worker are glue. Shared memory needs a **cross-origin isolated** page:
+the server must send `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy:
+require-corp`, or the page says so and stops. `@fugloy/recomp`'s `pnpm play` builds a folder of plain static
+files with the port, these files and a manifest, and serves it on localhost with those headers. The player is
+not on Fugløy's site in M2.
 
 MIT, as the rest of Fugløy.

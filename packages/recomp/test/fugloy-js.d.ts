@@ -116,3 +116,36 @@ declare module '@fugloy/runtime' {
 declare module '@fugloy/runtime/ops' {
   export {};
 }
+
+/** The browser player's loop (M2 Task 9, src/player/), which test/player.test.ts runs headlessly. */
+declare module '@fugloy/runtime/player' {
+  import type { PortModule } from '@fugloy/runtime';
+  /** What the worker posts at each frame (frame.js). */
+  export interface FrameMessage {
+    type: 'frame';
+    frame: number;
+    from: number;
+    to: number;
+    cycles: number;
+    video: Uint8Array;
+    sound: { t: number; v: number }[];
+    mode: number;
+  }
+  /** Where a standalone port starts: SP, the return address pushed there, and any registers. */
+  export interface Start {
+    sp?: number; ret?: number;
+    a?: number; f?: number; b?: number; c?: number; d?: number; e?: number; h?: number; l?: number;
+    i?: number; r?: number; ix?: number; iy?: number; wz?: number; q?: number;
+    af_?: number; bc_?: number; de_?: number; hl_?: number;
+  }
+  export const START: Readonly<Start>;
+  export function play(opts: {
+    mod: PortModule;
+    keys: Uint8Array;
+    counter?: Int32Array | null;
+    post: (message: FrameMessage, transfer: ArrayBuffer[]) => void;
+    wait: (ms: number) => void;
+    now: () => number;
+    start?: Start;
+  }): { reason: 'returned' };
+}

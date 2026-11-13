@@ -244,9 +244,8 @@ later choice; until then "upgraded and updated" means presentation and feel, not
   the referee, not by `port()`; a block reached from two routines is translated in each.
 - **M2 — Sea Dragon's port.** The `$DELAY` stand-in, the self-modification census and its sites,
   sound, the keyboard; the scripted sessions above with no difference; playable in the browser.
-  **The port and its proof are done (2026-11-13, plan
-  `docs/superpowers/plans/2026-11-13-part2-m2-sea-dragon-port.md`, Tasks 1–7 of 9, branch
-  `part2-m2`); the browser is not.** A census (`pnpm census`) plays three scripted games on emu,
+  **Done (2026-11-13, plan `docs/superpowers/plans/2026-11-13-part2-m2-sea-dragon-port.md`, all
+  nine tasks, branch `part2-m2`).** A census (`pnpm census`) plays three scripted games on emu,
   Novice, Expert and two players (Novice, then Expert), from the title to GAME OVER and back, on
   Fugløy's game stub ROM, and writes a port trace (`docs/port-trace-format.md`), committed as
   `examples/sea-dragon/seadrg01.trace.json`: eight rewritten sites (nine bytes), one dropped return
@@ -265,9 +264,29 @@ later choice; until then "upgraded and updated" means presentation and feel, not
   keyboard is the referee's: each key a session presses reaches both machines at the same block.
   Limits: `seadrg01.cmd` on the Model III only; a port takes no interrupts (Sea Dragon enables
   none); the three games are the paths those sessions take, not every path through the game, and
-  the census cannot see what `docs/port-trace-format.md` lists. **Remaining:** one screen renderer
-  in the runtime and the port playable in a browser, paced by the emulated clock, with keys and
-  sound (Tasks 8 and 9).
+  the census cannot see what `docs/port-trace-format.md` lists. The screen renderer and its glyphs
+  are the runtime's (`@fugloy/runtime/screen`), shared with the workbench (Task 8). **Playable in
+  the browser** (Task 9): the port runs in a Web Worker (`@fugloy/runtime/player`), which blocks
+  with `Atomics.wait` to keep the emulated clock with real time (more than a quarter of a second
+  behind, it moves its origin rather than run fast), reads the key matrix from memory shared with
+  the page, and posts video RAM and the port `$FF` writes each 1/60 s of the clock; the page draws
+  with the runtime's renderer and plays the cassette port's levels through WebAudio. `pnpm play`
+  writes the static folder and serves it locally with `Cross-Origin-Opener-Policy: same-origin` and
+  `Cross-Origin-Embedder-Policy: require-corp` (the plan's calls 4 and 5: not on the site until M3).
+  The port starts with emu's registers at the entry on the game stub ROM, since the game reads R
+  before it sets it. Checked by test, in CI: the clock (a wait when ahead, none when behind, no
+  catching up after a two-second stall), the sound (a square wave at absolute sample positions) and
+  the keys (the workbench's Shift rule; a key pressed and released between two frames held for one
+  whole frame), and the worker's loop over Sea Dragon's port for 600 frames, each screen and each
+  frame's sound equal to emu's at the same T-state with the same keys, from the first frame.
+  Checked in headless Chromium (a script, not a person): the page is cross-origin isolated; it ran
+  at 100.0% of the Model III's clock over ten seconds; the title animates; ENTER, `1`, `0` start a
+  game; the sub moves and fires; a game reaches GAME OVER and returns to the title; with the page
+  and its worker stopped for a minute, the game went on at normal speed; sound buffers were
+  scheduled with sound in them, none dropped; no console errors. Not checked: anyone listening, and
+  a tab in a real browser's background. A key tapped for less than a frame is held for one frame,
+  which Sea Dragon, reading the arrows once a game loop (about 47 ms), may miss, as the machine
+  would miss a press that short.
 - **M3 — The bundle and the arcade.** The plan's bundler: a per-game manifest (name, authors,
   year, machine, files, hints, rights), one static folder or `<trs80-game>` element, an arcade page
   listing the public-domain ports; Sea Dragon first.

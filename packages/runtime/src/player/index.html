@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fugløy player</title>
+<!-- The browser player (M2, @fugloy/runtime src/player/). page.js fills in the game from manifest.json.
+     Served by @fugloy/recomp's `pnpm play`, with the two cross-origin isolation headers it needs. -->
+<style>
+  :root {
+    --bg: #15171a;
+    --panel: #1d2024;
+    --text: #e8e6e1;
+    --muted: #a5a29b;
+    --rule: #33373d;
+    --accent: #e9b35a;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+  header h1 { margin: 0; font-size: 1.9rem; letter-spacing: 0.01em; }
+  header p { margin: 4px 0 0; color: var(--muted); }
+  #rights { color: var(--accent); }
+  .tube {
+    margin: 20px 0 8px;
+    display: flex;
+    justify-content: center;
+    background: #000;
+    border-radius: 10px;
+    padding: 16px 0;
+  }
+  #screen {
+    display: block;
+    max-width: 100%;
+    background: #000;
+    image-rendering: pixelated;
+    outline: none;
+  }
+  #screen:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+  #status { min-height: 1.5em; margin: 0 0 20px; color: var(--muted); }
+  h2 { font-size: 1rem; margin: 0 0 8px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 20px; margin: 0; }
+  dt { font-weight: 600; }
+  dd { margin: 0; color: var(--muted); }
+  footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 0.875rem; }
+  @media (max-width: 560px) { dl { grid-template-columns: 1fr; gap: 0; } dd { margin-bottom: 8px; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1 id="title">Loading…</h1>
+    <p id="authors"></p>
+    <p id="rights"></p>
+  </header>
+  <div class="tube"><canvas id="screen" tabindex="0" width="512" height="192" aria-label="The TRS-80's screen; keys typed here go to the game"></canvas></div>
+  <p id="status" role="status"></p>
+  <section>
+    <h2>Keys</h2>
+    <dl id="keys"></dl>
+  </section>
+  <footer>
+    A JavaScript port of the original program, made by Fugløy's recompiler: no emulator and none of the
+    program's code bytes, run at the original's speed. The TRS-80's characters are from xtrs
+    (runtime/NOTICE.md).
+  </footer>
+</main>
+<script type="module" src="runtime/player/page.js"></script>
+</body>
+</html>

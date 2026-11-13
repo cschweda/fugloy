@@ -439,6 +439,37 @@ change to `seadrg01.hints` that changes its code (as hinting `$50C1`–`$50E9` a
 did) makes `census.test.ts`'s `entered` and staleness checks fail on purpose: update the `entered` assertion
 and run `pnpm census` again to rewrite the trace.
 
+## Playing a port: `pnpm play`
+
+```sh
+pnpm play examples/sea-dragon/seadrg01.cmd --model 3 --hints examples/sea-dragon/seadrg01.hints \
+  --trace examples/sea-dragon/seadrg01.trace.json [--port 4380]
+```
+
+`tools/play.ts` (M2 Task 9; tools code, with Node and `@fugloy/emu`, never `src/`) ports the program and writes
+`.play/<name>/` (gitignored) through `tools/player.ts`'s `buildPlayer`: the port, `<name>.port.js`, importing
+the runtime as `./runtime/ops.js` (a worker has no import map), the runtime's source files with its player
+under `runtime/` (and the glyphs' `NOTICE.md`), `index.html`, and `manifest.json`: the game's name, its
+authors, its rights line and its keys (for Sea Dragon, known by its program's SHA-256, from
+`examples/sea-dragon/README.md` and the hint file's notes; another program shows its file name and the
+TRS-80's keys), the module, and the **start state** (`startState`): emu's registers at the program's entry on
+Fugløy's game stub ROM, after its loader, the state the referee starts a port from. Sea Dragon reads R (`LD
+A,R`, its random numbers) and never sets it, so from the runtime's reset registers the port goes another way
+once play starts. Then `servePlayer` serves the folder on `127.0.0.1` (port 4380, or `--port`) with
+`Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`, which the player's
+shared memory needs, and the media type of each file, and prints the URL. The folder is plain static files:
+any host sending those two headers can serve it. The player itself is `@fugloy/runtime/player` (its README).
+It is not on Fugløy's site in M2; the bundle, the arcade page and the site's headers are M3.
+
+`test/player.test.ts` (M2 Task 9, controller Ruling 3) runs the player's loop (`play`, its posting and waiting
+injected) over Sea Dragon's port, from the start state `pnpm play` writes, for 600 frames: the title, ENTER,
+`1`, `0`, then the sub climbing, firing, moving and diving. It must post 600 screens, each at the first block
+start at or after its frame's boundary and each equal to emu's video RAM at the same T-state from the entry,
+emu running the original on the game stub ROM with the same keys at the same frames, and each frame's port
+`$FF` writes equal to emu's; from the first frame. The same run from the reset registers goes another way. It
+also builds the folder in a temporary directory and checks that every import in it resolves inside it, and
+that the server sends the two headers and JavaScript's media type and refuses a path outside the folder.
+
 ## The Learn programs
 
 `test/learn.test.ts` is milestone M1's proof: every lesson (seven) and every Build Space Invaders chapter

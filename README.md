@@ -521,6 +521,8 @@ pnpm fugloy port game.cmd --model 3              # port to JavaScript: game.port
 pnpm fugloy port game.cmd --model 1 --hints game.hints -o out   # for the Model I, the hint file's names and notes, written into out/
 pnpm fugloy port examples/sea-dragon/seadrg01.cmd --model 3 --hints examples/sea-dragon/seadrg01.hints --trace examples/sea-dragon/seadrg01.trace.json
                                                  # Sea Dragon, with the trace its census took: the code it rewrites, the return address it drops, the ROM bytes it reads
+pnpm play examples/sea-dragon/seadrg01.cmd --model 3 --hints examples/sea-dragon/seadrg01.hints --trace examples/sea-dragon/seadrg01.trace.json
+                                                 # play Sea Dragon's port in a browser: writes .play/seadrg01/ and serves it on localhost
 ```
 
 `fugloy asm` exits 0 when the program assembled, 1 on an error in the source
@@ -531,7 +533,12 @@ on stderr, nothing written), the `--trace` file is malformed or was taken of
 another program (its sentence), or a file cannot be read or written, and 2
 for a usage error. A port trace
 ([format](docs/port-trace-format.md)) is what a census of the program's
-sessions saw it do that its bytes do not say; `pnpm census` takes one. For the
+sessions saw it do that its bytes do not say; `pnpm census` takes one. `pnpm
+play` (milestone M2) ports a program into `.play/<name>/`, a folder of static
+files that plays it in a browser at the original's speed, with keys and sound,
+and serves it on localhost with the two cross-origin isolation headers it needs
+(`Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Embedder-Policy:
+require-corp`; see `packages/recomp/README.md`). For the
 disassembler, the exit code is 0 on success, 1 when a file cannot be read or written, and 2
 for a usage error, a file that is neither a load module nor tokenized BASIC,
 a hint-file error, a label file written for another program, or a relocation
