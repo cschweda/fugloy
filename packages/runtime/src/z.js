@@ -26,6 +26,9 @@
  *   Ports (machine/io.js; the port number is its low 8 bits, as readPort and writePort take it, :476-489):
  *     Model III $EC-$EF  read: $FF (the RTC acknowledge, :174-180; no interrupts are modelled);
  *                        write: the mode register (:183), bit 2 the 32-column mode (:74)
+ *     Model III $00      read: $FF, as emu's Model III reads it: no device is on port $00, and a port no
+ *                        handler answers reads $FF (readPort, :476-480); Sea Dragon reads it as a joystick.
+ *                        A write to it is not modelled
  *     Model III $FF      read: $40 | mode register & $3E (:308, with no tape in the deck);
  *                        write: the raw byte to `sound` (:313); the mode register is untouched
  *     Model I $FF        read: $7F, or $3F with the 32-column bit set (:351-355, no tape);
@@ -59,7 +62,7 @@ const expansionError = (addr) => new Error(`the port does not model $${hex(addr,
  * @param {number} port
  */
 const portError = (model, port) =>
-  new Error(`the port does not model $${hex(port, 2)} (an I/O port; on the ${model === 1 ? 'Model I it models $FF' : 'Model III it models $FF and $EC-$EF'})`);
+  new Error(`the port does not model $${hex(port, 2)} (an I/O port; on the ${model === 1 ? 'Model I it models $FF' : 'Model III it models $FF, $EC-$EF and a read of $00'})`);
 
 /** The machine state a port runs on; `createZ` builds one. The fields and methods are described above and in README.md. */
 export class Z {
@@ -292,6 +295,7 @@ export class Z {
       case 3:
         if (port === 0xff) return 0x40 | (this.modeRegister & 0x3e); // io.js:308
         if (port >= 0xec && port <= 0xef) return 0xff; // io.js:177-180
+        if (port === 0x00) return 0xff; // io.js:476-480: no handler for $00, so the read floats high
         break;
       case 1:
         if (port === 0xff) return (this.modeRegister & this.modeBit ? 0x00 : 0x40) | 0x3f; // io.js:351-355

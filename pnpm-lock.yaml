@@ -142,6 +142,9 @@ importers:
       '@fugloy/recomp':
         specifier: workspace:*
         version: link:../recomp
+      '@fugloy/runtime':
+        specifier: workspace:*
+        version: link:../runtime
       '@fugloy/z80':
         specifier: workspace:*
         version: link:../z80

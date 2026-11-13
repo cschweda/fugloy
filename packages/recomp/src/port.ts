@@ -26,6 +26,12 @@ export interface PortOptions {
   runtimeImport: string;
   /** What the program is, for the module's first comment (a file name, not a path). */
   source?: string;
+  /**
+   * The ROM routines the runtime stands in for, address to name: @fugloy/runtime's `standins(model)`,
+   * by name (recomp does not depend on the runtime). A CALL to one is written as `o.standin` and is not
+   * refused; with none given, a CALL into the ROM is refused, as in M1.
+   */
+  standins?: ReadonlyMap<number, string>;
 }
 
 export interface PortReport {
@@ -44,6 +50,8 @@ export interface PortReport {
   data: { addr: number; length: number; kind: 'data' | 'unknown' }[];
   /** The places that throw a sentence if they run (a transfer to no block, a HALT), one sentence each. */
   refused: string[];
+  /** The ROM routines the port calls the runtime's stand-ins for, by address, each with its CALLs' addresses in order. */
+  standins: { addr: number; name: string; sites: number[] }[];
 }
 
 export type PortResult = { ok: true; js: string; report: PortReport } | { ok: false; errors: string[] };
@@ -173,6 +181,7 @@ export function port(cmd: Uint8Array, opts: PortOptions): PortResult {
     symbols: analysis.symbols,
     comments: analysis.annotations.comments,
     names: opts.names ?? new Map(),
+    standins: opts.standins ?? new Map(),
     data: data.map((d) => [d.addr, d.bytes] as const),
   });
   if (out.errors.length > 0) return { ok: false, errors: out.errors };
@@ -186,6 +195,9 @@ export function port(cmd: Uint8Array, opts: PortOptions): PortResult {
       routines: routines.routines.map((r) => ({ name: out.routineNames.get(r.start)!, addr: r.start, blocks: r.blocks.length, labelled: out.labelled.get(r.start)! })),
       data: data.map((d) => ({ addr: d.addr, length: d.bytes.length, kind: d.kind })),
       refused: out.refused,
+      standins: [...out.standinSites]
+        .sort(([x], [y]) => x - y)
+        .map(([at, sites]) => ({ addr: at, name: opts.standins!.get(at)!, sites: [...sites].sort((x, y) => x - y) })),
     },
   };
 }

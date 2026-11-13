@@ -22,8 +22,9 @@ emulator, a label-and-coverage file
 `fugloy port game.cmd --model 3` ports a `.CMD` program to JavaScript (Part 2 of Fugløy, milestone
 M1, in the repository only): it writes `game.port.js`, one function per routine and one statement
 per instruction, which imports `@fugloy/runtime/ops` and runs on `@fugloy/runtime`, and
-`game.port.txt`, its report (the entry, each routine and its blocks, the data regions, and the
-places that refuse if they run, with a line saying the port was not compared with the emulator, so
+`game.port.txt`, its report (the entry, each routine and its blocks, the data regions, the ROM
+routines `@fugloy/runtime` stands in for and where they are called (on the Model III, `$DELAY` at
+`$0060`; a CALL to it runs the runtime's own code, M2), and the places that refuse if they run, with a line saying the port was not compared with the emulator, so
 self-modifying code is not detected). `--model 1` ports for the Model I; `--hints <file>` applies a hint
 file, whose names name the routines and whose notes become their comments; `-o <dir>` writes the two
 files there. A program it cannot follow (a `JP (HL)`, bytes that are no instruction) is refused,

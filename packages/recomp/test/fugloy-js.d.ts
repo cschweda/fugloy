@@ -69,6 +69,14 @@ declare module '@fugloy/runtime' {
     readonly ENTRY: Routine;
   }
   export function load(z: Z, mod: PortModule): void;
+  /** A ROM routine the runtime stands in for (rom.js). */
+  export interface Standin {
+    readonly name: string;
+    run(z: Z): void;
+  }
+  export function standins(model: 1 | 3): ReadonlyMap<number, Standin>;
+  /** The Model III's stand-ins as Z80 source for @fugloy/asm, at the ROM's addresses, with no END. */
+  export const STANDINS_Z: string;
   export function runPort(z: Z, mod: PortModule): { reason: 'returned' };
 }
 

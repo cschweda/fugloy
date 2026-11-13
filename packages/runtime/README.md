@@ -70,13 +70,14 @@ holds what emu's video RAM holds.
 |---|---|---|
 | `$FF` | read `$40 \| mode & $3E`; write: the byte to `sound` | read `$7F`, or `$3F` in the 32-column mode; write: the byte to `sound`, and D0–D3 to the mode register |
 | `$EC`–`$EF` | read `$FF`; write: the mode register, bit 2 the 32-column mode | not modelled |
+| `$00` | read `$FF`, as emu reads a port no device answers (Sea Dragon's joystick read); a write is not modelled | not modelled |
 | any other | throws a sentence naming it | throws a sentence naming it |
 
 `'flat'` has no ports: they float high and a write is lost.
 
 ## What it does not model
 
-Interrupts (a port takes none), the cassette, the disk controller, the printer, the Model I's Expansion
+Interrupts (a port takes none), the ROM (but for the stand-ins above), the cassette, the disk controller, the printer, the Model I's Expansion
 Interface (its interrupt latch, drive select, printer and disk controller at `$37E0`–`$37EF`), the Model I's
 RAM sizes other than 48K, the Model 4, and any drawing or sound output: a program's writes to video RAM and
 to port `$FF` are all there is, and showing or playing them is a host's work. What the port cannot follow
@@ -87,8 +88,11 @@ fails loud with a sentence naming it.
 It mirrors `@fugloy/emu`, which is the oracle, and cites emu's lines where it does. The tests build emu
 beside a `Z` and compare the two: every address after the same writes, the video gate for every byte value,
 the keyboard reads, the ports and the 32-column bit for every value, the R counter, the sound stamps, and the
-key table for every name emu's `m.keyboard.press` accepts. `pnpm --filter @fugloy/runtime check:no-dom` links
-and loads the package in an empty `node:vm` context (emu's check), and a test scans the source for a browser or
+key table for every name emu's `m.keyboard.press` accepts, and port `$00`'s read. `test/rom.test.js` holds
+`$DELAY`'s stand-in to its measured time and registers for BC = 1, 2, 3, 256, 8192 and 0 (from four R
+values, bit 7 kept), and `o.standin` to the CALL's push and the RET's pop; `@fugloy/recomp`'s
+`test/standin.test.ts` runs the same calls beside emu on the game stub ROM and, locally, the user's ROM.
+`pnpm --filter @fugloy/runtime check:no-dom` links and loads the package in an empty `node:vm` context (emu's check), and a test scans the source for a browser or
 Node global.
 
 ## Running a port
@@ -139,9 +143,29 @@ trampoline (`o.call`) adds the routine and the block it happened in, once:
 | `push (z, v)`, `pop (z)`, `exsp (z, v)`, `exx (z)` | the stack (PUSH writes the high byte first; EX (SP),rr writes `(SP+1)` before `(SP)`) and EXX |
 | `call (z, routine, ret)` | CALL: runs `routine`, whose RET must return to `ret`, then each routine it returns (jumps into) in turn, until one returns nothing: a trampoline, so routines that jump into each other never grow the JavaScript stack |
 | `ret (z, expected, at)` | RET: throws a sentence when the popped address (in `z.wz`) is not `expected` |
+| `standin (z, addr, ret)` | a CALL to a ROM routine the runtime stands in for (below): pushes `ret` as the CALL does, runs the stand-in, pops `ret` into MEMPTR as the RET does, and leaves Q 0; the two stack bytes stay written, as on emu. A sentence for an address with no stand-in on the model |
 | `unknown (z, target, from)`, `halt (z, at)` | the sentences (as `Error`s, which the port throws) for a transfer to an address no block starts and for a HALT |
 
 `@fugloy/recomp`'s translator writes the calls, and its test runs every instruction both as translated
 statements here and on emu's core, and requires the two equal.
+
+## The ROM's stand-ins
+
+A port has no ROM. For the few ROM routines a game calls, the runtime has Fugløy's own stand-in
+(`src/rom.js`, M2): `standins(model)` maps each routine's address to `{ name, run(z) }`, where `run` does
+to the machine what the routine does from its first instruction to its RET (its T-states and R, the RET's
+included, and the registers and flags it changes; the stack is `o.standin`'s). A port calls it as
+`o.standin(z, 0x0060, 0x4EAF);` where the program CALLs the address; `@fugloy/recomp`'s `port()` is given the
+names (`opts.standins`) and lists the calls in its report.
+
+| Model | Address | Name | What it does |
+|---|---|---|---|
+| III | `$0060` | `DELAY` | pause for BC counts, BC 0 counting 65,536: 30 T-states a count and 15 more after the CALL, 5 R increments a count and 2 more; A 0, F `$44`, BC 0, nothing else changed (measured on emu with the Model III ROM) |
+| I | — | — | none in M2 |
+
+`STANDINS_Z` is the same routines as Z80 source for `@fugloy/asm`, Fugløy's own code at the ROM's addresses
+(`ORG 0060H` / `JP 01FBH`, and the loop at `01FBH`), so a CALL takes the ROM's time on it, and with no END:
+`@fugloy/recomp`'s referee appends it to Fugløy's stub ROM to run a game on emu in CI, where a call to the
+routine runs that code beside the port's stand-in. No byte of Tandy's ROM is in the runtime.
 
 MIT, as the rest of Fugløy.

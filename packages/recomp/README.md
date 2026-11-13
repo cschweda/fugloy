@@ -17,7 +17,7 @@ Version 0.1.0, built in the repository and **not published** in M1.
 ```ts
 import { port } from '@fugloy/recomp';
 
-const result = port(cmdBytes, { model: 3, names, runtimeImport: '@fugloy/runtime/ops', source: 'invaders.cmd' });
+const result = port(cmdBytes, { model: 3, names, runtimeImport: '@fugloy/runtime/ops', source: 'invaders.cmd', standins });
 if (result.ok) writeFile('invaders.port.js', result.js);   // and result.report
 else console.error(result.errors.join('\n'));               // sentences: why it cannot be ported
 ```
@@ -25,8 +25,14 @@ else console.error(result.errors.join('\n'));               // sentences: why it
 `port(cmd, opts)` ports a `.CMD` program: `@fugloy/disasm` loads and analyses it (a hint file's text in
 `opts.hints` applied; `opts.names`, a map from address to name, given to its addresses, over the hint
 file's), its IR's blocks are grouped into routines, and each instruction is translated. The result is
-`{ ok: true, js, report }` or `{ ok: false, errors }`. The same program, model, names and hints give the
-same module, byte for byte.
+`{ ok: true, js, report }` or `{ ok: false, errors }`. The same program, model, names, hints and stand-ins
+give the same module, byte for byte.
+
+`opts.standins` (M2) maps the address of a ROM routine `@fugloy/runtime` stands in for to its name:
+`new Map([...standins(model)].map(([addr, s]) => [addr, s.name]))`, from the runtime's `standins` (recomp
+does not depend on the runtime, so it takes the names). On the Model III that is `$0060`, `DELAY`; the
+Model I has none in M2. Without it, any CALL into the ROM is refused, as in M1. `fugloy port` passes the
+model's.
 
 The module imports the runtime's helpers as `o` from `opts.runtimeImport` and exports:
 
@@ -51,8 +57,9 @@ iteration that repeats itself. Where the block goes:
 | to a block of the same routine (its own start included) | structured: the block's code in place, `continue` to a loop's head, or `break` to the code after a loop or a labelled block; labelled: `b = 0x7006; continue;` |
 | into another routine's start | `return OTHER;` (the trampoline runs `OTHER` next, with the same `ret`) |
 | a CALL or RST of a routine | the push of the return address, the tick, then `o.call(z, CALLEE, 0x7005);` and on to the block after it |
+| a CALL of a ROM routine in `opts.standins` | the tick, then `o.standin(z, 0x0060, 0x4EAF); // $4EAC  CALL 0060H  ; $DELAY, the runtime's stand-in` (which pushes the return address itself, runs the stand-in and pops it) and on to the block after it; a CALL cc keeps its MEMPTR statement and runs `o.standin` on its taken path. Listed in `report.standins`, not `refused` |
 | a RET | the pop (into MEMPTR, as emu), the tick, then `o.ret(z, ret, 0x7010); return;`: a sentence if it popped anything but `ret` |
-| to an address no block starts (a ROM routine, data) | `throw o.unknown(z, 0x0060, 0x7002);`, listed in `report.refused` |
+| to an address no block starts (a ROM routine with no stand-in, data) | `throw o.unknown(z, 0x0050, 0x7002);`, listed in `report.refused` |
 | HALT | `throw o.halt(z, 0x7003);`, listed in `report.refused` |
 
 A `JP (HL)`, `JP (IX)` or `JP (IY)` refuses the port (`ok: false`, a sentence naming its address), as does
@@ -74,7 +81,9 @@ program: the loader's `addr`, `length` in bytes and a one-line `note`), `routine
 `blocks`, and `labelled`: true when the blocks are a `switch`, false when the routine is structured),
 `data` (`DATA`'s `addr`, `length` and `kind`: `data` for a region the hint file types as data, `unknown` for
 one the analysis did not reach, the string heuristic's guesses included, since the disassembler types no
-data from the code's references) and `refused` (each place that throws when it runs, one sentence each).
+data from the code's references), `refused` (each place that throws when it runs, one sentence each) and
+`standins` (each ROM routine the port calls a stand-in for, in address order: its `addr`, `name` and the
+`sites`, the addresses of its CALLs in order).
 
 `@fugloy/runtime`'s `load(z, port)` writes `DATA` into memory and `runPort(z, port)` runs `ENTRY` until it
 returns (see its README).
@@ -210,7 +219,7 @@ const result = await referee({ cmd, model: 3, names, hints, steps: check.steps }
 assembled program's own labels so): `port()` names each address by the first, and a `pcIn` step finds its
 label among all of them, so a label that shares its address with another is found.
 
-It boots emu on Fugløy's stub ROM (never the user's ROM), loads the program, ports it with `names` (and the
+It boots emu on Fugløy's stub ROM, loads the program, ports it with `names` (and the
 hint file's text in `hints`, if given), runs emu until its PC first equals `report.entryAddr` (at once, but
 for a relocated program, whose loader runs first), and there gives the port's `Z` emu's registers and 64K,
 but with every byte the `.CMD` loads, and every byte of the program's code and `DATA` at its run addresses,
@@ -227,6 +236,14 @@ program the end's compare also leaves out the bytes the loader left behind (what
 neither the program's code nor its `DATA` at its run addresses: the file's copy outside the run range, and
 the loader), which are no part of the port; a read of one still differs at the next block start, and a
 write to one is compared as any other.
+
+`rom` (M2) chooses the ROM emu runs and with it the stand-ins `port()` is given: `'stub'`, the default,
+Fugløy's stub and no stand-ins, as the Learn checks run; `'game'`, the game stub ROM (`test/game-rom.ts`'s
+`gameStubRom(model)`: the stub's source with `@fugloy/runtime`'s `STANDINS_Z` appended, Fugløy's own Z80
+for the stand-ins at the ROM's addresses, so emu runs a call to `$0060` through code that takes the ROM's
+time), booted as the stub is, and the runtime's stand-ins; or a ROM's bytes, locally the user's, which emu
+does not boot (the program is loaded into a machine just reset, and returns, if it does, to the word the
+reset stack holds), and the stand-ins. A game is refereed on `'game'` in CI, never on the user's ROM.
 
 `steps` are a `check.json`'s (`run`, `press`, `release`, `row`, `cell`, `pcIn`, as
 `packages/asm/test/lessons.test.ts` documents them). Each applies at the first block start at or after its
@@ -299,9 +316,17 @@ a RET to the wrong address and a device the runtime does not model.
 `test/relocate.test.ts` (M2) ports relocated programs: a body that runs at `$6000`, loaded at `$7000` behind
 a mover, with a hint file of disasm's own skeleton plus its `relocate` and `entry` lines, ports from `$6000`
 with its table in `DATA` at its run address and nothing in the file range, and passes the referee; the hint
-file with no entry in the range, or two, is refused with a sentence. Sea Dragon with `seadrg01.hints` ports
-from `$497F` with 27 routines, none labelled, and refuses only its six `CALL 0060H`; with no hint file its 15
-data regions are all `unknown`.
+file with no entry in the range, or two, is refused with a sentence. Sea Dragon with `seadrg01.hints` and the
+Model III's stand-ins ports from `$497F` with 27 routines, none labelled, nothing refused, and its six
+`CALL 0060H` (`$4EAC`, `$4EBC`, `$4EC6`, `$5512`, `$5F71`, `$6022`) on the runtime's `$DELAY`; without the
+stand-ins those six are refused; with no hint file its 15 data regions are all `unknown`.
+
+`test/standin.test.ts` (M2) holds the stand-in for `$DELAY` to the routine: a program calling `$0060` with BC
+= 1, 2, 3, 256, 8192 and 0 (65,536 counts), writing to video RAM between the calls, and one with a CALL cc to
+it taken and not taken, pass the referee on the game stub ROM and, locally when `fugloy.mcp.json` names a
+Model III ROM, on that ROM (skipped otherwise); the stand-in run one count short is stopped in `cycles`; the
+game stub is the plain stub but for the stand-in's ten bytes; `IN A,(00H)` reads as on emu; and a CALL to a
+ROM address with no stand-in (`$0050`, or `$0060` on the Model I) is still refused and throws when it runs.
 
 `test/structure.test.ts` checks the shapes: the straight line, DJNZ, diamond and nested-loop programs have
 no `switch`, every routine structured, and pass the referee on both models; the loops, the diamond's

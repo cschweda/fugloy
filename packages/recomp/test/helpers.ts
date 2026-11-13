@@ -18,7 +18,8 @@ export const hex = (n: number, width: number): string => n.toString(16).toUpperC
 const HALT = 0x76;
 /** Where each model's ROM space ends: the stub is padded with HALT to it, as the site pads it. */
 const ROM_END: Readonly<Record<Model, number>> = { 1: 0x3000, 3: 0x3800 };
-const stubSource = readFileSync(new URL('../../../apps/web/app/utils/emulator/stub-rom.z', import.meta.url), 'utf8');
+/** The stub ROM's source, which game-rom.ts extends with the runtime's stand-ins. */
+export const stubSource = readFileSync(new URL('../../../apps/web/app/utils/emulator/stub-rom.z', import.meta.url), 'utf8');
 
 /** `source` assembled for `model`, or an error naming the lines that did not assemble. */
 export function assembled(source: string, model: Model): AsmResult {

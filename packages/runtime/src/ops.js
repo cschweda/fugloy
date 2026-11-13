@@ -1,7 +1,8 @@
 /**
  * The helpers a port's generated statements call (`z.a = o.add8(z, z.a, z.b);`): the Z80's flag and
  * arithmetic routines, which a port imports as `@fugloy/runtime/ops`, and at the end the control a
- * port's routines share (CALL's trampoline, RET's check, the sentences for what a port cannot follow).
+ * port's routines share (CALL's trampoline, RET's check, a CALL to a ROM routine the runtime stands in
+ * for, the sentences for what a port cannot follow).
  * @fugloy/recomp's `translate` writes the calls; its test runs every instruction both ways, here and on
  * @fugloy/emu's core, and requires the two equal.
  *
@@ -11,6 +12,8 @@
  * leaves the rest of F alone. Values in are 8- or 16-bit as the registers hold them; values out are
  * masked to their width.
  */
+
+import { standins } from './rom.js';
 
 // F's bits (z80cpu.js:17-22; bits 5 and 3 are the undocumented Y and X, `_xy`, :171-174)
 const S = 0x80;
@@ -680,6 +683,29 @@ export function ret(z, expected, at) {
       `the RET at ${hex4(at)} returns to ${hex4(z.wz)}, not to ${hex4(expected)}, the address after the CALL that ran its routine (a port follows a RET only back to its CALL)`,
     );
   }
+}
+
+/**
+ * A CALL to a ROM routine the runtime stands in for (rom.js): push `returnAddr` as the CALL does (its
+ * T-states are the block's), run the stand-in, which ticks the routine's T-states and R, its RET's
+ * included, and pop the address as the RET does, into MEMPTR (emu's RET, z80cpu.js:521-528). The two
+ * bytes the push wrote stay in memory, as on emu, and Q is 0: a RET writes no flags. The port writes
+ * the call only for an address port() was given as a stand-in; on a machine that has none there, a
+ * sentence.
+ * @param {Machine} z
+ * @param {number} addr the routine's address
+ * @param {number} returnAddr the address after the CALL
+ */
+export function standin(z, addr, returnAddr) {
+  const routine = z.model === 1 || z.model === 3 ? standins(z.model).get(addr) : undefined;
+  if (routine === undefined) {
+    const model = z.model === 1 ? 'the Model I' : z.model === 3 ? 'the Model III' : `the ${String(z.model)} machine`;
+    throw new Error(`the runtime has no stand-in for the ROM routine at ${hex4(addr)} on ${model} (called to return to ${hex4(returnAddr)})`);
+  }
+  push(z, returnAddr);
+  routine.run(z);
+  z.wz = pop(z);
+  z.q = 0;
 }
 
 /**

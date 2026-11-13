@@ -8,7 +8,12 @@
  *   - emu boots Fugløy's stub ROM (apps/web/app/utils/emulator/stub-rom.z, as lessons.test.ts builds it),
  *     which clears the screen, pushes its RETURNED and halts; the .CMD is loaded, and emu runs until its
  *     PC first equals the port's entry (`report.entryAddr`): at once, unless a hint file relocates the
- *     program, when the file's loader runs first and moves it to where it runs. Never the user's ROM.
+ *     program, when the file's loader runs first and moves it to where it runs. For a game (`rom:
+ *     'game'`, M2) the stub is the game stub ROM (game-rom.ts: the stub and Fugløy's Z80 stand-ins at the
+ *     ROM's addresses), booted the same way, and port() is given the runtime's stand-ins, so a CALL to
+ *     one runs the stand-in on the port and Fugløy's Z80 for it on emu. In CI, never the user's ROM;
+ *     locally a test may pass the user's ROM bytes (`rom: <bytes>`), which emu does not boot: the program
+ *     is loaded into a machine just reset, and port() is given the stand-ins.
  *   - The port's `Z` takes emu's registers and 64K at that moment, so the stub's bytes, the screen,
  *     RETURNED on the stack and whatever the loader left in the registers are the same on both. Then
  *     every address the .CMD loads, and every address of the program's code and DATA (its run
@@ -43,12 +48,16 @@
  */
 import { Machine, parseCmd } from '@fugloy/emu';
 import { decodeAt, formatInstruction } from '@fugloy/z80';
-import { createZ, load, runPort } from '@fugloy/runtime';
+import { createZ, load, runPort, standins } from '@fugloy/runtime';
 import type { Z } from '@fugloy/runtime';
 import { port } from '../src/index.js';
 import { prepare } from '../src/port.js';
 import { RUNTIME, cpuOf, emuState, hex, importPort, memOf, runTo, setZ, stub, zState } from './helpers.js';
 import type { Model, State } from './helpers.js';
+import { gameStubRom } from './game-rom.js';
+
+/** The word at `addr` on emu, low byte first, read without a device's side effect. */
+const emuMemWord = (m: Machine, addr: number): number => m.system.memory.peekByte(addr) | (m.system.memory.peekByte((addr + 1) & 0xffff) << 8);
 
 /** A step of a lesson's `check.json`, as packages/asm/test/lessons.test.ts documents them. */
 export type Step =
@@ -72,6 +81,14 @@ export interface RefereeOptions {
   /** A hint file's text, given to `port()`; one that relocates the program makes the referee start at the port's entry. */
   hints?: string;
   steps: readonly Step[];
+  /**
+   * The ROM emu runs, and with it the stand-ins port() is given. 'stub' (the default): Fugløy's stub,
+   * no stand-ins, as the Learn checks run. 'game': the game stub ROM (game-rom.ts), booted as the stub
+   * is, and the runtime's stand-ins for the model. A ROM's bytes (the user's, locally): not booted (no
+   * ROM code runs before the load; the program starts from emu's reset state, its return address the word
+   * the reset stack holds), and the runtime's stand-ins.
+   */
+  rom?: 'stub' | 'game' | Uint8Array;
   /** For the referee's own tests: rewrites the port's module text before it runs, to plant a bug. */
   transform?: (js: string) => string;
 }
@@ -181,16 +198,19 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
   }
   checkSteps(steps, labels);
 
-  const portOptions = { model, names, runtimeImport: RUNTIME, ...(opts.hints === undefined ? {} : { hints: opts.hints }) };
+  const rom = opts.rom ?? 'stub';
+  const standinNames = new Map(rom === 'stub' ? [] : [...standins(model)].map(([at, s]) => [at, s.name]));
+  const portOptions = { model, names, runtimeImport: RUNTIME, standins: standinNames, ...(opts.hints === undefined ? {} : { hints: opts.hints }) };
   const p = port(cmd, portOptions);
   const prepared = prepare(cmd, portOptions);
   if (!p.ok || !prepared.ok) return { ok: false, report: (p.ok ? [] : p.errors).join(' '), at: { routine: '', block: parseCmd(cmd).entry, cycles: 0 }, field: 'port' };
   const mod = await importPort(opts.transform === undefined ? p.js : opts.transform(p.js));
 
-  // ---- emu: the stub booted, the program loaded, and run to the port's entry (through the loader, if any)
-  const { rom, returned } = stub(model);
-  const m = new Machine({ model, roms: { level2: rom } });
-  if (m.run({ until: 'halt', cycles: m.clockHz }).reason !== 'halt') throw new Error('the stub ROM did not start and halt');
+  // ---- emu: the stub booted (or a user's ROM reset), the program loaded, and run to the port's entry
+  // (through the loader, if any)
+  const booted = typeof rom === 'string';
+  const m = new Machine({ model, roms: { level2: rom === 'stub' ? stub(model).rom : rom === 'game' ? gameStubRom(model) : rom } });
+  if (booted && m.run({ until: 'halt', cycles: m.clockHz }).reason !== 'halt') throw new Error('the stub ROM did not start and halt');
   m.load.cmd(cmd);
   const cpu = cpuOf(m);
   if (!runTo(m, p.report.entryAddr, ENTRY_LIMIT)) {
@@ -201,6 +221,9 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
       field: 'entry',
     };
   }
+  // Where the entry returns to: the stub's RETURNED (the game stub's is the same address), or on a
+  // machine not booted the word on its stack at the entry, which runPort takes as the return address.
+  const returned = booted ? stub(model).returned : emuMemWord(m, cpu.registers.SP!);
   const emuMem = m.system.memory;
   const start = emuState(m);
   const startMem = memOf(m);
@@ -491,7 +514,7 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
     compareEnd();
   } catch (e) {
     if (!(e instanceof Stop)) throw e;
-    return stopped(e.field, explain(e, `after the program returned to the stub's RETURNED (${$4(returned)}), T-state ${since(z.cycles)} from the entry`), '', returned);
+    return stopped(e.field, explain(e, `after the program returned to ${booted ? "the stub's RETURNED" : 'the address on the reset stack'} (${$4(returned)}), T-state ${since(z.cycles)} from the entry`), '', returned);
   }
   return { ok: true, cycles: since(z.cycles), blocks, frames };
 }

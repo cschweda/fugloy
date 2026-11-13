@@ -88,6 +88,7 @@ describe('fugloy port', () => {
         ],
         data: [{ addr: 0x7020, length: 5, kind: 'data' }],
         refused: ['the transfer at $7002 goes to $0060, where no block of the program starts.'],
+        standins: [],
       },
       { source: 'game.cmd', model: 3, module: 'game.port.js' },
     );
@@ -130,6 +131,25 @@ describe('fugloy port', () => {
     expect(await run(['port', 'blank.cmd', '--model', '3', '--hints', 'bad.hints'], bad.io)).toBe(1);
     expect(bad.err.join('')).toMatch(/^fugloy port: blank\.cmd: the hint file, line 2: /);
     expect(bad.written.size).toBe(0);
+  });
+
+  it("runs Sea Dragon's six CALL 0060H on the runtime's $DELAY, and its report lists them, on the Model III only", async () => {
+    const cmd = new Uint8Array(await readFile(fileURLToPath(new URL('../../../examples/sea-dragon/seadrg01.cmd', import.meta.url))));
+    const hints = await readFile(fileURLToPath(new URL('../../../examples/sea-dragon/seadrg01.hints', import.meta.url)), 'utf8');
+    const { io, err, written } = capture({ 'seadrg01.cmd': cmd, 'seadrg01.hints': hints });
+    expect(await run(['port', 'seadrg01.cmd', '--model', '3', '--hints', 'seadrg01.hints'], io)).toBe(0);
+    expect(err.join('')).toBe('');
+    const js = written.get('seadrg01.port.js')!;
+    // Six calls; a block two routines share is written in each
+    expect(new Set(js.match(/o\.standin\(z, 0x0060, 0x[0-9A-F]{4}\);/g)).size).toBe(6);
+    const report = written.get('seadrg01.port.txt')!;
+    expect(report).toContain('ROM routines the runtime stands in for: 1\n  $0060  $DELAY  called from $4EAC, $4EBC, $4EC6, $5512, $5F71, $6022\n');
+    expect(report).toContain('Refused if they run: none');
+    // The Model I has no stand-ins in M2: the same calls are refused there
+    const m1 = capture({ 'seadrg01.cmd': cmd, 'seadrg01.hints': hints });
+    expect(await run(['port', 'seadrg01.cmd', '--model', '1', '--hints', 'seadrg01.hints'], m1.io)).toBe(0);
+    expect(m1.written.get('seadrg01.port.txt')).not.toContain('stands in for');
+    expect(m1.written.get('seadrg01.port.txt')).toContain('Refused if they run: 6');
   });
 
   it("exits 1 with port()'s sentences, writing nothing, when the program cannot be ported", async () => {

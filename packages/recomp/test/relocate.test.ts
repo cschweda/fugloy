@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { Buffer } from 'node:buffer';
 import { toCmd } from '@fugloy/asm';
 import { loadCmd, skeletonHints, writeHints } from '@fugloy/disasm';
+import { standins } from '@fugloy/runtime';
 import { describe, expect, it } from 'vitest';
 import { port } from '../src/index.js';
 import type { PortResult } from '../src/index.js';
@@ -98,17 +99,21 @@ const seaDragon = readFileSync(new URL('../../../examples/sea-dragon/seadrg01.cm
 const seaDragonHints = readFileSync(new URL('../../../examples/sea-dragon/seadrg01.hints', import.meta.url), 'utf8');
 
 describe('Sea Dragon (seadrg01.cmd)', () => {
-  it('ports with its hint file from $497F: 27 routines, none labelled, refusing the six CALL 0060H', () => {
-    const p = ok(port(seaDragon, { model: 3, hints: seaDragonHints, runtimeImport: RUNTIME, source: 'seadrg01.cmd' }));
+  it("ports with its hint file from $497F: 27 routines, none labelled, the six CALL 0060H to the runtime's $DELAY", () => {
+    const options = { model: 3 as const, hints: seaDragonHints, runtimeImport: RUNTIME, source: 'seadrg01.cmd', standins: new Map([...standins(3)].map(([at, s]) => [at, s.name])) };
+    const p = ok(port(seaDragon, options));
     expect(p.report.entryAddr).toBe(0x497f);
     expect(p.report.loader).toEqual({ addr: 0x8881, length: 15, note: expect.any(String) });
     expect(p.report.routines).toHaveLength(27);
     expect(p.report.routines.filter((r) => r.labelled)).toEqual([]);
-    expect(p.report.refused).toHaveLength(6);
-    expect(ok(port(seaDragon, { model: 3, hints: seaDragonHints, runtimeImport: RUNTIME, source: 'seadrg01.cmd' })).js, 'the same module twice').toBe(p.js);
+    expect(p.report.refused).toEqual([]);
+    expect(p.report.standins).toEqual([{ addr: 0x0060, name: 'DELAY', sites: [0x4eac, 0x4ebc, 0x4ec6, 0x5512, 0x5f71, 0x6022] }]);
+    expect(ok(port(seaDragon, options)).js, 'the same module twice').toBe(p.js);
+    // Without the stand-ins, the six calls are refused, as M1 refused any CALL into the ROM
+    const without = ok(port(seaDragon, { ...options, standins: new Map() }));
     const sites = [0x4eac, 0x4ebc, 0x4ec6, 0x5512, 0x5f71, 0x6022].map((a) => `$${hex(a, 4)}: CALL 0060H`);
     // In the order the routines are written, not by address
-    expect(p.report.refused.filter((s) => s.includes('0060')).map((s) => s.slice(0, sites[0]!.length)).sort()).toEqual(sites);
+    expect(without.report.refused.map((s) => s.slice(0, sites[0]!.length)).sort()).toEqual(sites);
     // No DATA entry in what the loader leaves behind ($8000-$8880), nor at the loader
     for (const d of p.report.data) expect(d.addr + d.length <= 0x8000, `DATA at $${hex(d.addr, 4)}`).toBe(true);
   });

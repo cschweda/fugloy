@@ -12,7 +12,8 @@
  * written once and runs its statements, tick and `z.q` in the same order. A transfer into another
  * routine's start returns that routine (the trampoline, `o.call`, runs it next with the same return
  * address); a transfer anywhere else throws `o.unknown`'s sentence. A CALL runs its callee through
- * `o.call`, and a RET checks with `o.ret` that it returns where its CALL said.
+ * `o.call`, and a RET checks with `o.ret` that it returns where its CALL said. A CALL to a ROM routine
+ * the runtime stands in for (`standins`) is `o.standin`.
  *
  * Time (Ruling 3): a block ticks its instructions' T-states and R at its end, on each path a
  * conditional transfer takes, and also just before an instruction that reads the time (`readsTime`),
@@ -48,6 +49,8 @@ export interface EmitInput {
   comments: ReadonlyMap<number, string>;
   /** The caller's names, by address; they win over the IR's. */
   names: ReadonlyMap<number, string>;
+  /** The ROM routines the runtime stands in for, address to name: a CALL to one is `o.standin`. */
+  standins: ReadonlyMap<number, string>;
   /** The program's non-code bytes, in address order. */
   data: readonly (readonly [number, Uint8Array])[];
 }
@@ -60,6 +63,8 @@ export interface Emitted {
   labelled: ReadonlyMap<number, boolean>;
   /** The places that throw a sentence when they run: transfers to no block, HALTs. */
   refused: string[];
+  /** By stand-in address, the addresses of the CALLs written as `o.standin`. */
+  standinSites: ReadonlyMap<number, ReadonlySet<number>>;
   /** What cannot be translated at all: the port is refused. */
   errors: string[];
 }
@@ -159,6 +164,7 @@ export function emit(input: EmitInput): Emitted {
   }
 
   const refused: string[] = [];
+  const standinSites = new Map<number, Set<number>>();
   const errors: string[] = [];
   const w = new Writer();
 
@@ -205,7 +211,7 @@ export function emit(input: EmitInput): Emitted {
   }
 
   // A block two routines share is translated, and so reported, in each
-  return { js: `${w.lines.join('\n')}\n`, routineNames, labelled, refused: [...new Set(refused)], errors: [...new Set(errors)] };
+  return { js: `${w.lines.join('\n')}\n`, routineNames, labelled, refused: [...new Set(refused)], standinSites, errors: [...new Set(errors)] };
 
   /** Write the routine `r`, structured where its control flow allows; true when it stays labelled. */
   function emitRoutine(r: Routine): boolean {
@@ -319,6 +325,11 @@ export function emit(input: EmitInput): Emitted {
           case 'call': {
             const target = tr.target!;
             const known = routines.starts.has(target);
+            const stood = known ? undefined : input.standins.get(target);
+            if (stood !== undefined) {
+              out.push(...standinCall(tr, ins, at, next, stood, comment, tick, notTaken));
+              break;
+            }
             const callee = known ? line(`o.call(z, ${routineNames.get(target)!}, ${word(next)});`) : nowhere(target, at, ins);
             if (tr.cond === undefined) {
               out.push(...statements(tr.lines, comment), tick(tr.cycles), callee);
@@ -346,6 +357,25 @@ export function emit(input: EmitInput): Emitted {
         return out;
       }
       return out;
+    }
+
+    /**
+     * A CALL to a ROM routine the runtime stands in for: `o.standin(z, addr, ret)` after the block's tick,
+     * where a call to a routine of the port runs `o.call`, then on to the next block. `o.standin` pushes
+     * the return address itself, so the CALL's own push is left out: an unconditional CALL's statements
+     * are its MEMPTR and that push (translate.ts, `call`), and the stand-in's RET sets MEMPTR after it;
+     * a CALL cc keeps its statement (MEMPTR, which a CALL not taken leaves) and drops the push its taken
+     * path would run.
+     */
+    function standinCall(tr: Translation, ins: Instruction, at: number, next: number, name: string, comment: string, tick: (cycles: number) => Stmt, notTaken: number): Stmt[] {
+      const target = tr.target!;
+      let sites = standinSites.get(target);
+      if (sites === undefined) standinSites.set(target, (sites = new Set()));
+      sites.add(at);
+      const said = `${comment}  ; $${name}, the runtime's stand-in`;
+      const call: Stmt = { k: 'line', code: `o.standin(z, ${word(target)}, ${word(next)});`, comment: tr.cond === undefined ? said : `$${name}, the runtime's stand-in` };
+      if (tr.cond === undefined) return [tick(tr.cycles), call, go(next, at, ins)];
+      return [...conditional({ ...tr, taken: [] }, comment, [tick(tr.cycles), call], [tick(notTaken)]), go(next, at, ins)];
     }
 
     /** A conditional transfer: its statements, then `if (cond) { taken; then }`, and `else { otherwise }` when given. */
