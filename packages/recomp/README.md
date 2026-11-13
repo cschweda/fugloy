@@ -173,6 +173,9 @@ high byte before the low.
 - **EI's delay.** EI sets both flip-flops at once; on a Z80, and in emu (`pendingEI`), interrupts are
   enabled only after the instruction that follows it. A port takes no interrupts in M1, so nothing can see
   the difference; the test compares EI with emu after EI and one NOP.
+- **Interrupts.** A port takes none: on the Model I, with interrupts enabled, emu takes the 40 Hz interrupt
+  at `$0038` and the port carries on without it. `port()` lists each EI in the report's `refused` (`$XXXX: EI
+  enables interrupts, which a port does not take (M1)`) and still returns `ok: true`.
 - **Self-modifying code.** M1 translates none, and `port()` does not look for it: the referee finds it, as a
   write by emu into a byte of the program's code, and refuses the run. A port of a program that patches its
   own code, run without the referee, would run the unpatched code.

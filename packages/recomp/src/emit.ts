@@ -76,7 +76,7 @@ const RESERVED = new Set([
   'export', 'extends', 'false', 'finally', 'for', 'function', 'if', 'implements', 'import', 'in', 'instanceof', 'interface',
   'let', 'new', 'null', 'package', 'private', 'protected', 'public', 'return', 'static', 'super', 'switch', 'this', 'throw',
   'true', 'try', 'typeof', 'var', 'void', 'while', 'with', 'yield', 'arguments', 'eval', 'undefined', 'NaN', 'Infinity',
-  'globalThis', 'Uint8Array',
+  'globalThis', 'Uint8Array', 'then',
   'o', 'MODEL', 'DATA', 'ENTRY', 'z', 'ret', 'b',
 ]);
 
@@ -265,6 +265,7 @@ export function emit(input: EmitInput): Emitted {
         }
         const next = (at + ins.length) & 0xffff;
         const text = renderInstruction(ins, symbols);
+        if (text.trim().toUpperCase() === 'EI') refused.push(`${addr(at)}: EI enables interrupts, which a port does not take (M1)`);
         const note = comments.get(at);
         const comment = `${addr(at)}  ${text}${note === undefined ? '' : `  ; ${note}`}`;
         // A note at the routine's start is its JSDoc; any other is a comment where it is

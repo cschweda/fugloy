@@ -23,7 +23,8 @@ emulator, a label-and-coverage file
 M1, in the repository only): it writes `game.port.js`, one function per routine and one statement
 per instruction, which imports `@fugloy/runtime/ops` and runs on `@fugloy/runtime`, and
 `game.port.txt`, its report (the entry, each routine and its blocks, the data regions, and the
-places that refuse if they run). `--model 1` ports for the Model I; `--hints <file>` applies a hint
+places that refuse if they run, with a line saying the port was not compared with the emulator, so
+self-modifying code is not detected). `--model 1` ports for the Model I; `--hints <file>` applies a hint
 file, whose names name the routines and whose notes become their comments; `-o <dir>` writes the two
 files there. A program it cannot follow (a `JP (HL)`, bytes that are no instruction) is refused,
 with a sentence naming the address, exit code 1, and nothing written.

@@ -95,6 +95,7 @@ describe('fugloy port', () => {
         'game.cmd, ported for the Model III by @fugloy/recomp 0.1.0',
         'Module: game.port.js (imports @fugloy/runtime/ops)',
         'Entry: START',
+        'This port was not compared with the emulator. Self-modifying code is not detected here: a program that changes its own code will run wrong.',
         '',
         'Routines: 2 (1 labelled)',
         '  $7000  START  3 blocks  labelled',

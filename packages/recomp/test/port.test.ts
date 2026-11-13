@@ -246,7 +246,7 @@ READ:   LD      HL,TABLE
         LD      (5000H),A
         RET
 TABLE:  DB      7`), 3);
-    for (const taken of ['Uint8Array', 'MODEL', 'DATA', 'ENTRY', 'o', 'z', 'ret', 'b']) {
+    for (const taken of ['Uint8Array', 'MODEL', 'DATA', 'ENTRY', 'o', 'z', 'ret', 'b', 'then']) {
       const names = namesOf(r);
       names.set(r.symbol('READ')!.value, taken);
       const p = portOk(r, 3, { names });
@@ -255,6 +255,25 @@ TABLE:  DB      7`), 3);
       expect(mod.DATA[0]![1]).toBeInstanceOf(Uint8Array);
       await expectSameAsEmu(r, 3, p.js);
     }
+  });
+
+  it('says each EI in the report: a port takes no interrupts, and the Model I interrupts at 40 Hz', () => {
+    const withEi = assembled(program(`
+START:  LD      A,1
+        EI
+        LD      B,A
+        EI
+        RET`), 1);
+    const p = portOk(withEi, 1);
+    expect(p.report.refused).toEqual([
+      '$7002: EI enables interrupts, which a port does not take (M1)',
+      '$7004: EI enables interrupts, which a port does not take (M1)',
+    ]);
+    const without = assembled(program(`
+START:  LD      A,1
+        DI
+        RET`), 1);
+    expect(portOk(without, 1).report.refused).toEqual([]);
   });
 
   it('gives each routine its own name when names collide, even after a suffix, and SUB_XXXX for an empty one', async () => {

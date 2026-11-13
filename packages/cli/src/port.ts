@@ -50,6 +50,7 @@ export function formatReport(report: PortReport, about: { source: string; model:
     `${about.source}, ported for ${modelName(about.model)} by @fugloy/recomp ${RECOMP_VERSION}`,
     `Module: ${about.module} (imports ${RUNTIME_IMPORT})`,
     `Entry: ${report.entry}`,
+    'This port was not compared with the emulator. Self-modifying code is not detected here: a program that changes its own code will run wrong.',
     '',
   ];
   const labelled = report.routines.filter((r) => r.labelled).length;

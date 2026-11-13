@@ -228,12 +228,12 @@ later choice; until then "upgraded and updated" means presentation and feel, not
   programs and then every Learn lesson and Space Invaders chapter (`apps/web/content/learn/`):
   they call no ROM, their sources are known, and each already has a `check.json` screen. Done when
   every lesson and chapter's port matches the emulator for its check run, in CI.
-  **Done (2026-11-13, plan `docs/superpowers/plans/2026-10-23-part2-m1-port-pipeline.md`, Tasks
-  1–5 of 6, branch `part2-m1`).** All 19 programs (lessons 1–7, chapters 1–12) on both models their
+  **Done (2026-11-13, plan `docs/superpowers/plans/2026-10-23-part2-m1-port-pipeline.md`, all six
+  tasks, branch `part2-m1`).** All 19 programs (lessons 1–7, chapters 1–12) on both models their
   `check.json` names, the Model III and the Model I (38 runs), are assembled, ported with their own
   labels as names, and refereed through their check steps in the suite CI runs
   (`packages/recomp/test/learn.test.ts`, about 61 s locally): all 38 match emu at every block start
-  and every frame. Their ports hold 129 routines and 717 blocks on each model; Task 6 writes all 129
+  and every frame. Their ports hold 129 routines and 717 blocks on each model; Task 6 wrote all 129
   as structured code (loops, `if`/`else`, `break` and `continue`), none labelled (a `switch` over its
   blocks, kept for a routine whose loop is entered other than at its head), 486,570 bytes of
   JavaScript in all (572,788 as labelled blocks). None of the programs writes into its
