@@ -11,7 +11,7 @@
  * same-origin` and `Cross-Origin-Embedder-Policy: require-corp`. Without them the page says so and stops.
  *
  * `globalThis.fugloyPlayer` holds a few counts for a person or a test watching the page: the last frame
- * posted, its T-state and its video RAM, and the audio buffers scheduled, dropped, and with a change of level
+ * posted, its T-state and its video RAM, the key rows shared with the worker, and the audio buffers scheduled, dropped, and with a change of level
  * in them (a sound).
  */
 import { modelOf } from '../model.js';
@@ -24,7 +24,7 @@ const VOLUME = 0.12;
 /** A high-pass below hearing takes out the level a port leaves standing, so a held level never clicks. */
 const DC_BLOCK_HZ = 20;
 
-const stats = { frame: 0, cycles: 0, video: /** @type {Uint8Array | null} */ (null), buffers: 0, dropped: 0, loud: 0, audio: false };
+const stats = { frame: 0, cycles: 0, video: /** @type {Uint8Array | null} */ (null), keys: /** @type {Uint8Array | null} */ (null), buffers: 0, dropped: 0, loud: 0, audio: false };
 /** @type {any} */ (globalThis).fugloyPlayer = stats;
 
 /** @param {string} id */
@@ -56,7 +56,9 @@ async function main() {
   const keyMemory = new SharedArrayBuffer(8);
   const counterMemory = new SharedArrayBuffer(4);
   const counter = new Int32Array(counterMemory);
-  const tracker = new KeyTracker(new Uint8Array(keyMemory), () => Atomics.load(counter, 0));
+  const rows = new Uint8Array(keyMemory);
+  stats.keys = rows;
+  const tracker = new KeyTracker(rows, () => Atomics.load(counter, 0));
 
   // ---- the screen
   const canvas = /** @type {HTMLCanvasElement} */ (byId('screen'));
@@ -143,7 +145,8 @@ async function main() {
   // ---- the keys, on the canvas
   canvas.addEventListener('keydown', (e) => {
     startAudio();
-    if (tracker.down(e)) e.preventDefault();
+    // The browser's own auto-repeat is passed over here; the tracker also takes a repeat as nothing
+    if (e.repeat ? tracker.holds(e) : tracker.down(e)) e.preventDefault();
   });
   canvas.addEventListener('keyup', (e) => {
     if (tracker.up(e)) e.preventDefault();

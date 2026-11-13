@@ -209,7 +209,8 @@ creates and pushes the tag.
   two seconds at once), reads the keyboard matrix from memory it shares with the page, and posts
   each 1/60 s of the model's clock the 1K of video RAM and the frame's writes to port `$FF`. The page
   draws the screen on a canvas with the runtime's renderer, maps keys as the workbench does (a key let
-  go early is held for nine frames, 150 ms, from its press, so a quick tap is still seen by a game that
+  go early is held for nine frames, 150 ms, from its first press (a key-down the browser repeats is not
+  a new press), so a quick tap is still seen by a game that
   reads its keys once a pass of its loop: Sea Dragon's reads of its controls in play are up to 127 ms
   apart at Novice, 92 ms at Expert; Shift with `;` types the TRS-80's `:`), and plays the cassette port's levels as a square wave through WebAudio, quietly, from the
   first key or click, dropping a frame of sound rather than letting the delay grow. `pnpm play` writes
@@ -225,13 +226,16 @@ creates and pushes the tag.
   (`packages/recomp/test/player.test.ts`, in CI). Checked in headless Chromium: the page is
   cross-origin isolated; 10.135 s of emulated time in 10.131 s of real time (100.0%); the title
   animates; ENTER, `1`, `0` start a game, typed as instant taps too; the sub moves left and right,
-  held and on instant taps of the arrows; a game played to
+  held and on instant taps of the arrows, and a held arrow let go stops it within one of the game's
+  polls (the shared key row clears at the key-up, the browser's repeats notwithstanding); SPACE fires,
+  on an instant tap too (a shot runs right along the surface row, and in a headless A/B run of the port
+  a second of SPACE adds the shot to the screen and writes to port `$FF` that the same run with no key
+  does not); a game played to
   GAME OVER returns to the title; after the page and its worker were stopped for a minute the game
   went on at normal speed (0.25 s of game in the first 0.257 s); audio buffers with sound in them were
-  scheduled and none dropped; no console errors. Not checked: anyone listening to the sound; a
+  scheduled and none dropped; no console errors. Not checked: anyone listening to the sound, and a
   tab in a real browser's background (headless Chromium kept the page visible, so the minute was a
-  stopped process instead); and that SPACE fires (no shot could be told apart on the screen in the
-  checks). A second, independent look at the page, in another headless browser, saw the title drawn. The player is not on
+  stopped process instead). A second, independent look at the page, in another headless browser, saw the title drawn. The player is not on
   the site: the bundle, the arcade page and the site's headers are M3.
 
 - A Full screen button in Run ▶'s machine row; Esc leaves it (and the browser's own exit); keys keep

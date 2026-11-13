@@ -94,7 +94,10 @@ export class KeyTracker {
   }
 
   /**
-   * A key went down. Returns true when it is the TRS-80's, so the page prevents the browser's default.
+   * A key went down. Returns true when it is the TRS-80's, so the page prevents the browser's default. A
+   * key already down and not let go is a repeat (the browser's auto-repeat sends `keydown` again and
+   * again while a key is held): it changes nothing, so its hold is counted from its first press and it is
+   * let go at once when it goes up after `minHold` frames.
    * @param {KeyEvent} e
    * @returns {boolean}
    */
@@ -107,6 +110,8 @@ export class KeyTracker {
     }
     const keys = BROWSER_KEYS.get(e.key);
     if (keys === undefined) return false;
+    const held = this.#down.get(e.code);
+    if (held !== undefined && !held.released) return true;
     // A character (not the space bar) lifts the physical Shift while it is down
     const char = e.key.length === 1 && e.key !== ' ';
     this.#down.set(e.code, { keys, char, pressed: this.frame(), released: false });
@@ -144,6 +149,16 @@ export class KeyTracker {
       }
     }
     if (changed) this.#write();
+  }
+
+  /**
+   * True when the key `e` names (by its physical key) is down here: what the page answers for a repeat it
+   * passes over, so the browser's default stays prevented for a key the tracker holds.
+   * @param {KeyEvent} e
+   * @returns {boolean}
+   */
+  holds(e) {
+    return this.#shifts.has(e.code) || this.#down.has(e.code);
   }
 
   /** The page lost the keyboard: every key up at once, held-over ones too. */

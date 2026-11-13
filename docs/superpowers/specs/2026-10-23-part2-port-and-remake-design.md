@@ -276,19 +276,22 @@ later choice; until then "upgraded and updated" means presentation and feel, not
   The port starts with emu's registers at the entry on the game stub ROM, since the game reads R
   before it sets it. Checked by test, in CI: the clock (a wait when ahead, none when behind, no
   catching up after a two-second stall), the sound (a square wave at absolute sample positions) and
-  the keys (the workbench's Shift rule; a key pressed and released at once held for nine frames,
+  the keys (the workbench's Shift rule; a key's repeated key-downs not restarting its hold; a key
+  pressed and released at once held for nine frames,
   150 ms, above the longest gap measured between Sea Dragon's reads of its controls in play, 127 ms
   at Novice), and the worker's loop over Sea Dragon's port for 600 frames, each screen and each
   frame's sound equal to emu's at the same T-state with the same keys, from the first frame.
   Checked in headless Chromium (a script, not a person): the page is cross-origin isolated; it ran
   at 100.0% of the Model III's clock over ten seconds; the title animates; ENTER, `1`, `0` start a
-  game, typed as instant taps too; the sub moves, held and on instant taps of the arrows; a game
+  game, typed as instant taps too; the sub moves, held and on instant taps of the arrows, and stops
+  within one of the game's polls of a held arrow's key-up; SPACE fires, on an instant tap too (a shot
+  runs right along the surface row; a headless A/B run of the port shows the shot and its sound
+  appear with SPACE and not without); a game
   reaches GAME OVER and returns to the title; with the page and its worker stopped for a minute
   (SIGSTOP of the browser's renderer: a stall, not a background tab), the game went on at normal
   speed; sound buffers were scheduled with sound in them, none dropped; no console errors. A second,
   independent look at the page, in another headless browser, saw the title drawn. Not checked:
-  anyone listening; a tab in a real browser's background; and that SPACE fires (no shot could be
-  told apart on the screen in the checks).
+  anyone listening, and a tab in a real browser's background.
 - **M3 — The bundle and the arcade.** The plan's bundler: a per-game manifest (name, authors,
   year, machine, files, hints, rights), one static folder or `<trs80-game>` element, an arcade page
   listing the public-domain ports; Sea Dragon first.

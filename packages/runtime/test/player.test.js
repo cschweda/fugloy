@@ -295,6 +295,37 @@ describe('the keys', () => {
     expect(rows[6]).toBe(0x00);
   });
 
+  it("lets go at once of a key held past the hold with the browser's repeating key-downs", () => {
+    const { rows, tracker, copy, ev } = tracked();
+    tracker.down(ev('ArrowRight', 'ArrowRight'));
+    // Held for a second: the browser repeats its keydown every other frame
+    for (let k = 0; k < 60; k++) {
+      copy();
+      if (k % 2 === 1) expect(tracker.down(ev('ArrowRight', 'ArrowRight'))).toBe(true);
+    }
+    expect(rows[6]).toBe(0x40);
+    tracker.up(ev('ArrowRight', 'ArrowRight'));
+    // Out of the rows at once, and out of the worker's next copy
+    expect(rows[6]).toBe(0x00);
+    expect(copy()[6]).toBe(0x00);
+  });
+
+  it('says which keys it holds (for a repeat the page passes over), and starts a new hold for a key pressed again while held over', () => {
+    const { rows, tracker, copies, ev } = tracked();
+    expect(tracker.holds(ev('ArrowUp', 'ArrowUp'))).toBe(false);
+    tracker.down(ev('ArrowUp', 'ArrowUp'));
+    tracker.down(ev('Shift', 'ShiftLeft'));
+    expect(tracker.holds(ev('ArrowUp', 'ArrowUp'))).toBe(true);
+    expect(tracker.holds(ev('Shift', 'ShiftLeft'))).toBe(true);
+    tracker.up(ev('ArrowUp', 'ArrowUp')); // held over
+    copies(4);
+    tracker.down(ev('ArrowUp', 'ArrowUp')); // a new press, four frames into the hold
+    tracker.up(ev('ArrowUp', 'ArrowUp'));
+    // The new press is held its own nine frames, counted from it
+    expect(copies(MIN_HOLD_FRAMES).map((r) => r[6])).toEqual(Array(MIN_HOLD_FRAMES).fill(0x08));
+    expect(rows[6]).toBe(0x00);
+  });
+
   it('takes another hold from its options', () => {
     const rows = new Uint8Array(8);
     let frame = 0;
