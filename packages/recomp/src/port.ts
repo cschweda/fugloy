@@ -12,11 +12,15 @@
  * With a trace (M2; trace.ts), each code byte the program rewrites (a cell) is matched to the byte of
  * its instruction it is: a rewritten displacement, immediate or word operand is read from memory when
  * the instruction runs, and the module carries the cell's initial value (`CELLS`); a rewritten JP nn goes
- * to each target the trace saw it hold. The module's `CODE` lets the runtime refuse a write into any
- * other code byte.
+ * to each target the trace saw it hold. A rewritten opcode makes its instruction a choice (a variant
+ * site): one instruction per value the trace saw there and the value as loaded, each decoded here from
+ * the bytes as loaded with the cell's byte replaced and translated ahead of time; the site is a block of
+ * its own whose successors are every variant's, and any the analysis did not reach is given to it as a
+ * root. The module's `CODE` lets the runtime refuse a write into any other code byte.
  */
-import { analyze, applyHints, buildIr, detectFormat, emptyAnnotations, loadCmd, parseHints, programHash, renderInstruction } from '@fugloy/disasm';
-import type { Analysis, Annotations, BasicBlock, Ir } from '@fugloy/disasm';
+import { analyze, applyHints, buildIr, detectFormat, emptyAnnotations, endsPath, loadCmd, parseHints, programHash, renderInstruction, targetOf } from '@fugloy/disasm';
+import type { Analysis, Annotations, BasicBlock, Ir, Successor } from '@fugloy/disasm';
+import { decode } from '@fugloy/z80';
 import type { Instruction } from '@fugloy/z80';
 import { emit } from './emit.js';
 import { routinesOf } from './routines.js';
@@ -58,6 +62,19 @@ export interface PortCell {
   kind: 'disp' | 'imm' | 'word' | 'opcode';
   /** The values the trace saw written to it. */
   values: number[];
+  /**
+   * For an opcode: the instruction for each value the port chooses between (each the trace saw, and the
+   * value as loaded), by value, as assembly.
+   */
+  variants?: string[];
+}
+
+/** An instruction whose opcode the program rewrites: its cell, and one instruction per value it may hold. */
+export interface VariantSite {
+  /** The opcode byte the program rewrites (the instruction's first byte, or the one after a prefix). */
+  cell: number;
+  /** By value: each the trace saw there, and the value as loaded; each decoded from the bytes as loaded with the cell's byte replaced. */
+  variants: { value: number; ins: Instruction }[];
 }
 
 export interface PortReport {
@@ -107,6 +124,8 @@ export interface Prepared {
   cells: PortCell[];
   /** By instruction address, the operands it reads from memory and, for a rewritten JP nn, the targets it may hold. */
   patched: ReadonlyMap<number, { cells: Cells; targets?: number[] }>;
+  /** By instruction address, the instructions whose opcode the program rewrites: each a block of its own. */
+  variants: ReadonlyMap<number, VariantSite>;
 }
 
 const addr = (n: number): string => `$${n.toString(16).toUpperCase().padStart(4, '0')}`;
@@ -141,12 +160,13 @@ function roles(ins: Instruction): Role[] | null {
 const KIND: Record<Exclude<Role, 'prefix'>, PortCell['kind']> = { opcode: 'opcode', disp: 'disp', rel: 'disp', imm: 'imm', port: 'imm', lo: 'word', hi: 'word' };
 
 /**
- * The trace's cells, each matched to the instruction byte it is (from the IR's instruction at or before
+ * The trace's cells, each matched to the instruction byte it is (from the decoded instruction that covers
  * it), and by instruction the operands to read from memory; a rewritten JP nn's targets, each of which
- * must be a block of the port. Sentences for a cell in no decoded instruction, a prefix byte, and a
- * target where no block starts.
+ * must be a block of the port. Sentences for a cell two decoded instructions cover, a cell in no decoded
+ * instruction, a prefix byte, and a target where no block starts. Exported for the tests, which give it a
+ * pass 1 holding two decodes over one byte.
  */
-function matchCells(
+export function matchCells(
   trace: PortTrace,
   analysis: Analysis,
   isBlock: (a: number) => boolean,
@@ -160,11 +180,18 @@ function matchCells(
   /** By instruction: its word cells' values, low and high (undefined where that byte is not a cell). */
   const words = new Map<number, { lo?: number[]; hi?: number[] }>();
   for (const p of trace.patches) {
-    let at: number | undefined;
-    for (let back = 0; back < 4 && at === undefined; back++) {
+    // Every decoded instruction that covers the cell (an instruction is at most four bytes)
+    const covering: number[] = [];
+    for (let back = 3; back >= 0; back--) {
       const ins = instructions.get((p.addr - back) & 0xffff);
-      if (ins !== undefined && back < ins.length) at = (p.addr - back) & 0xffff;
+      if (ins !== undefined && back < ins.length) covering.push((p.addr - back) & 0xffff);
     }
+    if (covering.length > 1) {
+      const which = listed(covering.map((a) => `${text(instructions.get(a)!)} at ${addr(a)}`));
+      errors.push(`${addr(p.addr)}: the trace says the program rewrites this byte, which ${covering.length === 2 ? 'two' : String(covering.length)} instructions the disassembly decoded cover (${which}); a port cannot tell which of them the byte belongs to.`);
+      continue;
+    }
+    const at: number | undefined = covering[0];
     const ins = at === undefined ? undefined : instructions.get(at)!;
     const role = ins === undefined ? undefined : roles(ins)?.[(p.addr - at!) & 0xffff];
     if (ins === undefined || role === undefined) {
@@ -215,6 +242,84 @@ function matchCells(
   return { cells, patched, errors };
 }
 
+/** The successors of a block that ends in `ins` at `at`, as @fugloy/disasm's basicBlocks gives them; a target not loaded is external. */
+function successorsOf(ins: Instruction, at: number, loaded: (a: number) => boolean): Successor[] {
+  const out: Successor[] = [];
+  const target = targetOf(ins);
+  if (target !== null) {
+    const kind = ins.flow.kind === 'call' ? (ins.operands[0]?.kind === 'rst' ? 'rst' : ins.flow.conditional ? 'ccall' : 'call') : ins.flow.conditional ? 'cjump' : 'jump';
+    out.push({ to: target, kind: loaded(target) ? kind : 'external' });
+  }
+  if (!endsPath(ins)) out.push({ to: (at + ins.length) & 0xffff, kind: 'next' });
+  return out;
+}
+
+/**
+ * The instructions an opcode cell makes of its instruction: one per value the trace saw there and the
+ * value as loaded, by value, each decoded from the bytes as loaded with the cell's byte replaced. Sentences
+ * for a value @fugloy/z80 decodes only as DB, one that makes the cell a prefix (the instruction would run
+ * on into bytes the analysis reads as other instructions), and a variant with another byte that is not
+ * code the disassembly decoded (no write guard would keep it) or is itself rewritten (`rewritten`).
+ */
+function variantSite(cell: PortCell, analysis: Analysis, rewritten: ReadonlySet<number>): { site: VariantSite } | { errors: string[] } {
+  const at = cell.instruction;
+  const bytes = analysis.space.image.bytes;
+  const loaded = analysis.pass1.instructions.get(at)!;
+  const text = (ins: Instruction): string => renderInstruction(ins, analysis.symbols);
+  const said = `${addr(cell.addr)}: the program rewrites the opcode of ${text(loaded)} at ${addr(at)}`;
+  const values = [...new Set([...cell.values, bytes[cell.addr]!])].sort((x, y) => x - y);
+  const errors: string[] = [];
+  const variants: VariantSite['variants'] = [];
+  for (const value of values) {
+    const ins = decode((i) => {
+      const a = (at + i) & 0xffff;
+      return a === cell.addr ? value : bytes[a];
+    }, at);
+    const role = roles(ins)?.[(cell.addr - at) & 0xffff];
+    const spelled = ins.bytes.map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+    if (ins.mnemonic === 'DB' || role === undefined) {
+      errors.push(`${said} to ${byteHex(value)}, and @fugloy/z80 reads ${spelled} there only as DB, so the port has no instruction to translate for it.`);
+      continue;
+    }
+    if (role !== 'opcode') {
+      errors.push(`${said} to ${byteHex(value)}, a prefix: ${spelled} decodes as ${text(ins)}, running on into bytes the disassembly reads as other instructions, which a port cannot follow.`);
+      continue;
+    }
+    let fits = true;
+    for (let k = 0; k < ins.length; k++) {
+      const a = (at + k) & 0xffff;
+      if (a === cell.addr) continue;
+      if (rewritten.has(a)) errors.push(`${said} to ${byteHex(value)}, making ${text(ins)}, whose byte at ${addr(a)} the program rewrites too; a port does not follow an instruction whose opcode and operand are both rewritten.`);
+      else if (!analysis.pass1.map.isCode(a)) errors.push(`${said} to ${byteHex(value)}, making ${text(ins)}, whose byte at ${addr(a)} is not code the disassembly decoded, so the port could not keep it from being written.`);
+      else continue;
+      fits = false;
+      break;
+    }
+    if (fits) variants.push({ value, ins });
+  }
+  return errors.length > 0 ? { errors } : { site: { cell: cell.addr, variants } };
+}
+
+/**
+ * The roots a swapped opcode needs the analysis to have, so each site is a block of its own and every
+ * variant's successors are blocks: each site, and every successor in the loaded program, in the trace's
+ * order. Empty with no opcode cell. The sentences are left to the match on the final analysis.
+ */
+function variantRoots(trace: PortTrace, analysis: Analysis): number[] {
+  const { cells } = matchCells(trace, analysis, () => true);
+  const rewritten = new Set(cells.map((c) => c.addr));
+  const loaded = (a: number): boolean => analysis.space.image.isLoaded(a);
+  const roots: number[] = [];
+  for (const c of cells) {
+    if (c.kind !== 'opcode') continue;
+    const v = variantSite(c, analysis, rewritten);
+    if (!('site' in v)) continue;
+    roots.push(c.instruction);
+    for (const x of v.site.variants) for (const s of successorsOf(x.ins, c.instruction, loaded)) if (s.kind !== 'external') roots.push(s.to);
+  }
+  return [...new Set(roots)];
+}
+
 /** Analyse the .CMD program `cmd` for its port, or say in sentences why it cannot be ported. */
 export function prepare(cmd: Uint8Array, opts: PortOptions): { ok: true; prepared: Prepared } | { ok: false; errors: string[] } {
   if (opts.model !== 1 && opts.model !== 3) return { ok: false, errors: [`model must be 1 (the Model I) or 3 (the Model III), not ${String(opts.model)}.`] };
@@ -239,7 +344,13 @@ export function prepare(cmd: Uint8Array, opts: PortOptions): { ok: true; prepare
   // The caller's names name the listing's operands too, so each instruction's comment reads with them.
   if (opts.names !== undefined) annotations = { ...annotations, names: new Map([...annotations.names, ...opts.names]) };
 
-  const analysis = analyze(mod, { annotations });
+  let analysis = analyze(mod, { annotations });
+  // A swapped opcode's site, and its variants' successors, start blocks: given to the analysis as roots,
+  // which also decodes a successor only a variant reaches
+  if (trace !== undefined) {
+    const roots = variantRoots(trace, analysis);
+    if (roots.length > 0) analysis = analyze(mod, { annotations, entries: roots });
+  }
   const ir = buildIr(mod, analysis.pass1, opts.source, analysis);
   const blocks = new Map(ir.blocks.map((b) => [b.start, b]));
 
@@ -290,11 +401,49 @@ export function prepare(cmd: Uint8Array, opts: PortOptions): { ok: true; prepare
   if (!blocks.has(entry) || loaderBlocks.has(entry)) return { ok: false, errors: [`the entry, ${addr(entry)}, is not code the disassembly found.`] };
 
   // The trace's cells; a rewritten JP nn's targets are its block's successors, so its routine holds them
-  const matched = trace === undefined ? { cells: [], patched: new Map<number, { cells: Cells; targets?: number[] }>(), errors: [] } : matchCells(trace, analysis, (a) => blocks.has(a) && !loaderBlocks.has(a));
+  const isBlock = (a: number): boolean => blocks.has(a) && !loaderBlocks.has(a);
+  const matched = trace === undefined ? { cells: [], patched: new Map<number, { cells: Cells; targets?: number[] }>(), errors: [] } : matchCells(trace, analysis, isBlock);
   if (matched.errors.length > 0) return { ok: false, errors: matched.errors };
+
+  // The swapped opcodes: each site a block of its own, whose successors are its variants' together
+  const variants = new Map<number, VariantSite>();
+  const variantSucc = new Map<number, Successor[]>();
+  const variantErrors: string[] = [];
+  const rewritten = new Set(matched.cells.map((c) => c.addr));
+  const text = (ins: Instruction): string => renderInstruction(ins, analysis.symbols);
+  for (const c of matched.cells) {
+    if (c.kind !== 'opcode') continue;
+    const v = variantSite(c, analysis, rewritten);
+    if (!('site' in v)) {
+      variantErrors.push(...v.errors);
+      continue;
+    }
+    const at = c.instruction;
+    const loadedIns = analysis.pass1.instructions.get(at)!;
+    const block = blocks.get(at);
+    if (block === undefined || !isBlock(at) || block.end !== ((at + loadedIns.length - 1) & 0xffff)) {
+      variantErrors.push(`${addr(c.addr)}: the program rewrites the opcode of ${text(loadedIns)} at ${addr(at)}, which is not a block of its own in the disassembly, so the port cannot choose between its instructions there.`);
+      continue;
+    }
+    const succ: Successor[] = [];
+    for (const x of v.site.variants) {
+      for (const s of successorsOf(x.ins, at, (a) => analysis.space.image.isLoaded(a))) {
+        if (s.kind !== 'external' && !isBlock(s.to)) {
+          variantErrors.push(`${addr(c.addr)}: the program rewrites the opcode at ${addr(at)} to ${byteHex(x.value)}, making ${text(x.ins)}, which goes to ${addr(s.to)}, where no block of the disassembly starts.`);
+        } else if (!succ.some((t) => t.kind === s.kind && t.to === s.to)) succ.push(s);
+      }
+    }
+    c.variants = v.site.variants.map((x) => text(x.ins));
+    variants.set(at, v.site);
+    variantSucc.set(at, succ);
+  }
+  if (variantErrors.length > 0) return { ok: false, errors: variantErrors };
+
   const ported = ir.blocks
     .filter((b) => !loaderBlocks.has(b.start))
     .map((b): BasicBlock => {
+      const chosen = variantSucc.get(b.start);
+      if (chosen !== undefined) return { ...b, succ: chosen };
       const last = [...matched.patched].find(([at, p]) => p.targets !== undefined && at >= b.start && at + analysis.pass1.instructions.get(at)!.length - 1 === b.end);
       return last === undefined ? b : { ...b, succ: [...b.succ, ...last[1].targets!.map((to) => ({ kind: 'jump' as const, to }))] };
     });
@@ -325,7 +474,7 @@ export function prepare(cmd: Uint8Array, opts: PortOptions): { ok: true; prepare
       else code.push({ start: a, end: a });
     }
   }
-  return { ok: true, prepared: { analysis, ir, entry, ...(loader === undefined ? {} : { loader }), loaderBlocks, routines, code, data, cells: matched.cells, patched: matched.patched } };
+  return { ok: true, prepared: { analysis, ir, entry, ...(loader === undefined ? {} : { loader }), loaderBlocks, routines, code, data, cells: matched.cells, patched: matched.patched, variants } };
 }
 
 /** The blocks reached from `from` by any transfer the IR knows (a CALL's included), `from` among them. */
@@ -346,18 +495,7 @@ function reachedFrom(from: number, blocks: ReadonlyMap<number, BasicBlock>): Set
 export function port(cmd: Uint8Array, opts: PortOptions): PortResult {
   const p = prepare(cmd, opts);
   if (!p.ok) return p;
-  const { analysis, ir, entry, loader, routines, data, code, cells, patched } = p.prepared;
-  // A swapped opcode is not translated yet: each one is named
-  const swapped = cells.filter((c) => c.kind === 'opcode');
-  if (swapped.length > 0) {
-    return {
-      ok: false,
-      errors: swapped.map((c) => {
-        const ins = analysis.pass1.instructions.get(c.instruction)!;
-        return `${addr(c.addr)}: the program rewrites the opcode of ${renderInstruction(ins, analysis.symbols)} at ${addr(c.instruction)} (the trace saw ${listed(c.values.map(byteHex))} there); a port does not translate a swapped opcode yet.`;
-      }),
-    };
-  }
+  const { analysis, ir, entry, loader, routines, data, code, cells, patched, variants } = p.prepared;
   const bytes = analysis.space.image.bytes;
   const out = emit({
     model: opts.model,
@@ -376,6 +514,7 @@ export function port(cmd: Uint8Array, opts: PortOptions): PortResult {
     code: code.map((r) => [r.start, r.end] as const),
     cells: cells.map((c) => [c.addr, bytes[c.addr]!] as const),
     patched,
+    variants,
   });
   if (out.errors.length > 0) return { ok: false, errors: out.errors };
   return {

@@ -712,13 +712,13 @@ export function standin(z, addr, returnAddr) {
  * The sentence for a transfer to an address where no block of the port starts: an address the
  * disassembly did not find as code (outside the program, such as a ROM routine, or inside its data).
  * The port's statement throws it. For a JP whose target the program rewrites, `known` and `cell` are
- * given: the targets the trace saw it hold, each a block of the port, and where its target word is; the
- * sentence names the value it holds now, which is none of them.
+ * given: the targets the trace saw it hold, each a block of the port, and the byte of its target the
+ * program rewrites (the low byte when both are); the sentence names the value it holds now, which is none of them.
  * @param {Machine} z
  * @param {number} target
  * @param {number} from the transfer's address
  * @param {readonly number[]} [known] the targets the trace saw a rewritten JP hold
- * @param {number} [cell] the address of that JP's target word
+ * @param {number} [cell] the address of the byte of that JP's target the program rewrites
  * @returns {Error}
  */
 export function unknown(z, target, from, known, cell) {
@@ -729,6 +729,24 @@ export function unknown(z, target, from, known, cell) {
     );
   }
   return new Error(`the transfer at ${hex4(from)} goes to ${hex4(target)}, where no block of the port starts (the disassembly found no code there)`);
+}
+
+/**
+ * The sentence for an instruction whose opcode the program rewrites (a variant site, M2) holding a value
+ * the port has no translation for: the port knows the values the trace saw written there and the value
+ * as loaded, one translated instruction each. The port's `switch` on the cell throws it.
+ * @param {Machine} z
+ * @param {number} cell the opcode's address
+ * @param {readonly number[]} known the values the port translates, by value
+ * @returns {Error}
+ */
+export function variant(z, cell, known) {
+  /** @param {number} n */
+  const hex2 = (n) => `$${n.toString(16).toUpperCase().padStart(2, '0')}`;
+  const knows = known.length === 1 ? hex2(known[0]) : `${known.slice(0, -1).map(hex2).join(', ')} and ${hex2(known[known.length - 1])}`;
+  return new Error(
+    `the opcode at ${hex4(cell)} is ${hex2(z.mem[cell])}, which the trace did not see there (the port knows ${knows}); run the census over a session that reaches this`,
+  );
 }
 
 /**

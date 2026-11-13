@@ -17,7 +17,9 @@ import { loadCmd, programHash, skeletonHints, writeHints } from '@fugloy/disasm'
 import { createZ, load, runPort, standins } from '@fugloy/runtime';
 import type { PortModule, Z } from '@fugloy/runtime';
 import { describe, expect, it } from 'vitest';
+import { decodeAt } from '@fugloy/z80';
 import { parseTrace, port } from '../src/index.js';
+import { matchCells, prepare } from '../src/port.js';
 import type { PortOptions, PortResult, PortTrace } from '../src/index.js';
 import { census } from '../tools/census.js';
 import { RUNTIME, assembled, hex, importPort, namesOf, program, stub } from './helpers.js';
@@ -169,6 +171,48 @@ PTR:    LD      HL,5000H
         DJNZ    LOOP
         RET`);
 
+/** Rewrites the high byte alone of a LD HL,nn's word ($51 to $55, from B), and stores C at $5105 … $5505. */
+const HIGH = program(`
+START:  LD      B,5
+        LD      C,0
+LOOP:   LD      A,B
+        ADD     A,50H
+        LD      (PTR+2),A       ; the high byte of the LD's word
+PTR:    LD      HL,5005H
+        LD      (HL),C
+        INC     C
+        DJNZ    LOOP
+        RET`);
+
+/**
+ * Rewrites the high byte alone of a JP's target, from PAGES: $7100 (T1) and $7200 (T2) in turn, six times
+ * round. T2 is reached only by the rewritten JP, so the hint file names it an entry (block 2, at $7200).
+ */
+const HIGH_JUMP = program(`
+START:  LD      B,6
+        LD      C,0
+LOOP:   LD      A,B
+        AND     1
+        LD      E,A
+        LD      D,0
+        LD      HL,PAGES
+        ADD     HL,DE
+        LD      A,(HL)
+        LD      (JUMP+2),A
+JUMP:   JP      T1
+NEXT:   DJNZ    LOOP
+        LD      A,C
+        LD      (5000H),A
+        RET
+PAGES:  DB      71H,72H
+        DS      7100H-$
+T1:     INC     C
+        JP      NEXT
+        DS      7200H-$
+T2:     INC     C
+        INC     C
+        JP      NEXT`);
+
 /** Writes a RET over its own NOP at DONE, but only while ENTER is held: the census's session holds no key. */
 const UNSEEN = program(`
 START:  LD      A,(3840H)       ; ENTER is bit 0
@@ -247,6 +291,55 @@ describe('a rewritten operand, read from memory when its instruction runs', () =
     await expectNoCodeButCells(s, p.js);
     passed(await judge(s));
   });
+
+  it('the high byte alone of a word: read from its cell, the low byte the constant it was loaded with, and the referee passes', async () => {
+    const s = synthetic(HIGH);
+    const ptr = s.at('PTR');
+    expect(s.trace.patches).toEqual([{ addr: ptr + 2, writers: [s.at('LOOP') + 3], values: [0x51, 0x52, 0x53, 0x54, 0x55] }]);
+    const p = ok(port(s.cmd, options(s)));
+    expect(p.report.cells).toEqual([{ addr: ptr + 2, instruction: ptr, kind: 'word', values: [0x51, 0x52, 0x53, 0x54, 0x55] }]);
+    expect(p.js).toContain(`z.hl = z.mem[0x${hex(ptr + 2, 4)}] << 8 | 0x05;`);
+    await expectNoCodeButCells(s, p.js);
+    passed(await judge(s));
+  });
+
+  it("a JP whose target's high byte alone is rewritten: an unseen target's sentence names that byte", async () => {
+    const r = assembled(HIGH_JUMP, 3);
+    const cmd = toCmd(r);
+    const hints = `${writeHints(skeletonHints(loadCmd(cmd), cmd))}block 2:$0000 entry\n`;
+    const trace = census({ cmd, name: 'synthetic.cmd', hints, model: 3, rom: 'game', sessions: [TO_RET] });
+    const s = { r, cmd, hints, trace, at: (label: string): number => r.symbol(label)!.value };
+    const jump = s.at('JUMP');
+    const p = ok(port(s.cmd, options(s)));
+    expect(p.report.cells).toEqual([{ addr: jump + 2, instruction: jump, kind: 'word', values: [0x71, 0x72] }]);
+    expect(p.js).toContain(`z.wz = z.mem[0x${hex(jump + 2, 4)}] << 8 | 0x00;`);
+    passed(await judge(s));
+    // A third page in PAGES' first byte (taken the first time round): the sentence names the high byte's cell
+    const mod = await importPort(p.js);
+    const z = standalone(mod);
+    z.mem[s.at('PAGES')] = 0x73;
+    expect(thrown(() => runPort(z, mod))).toBe(
+      `the transfer at ${$4(jump)} goes to $7300: the program rewrote its target at ${$4(jump + 2)} to a value the trace did not see ` +
+        `(it saw $7100 and $7200); run the census over a session that reaches this (in START, in the block at ${$4(s.at('LOOP'))})`,
+    );
+  });
+});
+
+describe('a cell two decoded instructions cover', () => {
+  it('makes the match fail, naming the cell and both instructions', () => {
+    const s = synthetic(IMM);
+    const pre = prepare(s.cmd, options(s));
+    if (!pre.ok) throw new Error(pre.errors.join(' '));
+    const { analysis } = pre.prepared;
+    const cell = s.at('ADDI') + 1;
+    // Pass 1 holding a second decode that covers the cell: one starting at the cell itself
+    analysis.pass1.instructions.set(cell, decodeAt(analysis.space.image.bytes, cell));
+    const m = matchCells(s.trace, analysis, () => true);
+    expect(m.errors.filter((e) => e.startsWith($4(cell)))).toEqual([
+      `${$4(cell)}: the trace says the program rewrites this byte, which two instructions the disassembly decoded cover (ADD A,00H at ${$4(cell - 1)} and NOP at ${$4(cell)}); a port cannot tell which of them the byte belongs to.`,
+    ]);
+    expect(m.cells.map((c) => c.addr)).not.toContain(cell);
+  });
 });
 
 describe('a write into code the trace does not name', () => {
@@ -280,20 +373,12 @@ describe('a write into code the trace does not name', () => {
 const SEA_DRAGON = new Uint8Array(readFileSync(new URL('../../../examples/sea-dragon/seadrg01.cmd', import.meta.url)));
 const SEA_DRAGON_HINTS = readFileSync(new URL('../../../examples/sea-dragon/seadrg01.hints', import.meta.url), 'utf8');
 const SEA_DRAGON_TRACE = parseTrace(readFileSync(new URL('../../../examples/sea-dragon/seadrg01.trace.json', import.meta.url), 'utf8'), programHash(SEA_DRAGON));
-/** The three sites that swap a whole opcode: $5174 (LD (HL),A / NOP), $525E (JP NZ / JP Z), $5AEA (CALL / RET). */
+/** The three sites that swap a whole opcode: $5174 (LD (HL),A / NOP), $525E (JP NZ / JP Z), $5AEA (CALL / RET); variant.test.ts ports them. */
 const OPCODE_CELLS = [0x5174, 0x525e, 0x5aea];
 
 describe('Sea Dragon (seadrg01.cmd) with its hint file and trace', () => {
   const seaDragon = (trace: PortTrace): PortResult =>
     port(SEA_DRAGON, { model: 3, hints: SEA_DRAGON_HINTS, trace, runtimeImport: RUNTIME, source: 'seadrg01.cmd', standins: new Map([...standins(3)].map(([at, x]) => [at, x.name])) });
-
-  it('fails for the three opcode cells alone, each named', () => {
-    const p = seaDragon(SEA_DRAGON_TRACE);
-    if (p.ok) throw new Error('Sea Dragon ported, its opcode cells and all');
-    expect(p.errors).toHaveLength(3);
-    p.errors.forEach((e, k) => expect(e).toMatch(new RegExp(`^\\${$4(OPCODE_CELLS[k]!)}: the program rewrites the opcode of `)));
-    expect(p.errors[1]).toContain('the trace saw $C2 and $CA there');
-  });
 
   it('ports its five operand sites, the JP at $509A to $509D and $50C1, with no routine labelled', () => {
     const operands = { ...SEA_DRAGON_TRACE, patches: SEA_DRAGON_TRACE.patches.filter((x) => !OPCODE_CELLS.includes(x.addr)) };

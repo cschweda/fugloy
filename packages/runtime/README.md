@@ -155,7 +155,8 @@ trampoline (`o.call`) adds the routine and the block it happened in, once:
 | `call (z, routine, ret)` | CALL: runs `routine`, whose RET must return to `ret`, then each routine it returns (jumps into) in turn, until one returns nothing: a trampoline, so routines that jump into each other never grow the JavaScript stack |
 | `ret (z, expected, at)` | RET: throws a sentence when the popped address (in `z.wz`) is not `expected` |
 | `standin (z, addr, ret)` | a CALL to a ROM routine the runtime stands in for (below): pushes `ret` as the CALL does, runs the stand-in, pops `ret` into MEMPTR as the RET does, and leaves Q 0; the two stack bytes stay written, as on emu. A sentence for an address with no stand-in on the model |
-| `unknown (z, target, from[, known, cell])`, `halt (z, at)` | the sentences (as `Error`s, which the port throws) for a transfer to an address no block starts and for a HALT. With `known` and `cell` (M2), a JP whose target the program rewrites: the targets the trace saw and the address of the word it is read from, named with the value it holds instead |
+| `unknown (z, target, from[, known, cell])`, `halt (z, at)` | the sentences (as `Error`s, which the port throws) for a transfer to an address no block starts and for a HALT. With `known` and `cell` (M2), a JP whose target the program rewrites: the targets the trace saw and the address of the byte rewritten, named with the value it holds instead |
+| `variant (z, cell, known)` | the sentence (an `Error`, which the port throws) for an instruction whose opcode the program rewrites (M2) holding a value the port has no translation for: the cell, the value it holds (`z.mem[cell]`) and the values the port knows |
 
 `@fugloy/recomp`'s translator writes the calls, and its test runs every instruction both as translated
 statements here and on emu's core, and requires the two equal.

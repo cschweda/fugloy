@@ -14,7 +14,11 @@
  * routine's start returns that routine (the trampoline, `o.call`, runs it next with the same return
  * address); a transfer anywhere else throws `o.unknown`'s sentence. A rewritten operand (`patched`) is
  * read from its cell in memory; a JP whose target is rewritten goes to whichever of the trace's targets
- * it holds, as a chain of `if`s, and throws `o.unknown`'s sentence for any other. A CALL runs its callee through
+ * it holds, as a chain of `if`s, and throws `o.unknown`'s sentence for any other. An instruction whose
+ * opcode is rewritten (`variants`) is a block of its own, `switch (z.mem[cell])` with a case for each
+ * value the port knows, that instruction's translation with its own tick, and `o.variant`'s sentence for
+ * any other: a choice on a cell, not on a block, so the routine stays structured around it (inside a
+ * case, a `break` or `continue` always names its loop). A CALL runs its callee through
  * `o.call`, and a RET checks with `o.ret` that it returns where its CALL said. A CALL to a ROM routine
  * the runtime stands in for (`standins`) is `o.standin`.
  *
@@ -27,6 +31,7 @@ import type { Ir } from '@fugloy/disasm';
 import { renderInstruction } from '@fugloy/disasm';
 import type { SymbolTable } from '@fugloy/disasm';
 import type { Instruction } from '@fugloy/z80';
+import type { VariantSite } from './port.js';
 import type { Routine, Routines } from './routines.js';
 import { structure } from './structure.js';
 import type { Code, Exit } from './structure.js';
@@ -62,6 +67,8 @@ export interface EmitInput {
   cells: readonly (readonly [number, number])[];
   /** By instruction address: the operands it reads from memory, and for a rewritten JP nn the targets it may hold. */
   patched: ReadonlyMap<number, { cells: Cells; targets?: number[] }>;
+  /** By instruction address: the instructions whose opcode the program rewrites, each the start and whole of its block. */
+  variants: ReadonlyMap<number, VariantSite>;
 }
 
 export interface Emitted {
@@ -80,6 +87,7 @@ export interface Emitted {
 
 const hex = (n: number, width: number): string => n.toString(16).toUpperCase().padStart(width, '0');
 const word = (n: number): string => `0x${hex(n & 0xffff, 4)}`;
+const byteLiteral = (n: number): string => `0x${hex(n & 0xff, 2)}`;
 const addr = (n: number): string => `$${hex(n & 0xffff, 4)}`;
 
 /**
@@ -275,7 +283,7 @@ export function emit(input: EmitInput): Emitted {
     /**
      * A JP whose target the program rewrites: `if (z.wz === target)` for each target the trace saw, in
      * address order, each the transfer there; for any other, `o.unknown`'s sentence naming the targets
-     * and the word the target is read from (`cell`).
+     * and the byte of the target rewritten (`cell`: the low byte's address when both are).
      */
     function choose(expr: string, targets: readonly number[], from: number, ins: Instruction, cell: number): Stmt {
       let rest: Stmt = { k: 'line', code: `throw o.unknown(z, ${expr}, ${word(from)}, [${targets.map(word).join(', ')}], ${word(cell)});`, leaves: true };
@@ -291,6 +299,8 @@ export function emit(input: EmitInput): Emitted {
 
     /** The block's statements, from `z.at` to its transfer; null when it cannot be translated (the error is recorded). */
     function blockCode(start: number, end: number): Stmt[] | null {
+      const site = input.variants.get(start);
+      if (site !== undefined) return variantCode(start, site);
       const out: Stmt[] = [{ k: 'at', addr: start }];
       const line = (code: string): Stmt => ({ k: 'line', code });
       let t = 0;
@@ -310,7 +320,6 @@ export function emit(input: EmitInput): Emitted {
           errors.push((e as Error).message);
           return null;
         }
-        const next = (at + ins.length) & 0xffff;
         const text = renderInstruction(ins, symbols);
         if (text.trim().toUpperCase() === 'EI') refused.push(`${addr(at)}: EI enables interrupts, which a port does not take (M1)`);
         const note = comments.get(at);
@@ -324,75 +333,124 @@ export function emit(input: EmitInput): Emitted {
           t = 0;
           rr = 0;
         }
-        const last = at + ins.length > end;
-        if (!last) {
+        if (at + ins.length <= end) {
           out.push(...statements(tr.lines, comment));
           t += tr.cycles;
           rr += tr.r;
           qPrev = tr.writesFlags ? 1 : 0;
-          at = next;
+          at = (at + ins.length) & 0xffff;
           continue;
         }
-
-        // The block's last instruction: its tick, Q, and where it goes
-        const q = `z.q = ${tr.writesFlags ? 1 : 0};`;
-        const tick = (cycles: number): Stmt => line(`z.tick(${t + cycles}, ${rr + tr.r}); ${q}`);
-        const notTaken = tr.cyclesNotTaken ?? tr.cycles;
-        if (tr.targetExpr !== undefined && tr.flow === 'jump' && tr.targets === undefined) {
-          errors.push(`${addr(at)}: ${text} jumps to an address computed as it runs, which M1 does not translate (a hint naming its targets is for a later milestone).`);
-          return null;
-        }
-        switch (tr.flow) {
-          case 'next':
-            out.push(...statements(tr.lines, comment), tick(tr.cycles), go(next, at, ins));
-            break;
-          case 'jump': {
-            if (tr.targets !== undefined) {
-              out.push(...statements(tr.lines, comment), tick(tr.cycles), choose(tr.targetExpr!, tr.targets, at, ins, patch!.cells.word!));
-              break;
-            }
-            const target = tr.target!;
-            if (tr.cond === undefined) {
-              out.push(...statements(tr.lines, comment), tick(tr.cycles), go(target, at, ins));
-              break;
-            }
-            out.push(...conditional(tr, comment, [tick(tr.cycles), go(target, at, ins)]), tick(notTaken), go(next, at, ins));
-            break;
-          }
-          case 'call': {
-            const target = tr.target!;
-            const known = routines.starts.has(target);
-            const stood = known ? undefined : input.standins.get(target);
-            if (stood !== undefined) {
-              out.push(...standinCall(tr, ins, at, next, stood, comment, tick, notTaken));
-              break;
-            }
-            const callee = known ? line(`o.call(z, ${routineNames.get(target)!}, ${word(next)});`) : nowhere(target, at, ins);
-            if (tr.cond === undefined) {
-              out.push(...statements(tr.lines, comment), tick(tr.cycles), callee);
-              if (!known) break;
-            } else {
-              out.push(...conditional(tr, comment, [tick(tr.cycles), callee], [tick(notTaken)]));
-            }
-            out.push(go(next, at, ins));
-            break;
-          }
-          case 'return': {
-            const back: Stmt = { k: 'line', code: `o.ret(z, ret, ${word(at)}); return;`, leaves: true };
-            if (tr.cond === undefined) {
-              out.push(...statements(tr.lines, comment), tick(tr.cycles), back);
-              break;
-            }
-            out.push(...conditional(tr, comment, [tick(tr.cycles), back]), tick(notTaken), go(next, at, ins));
-            break;
-          }
-          case 'halt':
-            out.push(...statements(tr.lines, comment), tick(tr.cycles), { k: 'line', code: `throw o.halt(z, ${word(at)});`, leaves: true });
-            refused.push(`${addr(at)}: HALT waits for an interrupt, which a port does not take; the port throws there when it runs.`);
-            break;
-        }
+        const last = ending(tr, ins, at, comment, t, rr, patch);
+        if (last === null) return null;
+        out.push(...last);
         return out;
       }
+      return out;
+    }
+
+    /**
+     * A block's last instruction, `tr` the translation of `ins` at `at`: its statements, the block's tick
+     * (`t` T-states and `rr` R before it, then its own) and Q on each path it takes, and where it goes.
+     * Null when it cannot be translated (the error is recorded).
+     */
+    function ending(tr: Translation, ins: Instruction, at: number, comment: string, t: number, rr: number, patch: { cells: Cells } | undefined): Stmt[] | null {
+      const line = (code: string): Stmt => ({ k: 'line', code });
+      const next = (at + ins.length) & 0xffff;
+      const out: Stmt[] = [];
+      const q = `z.q = ${tr.writesFlags ? 1 : 0};`;
+      const tick = (cycles: number): Stmt => line(`z.tick(${t + cycles}, ${rr + tr.r}); ${q}`);
+      const notTaken = tr.cyclesNotTaken ?? tr.cycles;
+      if (tr.targetExpr !== undefined && tr.flow === 'jump' && tr.targets === undefined) {
+        errors.push(`${addr(at)}: ${renderInstruction(ins, symbols)} jumps to an address computed as it runs, which M1 does not translate (a hint naming its targets is for a later milestone).`);
+        return null;
+      }
+      switch (tr.flow) {
+        case 'next':
+          out.push(...statements(tr.lines, comment), tick(tr.cycles), go(next, at, ins));
+          break;
+        case 'jump': {
+          if (tr.targets !== undefined) {
+            // The unseen target's sentence names the byte rewritten: the high byte's when it alone is
+            const cell = patch!.cells.half === 'hi' ? (patch!.cells.word! + 1) & 0xffff : patch!.cells.word!;
+            out.push(...statements(tr.lines, comment), tick(tr.cycles), choose(tr.targetExpr!, tr.targets, at, ins, cell));
+            break;
+          }
+          const target = tr.target!;
+          if (tr.cond === undefined) {
+            out.push(...statements(tr.lines, comment), tick(tr.cycles), go(target, at, ins));
+            break;
+          }
+          out.push(...conditional(tr, comment, [tick(tr.cycles), go(target, at, ins)]), tick(notTaken), go(next, at, ins));
+          break;
+        }
+        case 'call': {
+          const target = tr.target!;
+          const known = routines.starts.has(target);
+          const stood = known ? undefined : input.standins.get(target);
+          if (stood !== undefined) {
+            out.push(...standinCall(tr, ins, at, next, stood, comment, tick, notTaken));
+            break;
+          }
+          const callee = known ? line(`o.call(z, ${routineNames.get(target)!}, ${word(next)});`) : nowhere(target, at, ins);
+          if (tr.cond === undefined) {
+            out.push(...statements(tr.lines, comment), tick(tr.cycles), callee);
+            if (!known) break;
+          } else {
+            out.push(...conditional(tr, comment, [tick(tr.cycles), callee], [tick(notTaken)]));
+          }
+          out.push(go(next, at, ins));
+          break;
+        }
+        case 'return': {
+          const back: Stmt = { k: 'line', code: `o.ret(z, ret, ${word(at)}); return;`, leaves: true };
+          if (tr.cond === undefined) {
+            out.push(...statements(tr.lines, comment), tick(tr.cycles), back);
+            break;
+          }
+          out.push(...conditional(tr, comment, [tick(tr.cycles), back]), tick(notTaken), go(next, at, ins));
+          break;
+        }
+        case 'halt':
+          out.push(...statements(tr.lines, comment), tick(tr.cycles), { k: 'line', code: `throw o.halt(z, ${word(at)});`, leaves: true });
+          refused.push(`${addr(at)}: HALT waits for an interrupt, which a port does not take; the port throws there when it runs.`);
+          break;
+      }
+      return out;
+    }
+
+    /**
+     * An instruction whose opcode the program rewrites, the whole of its block: `switch` on the cell, a case
+     * per value the port knows, each that instruction translated as a block's last (its own tick, Q and
+     * transfer, from the block's start), and `o.variant`'s sentence for any other value.
+     */
+    function variantCode(at: number, site: VariantSite): Stmt[] | null {
+      const out: Stmt[] = [{ k: 'at', addr: at }];
+      for (const text of at === r.start ? [] : (notes.get(at) ?? [])) out.push({ k: 'note', text });
+      const note = comments.get(at);
+      const cases: { value: number; body: Stmt[] }[] = [];
+      for (const v of site.variants) {
+        let tr: Translation;
+        try {
+          tr = translate(v.ins, at, { qPrev: null });
+        } catch (e) {
+          errors.push((e as Error).message);
+          return null;
+        }
+        const text = renderInstruction(v.ins, symbols);
+        if (text.trim().toUpperCase() === 'EI') refused.push(`${addr(at)}: EI enables interrupts, which a port does not take (M1)`);
+        const body = ending(tr, v.ins, at, `${addr(at)}  ${text}${note === undefined ? '' : `  ; ${note}`}`, 0, 0, undefined);
+        if (body === null) return null;
+        cases.push({ value: v.value, body });
+      }
+      const texts = site.variants.map((v) => `$${hex(v.value, 2)}: ${renderInstruction(v.ins, symbols)}`);
+      out.push({
+        k: 'switch',
+        expr: `z.mem[${word(site.cell)}]`,
+        comment: `${addr(at)}  its opcode at ${addr(site.cell)} is rewritten as it runs: ${texts.join('; ')}`,
+        cases,
+        otherwise: `throw o.variant(z, ${word(site.cell)}, [${site.variants.map((v) => byteLiteral(v.value)).join(', ')}]);`,
+      });
       return out;
     }
 
@@ -463,6 +521,18 @@ export function emit(input: EmitInput): Emitted {
           }
           w.line(indent, '}');
           break;
+        case 'switch':
+          // A bare `break` in a case would leave the switch, not the loop: inside, every jump names its loop
+          w.line(indent, `switch (${s.expr}) {`, s.comment);
+          for (const c of s.cases) {
+            w.line(indent + 2, `case ${byteLiteral(c.value)}:`);
+            write(c.body, indent + 4, mode, labels, null);
+            if (completes(c.body)) w.line(indent + 4, 'break;');
+          }
+          w.line(indent + 2, 'default:');
+          w.line(indent + 4, s.otherwise);
+          w.line(indent, '}');
+          break;
         case 'loop':
           w.line(indent, `${labels.has(s.label) ? `${s.label}: ` : ''}while (true) {`);
           write(s.body, indent + 2, mode, labels, s.label);
@@ -485,7 +555,7 @@ export function emit(input: EmitInput): Emitted {
  * A routine's code before it is written. `line` is code built by the emitter or the translator (with its
  * comment, free text, which the Writer sanitizes); `leaves` marks one that never completes (a return or a
  * throw). `go` is a transfer to a block of the routine, which the structure decides; `loop`, `labelled`
- * and `jump` are the structure's, labelled from addresses alone.
+ * and `jump` are the structure's, labelled from addresses alone. `switch` is a swapped opcode's choice.
  */
 type Stmt =
   | { k: 'line'; code: string; comment?: string; leaves?: true }
@@ -493,6 +563,8 @@ type Stmt =
   | { k: 'at'; addr: number }
   | { k: 'go'; to: number }
   | { k: 'if'; cond: string; comment?: string; then: Stmt[]; else?: Stmt[] }
+  /** A choice on a cell's value: each case's statements (followed by `break;` when they complete), else `otherwise`, which throws. */
+  | { k: 'switch'; expr: string; comment?: string; cases: { value: number; body: Stmt[] }[]; otherwise: string }
   | { k: 'loop'; label: string; body: Stmt[] }
   | { k: 'labelled'; label: string; body: Stmt[] }
   | { k: 'jump'; how: 'break' | 'continue'; label: string; loop: boolean };
@@ -517,7 +589,7 @@ function statements(lines: readonly string[], comment: string): Stmt[] {
 
 /** The blocks a block's statements go to, one per transfer, in the order they are written. */
 function gos(stmts: readonly Stmt[]): number[] {
-  return stmts.flatMap((s) => (s.k === 'go' ? [s.to] : s.k === 'if' ? [...gos(s.then), ...gos(s.else ?? [])] : []));
+  return stmts.flatMap((s) => (s.k === 'go' ? [s.to] : s.k === 'if' ? [...gos(s.then), ...gos(s.else ?? [])] : s.k === 'switch' ? s.cases.flatMap((c) => gos(c.body)) : []));
 }
 
 /** The structure's code as statements: each block's, its transfers written as the structure says. */
@@ -525,6 +597,7 @@ function compose(code: Code, exits: ReadonlyMap<number, ReadonlyMap<number, Exit
   const resolve = (stmts: readonly Stmt[], how: ReadonlyMap<number, Exit>): Stmt[] =>
     stmts.flatMap((s): Stmt[] => {
       if (s.k === 'if') return [{ ...s, then: resolve(s.then, how), ...(s.else === undefined ? {} : { else: resolve(s.else, how) }) }];
+      if (s.k === 'switch') return [{ ...s, cases: s.cases.map((c) => ({ ...c, body: resolve(c.body, how) })) }];
       if (s.k !== 'go') return [s];
       const e = how.get(s.to)!;
       switch (e.kind) {
@@ -584,6 +657,9 @@ function tidy(list: readonly Stmt[], fall: ReadonlySet<string>): Stmt[] {
         const other = s.else === undefined ? [] : tidy(s.else, f);
         return other.length === 0 ? { k: 'if', cond: s.cond, ...(s.comment === undefined ? {} : { comment: s.comment }), then } : { ...s, then, else: other };
       }
+      case 'switch':
+        // Falling off a case leaves the switch: what falling off the switch does
+        return { ...s, cases: s.cases.map((c) => ({ ...c, body: tidy(c.body, f) })) };
       case 'loop':
         return { ...s, body: tidy(s.body, new Set([`continue ${s.label}`])) };
       case 'labelled':
@@ -607,7 +683,8 @@ function labelsUsed(stmts: readonly Stmt[], loop: string | null = null, used = n
     else if (s.k === 'if') {
       labelsUsed(s.then, loop, used);
       labelsUsed(s.else ?? [], loop, used);
-    } else if (s.k === 'loop') labelsUsed(s.body, s.label, used);
+    } else if (s.k === 'switch') for (const c of s.cases) labelsUsed(c.body, null, used);
+    else if (s.k === 'loop') labelsUsed(s.body, s.label, used);
     else if (s.k === 'labelled') labelsUsed(s.body, loop, used);
   }
   return used;
@@ -619,6 +696,7 @@ function unwrap(stmts: readonly Stmt[], used: ReadonlySet<string>): Stmt[] {
     if (s.k === 'labelled') return used.has(s.label) ? [{ ...s, body: unwrap(s.body, used) }] : unwrap(s.body, used);
     if (s.k === 'loop') return [{ ...s, body: unwrap(s.body, used) }];
     if (s.k === 'if') return [{ ...s, then: unwrap(s.then, used), ...(s.else === undefined ? {} : { else: unwrap(s.else, used) }) }];
+    if (s.k === 'switch') return [{ ...s, cases: s.cases.map((c) => ({ ...c, body: unwrap(c.body, used) })) }];
     return [s];
   });
 }
@@ -628,6 +706,7 @@ function breaks(stmts: readonly Stmt[], label: string): boolean {
   return stmts.some((s) =>
     (s.k === 'jump' && s.how === 'break' && s.label === label) ||
     (s.k === 'if' && (breaks(s.then, label) || breaks(s.else ?? [], label))) ||
+    (s.k === 'switch' && s.cases.some((c) => breaks(c.body, label))) ||
     ((s.k === 'loop' || s.k === 'labelled') && breaks(s.body, label)));
 }
 
@@ -646,6 +725,8 @@ function completes(stmts: readonly Stmt[]): boolean {
       return false;
     case 'if':
       return last.else === undefined || completes(last.then) || completes(last.else);
+    case 'switch':
+      return last.cases.some((c) => completes(c.body));
     case 'loop':
       return breaks(last.body, last.label);
     case 'labelled':
@@ -658,6 +739,7 @@ function safeIfs(stmts: readonly Stmt[]): boolean {
   return stmts.every((s, i) => {
     if (s.k === 'go') return false;
     if (s.k === 'if') return (s.else !== undefined || i === stmts.length - 1 || !completes(s.then)) && safeIfs(s.then) && safeIfs(s.else ?? []);
+    if (s.k === 'switch') return s.cases.every((c) => safeIfs(c.body));
     if (s.k === 'loop' || s.k === 'labelled') return safeIfs(s.body);
     return true;
   });
