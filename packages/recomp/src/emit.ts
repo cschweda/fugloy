@@ -449,7 +449,8 @@ export function emit(input: EmitInput): Emitted {
         expr: `z.mem[${word(site.cell)}]`,
         comment: `${addr(at)}  its opcode at ${addr(site.cell)} is rewritten as it runs: ${texts.join('; ')}`,
         cases,
-        otherwise: `throw o.variant(z, ${word(site.cell)}, [${site.variants.map((v) => byteLiteral(v.value)).join(', ')}]);`,
+        // The sentence names the instruction as loaded, its text a string literal (stringLiteral escapes it)
+        otherwise: `throw o.variant(z, ${word(site.cell)}, [${site.variants.map((v) => byteLiteral(v.value)).join(', ')}], ${stringLiteral(renderInstruction(instructions.get(at)!, symbols))});`,
       });
       return out;
     }

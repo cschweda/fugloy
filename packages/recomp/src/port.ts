@@ -289,7 +289,7 @@ function variantSite(cell: PortCell, analysis: Analysis, rewritten: ReadonlySet<
     for (let k = 0; k < ins.length; k++) {
       const a = (at + k) & 0xffff;
       if (a === cell.addr) continue;
-      if (rewritten.has(a)) errors.push(`${said} to ${byteHex(value)}, making ${text(ins)}, whose byte at ${addr(a)} the program rewrites too; a port does not follow an instruction whose opcode and operand are both rewritten.`);
+      if (rewritten.has(a)) errors.push(`${said} to ${byteHex(value)}, making ${text(ins)}, which takes in the byte at ${addr(a)}; the program rewrites that byte too, and a port does not translate a variant that takes in a rewritten byte other than its opcode.`);
       else if (!analysis.pass1.map.isCode(a)) errors.push(`${said} to ${byteHex(value)}, making ${text(ins)}, whose byte at ${addr(a)} is not code the disassembly decoded, so the port could not keep it from being written.`);
       else continue;
       fits = false;
@@ -300,24 +300,80 @@ function variantSite(cell: PortCell, analysis: Analysis, rewritten: ReadonlySet<
   return errors.length > 0 ? { errors } : { site: { cell: cell.addr, variants } };
 }
 
+/** Where a variant's successor came from: the cell, its site, the value and the instruction it makes there. */
+interface RootOrigin {
+  cell: number;
+  at: number;
+  value: number;
+  ins: Instruction;
+}
+
 /**
  * The roots a swapped opcode needs the analysis to have, so each site is a block of its own and every
  * variant's successors are blocks: each site, and every successor in the loaded program, in the trace's
- * order. Empty with no opcode cell. The sentences are left to the match on the final analysis.
+ * order; and for each successor, the variant that goes there (the first, where several do). Empty with no
+ * opcode cell. The sentences are left to the match on the final analysis.
  */
-function variantRoots(trace: PortTrace, analysis: Analysis): number[] {
+function variantRoots(trace: PortTrace, analysis: Analysis): { roots: number[]; origins: Map<number, RootOrigin> } {
   const { cells } = matchCells(trace, analysis, () => true);
   const rewritten = new Set(cells.map((c) => c.addr));
   const loaded = (a: number): boolean => analysis.space.image.isLoaded(a);
   const roots: number[] = [];
+  const origins = new Map<number, RootOrigin>();
   for (const c of cells) {
     if (c.kind !== 'opcode') continue;
     const v = variantSite(c, analysis, rewritten);
     if (!('site' in v)) continue;
     roots.push(c.instruction);
-    for (const x of v.site.variants) for (const s of successorsOf(x.ins, c.instruction, loaded)) if (s.kind !== 'external') roots.push(s.to);
+    for (const x of v.site.variants) {
+      for (const s of successorsOf(x.ins, c.instruction, loaded)) {
+        if (s.kind === 'external') continue;
+        roots.push(s.to);
+        if (!origins.has(s.to)) origins.set(s.to, { cell: c.addr, at: c.instruction, value: x.value, ins: x.ins });
+      }
+    }
   }
-  return [...new Set(roots)];
+  return { roots: [...new Set(roots)], origins };
+}
+
+/**
+ * The instructions of the first analysis (`before`, with no variant's roots) that the second (`after`) no
+ * longer has at the same address and length: a variant's successor was decoded first and took their bytes
+ * (the analysis works its roots in order, the variants' before the hint file's entries). One sentence for
+ * each, naming it and the variant whose successor's path decoded over it: a successor no first-pass
+ * instruction starts at, from which the second analysis's new instructions (by falling through and their
+ * targets) reach an instruction overlapping it.
+ */
+function displaced(before: Analysis, after: Analysis, origins: ReadonlyMap<number, RootOrigin>): string[] {
+  const old = before.pass1.instructions;
+  const now = after.pass1.instructions;
+  const text = (ins: Instruction): string => renderInstruction(ins, before.symbols);
+  const lost = [...old].filter(([a, ins]) => now.get(a)?.length !== ins.length).sort(([x], [y]) => x - y);
+  if (lost.length === 0) return [];
+  const fresh = (a: number): boolean => now.has(a) && old.get(a)?.length !== now.get(a)!.length;
+  /** The new instructions a successor's path decoded: from it, by falling through and to their targets. */
+  const pathOf = (from: number): Set<number> => {
+    const seen = new Set<number>();
+    const todo = [from];
+    while (todo.length > 0) {
+      const a = todo.pop()!;
+      if (seen.has(a) || !fresh(a)) continue;
+      seen.add(a);
+      const ins = now.get(a)!;
+      if (!endsPath(ins)) todo.push((a + ins.length) & 0xffff);
+      const t = targetOf(ins);
+      if (t !== null) todo.push(t);
+    }
+    return seen;
+  };
+  const paths = [...origins].filter(([to]) => !old.has(to)).map(([to, o]) => ({ to, o, path: pathOf(to) }));
+  return lost.map(([a, ins]) => {
+    const overlaps = (b: number): boolean => b < a + ins.length && a < b + now.get(b)!.length;
+    const by = paths.find((p) => [...p.path].some(overlaps)) ?? paths[0];
+    const lostText = `${text(ins)} at ${addr(a)}`;
+    if (by === undefined) return `${addr(a)}: the analysis with the swapped opcodes' successors as roots no longer decodes ${lostText}, which the program's own code reaches; a port cannot follow it.`;
+    return `${addr(by.o.cell)}: the program rewrites the opcode at ${addr(by.o.at)} to ${byteHex(by.o.value)}, making ${text(by.o.ins)}, which goes to ${addr(by.to)}, where no block of the disassembly starts; decoding code there would displace ${lostText}, which the program's own code reaches.`;
+  });
 }
 
 /** Analyse the .CMD program `cmd` for its port, or say in sentences why it cannot be ported. */
@@ -348,8 +404,14 @@ export function prepare(cmd: Uint8Array, opts: PortOptions): { ok: true; prepare
   // A swapped opcode's site, and its variants' successors, start blocks: given to the analysis as roots,
   // which also decodes a successor only a variant reaches
   if (trace !== undefined) {
-    const roots = variantRoots(trace, analysis);
-    if (roots.length > 0) analysis = analyze(mod, { annotations, entries: roots });
+    const { roots, origins } = variantRoots(trace, analysis);
+    if (roots.length > 0) {
+      const first = analysis;
+      analysis = analyze(mod, { annotations, entries: roots });
+      // Every instruction the program's own code reaches must survive the roots, at the same address and length
+      const lost = displaced(first, analysis, origins);
+      if (lost.length > 0) return { ok: false, errors: lost };
+    }
   }
   const ir = buildIr(mod, analysis.pass1, opts.source, analysis);
   const blocks = new Map(ir.blocks.map((b) => [b.start, b]));

@@ -80,6 +80,30 @@ function thrown(fn: () => unknown): string | null {
 }
 
 const count = (text: string, part: string): number => text.split(part).length - 1;
+
+/** Each instruction byte of an assembled program, from its listing (every line but its DB and DS lines). */
+function codeBytes(r: AsmResult): Set<number> {
+  const code = new Set<number>();
+  for (const l of r.listing) {
+    if (l.address === null || /^\s*(\w+:?)?\s+D[BWS]\b/i.test(l.text)) continue;
+    l.bytes.forEach((_, k) => code.add(l.address! + k));
+  }
+  return code;
+}
+
+/**
+ * The module carries none of the program's code: DATA holds no code byte, CELLS holds exactly the trace's
+ * cells, each with its byte as the program loads it, and CODE covers every instruction byte.
+ */
+async function expectNoCodeButCells(s: Synthetic, js: string): Promise<void> {
+  const mod = (await importPort(js)) as PortModule & { CODE: [number, number][]; CELLS: [number, number][] };
+  const code = codeBytes(s.r);
+  const inData = mod.DATA.flatMap(([a, bytes]) => [...bytes].map((_, k) => a + k));
+  expect(inData.filter((a) => code.has(a)), 'code addresses in DATA').toEqual([]);
+  expect(mod.CELLS).toEqual(s.trace.patches.map((p) => [p.addr, s.r.image!.bytes[p.addr]]));
+  const covered = new Set(mod.CODE.flatMap(([from, to]) => Array.from({ length: to - from + 1 }, (_, k) => from + k)));
+  expect([...code].filter((a) => !covered.has(a)), 'code bytes CODE leaves out').toEqual([]);
+}
 /** `a, b and c`. */
 const listed = (items: readonly string[]): string => (items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`);
 
@@ -186,10 +210,10 @@ SITE:   JP      NZ,LOOP
 OPS:    DB      0C2H,0C3H`);
 
 const CASES = [
-  { name: 'JP NZ / JP Z', source: JUMPS, site: 'SITE', values: [0xc2, 0xca], variants: ['JP NZ,SKIP', 'JP Z,SKIP'] },
-  { name: 'LD (HL),A / NOP', source: STORE, site: 'SITE', values: [0x00, 0x77], variants: ['NOP', 'LD (HL),A'] },
-  { name: 'CALL nn / RET', source: CALLS, site: 'SUB', values: [0xc9, 0xcd], variants: ['RET', 'CALL BUMP'] },
-  { name: "JP NZ / JP at a loop's latch", source: LATCH, site: 'SITE', values: [0xc2, 0xc3], variants: ['JP NZ,LOOP', 'JP LOOP'] },
+  { name: 'JP NZ / JP Z', source: JUMPS, site: 'SITE', values: [0xc2, 0xca], variants: ['JP NZ,SKIP', 'JP Z,SKIP'], loaded: 'JP NZ,SKIP' },
+  { name: 'LD (HL),A / NOP', source: STORE, site: 'SITE', values: [0x00, 0x77], variants: ['NOP', 'LD (HL),A'], loaded: 'LD (HL),A' },
+  { name: 'CALL nn / RET', source: CALLS, site: 'SUB', values: [0xc9, 0xcd], variants: ['RET', 'CALL BUMP'], loaded: 'CALL BUMP' },
+  { name: "JP NZ / JP at a loop's latch", source: LATCH, site: 'SITE', values: [0xc2, 0xc3], variants: ['JP NZ,LOOP', 'JP LOOP'], loaded: 'JP NZ,LOOP' },
 ] as const;
 
 describe('a swapped opcode, translated as a choice between the instructions the trace saw', () => {
@@ -213,10 +237,9 @@ describe('a swapped opcode, translated as a choice between the instructions the 
           expect(inSwitch).toMatch(/^\s+break loop_[0-9A-F]{4};$/m);
         }
         for (const v of c.values) expect(p.js).toMatch(new RegExp(`case 0x${hex(v, 2)}:`));
-        expect(p.js).toContain(`throw o.variant(z, 0x${hex(site, 4)}, [${c.values.map((v) => `0x${hex(v, 2)}`).join(', ')}]);`);
-        // The cell is carried (its byte as loaded); no other code byte is
-        const mod = (await importPort(p.js)) as PortModule & { CELLS: [number, number][] };
-        expect(mod.CELLS).toEqual([[site, s.r.image!.bytes[site]]]);
+        expect(p.js).toContain(`throw o.variant(z, 0x${hex(site, 4)}, [${c.values.map((v) => `0x${hex(v, 2)}`).join(', ')}], '${c.loaded}');`);
+        // The cell is carried (its byte as loaded); no other code byte is, in DATA or anywhere
+        await expectNoCodeButCells(s, p.js);
         const res = await referee({ cmd: s.cmd, model: 3, names: namesOf(s.r), hints: s.hints, trace: s.trace, rom: 'game', steps: [{ run: 1_000_000 }] });
         if (!res.ok) throw new Error(`the referee stopped: ${res.report}`);
       });
@@ -228,7 +251,7 @@ describe('a swapped opcode, translated as a choice between the instructions the 
         z.mem[s.at('OPS')] = 0x3c; // INC A, which the trace never saw
         const known = listed(c.values.map($2));
         expect(thrown(() => runPort(z, mod))).toMatch(
-          new RegExp(`^the opcode at \\${$4(site)} is \\$3C, which the trace did not see there \\(the port knows ${known.replace(/\$/g, '\\$')}\\); run the census over a session that reaches this \\(in [A-Z_]+, in the block at \\${$4(site)}\\)$`),
+          new RegExp(`^the opcode at \\${$4(site)} \\(of ${c.loaded.replace(/[()]/g, '\\$&')} as loaded\\) is \\$3C, which the trace did not see there \\(the port knows ${known.replace(/\$/g, '\\$')}\\); run the census over a session that reaches this \\(in [A-Z_]+, in the block at \\${$4(site)}\\)$`),
         );
       });
     });
@@ -279,6 +302,81 @@ OPS:    DB      0`));
       errors: [`${$4(at)}: the program rewrites the opcode at ${$4(at)} to $18, making JR ${hex(at + 3, 4)}H, which goes to ${$4(at + 3)}, where no block of the disassembly starts.`],
     });
   });
+
+  it("refuses a variant whose successor, decoded first, would push out an instruction the program's own code runs", () => {
+    // The JR's d is LD B's opcode, $06: SITE + 2 + 6 is the last byte of SUB's LD BC,nn. Given as a root, the
+    // analysis decodes it before START's path reaches SUB, and LD BC,1234H would be lost (its bytes put in DATA)
+    const s2 = synthetic(program(`
+START:  LD      A,(OPS)
+        LD      (SITE),A
+        CALL    SUB
+SITE:   NOP
+        LD      B,1
+        RET
+SUB:    NOP
+        NOP
+        LD      BC,1234H
+        RET
+OPS:    DB      0`));
+    const at = s2.at('SITE');
+    const ld = s2.at('SUB') + 2;
+    expect(at + 2 + 6).toBe(ld + 2);
+    const trace = { ...s2.trace, patches: s2.trace.patches.map((p) => ({ ...p, values: [0x00, 0x18] })) };
+    expect(port(s2.cmd, { ...options(s2), trace })).toEqual({
+      ok: false,
+      errors: [
+        `${$4(at)}: the program rewrites the opcode at ${$4(at)} to $18, making JR ${hex(ld + 2, 4)}H, which goes to ${$4(ld + 2)}, where no block of the disassembly starts; ` +
+          `decoding code there would displace LD BC,1234H at ${$4(ld)}, which the program's own code reaches.`,
+      ],
+    });
+  });
+
+  it('refuses a variant that takes in another rewritten byte, whether its own operand or a byte of the next instruction', () => {
+    // JUMPS with the JP's low byte rewritten as well: each variant takes it in
+    const lo = { addr: site + 1, writers: [s.at('LOOP')], values: [s.at('SKIP') & 0xff] };
+    const both = { ...s.trace, patches: [...s.trace.patches, lo] };
+    expect(port(s.cmd, { ...options(s), trace: both })).toEqual({
+      ok: false,
+      errors: [0xc2, 0xca].map(
+        (v) => `${$4(site)}: the program rewrites the opcode of JP NZ,SKIP at ${$4(site)} to ${$2(v)}, making JP ${v === 0xc2 ? 'NZ' : 'Z'},SKIP, which takes in the byte at ${$4(site + 1)}; ` +
+          'the program rewrites that byte too, and a port does not translate a variant that takes in a rewritten byte other than its opcode.',
+      ),
+    });
+    // A NOP made LD A,n would take in the next instruction's opcode, itself a cell (a NOP rewritten to itself)
+    const next = synthetic(program(`
+START:  LD      A,(OPS)
+        LD      (SITE),A
+        LD      (SITE+1),A
+SITE:   NOP
+        NOP
+        RET
+OPS:    DB      0`));
+    const at = next.at('SITE');
+    const trace = { ...next.trace, patches: next.trace.patches.map((p) => (p.addr === at ? { ...p, values: [0x00, 0x3e] } : p)) };
+    const p = port(next.cmd, { ...options(next), trace });
+    expect(p).toEqual({
+      ok: false,
+      errors: [`${$4(at)}: the program rewrites the opcode of NOP at ${$4(at)} to $3E, making LD A,00H, which takes in the byte at ${$4(at + 1)}; the program rewrites that byte too, and a port does not translate a variant that takes in a rewritten byte other than its opcode.`],
+    });
+  });
+
+  it('refuses a variant that takes in a byte that is not code the disassembly decoded', () => {
+    // A RET made CALL nn would take in the two bytes of TABLE, data no instruction covers
+    const data = synthetic(program(`
+START:  LD      A,(OPS)
+        LD      (SITE),A
+        CALL    SITE
+        RET
+SITE:   RET
+TABLE:  DB      12H,34H
+OPS:    DB      0C9H`));
+    const at = data.at('SITE');
+    const trace = { ...data.trace, patches: data.trace.patches.map((p) => ({ ...p, values: [0xc9, 0xcd] })) };
+    expect(port(data.cmd, { ...options(data), trace })).toEqual({
+      ok: false,
+      errors: [`${$4(at)}: the program rewrites the opcode of RET at ${$4(at)} to $CD, making CALL 3412H, whose byte at ${$4(at + 1)} is not code the disassembly decoded, so the port could not keep it from being written.`],
+    });
+  });
 });
 
 // ---- Sea Dragon
@@ -310,5 +408,22 @@ describe('Sea Dragon (seadrg01.cmd) with its hint file and trace', () => {
     expect(p.report.refused).toEqual([]);
     expect(p.js).not.toContain('switch (b)');
     for (const site of ['5174', '525E', '5AEA']) expect(count(p.js, `switch (z.mem[0x${site}]) {`), `$${site}`).toBe(1);
+  });
+
+  it("carries no code byte: DATA and CODE are the port's without the opcode cells, and DATA holds no byte CODE covers", async () => {
+    const opts: PortOptions = { model: 3, hints: SEA_DRAGON_HINTS, runtimeImport: RUNTIME, source: 'seadrg01.cmd', standins: new Map([...standins(3)].map(([at, x]) => [at, x.name])) };
+    type Mod = PortModule & { CODE: [number, number][]; CELLS: [number, number][] };
+    const full = (await importPort(ok(port(SEA_DRAGON, { ...opts, trace: SEA_DRAGON_TRACE })).js)) as Mod;
+    // The variants' roots decode nothing new: without the opcode cells there are none, and the code is the same
+    const operands = { ...SEA_DRAGON_TRACE, patches: SEA_DRAGON_TRACE.patches.filter((x) => ![0x5174, 0x525e, 0x5aea].includes(x.addr)) };
+    const without = (await importPort(ok(port(SEA_DRAGON, { ...opts, trace: operands })).js)) as Mod;
+    expect(full.CODE).toEqual(without.CODE);
+    expect(full.DATA.map(([a, b]) => [a, [...b]])).toEqual(without.DATA.map(([a, b]) => [a, [...b]]));
+    const code = new Uint8Array(0x10000);
+    for (const [from, to] of full.CODE) code.fill(1, from, to + 1);
+    const inData = full.DATA.flatMap(([a, bytes]) => [...bytes].map((_, k) => a + k));
+    expect(inData.filter((a) => code[a] === 1), 'code addresses in DATA').toEqual([]);
+    expect(full.CELLS.map(([a]) => a)).toEqual([0x49c1, 0x4f41, 0x509b, 0x509c, 0x5174, 0x525e, 0x5ad0, 0x5add, 0x5aea]);
+    expect(full.CELLS.every(([a]) => code[a] === 1), 'every cell is in CODE').toBe(true);
   });
 });

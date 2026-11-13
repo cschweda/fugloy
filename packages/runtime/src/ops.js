@@ -738,14 +738,15 @@ export function unknown(z, target, from, known, cell) {
  * @param {Machine} z
  * @param {number} cell the opcode's address
  * @param {readonly number[]} known the values the port translates, by value
+ * @param {string} instruction the instruction as loaded, as assembly
  * @returns {Error}
  */
-export function variant(z, cell, known) {
+export function variant(z, cell, known, instruction) {
   /** @param {number} n */
   const hex2 = (n) => `$${n.toString(16).toUpperCase().padStart(2, '0')}`;
   const knows = known.length === 1 ? hex2(known[0]) : `${known.slice(0, -1).map(hex2).join(', ')} and ${hex2(known[known.length - 1])}`;
   return new Error(
-    `the opcode at ${hex4(cell)} is ${hex2(z.mem[cell])}, which the trace did not see there (the port knows ${knows}); run the census over a session that reaches this`,
+    `the opcode at ${hex4(cell)} (of ${instruction} as loaded) is ${hex2(z.mem[cell])}, which the trace did not see there (the port knows ${knows}); run the census over a session that reaches this`,
   );
 }
 

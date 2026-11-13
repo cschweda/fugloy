@@ -73,7 +73,7 @@ iteration that repeats itself. Where the block goes:
 | a RET | the pop (into MEMPTR, as emu), the tick, then `o.ret(z, ret, 0x7010); return;`: a sentence if it popped anything but `ret` |
 | to an address no block starts (a ROM routine with no stand-in, data) | `throw o.unknown(z, 0x0050, 0x7002);`, listed in `report.refused` |
 | a `JP nn` whose target the program rewrites | `z.wz = z.mem[0x509B] \| z.mem[0x509C] << 8; // $509A  JP L509D  ; rewritten as it runs: read from $509B, $509C`, the tick, then `if (z.wz === 0x509D) { … } else { if (z.wz === 0x50C1) { … } else { throw o.unknown(z, z.wz, 0x509A, [0x509D, 0x50C1], 0x509B); } }`: a transfer for each target (below), structured as a conditional jump's arms, and for any other value a sentence naming the JP, the value, the byte rewritten (the low byte's address when both are, the high byte's when it alone is) and the targets the trace saw |
-| an instruction whose opcode the program rewrites | `switch (z.mem[0x525E]) { case 0xC2: …; break; case 0xCA: …; break; default: throw o.variant(z, 0x525E, [0xC2, 0xCA]); }`, the site a block of its own: each case is that instruction translated as a block's last, with its own tick, Q and transfer (below) |
+| an instruction whose opcode the program rewrites | `switch (z.mem[0x525E]) { case 0xC2: …; break; case 0xCA: …; break; default: throw o.variant(z, 0x525E, [0xC2, 0xCA], 'JP NZ,L52F8'); }`, the site a block of its own: each case is that instruction translated as a block's last, with its own tick, Q and transfer (below) |
 | HALT | `throw o.halt(z, 0x7003);`, listed in `report.refused` |
 
 A `JP (HL)`, `JP (IX)` or `JP (IY)` refuses the port (`ok: false`, a sentence naming its address), as does
@@ -111,11 +111,16 @@ code only a variant reaches is analysed as code, then sets the block's successor
 `o.standin`), a RET with `o.ret`'s check. A case that falls through ends `break;`, and a jump inside a case
 names its loop's label, since a bare `break` would leave the switch. The `switch` is on a cell, not on a
 block: the routine stays structured around it. A value the port has no case for throws `o.variant`'s
-sentence (`the opcode at $525E is $00, which the trace did not see there (the port knows $C2 and $CA); run
-the census over a session that reaches this`), which, like an unseen JP target, is not in `refused`; nothing
+sentence (`the opcode at $525E (of JP NZ,L52F8 as loaded) is $00, which the trace did not see there (the
+port knows $C2 and $CA); run the census over a session that reaches this`), which, like an unseen JP target, is not in `refused`; nothing
 is decoded as the port runs. A value `@fugloy/z80` reads only as `DB`, one that makes the cell a prefix, a
-variant with another byte that is rewritten too or that is not code the disassembly decoded, a site that is
-not a block of its own, and a successor where no block starts each refuse the port with a sentence.
+variant that takes in another rewritten byte or a byte that is not code the disassembly decoded, a site that
+is not a block of its own, and a successor where no block starts each refuse the port with a sentence. So
+does a successor whose root would take bytes from the program's own code: the analysis works the roots it is
+given before the hint file's entries, so a variant's successor can be decoded first, inside an instruction
+the program runs, and push it out; `port()` requires every instruction of the analysis without the roots to
+be in the analysis with them, at the same address and length, and otherwise names the variant and the
+instruction it would displace.
 `report.cells` gives each opcode cell its `variants`, the instructions by value.
 
 **A relocated program.** When the file loads a program at one address and a loader moves it to where it
