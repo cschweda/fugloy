@@ -228,6 +228,20 @@ later choice; until then "upgraded and updated" means presentation and feel, not
   programs and then every Learn lesson and Space Invaders chapter (`apps/web/content/learn/`):
   they call no ROM, their sources are known, and each already has a `check.json` screen. Done when
   every lesson and chapter's port matches the emulator for its check run, in CI.
+  **Done (2026-11-13, plan `docs/superpowers/plans/2026-10-23-part2-m1-port-pipeline.md`, all six
+  tasks, branch `part2-m1`).** All 19 programs (lessons 1–7, chapters 1–12) on both models their
+  `check.json` names, the Model III and the Model I (38 runs), are assembled, ported with their own
+  labels as names, and refereed through their check steps in the suite CI runs
+  (`packages/recomp/test/learn.test.ts`, about 61 s locally): all 38 match emu at every block start
+  and every frame. Their ports hold 129 routines and 717 blocks on each model; Task 6 wrote all 129
+  as structured code (loops, `if`/`else`, `break` and `continue`), none labelled (a `switch` over its
+  blocks, kept for a routine whose loop is entered other than at its head), 486,570 bytes of
+  JavaScript in all (572,788 as labelled blocks). None of the programs writes into its
+  own code, and no port lists a place that refuses as it runs. The CLI has `fugloy port <program.cmd>
+  --model 1|3 [--hints <file>] [-o <dir>]` (no `--trace` yet; the model is named). Known limits:
+  EI's one-instruction delay is not modelled (no Learn program has EI); the referee does not compare
+  sound or cassette writes (none uses IN or OUT); self-modifying code is refused, and found only by
+  the referee, not by `port()`; a block reached from two routines is translated in each.
 - **M2 — Sea Dragon's port.** The `$DELAY` stand-in, the self-modification census and its sites,
   sound, the keyboard; the scripted sessions above with no difference; playable in the browser.
 - **M3 — The bundle and the arcade.** The plan's bundler: a per-game manifest (name, authors,

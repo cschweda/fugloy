@@ -1,0 +1,39 @@
+{
+  "name": "@fugloy/recomp",
+  "version": "0.1.0",
+  "description": "Turns a TRS-80 program into a readable JavaScript port that runs on @fugloy/runtime (no DOM, no Node)",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@fugloy/disasm": "workspace:^",
+    "@fugloy/z80": "workspace:^"
+  },
+  "devDependencies": {
+    "@fugloy/asm": "workspace:*",
+    "@fugloy/emu": "workspace:*",
+    "@fugloy/runtime": "workspace:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cschweda/fugloy.git",
+    "directory": "packages/recomp"
+  },
+  "homepage": "https://github.com/cschweda/fugloy#readme",
+  "bugs": {
+    "url": "https://github.com/cschweda/fugloy/issues"
+  }
+}

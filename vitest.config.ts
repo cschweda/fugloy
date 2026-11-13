@@ -12,6 +12,7 @@ export default defineConfig({
       '@fugloy/disasm': src('disasm'),
       '@fugloy/cli': src('cli'),
       '@fugloy/asm': src('asm'),
+      '@fugloy/recomp': src('recomp'),
     },
   },
   test: {

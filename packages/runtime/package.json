@@ -1,0 +1,29 @@
+{
+  "name": "@fugloy/runtime",
+  "version": "0.1.0",
+  "description": "The machine a generated JavaScript port of a TRS-80 program runs on: registers, the 64K with the model's memory map, the keyboard matrix, ports, and T-state and R counters (no DOM, no Node, no dependencies)",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js",
+    "./ops": "./src/ops.js"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "check:no-dom": "node --experimental-vm-modules ../emu/scripts/check-no-dom.mjs src/index.js"
+  },
+  "devDependencies": {
+    "@fugloy/emu": "workspace:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cschweda/fugloy.git",
+    "directory": "packages/runtime"
+  },
+  "homepage": "https://github.com/cschweda/fugloy#readme",
+  "bugs": {
+    "url": "https://github.com/cschweda/fugloy/issues"
+  }
+}
