@@ -110,6 +110,10 @@ describe('$DELAY, stood in for', () => {
     expect(res.field).toBe('cycles');
   });
 
+  // The referee boots the user's ROM to READY before the load (Ruling 5). It used to start these programs
+  // from a machine just reset, whose SP of $FFFF made their return word straddle RAM's top and ROM $0000;
+  // under Ruling 13 the port's ROM space is the module's ($00 there), so a return word read partly from ROM
+  // differs from emu's, and the booted start puts it in RAM.
   it.skipIf(userRom === null)("passes the referee on the user's Model III ROM (fugloy.mcp.json), for the same counts and the CALL cc", async () => {
     passed(await judge(delays, 3, userRom!));
     passed(await judge(conditional, 3, userRom!));

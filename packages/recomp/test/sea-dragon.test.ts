@@ -81,7 +81,7 @@ async function refereed(rom: SessionRom, name: string): Promise<{ steps: Step[];
       hints: SEA_DRAGON_HINTS,
       trace: TRACE,
       steps,
-      ...(rom === 'game' ? { rom: 'game' as const } : { rom, boot: 'ready' as const }),
+      ...(rom === 'game' ? { rom: 'game' as const } : { rom }),
     }),
   );
   return { steps, res };
@@ -94,6 +94,8 @@ function expectWhole(name: string, steps: readonly Step[], res: Extract<RefereeR
   expect(res.cycles).toBeGreaterThanOrEqual(length);
   expect(res.blocks).toBeGreaterThan(0);
   expect(res.frames).toBeGreaterThan(0);
+  // The sound was compared, not vacuously passed: the game's writes to port $FF, on both machines
+  expect(res.sounds).toBeGreaterThan(0);
   const rows = steps.flatMap((s) => ('row' in s ? [s.text] : []));
   expect(rows[0]).toContain('BY: Wayne');
   expect(rows.at(-1)).toContain(GAME_OVER[name]);
@@ -162,6 +164,24 @@ describe("Sea Dragon's three games, refereed on the game stub ROM", () => {
       expect(res.report).toMatch(/^sound: write 1 to port \$FF since the last compare \(of \d+ on emu, \d+ on the port\): port \$[0-9A-F]{2} at T-state (\d+), emu \$[0-9A-F]{2} at T-state (\d+)/);
       const [, portT, emuT] = /port \$[0-9A-F]{2} at T-state (\d+), emu \$[0-9A-F]{2} at T-state (\d+)/.exec(res.report)!;
       expect(Number(portT) - Number(emuT)).toBe(1);
+    },
+    SESSION_TIMEOUT_MS,
+  );
+});
+
+describe("Sea Dragon's ROM bytes, refereed on the ROM space a standalone port has (Ruling 13)", () => {
+  it(
+    'stops a port whose module carries a wrong byte at $0000 at the first register it reaches',
+    async () => {
+      const wrong = (js: string): string => {
+        expect(js).toContain('[0x0000, 0xF3],');
+        return js.replace('[0x0000, 0xF3],', '[0x0000, 0x00],');
+      };
+      const res = await referee({ cmd: SEA_DRAGON, model: 3, hints: SEA_DRAGON_HINTS, trace: TRACE, steps: stepsOf('game', 'novice'), rom: 'game', transform: wrong });
+      if (res.ok) throw new Error('the referee passed a port whose ROM byte is wrong');
+      // $515D LD A,(IX+00H) reads $0000 with IX 0; the port's $00 takes the other way through the routine
+      expect(res.field).toBe('cycles');
+      expect(res.at.block).toBe(0x5163);
     },
     SESSION_TIMEOUT_MS,
   );

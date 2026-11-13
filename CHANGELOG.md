@@ -188,7 +188,9 @@ creates and pushes the tag.
   [-o <dir>]`; a trace of another program, or a malformed one, exits 1 with its sentence), and its
   report lists the loader left out, each data region's kind, the rewritten code, the drops, the
   resets, the stand-ins and the ROM bytes, and says that a write into code the trace does not name
-  stops the port. Limits: `seadrg01.cmd` on the Model III only; a port takes no interrupts (Sea
+  stops the port, while a read of its own code or of a ROM byte the trace does not name reads `$00`
+  without stopping. The referee gives a port the ROM space a standalone port has (the module's `ROM`,
+  `$00` elsewhere) and counts the sound it compared. Limits: `seadrg01.cmd` on the Model III only; a port takes no interrupts (Sea
   Dragon enables none); the three games are the paths those sessions take, not every path through
   the game, and what the census cannot see is listed in the trace format's document; a block
   reached from two routines is translated in each. Release coupling: the CLI depends on the

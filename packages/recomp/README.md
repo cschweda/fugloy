@@ -310,9 +310,9 @@ high byte before the low.
   census over a session that reaches this)` at the write, so a port never runs on with stale code. A path
   the census's sessions never took may rewrite a byte the trace does not name; a longer session finds it.
 - **A ROM byte the trace does not name.** A standalone port's ROM space holds only its module's `ROM`
-  bytes (M2, from the census's sessions); any other ROM byte reads as `$00`, so a path the sessions never
-  took that reads another ROM byte as data reads something else (the referee, with the ROM in emu, shows it
-  as a difference).
+  bytes (M2, from the census's sessions); any other ROM byte reads as `$00`, silently: a path the sessions
+  never took that reads another ROM byte as data goes on with `$00`. The referee gives its port the same ROM
+  space, so there the read stops the run at the first register or byte it changes, against emu's ROM.
 - **A block reached from two routines** is translated in each, so its statements appear twice.
 - What the runtime does not model (interrupts, the devices it lists).
 
@@ -340,14 +340,16 @@ put back as a standalone port has it: none of the code bytes (they read as `load
 in `src/port.ts`, which `port()` is built on), less the loader's. That is set straight into the port's
 memory before `load`, so the write guard `load` installs never fires on the referee's own set-up. `trace`
 (M2), given to `port()` too, names the code bytes the program rewrites: `load` puts their initial values in,
-emu may write them, and each is compared with the port's like any byte written. `load` also puts the
-module's `ROM` (the trace's ROM reads, taken on the game stub ROM) over emu's bytes: on the game stub they are
-emu's; on the user's ROM one may differ (Sea Dragon reads `$0003`, `$00` on the stub and `$15` on the ROM
-here), and the port runs on the module's byte, as a standalone port does, so a register or byte that byte
-reached would stop the run; the byte itself must hold the module's value. Then
+emu may write them, and each is compared with the port's like any byte written. The port's ROM space (below
+`$3800` on the Model III, `$3000` on the Model I) is not emu's either (Ruling 13): it is what `load` leaves in a
+standalone port, the module's `ROM` (the trace's ROM reads, taken on the game stub ROM) and `$00` everywhere
+else, and it is never compared (a write there is lost on both machines). A ROM byte the program reads that the
+module does not carry, or carries with another value than emu's ROM holds, so reaches a register as
+something else on the port, and the run stops there: on the user's ROM, where Sea Dragon's `$0003` is `$15`
+and the module's `$00`, no register depends on it, and the sessions pass. Then
 the port runs with `z.at` replaced. At each block start emu is stepped until its T-states reach the port's,
 and there must be equal: the T-states, emu's PC and the block's address, every register, F, R, MEMPTR, the
-interrupt state and Q, and every byte either machine wrote since the block before. At the first block start
+interrupt state and Q, and every byte either machine wrote since the block before (outside the ROM space). At the first block start
 of each frame (1/60 s of emu's `clockHz`) video RAM and the sound are compared, and at the end the 64K and the
 sound, the keyboard as each reads it from the keys held; the one address range never compared is the Model I's Expansion Interface,
 `$37E0`–`$37EF`, whose 40 Hz latch emu sets with time and which the runtime refuses to touch. For a relocated
@@ -361,10 +363,9 @@ Fugløy's stub and no stand-ins, as the Learn checks run; `'game'`, the game stu
 `gameStubRom(model)`: the stub's source with `@fugloy/runtime`'s `STANDINS_Z` appended, Fugløy's own Z80
 for the stand-ins at the ROM's addresses, so emu runs a call to `$0060` through code that takes the ROM's
 time), booted as the stub is, and the runtime's stand-ins; or a ROM's bytes, locally the user's, and the
-stand-ins: emu does not boot it (the program is loaded into a machine just reset, and returns, if it does, to
-the word the reset stack holds), or, with `boot: 'ready'`, boots it to BASIC's READY first (`bootToReady` in
-`test/helpers.ts`: ENTER at Cass? and Memory Size?), as Sea Dragon's sessions start on the user's ROM. A game
-is refereed on `'game'` in CI, never on the user's ROM.
+stand-ins: emu boots it to BASIC's READY before the load (`bootToReady` in `test/helpers.ts`: ENTER at Cass?
+and Memory Size?), as a user loads a program, and the program returns, if it does, to the word on the stack
+at its entry. A game is refereed on `'game'` in CI, never on the user's ROM.
 
 `steps` are a `check.json`'s (`run`, `press`, `release`, `row`, `cell`, `pcIn`, as
 `packages/asm/test/lessons.test.ts` documents them). Each applies at the first block start at or after its
@@ -468,9 +469,11 @@ pressed by a step (the wait loop ends at the same T-state on both), the check st
 shares its address with another included), the refusals, and the steps it refuses to judge by (none with a
 `run`, a malformed step, a `pcIn` label not given). M2 adds the sound, on both models: two writes to port
 `$FF` pass; an OUT whose write is stamped one T-state late, another byte written, and a write too many are
-each stopped in `sound` at the next frame, naming the write; and the ROM bytes a port carries: a trace that
-says `$0003` read `$55` (the stub holds `$00`) passes where the program only reads it and writes it back
-(`SET 0,(IX+3)`, Sea Dragon's `$5168`), stops in A where it loads it, and one past the ROM refuses the port.
+each stopped in `sound` at the next frame, naming the write; and the ROM space (Ruling 13): a trace that says
+`$0003` read `$55` (the stub holds `$00`) passes where the program only reads it and writes it back (`SET
+0,(IX+3)`, Sea Dragon's `$5168`) and stops in A where it loads it; a program that loads `$0000`, which no trace
+names, stops in A (port `$00`, emu `$F3`); a write to ROM is not compared; and a ROM read past the ROM refuses
+the port. The `ok` result counts the writes to port `$FF` compared (`sounds`), 0 for Task 3's programs.
 
 `test/port.test.ts` assembles programs with `@fugloy/asm` (a straight line, a DJNZ count, conditional JP
 and JR both ways, CALL and RET three deep with CALL cc and RET cc both ways, two routines jumping into each
@@ -559,9 +562,12 @@ the file alone; recording each session on emu first takes 0.8 to 3.9 s. An OUT s
 stopped in `sound` at the first frame after the game's first write. Locally, when `fugloy.mcp.json` names a
 Model III ROM, the same three games, recorded on that ROM booted to READY, pass on it too (94,494,841,
 60,696,396 and 124,397,798 T-states there), with the module's `$0003` (`$00`) where the ROM holds `$15`: no
-register depends on it. The three games are the paths the recorded sessions take, not every path through the
-game: a path they never take may rewrite a byte, drop a return address or read a ROM byte the trace does not
-name, and the port then stops with a sentence (see *What it does not model*).
+register depends on it. Each session compares its sound (`sounds` above 0). A module whose `$0000` is wrong
+(`$00` for `$F3`) stops the Novice game at the first block where it shows (`cycles`, at `$5163`). The three
+games are the paths the recorded sessions take, not every path through the game: a path they never take may
+rewrite a byte or drop a return address the trace does not name, and the port then stops with a sentence, or
+read a ROM byte the trace does not name, which a standalone port reads as `$00` without stopping (see *What it
+does not model*).
 
 `test/structure.test.ts` checks the shapes: the straight line, DJNZ, diamond and nested-loop programs have
 no `switch`, every routine structured, and pass the referee on both models; the loops, the diamond's

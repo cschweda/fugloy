@@ -12,10 +12,9 @@
  *     'game'`, M2) the stub is the game stub ROM (game-rom.ts: the stub and Fugløy's Z80 stand-ins at the
  *     ROM's addresses), booted the same way, and port() is given the runtime's stand-ins, so a CALL to
  *     one runs the stand-in on the port and Fugløy's Z80 for it on emu. In CI, never the user's ROM;
- *     locally a test may pass the user's ROM bytes (`rom: <bytes>`), and port() is given the stand-ins:
- *     by default emu does not boot it (the program is loaded into a machine just reset, for M2 Task 2's
- *     small programs); with `boot: 'ready'` it boots it to BASIC's READY first (helpers.ts,
- *     `bootToReady`), as Sea Dragon's sessions start on the user's ROM (controller Ruling 5).
+ *     locally a test may pass the user's ROM bytes (`rom: <bytes>`), which emu boots to BASIC's READY
+ *     before the load (helpers.ts, `bootToReady`), as a user loads a program and as Sea Dragon's sessions
+ *     start on the user's ROM (controller Ruling 5), and port() is given the stand-ins.
  *   - The port's `Z` takes emu's registers and 64K at that moment, so the stub's bytes, the screen,
  *     RETURNED on the stack and whatever the loader left in the registers are the same on both. Then
  *     every address the .CMD loads, and every address of the program's code and DATA (its run
@@ -23,11 +22,12 @@
  *     port's DATA: the port runs on the memory a standalone port would have, with none of the program's
  *     code bytes (they read as `load` leaves them, 0 in RAM). A program that reads its own code as data
  *     therefore reads something else on the port, and the first register or byte that read changes
- *     stops the run, with the code byte named. `load` also stores the module's `ROM` (M2: the ROM bytes
- *     the trace saw the program read, taken on the game stub ROM) over emu's: on the game stub they are
- *     emu's bytes; on the user's ROM a byte may differ (Sea Dragon's $0003), and the port runs on the
- *     module's byte, as a standalone port would, so a register or byte the difference reached would stop
- *     the run there.
+ *     stops the run, with the code byte named. The port's ROM space (below the model's ROM top, $3800 on
+ *     the Model III, $3000 on the Model I) is not emu's either (controller Ruling 13): it holds what
+ *     `load` leaves in a standalone port, the module's `ROM` (M2: the ROM bytes the trace saw the program
+ *     read as data, taken on the game stub ROM) and $00 everywhere else. A ROM byte the program reads that
+ *     the trace does not carry (or carries with another value than emu's ROM holds) therefore reaches a
+ *     register as something else on the port, and the first register or byte it changes stops the run.
  *   - The port runs with `z.at` replaced. At each block start emu is stepped, an instruction at a time,
  *     until its T-states reach the port's; then emu's T-states must equal the port's, emu's PC the
  *     block's address, and every register, F, R, MEMPTR, the interrupt state and Q must be equal, and
@@ -53,10 +53,11 @@
  *     HALT, a RET elsewhere) stops the run with the port's sentence; for a device, emu is stepped
  *     through the block to the same access, which names the instruction.
  *
- * The memory compared is the whole 64K, the keyboard ($3800-$3BFF) as each machine reads it from the
- * keys held (at a byte of the program's code that is not a cell, and at a ROM byte the module carries,
- * the port must hold what `load` put there), with one exception: the Model I's Expansion Interface,
- * $37E0-$37EF, whose 40 Hz interrupt latch emu sets as time passes. The runtime does not model it and throws a sentence at any read or
+ * The memory compared is the 64K above the ROM space, the keyboard ($3800-$3BFF) as each machine reads it
+ * from the keys held (at a byte of the program's code that is not a cell, the port must hold what `load`
+ * left there), with one exception: the Model I's Expansion Interface, $37E0-$37EF, whose 40 Hz interrupt
+ * latch emu sets as time passes. The ROM space is never compared: a write there is lost on both machines,
+ * and the port's ROM is the module's by definition (see above). The runtime does not model it and throws a sentence at any read or
  * write there, so no port can differ there silently. A relocated program's end-of-run compare also
  * leaves out the bytes its loader left behind (see `leftBehind` below), and nothing else.
  */
@@ -99,16 +100,11 @@ export interface RefereeOptions {
   /**
    * The ROM emu runs, and with it the stand-ins port() is given. 'stub' (the default): Fugløy's stub,
    * no stand-ins, as the Learn checks run. 'game': the game stub ROM (game-rom.ts), booted as the stub
-   * is, and the runtime's stand-ins for the model. A ROM's bytes (the user's, locally): not booted (no
-   * ROM code runs before the load; the program starts from emu's reset state, its return address the word
-   * the reset stack holds), and the runtime's stand-ins.
+   * is, and the runtime's stand-ins for the model. A ROM's bytes (the user's, locally): booted to BASIC's
+   * READY (helpers.ts, `bootToReady`), the program's return address the word on the stack at its entry,
+   * and the runtime's stand-ins.
    */
   rom?: 'stub' | 'game' | Uint8Array;
-  /**
-   * With a ROM's bytes: 'reset' (the default), the program is loaded into a machine just reset; 'ready',
-   * the ROM is booted to BASIC's READY first (helpers.ts, `bootToReady`), as a user loads a program.
-   */
-  boot?: 'reset' | 'ready';
   /** For the referee's own tests: rewrites the port's module text before it runs, to plant a bug. */
   transform?: (js: string) => string;
   /** The program's trace (M2), given to `port()`: its cells are code bytes the program may write. */
@@ -117,7 +113,8 @@ export interface RefereeOptions {
 
 /**
  * `cycles` are T-states from the program's entry. `ok`: how long the run was, how many block starts were
- * compared, and at how many of them video RAM was (the frames). Not `ok`: `report`, a sentence naming
+ * compared, at how many of them video RAM and the sound were (the frames), and how many writes to port
+ * $FF were compared (`sounds`). Not `ok`: `report`, a sentence naming
  * what differed or was refused, both values, the block and the instruction; `at`, the block start where
  * the referee stopped (`routine` is the port's routine running it; after the program returned, '' and
  * the stub's RETURNED); `field`, what differed: a register as the runtime names it (`a` … `hl_`, `wz`,
@@ -126,7 +123,7 @@ export interface RefereeOptions {
  * step's `row N`, `cell $XXXX` or `pcIn`.
  */
 export type RefereeResult =
-  | { ok: true; cycles: number; blocks: number; frames: number }
+  | { ok: true; cycles: number; blocks: number; frames: number; sounds: number }
   | { ok: false; report: string; at: { routine: string; block: number; cycles: number }; field: string };
 
 const $2 = (n: number): string => `$${hex(n, 2)}`;
@@ -234,12 +231,12 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
   if (!p.ok || !prepared.ok) return { ok: false, report: (p.ok ? [] : p.errors).join(' '), at: { routine: '', block: parseCmd(cmd).entry, cycles: 0 }, field: 'port' };
   const mod = await importPort(opts.transform === undefined ? p.js : opts.transform(p.js));
 
-  // ---- emu: the stub booted (or a user's ROM reset, or booted to READY), the program loaded, and run to
-  // the port's entry (through the loader, if any)
+  // ---- emu: the stub booted (or a user's ROM booted to READY), the program loaded, and run to the port's
+  // entry (through the loader, if any)
   const booted = typeof rom === 'string';
   const m = new Machine({ model, roms: { level2: rom === 'stub' ? stub(model).rom : rom === 'game' ? gameStubRom(model) : rom } });
   if (booted && m.run({ until: 'halt', cycles: m.clockHz }).reason !== 'halt') throw new Error('the stub ROM did not start and halt');
-  if (!booted && opts.boot === 'ready') bootToReady(m);
+  if (!booted) bootToReady(m);
   m.load.cmd(cmd);
   const cpu = cpuOf(m);
   if (!runTo(m, p.report.entryAddr, ENTRY_LIMIT)) {
@@ -269,9 +266,6 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
   for (const c of p.report.cells) cell[c.addr] = 1;
   const inData = new Uint8Array(0x10000);
   for (const d of p.report.data) for (let k = 0; k < d.length; k++) inData[(d.addr + k) & 0xffff] = 1;
-  /** The module's ROM bytes (the trace's ROM reads), which `load` puts over emu's; -1 elsewhere. */
-  const romByte = new Int16Array(0x10000).fill(-1);
-  for (const b of p.report.rom) romByte[b.addr] = b.value;
   const length = new Uint8Array(0x10000);
   for (let a = 0; a < 0x10000; a++) if (code[a]) length[a] = decodeAt(startMem, a).length;
   // The bytes a relocated program's loader left behind: what the .CMD loads that is neither the program's
@@ -283,12 +277,14 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
   const leftBehind = new Uint8Array(0x10000);
   for (let a = 0; a < 0x10000; a++) if (loaded[a] && !code[a] && !inData[a]) leftBehind[a] = 1;
 
-  // ---- the port: emu's registers and 64K, but the program's bytes as a standalone port has them (Ruling 1:
-  // set straight into its memory before `load`, so the write guard `load` installs never sees them)
+  // ---- the port: emu's registers and 64K, but the program's bytes and the ROM space as a standalone port
+  // has them (Ruling 1: set straight into its memory before `load`, so the write guard `load` installs
+  // never sees them; Ruling 13: the ROM space as a new Z holds it, $00, until `load` stores the module's ROM)
   const z = createZ({ model });
   const fresh = z.mem.slice();
+  const romTop = z.romTop;
   setZ(z, start, startMem);
-  for (let a = 0; a < 0x10000; a++) if (loaded[a] || code[a] || inData[a]) z.mem[a] = fresh[a]!;
+  for (let a = 0; a < 0x10000; a++) if (a < romTop || loaded[a] || code[a] || inData[a]) z.mem[a] = fresh[a]!;
   load(z, mod);
 
   // ---- watching both machines' writes, and emu's reads of code as data
@@ -370,22 +366,19 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
 
   /**
    * One address, the port's against emu's: the port must hold emu's byte, but at a code byte that is not
-   * one of the trace's cells what `load` left there, and at a ROM byte the module carries the module's
-   * byte (which `load` put there; on the game stub ROM it is emu's); the keyboard as each machine reads
-   * it; the Model I's Expansion Interface not at all.
+   * one of the trace's cells what `load` left there; the keyboard as each machine reads it; the ROM space
+   * and the Model I's Expansion Interface not at all.
    */
   const compareByte = (a: number): void => {
+    if (a < romTop) return;
     if (model === 1 && a >= EXPANSION.start && a <= EXPANSION.end) return;
     const keyboard = a >= KEYBOARD.start && a <= KEYBOARD.end;
     const pv = keyboard ? z.read(a) : z.mem[a]!;
     const ev = emuMem.peekByte(a);
     const carried = code[a] && !cell[a];
-    const romCarried = romByte[a]! >= 0;
-    const want = carried ? fresh[a]! : romCarried ? romByte[a]! : ev;
+    const want = carried ? fresh[a]! : ev;
     if (pv === want) return;
-    const note = carried
-      ? ` (a byte of the program's code, where the port holds what load left, ${$2(want)})`
-      : romCarried ? ` (a ROM byte the port carries, where it holds the module's, ${$2(want)})` : '';
+    const note = carried ? ` (a byte of the program's code, where the port holds what load left, ${$2(want)})` : '';
     throw new Stop(`mem[${$4(a)}]`, `${$4(a)}: port ${$2(pv)}, emu ${$2(ev)}${note}`);
   };
   const compareWritten = (): void => {
@@ -425,6 +418,7 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
       if (e !== undefined && q !== undefined && e.t === q.t && e.v === q.v) continue;
       throw new Stop('sound', `sound: write ${k + 1} to port $FF since the last compare (of ${ev.length} on emu, ${pv.length} on the port): port ${show(q)}, emu ${show(e)}`);
     }
+    sounds += ev.length;
     m.sound.clear();
     z.sound.length = 0;
   };
@@ -476,6 +470,8 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
   let nextFrame = Math.ceil(start.cycles / frameT) * frameT;
   let blocks = 0;
   let frames = 0;
+  /** The writes to port $FF compared, on each machine. */
+  let sounds = 0;
   z.at = (addr: number): void => {
     z.block = addr;
     catchUp();
@@ -518,7 +514,7 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
   try {
     runPort(z, mod);
   } catch (e) {
-    if (e === END) return { ok: true, cycles: since(z.cycles), blocks, frames };
+    if (e === END) return { ok: true, cycles: since(z.cycles), blocks, frames, sounds };
     if (e instanceof Stop) {
       const { routine, block } = placed(e);
       return stopped(e.field, explain(e, inBlock(routine, block)), routine, block);
@@ -594,7 +590,7 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
     compareEnd();
   } catch (e) {
     if (!(e instanceof Stop)) throw e;
-    return stopped(e.field, explain(e, `after the program returned to ${booted ? "the stub's RETURNED" : 'the address on the reset stack'} (${$4(returned)}), T-state ${since(z.cycles)} from the entry`), '', returned);
+    return stopped(e.field, explain(e, `after the program returned to ${booted ? "the stub's RETURNED" : 'the address on the stack at the entry'} (${$4(returned)}), T-state ${since(z.cycles)} from the entry`), '', returned);
   }
-  return { ok: true, cycles: since(z.cycles), blocks, frames };
+  return { ok: true, cycles: since(z.cycles), blocks, frames, sounds };
 }

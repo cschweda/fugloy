@@ -72,7 +72,7 @@ describe("Task 3's programs", () => {
       it(`${what}: passes on ${modelName(model)}, compared at every block it starts`, async () => {
         const r = assembled(source, model);
         const res = passed(await judge(r, model, [{ run: 1_000_000 }]));
-        expect(res).toEqual({ ok: true, ...(await counted(r, model)), frames: expect.any(Number) });
+        expect(res).toEqual({ ok: true, ...(await counted(r, model)), frames: expect.any(Number), sounds: 0 });
         expect(res.blocks).toBeGreaterThan(0);
       });
     }
@@ -175,7 +175,7 @@ PARK:   JR      PARK`), model);
   });
 });
 
-describe("the ROM bytes a port carries (its module's ROM, from the trace; M2 Task 7)", () => {
+describe("the ROM space: the port's is a standalone port's, its module's ROM and $00 elsewhere (M2 Task 7, Ruling 13)", () => {
   // A trace that says the program read $0003 as $55, where the stub ROM holds $00: as a trace taken on
   // one ROM reads on another (Sea Dragon's, taken on the game stub, on the user's ROM, which holds $15)
   const traced = (r: AsmResult): PortTrace => ({
@@ -183,7 +183,7 @@ describe("the ROM bytes a port carries (its module's ROM, from the trace; M2 Tas
     sessions: [], patches: [], entered: [], drops: [], romReads: [{ addr: 0x0003, value: 0x55 }],
   });
 
-  it("lets the port hold the module's byte there, whatever emu's ROM holds, when nothing the program keeps depends on it", async () => {
+  it("runs the port on the module's byte, whatever emu's ROM holds, and passes when nothing the program keeps depends on it", async () => {
     // SET 0,(IX+3) reads the byte and writes it back, which the ROM ignores (Sea Dragon's $5168)
     const r = assembled(program(`
 START:  LD      IX,0
@@ -217,6 +217,28 @@ PARK:   JR      PARK`), 3);
     const res = failed(await referee({ cmd: toCmd(r), model: 3, names: namesOf(r), trace: traced(r), steps: [{ run: 1000 }] }));
     expect(res.field).toBe('a');
     expect(res.report).toMatch(/^A: port \$56, emu \$01, at the start of the block at \$7004/);
+  });
+
+  it('stops a program that reads a ROM byte its trace does not name at the register that received it: the port reads $00', async () => {
+    // The stub ROM's first byte is DI ($F3); with no trace the port carries no ROM byte
+    expect(stub(3).rom[0x0000]).toBe(0xf3);
+    const r = assembled(program(`
+START:  LD      A,(0000H)
+PARK:   JR      PARK`), 3);
+    const res = failed(await judge(r, 3, [{ run: 1000 }]));
+    expect(res.field).toBe('a');
+    expect(res.at.block).toBe(r.symbol('PARK')!.value);
+    expect(res.report).toMatch(/^A: port \$00, emu \$F3, at the start of the block at \$7003/);
+  });
+
+  it('never compares the ROM space: a write there is lost on both machines', async () => {
+    const r = assembled(program(`
+START:  LD      A,42H
+        LD      (0003H),A
+        LD      HL,0010H
+        LD      (HL),A
+        RET`), 3);
+    passed(await judge(r, 3, [{ run: 1000 }]));
   });
 });
 

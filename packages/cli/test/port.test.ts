@@ -107,7 +107,7 @@ describe('fugloy port', () => {
         'game.cmd, ported for the Model III by @fugloy/recomp 0.1.0',
         'Module: game.port.js (imports @fugloy/runtime/ops)',
         'Entry: START',
-        "This port was not compared with the emulator. It was made with no trace, so a write into the program's code stops it with a sentence.",
+        "This port was not compared with the emulator. It was made with no trace, so a write into the program's code stops it with a sentence; a read of its own code, or of a ROM byte, reads $00 without stopping.",
         '',
         'Routines: 2 (1 labelled)',
         '  $7000  START  3 blocks  labelled',
@@ -181,7 +181,7 @@ describe('fugloy port', () => {
     expect(report).toBe(formatReport(p.report, { source: 'seadrg01.cmd', model: 3, module: 'seadrg01.port.js', trace: 'seadrg01.trace.json' }));
     expect(report).toContain('\nLoader: The file\'s transfer routine at $8881 (15 bytes) moves the program to where it runs; the port does not translate it, and starts at $497F with its data already at its run addresses.\n');
     expect(report).toContain('\nTrace: seadrg01.trace.json\n');
-    expect(report).toContain("\nThis port was not compared with the emulator. A write into the program's code that the trace does not name stops it with a sentence.\n");
+    expect(report).toContain("\nThis port was not compared with the emulator. A write into the program's code that the trace does not name stops it with a sentence; a read of its own code, or of a ROM byte the trace does not name, reads $00 without stopping.\n");
     expect(report).toMatch(/\nRoutines: \d+ \(0 labelled\)\n/);
     expect(report).toContain('\nCode the program rewrites, read as it runs: 8 sites, 9 bytes\n');
     expect(report).toContain('\n  $49C1  displacement of the instruction at $49BF; 9 values seen\n');

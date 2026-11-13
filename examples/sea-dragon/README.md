@@ -74,6 +74,7 @@ about 12 seconds). Locally the same games pass on the Model III ROM too. What
 that does not cover: `seadrg01.cmd` on the Model III only (not the other builds
 or the Model I); no interrupts (the game enables none); the paths the three
 games take, not every path through the game, so a path they never take may
-write into code, drop a return address or read a ROM byte the trace does not
-name, and the port then stops with a sentence. Playing the port in a browser
-comes next.
+write into code or drop a return address the trace does not name, and the port
+then stops with a sentence, or read a ROM byte the trace does not name, which
+the port reads as `$00` without stopping. Playing the port in a browser comes
+next.

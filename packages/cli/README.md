@@ -25,7 +25,8 @@ statement per instruction, which imports `@fugloy/runtime/ops` and runs on `@fug
 `game.port.txt`, its report, one line an item: the entry; the loader it left out, for a program its
 hint file relocates; the trace, if given; a line saying the port was not compared with the emulator
 and that a write into the program's code the trace does not name (with no trace, any) stops it with a
-sentence; each routine and its blocks; the data regions and their kinds (`data`, typed by the hint
+sentence, while a read of its own code or of a ROM byte the trace does not name reads `$00` without
+stopping; each routine and its blocks; the data regions and their kinds (`data`, typed by the hint
 file, or `unknown`); the code the program rewrites (each cell's kind, and an opcode's choice of
 instructions); the `POP`s that drop a return address; the jumps back to the entry that discard the
 stack; the ROM routines `@fugloy/runtime` stands in for and where they are called (on the Model III,

@@ -349,8 +349,10 @@ references waits (emu spec §12).
   `STANDINS_Z`) and writes the trace; Sea Dragon's is committed as
   `examples/sea-dragon/seadrg01.trace.json`, and `census.test.ts` fails when it
   is stale. The referee also compares the sound (port `$FF` writes) at every
-  frame, starts a user's ROM booted to READY with `boot: 'ready'`, and holds a
-  carried ROM byte to the module's value. `test/sea-dragon.test.ts` referees
+  frame (`sounds` counts them), boots a user's ROM to READY before the
+  load, and gives the port the ROM space a standalone port has (the module's
+  `ROM`, `$00` elsewhere; never compared), so a ROM byte read that the trace
+  missed stops the run at the register it reaches. `test/sea-dragon.test.ts` referees
   Sea Dragon's port through the three games in CI (about 12 s of refereeing),
   and locally on the Model III ROM too. Limits: `seadrg01.cmd` on the Model III
   only, no interrupts in a port, the three sessions' paths only.

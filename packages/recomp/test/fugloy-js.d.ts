@@ -80,6 +80,8 @@ declare module '@fugloy/runtime' {
     in(port: number): number;
     out(port: number, v: number): void;
     readonly model: 1 | 3 | 'flat';
+    /** Where the ROM space ends: the first address past it ($3000 on the Model I, $3800 on the Model III). */
+    readonly romTop: number;
     readonly clockHz: number;
     readonly columns32: boolean;
     press(name: string): void;

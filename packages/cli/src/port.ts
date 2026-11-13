@@ -77,8 +77,8 @@ export function formatReport(report: PortReport, about: { source: string; model:
     ...(report.loader === undefined ? [] : [`Loader: ${report.loader.note}`]),
     ...(about.trace === undefined ? [] : [`Trace: ${about.trace}`]),
     about.trace === undefined
-      ? 'This port was not compared with the emulator. It was made with no trace, so a write into the program\'s code stops it with a sentence.'
-      : 'This port was not compared with the emulator. A write into the program\'s code that the trace does not name stops it with a sentence.',
+      ? 'This port was not compared with the emulator. It was made with no trace, so a write into the program\'s code stops it with a sentence; a read of its own code, or of a ROM byte, reads $00 without stopping.'
+      : 'This port was not compared with the emulator. A write into the program\'s code that the trace does not name stops it with a sentence; a read of its own code, or of a ROM byte the trace does not name, reads $00 without stopping.',
     '',
   ];
   const labelled = report.routines.filter((r) => r.labelled).length;
