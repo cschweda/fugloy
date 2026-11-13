@@ -121,7 +121,58 @@ high byte before the low.
   the difference; the test compares EI with emu after EI and one NOP.
 - What the runtime does not model (interrupts, the devices it lists).
 
+## The referee
+
+A port is proved the same program by running it beside `@fugloy/emu`: `test/referee.ts` (test code, since emu
+is a devDependency) exports
+
+```ts
+const result = await referee({ cmd, model: 3, names, steps: check.steps });
+// { ok: true, cycles, blocks, frames }
+// { ok: false, report, at: { routine, block, cycles }, field }
+```
+
+It boots emu on Fugløy's stub ROM (never the user's ROM), loads the program, ports it with `names`, and gives
+the port's `Z` emu's registers and 64K, but with every byte the `.CMD` loads put back as a standalone port has
+it: none of the code bytes (they read as `load` leaves them, 0 in RAM), and `DATA` written by `load`. Then
+the port runs with `z.at` replaced. At each block start emu is stepped until its T-states reach the port's,
+and there must be equal: the T-states, emu's PC and the block's address, every register, F, R, MEMPTR, the
+interrupt state and Q, and every byte either machine wrote since the block before. At the first block start
+of each frame (1/60 s of emu's `clockHz`) video RAM is compared, and at the end the 64K, the keyboard as each
+reads it from the keys held; the one address range never compared is the Model I's Expansion Interface,
+`$37E0`–`$37EF`, whose 40 Hz latch emu sets with time and which the runtime refuses to touch.
+
+`steps` are a `check.json`'s (`run`, `press`, `release`, `row`, `cell`, `pcIn`, as
+`packages/asm/test/lessons.test.ts` documents them). Each applies at the first block start at or after its
+T-state from the entry, on both machines: a key to both keyboards; `row` and `cell` checked on both, `pcIn`
+on emu's PC, its labels read from `names`. The run ends at the first block start at or after the last `run`,
+or when the program returns to the stub's `RETURNED` (steps not yet due then apply to both as they stopped).
+`cycles` count T-states from the entry; `blocks` the block starts compared; `frames` how many of them
+compared video RAM.
+
+It stops at the first of these, with a sentence in `report` and the block start in `at` (after a return,
+routine `''` and block `RETURNED`):
+
+| `field` | |
+|---|---|
+| `cycles`, `pc`, `a` … `hl_`, `wz`, `iff1`, `iff2`, `im`, `q` | a difference at a block start: both values, the block before and emu's last instruction in it, and the first byte of the program's code emu read as data, if any (a port has no code bytes, so a program that reads its own code is stopped at the first register or byte that read changes) |
+| `mem[$XXXX]` | a byte either machine wrote that differs, or one the end's compare finds |
+| `code` | `self-modifying code: $XXXX written by the instruction at $YYYY (M1 does not translate it)`: emu wrote into a byte of the program's code, by any instruction, whether or not the byte runs again |
+| `refusal` | what the port refused as it ran, in the port's sentence; for a device, emu is stepped through the block to the same access, which names the instruction |
+| `port` | `port()` refused the program: its sentences |
+| `row N`, `cell $XXXX`, `pcIn` | a check step that does not hold, on either machine |
+
+The Learn checks run it on every lesson and chapter: about 19 million T-states a second (chapter 8 of Build
+Space Invaders, 236 million T-states, in about 12.5 s).
+
 ## How it is checked
+
+`test/referee.test.ts` runs the referee over the programs below on both models, and plants what it must
+catch: an `add8` whose H is wrong (stopped in F at the block after the first ADD), a block's tick one T-state
+or one R increment short (stopped in `cycles` or `r` at the next block), a byte written differently, a
+store, a block move and a push into the program's code and a write into code that never runs again (each
+refused as self-modifying), a program that reads its own code into a register and one into memory, a key
+pressed by a step (the wait loop ends at the same T-state on both), the check steps, and the refusals.
 
 `test/port.test.ts` assembles programs with `@fugloy/asm` (a straight line, a DJNZ count, conditional JP
 and JR both ways, CALL and RET three deep with CALL cc and RET cc both ways, two routines jumping into each

@@ -24,9 +24,13 @@ declare module '@fugloy/emu' {
     reset(): void;
     executeInstruction(): number;
   }
-  /** Merges with the Machine packages/asm/test/fugloy-emu.d.ts declares: its system and step. */
+  /** Merges with the Machine packages/asm/test/fugloy-emu.d.ts declares: its system, step and live video RAM. */
   export interface Machine {
-    readonly system: { readonly cpu: Z80CPU };
+    readonly system: {
+      readonly cpu: Z80CPU;
+      /** A read with no device side effect (memory.js, peekByte). */
+      readonly memory: { peekByte(addr: number): number };
+    };
     step(n?: number): { cycles: number; halted: boolean };
   }
 }
@@ -50,6 +54,11 @@ declare module '@fugloy/runtime' {
     write16(addr: number, v: number): void;
     in(port: number): number;
     out(port: number, v: number): void;
+    readonly model: 1 | 3 | 'flat';
+    readonly clockHz: number;
+    readonly columns32: boolean;
+    press(name: string): void;
+    release(name: string): void;
   }
   export function createZ(opts: { model: 1 | 3 | 'flat' }): Z;
   /** A port module, as @fugloy/recomp's port() writes it. */
