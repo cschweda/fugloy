@@ -15,7 +15,9 @@ trap 'rm -rf "$WORK"' EXIT
 git clone -q "$ZMAC_REPO" "$WORK/zmac"
 git -C "$WORK/zmac" checkout -q "$ZMAC_COMMIT"
 # The Makefile names gcc, which is clang on macOS; the old-style C needs these flags there.
-make -C "$WORK/zmac/src" zmac CC="${CC:-cc}" CFLAGS="${ZMAC_CFLAGS:--O2 -Wno-implicit-function-declaration -Wno-implicit-int -Wno-deprecated-non-prototype -Wno-return-type}"
+# -std=gnu17: zmac declares functions without parameters ("void bookmark();") and defines them with
+# some, which C23, the default from GCC 15, makes an error.
+make -C "$WORK/zmac/src" zmac CC="${CC:-cc}" CFLAGS="${ZMAC_CFLAGS:--O2 -std=gnu17 -Wno-implicit-function-declaration -Wno-implicit-int -Wno-deprecated-non-prototype -Wno-return-type}"
 mkdir -p "$DEST"
 cp "$WORK/zmac/src/zmac" "$DEST/zmac"
 echo "$ZMAC_COMMIT" > "$DEST/COMMIT"
