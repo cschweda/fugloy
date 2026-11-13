@@ -53,6 +53,16 @@ describe('lesson progress', () => {
     expect([...createProgress(lessonText, () => s).done()]).toEqual(['a']);
   });
 
+  it("keeps another tab's done mark when this one marks a lesson later", () => {
+    const s = fake();
+    const a = createProgress(lessonText, () => s);
+    const b = createProgress(lessonText, () => s);
+    expect([...a.done()]).toEqual([]); // tab A has read the (empty) store
+    b.markDone('two');
+    a.markDone('one');
+    expect([...createProgress(lessonText, () => s).done()].sort()).toEqual(['one', 'two']);
+  });
+
   it('answers from memory when every storage method throws', () => {
     const boom = () => { throw new Error('blocked'); };
     const s = { getItem: boom, setItem: boom, removeItem: boom, clear: boom, key: boom, length: 0 } as unknown as Storage;

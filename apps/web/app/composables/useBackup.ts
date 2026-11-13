@@ -27,10 +27,16 @@ export function useBackup() {
   async function backUp(): Promise<void> {
     const s = await store();
     if (s === null) return;
-    await persistence.flush();
-    await loadedSources()?.flush();
-    const { makeBackup } = await import('../utils/backup');
-    const json = await makeBackup(s);
+    let json: string;
+    try {
+      await persistence.flush();
+      await loadedSources()?.flush();
+      const { makeBackup } = await import('../utils/backup');
+      json = await makeBackup(s);
+    } catch (err) {
+      message.value = `The backup could not be made: ${err instanceof Error ? err.message : String(err)}`;
+      return;
+    }
     const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
     const a = document.createElement('a');
     a.href = url;

@@ -76,6 +76,8 @@ export function useListingEditor(opts: {
   function mark(as: MarkKind | 'table'): void {
     const r = markRange(rows.value, cursor.value, selection.value);
     if (r === null) return;
+    // The keys work from the Hints and Source pages too: show the row being marked, and what was said about it.
+    opts.showListing();
     edit(as === 'table' ? { op: 'table', ...r } : { op: 'mark', as, ...r });
   }
 

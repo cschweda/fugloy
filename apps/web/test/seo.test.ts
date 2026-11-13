@@ -13,9 +13,10 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const out = join(dirname(fileURLToPath(import.meta.url)), '..', '.output', 'public');
-const built = existsSync(join(out, 'index.html'));
-if (!built && process.env.FUGLOY_REQUIRE_SEO === '1') throw new Error('FUGLOY_REQUIRE_SEO=1 but .output/public is missing; run `pnpm --filter @fugloy/web generate` first.');
-if (!built) console.warn('seo.test: .output/public is missing; run `pnpm --filter @fugloy/web generate` first. Skipping.');
+const REQUIRED = process.env.FUGLOY_REQUIRE_SEO === '1';
+const present = existsSync(join(out, 'index.html'));
+if (!present && REQUIRED) throw new Error('FUGLOY_REQUIRE_SEO=1 but .output/public is missing; run `pnpm --filter @fugloy/web generate` first.');
+if (!present) console.warn('seo.test: .output/public is missing; run `pnpm --filter @fugloy/web generate` first. Skipping.');
 
 const ORIGIN = 'https://app.fugloy.dev';
 // Each lesson's page, from its folder (content/learn/NN-slug) and the title in its front matter, and (6C) each
@@ -42,6 +43,13 @@ const PAGES = [
   { path: '/manuals/', file: 'manuals/index.html', title: 'Manuals · Fugløy' },
   { path: '/about/', file: 'about/index.html', title: 'About · Fugløy' },
 ];
+
+// A site generated before a lesson or page was added lacks that page's file. Left over from an earlier
+// run, that is a stale build, not a broken one: skip as for a missing one. With FUGLOY_REQUIRE_SEO=1
+// the site was just generated, so a missing page is a failure and the tests run to say which.
+const stale = present && !REQUIRED && [...PAGES, ...ALIASES].some((p) => !existsSync(join(out, p.file)));
+if (stale) console.warn('seo.test: .output/public is older than the pages it should hold; run `pnpm --filter @fugloy/web generate` again. Skipping.');
+const built = present && !stale;
 
 const read = (f: string): string => readFileSync(join(out, f), 'utf8');
 /** Every file under a directory, relative paths. */
@@ -200,7 +208,7 @@ describe.skipIf(!built)('SEO of the generated pages', () => {
   });
 });
 
-describe.skipIf(!built || process.env.FUGLOY_REQUIRE_SEO !== '1')('the site as Netlify builds it', () => {
+describe.skipIf(!built || !REQUIRED)('the site as Netlify builds it', () => {
   it('does not contain the browser checks\' window.__fugloyTest or window.__fugloyLearn hooks', () => {
     const files = walk(out).filter((f) => /\.(m?js|html)$/.test(f));
     expect(files.length).toBeGreaterThan(5);
