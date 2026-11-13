@@ -57,8 +57,12 @@ export interface RefereeOptions {
   /** The program, a .CMD. */
   cmd: Uint8Array;
   model: Model;
-  /** Names for addresses, given to `port()` and read by `pcIn` steps (for a Learn program, its labels). */
-  names?: ReadonlyMap<number, string>;
+  /**
+   * Names for addresses (for a Learn program, its labels): `port()` names each address by the first (or
+   * only) name given for it, and a `pcIn` step finds its label among all of them, so a label that shares
+   * its address with another is found.
+   */
+  names?: ReadonlyMap<number, string | readonly string[]>;
   steps: readonly Step[];
   /** For the referee's own tests: rewrites the port's module text before it runs, to plant a bug. */
   transform?: (js: string) => string;
@@ -132,21 +136,39 @@ function screenRow(z: Z, row: number): string {
   return line;
 }
 
-/** Throws a sentence for a step that is not one of check.json's forms. */
-function checkSteps(steps: readonly Step[]): void {
+/**
+ * Throws a sentence for steps the referee cannot judge by: a step that is not one of check.json's forms,
+ * steps with no `run` (the run would end at the first block start, having compared that block alone),
+ * and a `pcIn` label `labels` does not hold. These are input errors, found before anything runs.
+ */
+function checkSteps(steps: readonly Step[], labels: ReadonlyMap<string, number>): void {
   steps.forEach((s, i) => {
     const keys = Object.keys(s).sort().join(',');
     const ok = ['run', 'press', 'release', 'row,text', 'byte,cell', 'pcIn', 'pcIn,to'].includes(keys) &&
       (!('run' in s) || (Number.isInteger(s.run) && s.run > 0));
     if (!ok) throw new Error(`step ${i + 1} (${JSON.stringify(s)}) is not one of run, press, release, row and text, cell and byte, pcIn, or pcIn and to`);
   });
+  if (!steps.some((s) => 'run' in s)) throw new Error('the steps have no run step, so the referee would compare the first block alone; give it a run of some T-states');
+  for (const s of steps) {
+    if (!('pcIn' in s)) continue;
+    for (const label of s.to === undefined ? [s.pcIn] : [s.pcIn, s.to]) {
+      if (!labels.has(label)) throw new Error(`pcIn names ${label}, which the names given do not hold`);
+    }
+  }
 }
 
 /** Run the program `cmd` on emu and its port side by side; see the header. */
 export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
   const { cmd, model, steps } = opts;
-  const names = opts.names ?? new Map<number, string>();
-  checkSteps(steps);
+  /** The port's names, the first given at each address; and every name given, to its address, for pcIn. */
+  const names = new Map<number, string>();
+  const labels = new Map<string, number>();
+  for (const [address, given] of opts.names ?? new Map<number, string>()) {
+    const all = typeof given === 'string' ? [given] : given;
+    if (all.length > 0) names.set(address, all[0]!);
+    for (const label of all) if (!labels.has(label)) labels.set(label, address);
+  }
+  checkSteps(steps, labels);
 
   const p = port(cmd, { model, names, runtimeImport: RUNTIME });
   if (!p.ok) return { ok: false, report: p.errors.join(' '), at: { routine: '', block: parseCmd(cmd).entry, cycles: 0 }, field: 'port' };
@@ -286,10 +308,8 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
     else due.push({ t: endT, step: s, index });
   });
   let next = 0;
-  const addressOf = (label: string): number => {
-    for (const [a, n] of names) if (n === label) return a;
-    throw new Error(`pcIn names ${label}, which the names given do not hold`);
-  };
+  /** A pcIn label's address; checkSteps has made sure each is there. */
+  const addressOf = (label: string): number => labels.get(label)!;
   const applyStep = (step: Exclude<Step, { run: number }>, index: number): void => {
     const where = `step ${index + 1} ${JSON.stringify(step)}`;
     if ('press' in step) {

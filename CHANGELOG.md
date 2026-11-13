@@ -135,6 +135,32 @@ creates and pushes the tag.
 
 ### Added
 
+- Part 2's milestone M1, the port pipeline on Fugløy's own programs (design
+  `docs/superpowers/specs/2026-10-23-part2-port-and-remake-design.md`, plan
+  `docs/superpowers/plans/2026-10-23-part2-m1-port-pipeline.md`; in the repository only, nothing
+  published). Two new packages at 0.1.0: `@fugloy/runtime`, the machine a port runs on (plain
+  JavaScript with no dependencies, no DOM, no Node: the registers, the 64K with the Model I's or
+  Model III's memory map (the Model I's video gate too), the keyboard matrix, port `$FF` and the
+  Model III's `$EC`–`$EF`, T-states and R, and the flag helpers in `@fugloy/runtime/ops`, each
+  mirroring emu's core), and
+  `@fugloy/recomp`, whose `port(cmd, { model, names, hints })` turns a `.CMD` into one JavaScript
+  module: one function per routine (the entry and each CALL or RST target), one statement per
+  instruction, every byte sequence `@fugloy/z80` decodes translated (800 instructions, each proven
+  against emu's core from 64 states), each block's T-states and R exact, the program's data as
+  `DATA` and none of its code bytes. A referee (`packages/recomp/test/referee.ts`) runs a port
+  beside emu on Fugløy's stub ROM and compares the two at every block start (the T-states, PC,
+  every register, F, R, MEMPTR, Q and the interrupt state, every byte written), video RAM every
+  frame and the 64K at the end; it refuses self-modifying code and names the first difference's
+  block, field and instruction. Every Learn lesson and Build Space Invaders chapter, 19 programs on
+  the Model III and the Model I (38 runs), is ported and refereed through its `check.json` in CI
+  (`packages/recomp/test/learn.test.ts`, about 61 s locally): all match. Their ports hold 129
+  routines and 717 blocks on each model, all still a labelled `switch` over their blocks. The CLI
+  gains `fugloy port <program.cmd> --model 1|3 [--hints <file>] [-o <dir>]`, which writes
+  `<name>.port.js` and its report, `<name>.port.txt`, and exits 1 with the sentences when the
+  program cannot be ported. Not yet: EI's one-instruction delay, a comparison of sound and
+  cassette writes, self-modifying code (refused), and structured loops and conditionals in the
+  output (the next task).
+
 - A Full screen button in Run ▶'s machine row; Esc leaves it (and the browser's own exit); keys keep
   reaching the TRS-80, and focus is kept. The first screen is 252,262 B gzip of its 252,775 B budget.
 

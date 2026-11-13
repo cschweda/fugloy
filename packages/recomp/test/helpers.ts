@@ -45,7 +45,23 @@ export function stub(model: Model): { rom: Uint8Array; returned: number } {
 /** The names an assembled program defines on its own lines (not the ROM's), by address: the first at each. */
 export function namesOf(r: AsmResult): Map<number, string> {
   const names = new Map<number, string>();
-  for (const [name, s] of r.symbols) if (s.line !== 0 && !names.has(s.value)) names.set(s.value, name);
+  for (const [address, all] of allNamesOf(r)) names.set(address, all[0]!);
+  return names;
+}
+
+/**
+ * Every name an assembled program defines on its own lines, by address, in the order it defines them:
+ * the referee's `names`, so a `pcIn` finds a label that shares its address with another (the port is
+ * named by the first, as with `namesOf`).
+ */
+export function allNamesOf(r: AsmResult): Map<number, string[]> {
+  const names = new Map<number, string[]>();
+  for (const [name, s] of r.symbols) {
+    if (s.line === 0) continue;
+    const at = names.get(s.value);
+    if (at === undefined) names.set(s.value, [name]);
+    else at.push(name);
+  }
   return names;
 }
 

@@ -119,6 +119,10 @@ high byte before the low.
 - **EI's delay.** EI sets both flip-flops at once; on a Z80, and in emu (`pendingEI`), interrupts are
   enabled only after the instruction that follows it. A port takes no interrupts in M1, so nothing can see
   the difference; the test compares EI with emu after EI and one NOP.
+- **Self-modifying code.** M1 translates none, and `port()` does not look for it: the referee finds it, as a
+  write by emu into a byte of the program's code, and refuses the run. A port of a program that patches its
+  own code, run without the referee, would run the unpatched code.
+- **A block reached from two routines** is translated in each, so its statements appear twice.
 - What the runtime does not model (interrupts, the devices it lists).
 
 ## The referee
@@ -131,6 +135,10 @@ const result = await referee({ cmd, model: 3, names, steps: check.steps });
 // { ok: true, cycles, blocks, frames }
 // { ok: false, report, at: { routine, block, cycles }, field }
 ```
+
+`names` maps an address to a name or to every name there (`allNamesOf` in `test/helpers.ts` gives an
+assembled program's own labels so): `port()` names each address by the first, and a `pcIn` step finds its
+label among all of them, so a label that shares its address with another is found.
 
 It boots emu on Fugløy's stub ROM (never the user's ROM), loads the program, ports it with `names`, and gives
 the port's `Z` emu's registers and 64K, but with every byte the `.CMD` loads put back as a standalone port has
@@ -148,7 +156,9 @@ T-state from the entry, on both machines: a key to both keyboards; `row` and `ce
 on emu's PC, its labels read from `names`. The run ends at the first block start at or after the last `run`,
 or when the program returns to the stub's `RETURNED` (steps not yet due then apply to both as they stopped).
 `cycles` count T-states from the entry; `blocks` the block starts compared; `frames` how many of them
-compared video RAM.
+compared video RAM. Steps it cannot judge by throw a sentence before anything runs: a step that is not one
+of those forms, steps with no `run` (the run would end at the first block start, having compared that block
+alone), and a `pcIn` label `names` does not hold.
 
 It stops at the first of these, with a sentence in `report` and the block start in `at` (after a return,
 routine `''` and block `RETURNED`):
@@ -162,8 +172,27 @@ routine `''` and block `RETURNED`):
 | `port` | `port()` refused the program: its sentences |
 | `row N`, `cell $XXXX`, `pcIn` | a check step that does not hold, on either machine |
 
-The Learn checks run it on every lesson and chapter: about 19 million T-states a second (chapter 8 of Build
-Space Invaders, 236 million T-states, in about 12.5 s).
+It does not compare the port's sound or cassette records (writes to port `$FF`, `z.sound`) with emu's: no
+Learn program uses IN or OUT. Milestone M2 adds the comparison for Sea Dragon's sound.
+
+## The Learn programs
+
+`test/learn.test.ts` is milestone M1's proof: every lesson (seven) and every Build Space Invaders chapter
+(twelve) under `apps/web/content/learn/`, found as `packages/asm/test/lessons.test.ts` finds them, on each
+model its `check.json` names (all nineteen name both, so 38 runs), is assembled with `@fugloy/asm`, ported
+with its own labels as the names, and run by the referee through its `check.json` steps. Each run must be
+`ok`, last at least as long as the steps' `run`s add up to (no Learn program returns to the stub), and
+compare video RAM at least once a frame. All 38 pass, in about 61 s on one core of an M-series Mac
+(chapter 8, 236 million T-states, about 12.5 s; about 19 million T-states a second). It needs neither zmac
+nor a user's ROM, so it runs in CI with the rest of the suite.
+
+The 38 ports, as of M1's Task 5 (before structured control flow): 129 routines and 717 blocks on each model,
+every routine `labelled` (a `switch` over its blocks), 572,788 bytes of JavaScript in all; the largest is
+chapter 12's, 45,320 bytes (1,204 lines, 18 routines). No port lists a place that refuses as it runs, and no
+program writes into its own code (the referee would have stopped it).
+
+`fugloy port <program.cmd> --model 1|3 [--hints <file>] [-o <dir>]` (`packages/cli`) writes a port and its
+report from the command line.
 
 ## How it is checked
 
@@ -172,7 +201,9 @@ catch: an `add8` whose H is wrong (stopped in F at the block after the first ADD
 or one R increment short (stopped in `cycles` or `r` at the next block), a byte written differently, a
 store, a block move and a push into the program's code and a write into code that never runs again (each
 refused as self-modifying), a program that reads its own code into a register and one into memory, a key
-pressed by a step (the wait loop ends at the same T-state on both), the check steps, and the refusals.
+pressed by a step (the wait loop ends at the same T-state on both), the check steps (a `pcIn` on a label that
+shares its address with another included), the refusals, and the steps it refuses to judge by (none with a
+`run`, a malformed step, a `pcIn` label not given).
 
 `test/port.test.ts` assembles programs with `@fugloy/asm` (a straight line, a DJNZ count, conditional JP
 and JR both ways, CALL and RET three deep with CALL cc and RET cc both ways, two routines jumping into each

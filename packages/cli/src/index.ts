@@ -1,6 +1,7 @@
 /**
  * The fugloy command: `fugloy <file> [--base <hex>] [--entry <hex>]... [--hints <path>] [--labels <path>] [--format listing|zmac|ir] [--sweep] [-o <path>]`,
- * and `fugloy asm <source> ...`, the assembler (asm.ts).
+ * `fugloy asm <source> ...`, the assembler (asm.ts), and `fugloy port <program.cmd> ...`, the port to
+ * JavaScript (port.ts).
  * Reads one file, detects its format from content, runs Pass 1 with the ROM,
  * hardware, and DOS tables that `--machine` and `--dos` choose, and prints a
  * listing, zmac source, or the JSON IR. Only this package touches the file
@@ -29,6 +30,7 @@ import {
 import type { Dos, Hint, Machine, Session, SymbolSelection } from '@fugloy/disasm';
 import { runAsm } from './asm.js';
 import { colorListing } from './color.js';
+import { runPort } from './port.js';
 
 export const VERSION = '1.3.0';
 
@@ -48,6 +50,7 @@ export interface Io {
 
 export const USAGE = `Usage: fugloy <file> [--base <hex> | --rebase <hex>] [--entry <hex>]... [--hints <path> | --write-hints <path>] [--labels <path>] [--machine 1|3|4] [--dos trsdos|ldos|none] [--format listing|zmac|ir] [--sweep] [--color] [-o <path>]
        fugloy asm <source> [-o <out.cmd>] [--model 1|3|4] [--dos trsdos|ldos|none] [--listing]
+       fugloy port <program.cmd> --model 1|3 [--hints <file>] [-o <dir>]
 
 Prints a listing of a TRS-80 .CMD load module, raw binary, or tokenized Level
 II .BAS program. The format is detected from the file's content, never its
@@ -90,8 +93,9 @@ listing instead, with each code line disassembled at its true address.
   --help           show this help
   --version        show the version
 
-fugloy asm assembles Z80 source into a .CMD; see fugloy asm --help. To
-disassemble a file named asm, write ./asm.
+fugloy asm assembles Z80 source into a .CMD; see fugloy asm --help. fugloy
+port ports a .CMD to JavaScript; see fugloy port --help. To disassemble a file
+named asm or port, write ./asm or ./port.
 `;
 
 const FORMATS = ['listing', 'zmac', 'ir'] as const;
@@ -133,6 +137,7 @@ function chooseTables(machineText: string | undefined, dosText: string | undefin
 
 export async function run(argv: string[], io: Io): Promise<number> {
   if (argv[0] === 'asm') return runAsm(argv.slice(1), io);
+  if (argv[0] === 'port') return runPort(argv.slice(1), io);
   const options = {
     base: { type: 'string' },
     rebase: { type: 'string' },

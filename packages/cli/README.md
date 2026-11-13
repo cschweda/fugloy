@@ -15,5 +15,18 @@ npx @fugloy/cli --help
 It follows the code from the entry point by recursive descent, names ROM, hardware, and DOS
 addresses from cited symbol tables, and takes a hint file of your decisions and, from the
 emulator, a label-and-coverage file
-([format](https://github.com/cschweda/fugloy/blob/main/docs/label-format.md)). MIT licensed; the
-full documentation is in the [repository README](https://github.com/cschweda/fugloy/blob/main/README.md).
+([format](https://github.com/cschweda/fugloy/blob/main/docs/label-format.md)).
+
+`fugloy asm game.z` assembles Z80 source into `game.cmd` (see `fugloy asm --help`).
+
+`fugloy port game.cmd --model 3` ports a `.CMD` program to JavaScript (Part 2 of Fugløy, milestone
+M1, in the repository only): it writes `game.port.js`, one function per routine and one statement
+per instruction, which imports `@fugloy/runtime/ops` and runs on `@fugloy/runtime`, and
+`game.port.txt`, its report (the entry, each routine and its blocks, the data regions, and the
+places that refuse if they run). `--model 1` ports for the Model I; `--hints <file>` applies a hint
+file, whose names name the routines and whose notes become their comments; `-o <dir>` writes the two
+files there. A program it cannot follow (a `JP (HL)`, bytes that are no instruction) is refused,
+with a sentence naming the address, exit code 1, and nothing written.
+
+MIT licensed; the full documentation is in the
+[repository README](https://github.com/cschweda/fugloy/blob/main/README.md).

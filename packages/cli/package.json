@@ -24,6 +24,7 @@
   "dependencies": {
     "@fugloy/asm": "workspace:*",
     "@fugloy/disasm": "workspace:*",
+    "@fugloy/recomp": "workspace:*",
     "@fugloy/z80": "workspace:*"
   },
   "repository": {

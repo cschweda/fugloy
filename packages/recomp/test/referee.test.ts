@@ -12,7 +12,7 @@ import type { AsmResult } from '@fugloy/asm';
 import { createZ, load } from '@fugloy/runtime';
 import { describe, expect, it } from 'vitest';
 import { port } from '../src/index.js';
-import { PROGRAMS, RUNTIME, assembled, cpuOf, emuState, hex, importPort, memOf, namesOf, program, setZ, stub } from './helpers.js';
+import { PROGRAMS, RUNTIME, allNamesOf, assembled, cpuOf, emuState, hex, importPort, memOf, namesOf, program, setZ, stub } from './helpers.js';
 import type { Model } from './helpers.js';
 import { referee } from './referee.js';
 import type { RefereeResult, Step } from './referee.js';
@@ -252,6 +252,19 @@ PARK:   JR      PARK`), 3);
     expect(pc.report).toContain(`$${hex(r.symbol('PARK')!.value, 4)}`);
   });
 
+  it('finds a pcIn label that shares its address with another label, the port named by the first', async () => {
+    // TOP's line emits nothing, so TOP and PARK are both $7003; the port names the routine's block TOP.
+    const r = assembled(program(`
+START:  LD      HL,3C00H
+TOP:
+PARK:   JR      PARK`), 3);
+    expect(r.symbol('TOP')!.value).toBe(r.symbol('PARK')!.value);
+    const res = passed(await referee({ cmd: toCmd(r), model: 3, names: allNamesOf(r), steps: [{ run: 1000 }, { pcIn: 'PARK' }, { pcIn: 'TOP' }] }));
+    expect(res.cycles).toBeGreaterThanOrEqual(1000);
+    const elsewhere = failed(await referee({ cmd: toCmd(r), model: 3, names: allNamesOf(r), steps: [{ run: 1000 }, { pcIn: 'START', to: 'PARK' }] }));
+    expect(elsewhere.field).toBe('pcIn');
+  });
+
   it('ends a run whose steps are spent, though the program never returns', async () => {
     const r = assembled(program(`
 START:  LD      HL,3C00H
@@ -260,6 +273,23 @@ PARK:   JR      PARK`), 1);
     expect(res.cycles).toBeGreaterThanOrEqual(50_000);
     // 1/60 s of the Model I's 1,774,080 Hz is 29,568 T-states
     expect(res.frames).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('what the referee refuses to judge', () => {
+  const r = assembled(program(`
+START:  LD      HL,3C00H
+PARK:   JR      PARK`), 3);
+
+  it('steps with no run, which would compare the first block alone, with a sentence', async () => {
+    const message = 'the steps have no run step, so the referee would compare the first block alone; give it a run of some T-states';
+    await expect(judge(r, 3, [{ row: 0, text: '' }, { pcIn: 'PARK' }])).rejects.toThrow(message);
+    await expect(judge(r, 3, [])).rejects.toThrow(message);
+  });
+
+  it('a step that is not one of check.json\'s forms, and a pcIn label the names do not hold', async () => {
+    await expect(judge(r, 3, [{ run: 0 }])).rejects.toThrow('step 1 ({"run":0}) is not one of run, press, release');
+    await expect(judge(r, 3, [{ run: 1000 }, { pcIn: 'NOWHERE' }])).rejects.toThrow('pcIn names NOWHERE, which the names given do not hold');
   });
 });
 

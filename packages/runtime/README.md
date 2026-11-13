@@ -102,6 +102,11 @@ load(z, port);                                // DATA, through z.write
 runPort(z, port);                             // { reason: 'returned' }
 ```
 
+`fugloy port game.cmd --model 3` (`packages/cli`) writes such a module, `game.port.js`, which imports
+`@fugloy/runtime/ops`; a bundler, or a page with an import map, resolves it. Every Learn lesson and Build
+Space Invaders chapter, ported for the Model III and the Model I, runs on this runtime block for block as
+`@fugloy/emu` runs the original through its `check.json` (`@fugloy/recomp`'s `test/learn.test.ts`).
+
 `load(z, port)` writes the port's `DATA` through `z.write`, as emu's `.CMD` loader writes a program through
 its memory, so the Model I's video RAM takes its bit 6 here too. `runPort(z, port)` runs `ENTRY` until it
 returns to the address on top of the stack as it starts: the one Fugløy's stub ROM pushes (its `RETURNED`)

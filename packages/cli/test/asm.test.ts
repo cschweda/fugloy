@@ -165,7 +165,7 @@ describe('fugloy asm', () => {
     const b = capture();
     expect(await run(['--help'], b.io)).toBe(0);
     expect(b.out.join('')).toContain('fugloy asm <source> [-o <out.cmd>]');
-    expect(b.out.join('')).toContain('To\ndisassemble a file named asm, write ./asm.');
+    expect(b.out.join('')).toContain('To disassemble a file\nnamed asm or port, write ./asm or ./port.');
   });
 
   it('the overwrite guard compares resolved paths, symbolic links followed', async () => {

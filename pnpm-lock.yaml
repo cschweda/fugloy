@@ -139,6 +139,9 @@ importers:
       '@fugloy/disasm':
         specifier: workspace:*
         version: link:../disasm
+      '@fugloy/recomp':
+        specifier: workspace:*
+        version: link:../recomp
       '@fugloy/z80':
         specifier: workspace:*
         version: link:../z80
