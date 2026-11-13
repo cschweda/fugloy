@@ -59,34 +59,75 @@ const hex = (n: number, width: number): string => n.toString(16).toUpperCase().p
 const word = (n: number): string => `0x${hex(n & 0xffff, 4)}`;
 const addr = (n: number): string => `$${hex(n & 0xffff, 4)}`;
 
-/** Names a module cannot give a routine: JavaScript's reserved words and globals, and its own names. */
+/**
+ * Names a module cannot give a routine: JavaScript's reserved words and the globals it may not shadow,
+ * every binding the module itself uses (the `o` import, `MODEL`, `DATA`, `ENTRY`, the global
+ * `Uint8Array` `DATA` is built with), and the parameters and local of a routine (`z`, `ret`, `b`).
+ */
 const RESERVED = new Set([
   'await', 'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger', 'default', 'delete', 'do', 'else', 'enum',
   'export', 'extends', 'false', 'finally', 'for', 'function', 'if', 'implements', 'import', 'in', 'instanceof', 'interface',
   'let', 'new', 'null', 'package', 'private', 'protected', 'public', 'return', 'static', 'super', 'switch', 'this', 'throw',
   'true', 'try', 'typeof', 'var', 'void', 'while', 'with', 'yield', 'arguments', 'eval', 'undefined', 'NaN', 'Infinity',
-  'o', 'z', 'b', 'ret', 'MODEL', 'DATA', 'ENTRY',
+  'globalThis', 'Uint8Array',
+  'o', 'MODEL', 'DATA', 'ENTRY', 'z', 'ret', 'b',
 ]);
 
-/** A name as a JavaScript identifier: other characters become `_`, and a reserved one takes a `_`. */
+/**
+ * A name as a JavaScript identifier: other characters become `_`, a leading digit takes a `_` before
+ * it, and a reserved name a `_` after it; empty when the name is.
+ */
 function identifier(name: string): string {
   let id = name.replace(/[^A-Za-z0-9_$]/g, '_');
   if (/^[0-9]/.test(id)) id = `_${id}`;
   return RESERVED.has(id) ? `${id}_` : id;
 }
 
-/** One line of a comment: no line breaks, and nothing that closes a block comment. */
-const oneLine = (text: string): string => text.replace(/[\r\n]+/g, ' ').replace(/\*\//g, '*\\/');
+/**
+ * Text from outside the emitter (a name, a symbol, a hint note or comment, an instruction's rendering,
+ * the source's name) as comment text: every JavaScript line terminator (CR, LF, U+2028, U+2029) and
+ * every other control character becomes a space, so it cannot end a `//` comment, and `*\/` is broken,
+ * so it cannot end a block comment. The Writer applies it to every comment it writes.
+ */
+const commentText = (text: string): string =>
+  text.replace(/[\u0000-\u001F\u007F-\u009F\u2028\u2029]+/g, ' ').replace(/\*\//g, '*\\/');
+
+/** A string as a JavaScript string literal in single quotes: every character outside printable ASCII escaped. */
+const stringLiteral = (text: string): string =>
+  `'${text.replace(/[\\']/g, '\\$&').replace(/[^\u0020-\u007E]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`)}'`;
 
 /** The column a statement's comment starts at, unless the statement runs past it. */
 const COMMENT_AT = 52;
 
+/**
+ * The module's lines. Code goes in as the emitter builds it, from numbers, identifiers and string
+ * literals; every piece of free text goes in through a comment method, which passes it through
+ * `commentText`.
+ */
 class Writer {
   readonly lines: string[] = [];
-  /** One line, indented; with a comment, the comment aligned after it. */
-  line(indent: number, text: string, comment?: string): void {
-    const line = `${' '.repeat(indent)}${text}`;
-    this.lines.push(comment === undefined ? line : `${line.padEnd(COMMENT_AT - 2)}  // ${comment}`);
+  /** One line of code, indented; with a comment, the comment aligned after it. */
+  line(indent: number, code: string, comment?: string): void {
+    const line = `${' '.repeat(indent)}${code}`;
+    this.lines.push(comment === undefined ? line : `${line.padEnd(COMMENT_AT - 2)}  // ${commentText(comment)}`);
+  }
+  /** A line of code with a short comment straight after it (`case 0x7006: // FILL`). */
+  tagged(indent: number, code: string, comment: string | undefined): void {
+    this.lines.push(`${' '.repeat(indent)}${code}${comment === undefined ? '' : ` // ${commentText(comment)}`}`);
+  }
+  /** A comment on a line of its own. */
+  comment(indent: number, text: string): void {
+    this.lines.push(`${' '.repeat(indent)}// ${commentText(text)}`);
+  }
+  /** A JSDoc block: one line, or a first line and the rest, a blank one as a bare ` *`. */
+  doc(first: string, rest: readonly string[] = []): void {
+    if (rest.length === 0) {
+      this.lines.push(`/** ${commentText(first)} */`);
+      return;
+    }
+    this.lines.push('/**', ` * ${commentText(first)}`);
+    for (const text of rest) this.lines.push(text === '' ? ' *' : ` * ${commentText(text)}`);
+    this.lines.push(' */');
   }
 }
 
@@ -97,37 +138,37 @@ export function emit(input: EmitInput): Emitted {
   /** The name an address has, from the caller, else the disassembler; undefined when it has none. */
   const nameOf = (a: number): string | undefined => input.names.get(a) ?? irNames.get(a);
 
-  // Routine names, unique, in address order
+  // Routine names, unique, in address order: a taken one takes its address, then a count
   const routineNames = new Map<number, string>();
   const taken = new Set<string>();
   for (const r of routines.routines) {
-    let id = identifier(nameOf(r.start) ?? `SUB_${hex(r.start, 4)}`);
-    if (taken.has(id)) id = `${id}_${hex(r.start, 4)}`;
-    taken.add(id);
-    routineNames.set(r.start, id);
+    const id = identifier(nameOf(r.start) ?? '') || `SUB_${hex(r.start, 4)}`;
+    let unique = id;
+    for (let n = 1; taken.has(unique); n++) unique = n === 1 ? `${id}_${hex(r.start, 4)}` : `${id}_${hex(r.start, 4)}_${n}`;
+    taken.add(unique);
+    routineNames.set(r.start, unique);
   }
 
   const refused: string[] = [];
   const errors: string[] = [];
   const w = new Writer();
 
-  w.line(0, '/**');
-  w.line(0, ` * ${input.source === undefined ? 'A TRS-80 program' : oneLine(input.source)}, ported to JavaScript for the Model ${input.model === 1 ? 'I' : 'III'}`);
-  w.line(0, ' * by @fugloy/recomp. Generated: never edit it by hand. It runs on @fugloy/runtime:');
-  w.line(0, ' * `load(z, port)`, then `runPort(z, port)`.');
-  w.line(0, ' */');
-  w.line(0, `import * as o from '${input.runtimeImport.replace(/[\\']/g, '\\$&')}';`);
+  w.doc(`${input.source ?? 'A TRS-80 program'}, ported to JavaScript for the Model ${input.model === 1 ? 'I' : 'III'}`, [
+    'by @fugloy/recomp. Generated: never edit it by hand. It runs on @fugloy/runtime:',
+    '`load(z, port)`, then `runPort(z, port)`.',
+  ]);
+  w.line(0, `import * as o from ${stringLiteral(input.runtimeImport)};`);
   w.line(0, '');
   w.line(0, `export const MODEL = ${input.model};`);
   w.line(0, '');
-  w.line(0, "/** The program's bytes that are not code (its data), as [address, bytes]. */");
+  w.doc("The program's bytes that are not code (its data), as [address, bytes].");
   w.line(0, 'export const DATA = [');
   for (const [at, bytes] of input.data) {
-    for (const text of notes.get(at) ?? []) w.line(2, `// ${oneLine(text)}`);
+    for (const text of notes.get(at) ?? []) w.comment(2, text);
     const label = nameOf(at);
     const head = `[${word(at)}, Uint8Array.of(`;
     const literals = [...bytes].map((v) => `0x${hex(v, 2)}`);
-    const comment = label === undefined ? undefined : `${addr(at)} ${oneLine(label)}`;
+    const comment = label === undefined ? undefined : `${addr(at)} ${label}`;
     if (literals.length <= 16) w.line(2, `${head}${literals.join(', ')})],`, comment);
     else {
       w.line(2, head, comment);
@@ -137,7 +178,7 @@ export function emit(input: EmitInput): Emitted {
   }
   w.line(0, '];');
   w.line(0, '');
-  w.line(0, '/** The routine the program starts at. */');
+  w.doc('The routine the program starts at.');
   w.line(0, `export const ENTRY = ${routineNames.get(input.entry)!};`);
 
   for (const r of routines.routines) {
@@ -152,19 +193,12 @@ export function emit(input: EmitInput): Emitted {
     const name = routineNames.get(r.start)!;
     const own = new Set(r.blocks.map((b) => b.start));
     const doc = notes.get(r.start) ?? [];
-    if (doc.length === 0) w.line(0, `/** ${name} (${addr(r.start)}) */`);
-    else {
-      w.line(0, '/**');
-      w.line(0, ` * ${name} (${addr(r.start)}).`);
-      for (const text of doc) w.line(0, text === '' ? ' *' : ` * ${oneLine(text)}`);
-      w.line(0, ' */');
-    }
+    w.doc(doc.length === 0 ? `${name} (${addr(r.start)})` : `${name} (${addr(r.start)}).`, doc);
     w.line(0, `export function ${name}(z, ret) {`);
     w.line(2, `let b = ${word(r.start)};`);
     w.line(2, 'for (;;) switch (b) {');
     for (const block of r.blocks) {
-      const label = nameOf(block.start);
-      w.line(4, label === undefined ? `case ${word(block.start)}:` : `case ${word(block.start)}: // ${oneLine(label)}`);
+      w.tagged(4, `case ${word(block.start)}:`, nameOf(block.start));
       w.line(6, `z.at(${word(block.start)});`);
       emitBlock(block.start, block.end);
     }
@@ -204,9 +238,9 @@ export function emit(input: EmitInput): Emitted {
         const next = (at + ins.length) & 0xffff;
         const text = renderInstruction(ins, symbols);
         const note = comments.get(at);
-        const comment = `${addr(at)}  ${text}${note === undefined ? '' : `  ; ${oneLine(note)}`}`;
+        const comment = `${addr(at)}  ${text}${note === undefined ? '' : `  ; ${note}`}`;
         // A note at the routine's start is its JSDoc; any other is a comment where it is
-        for (const line of at === r.start ? [] : (notes.get(at) ?? [])) w.line(6, `// ${oneLine(line)}`);
+        for (const line of at === r.start ? [] : (notes.get(at) ?? [])) w.comment(6, line);
         if (tr.readsTime && (t !== 0 || rr !== 0)) {
           w.line(6, `z.tick(${t}, ${rr});`);
           t = 0;
@@ -305,7 +339,7 @@ export function emit(input: EmitInput): Emitted {
 
     /** An instruction's statements, on one line with its comment, or a loop's over several. */
     function statements(indent: number, lines: readonly string[], comment: string): void {
-      if (lines.length === 0) w.line(indent, `// ${comment}`);
+      if (lines.length === 0) w.comment(indent, comment);
       else if (lines.some((l) => l.includes('{') || l.includes('}'))) {
         w.line(indent, lines[0]!, comment);
         for (const line of lines.slice(1)) w.line(indent, line);

@@ -178,6 +178,27 @@ function zAtEntry(model: Model, run: EmuRun): Z {
   return z;
 }
 
+/**
+ * Run the program on emu and the module `js` on the port from the same state at the entry: each block
+ * must start where emu starts an instruction at the same T-state with the same R, and at the end every
+ * register, F, R, MEMPTR, Q, the interrupt state, the T-states and the 64K must be equal.
+ */
+async function expectSameAsEmu(r: AsmResult, model: Model, js: string): Promise<void> {
+  const emu = onEmu(toCmd(r), model);
+  const mod = await importPort(js);
+  const z = zAtEntry(model, emu);
+  const starts: string[] = [];
+  z.at = (addr: number): void => {
+    const at = emu.boundaries.get(z.cycles);
+    if (at?.pc !== addr || at.r !== z.r) starts.push(`block $${hex(addr, 4)} at T-state ${z.cycles}, R $${hex(z.r, 2)}: emu ${at === undefined ? 'starts no instruction then' : `is at $${hex(at.pc, 4)}, R $${hex(at.r, 2)}`}`);
+  };
+  expect(runPort(z, mod)).toEqual({ reason: 'returned' });
+  expect(starts.slice(0, 3)).toEqual([]);
+  expect(zState(z)).toEqual(emu.end);
+  expect(firstDifference(model, z.mem, emu.endMem)).toBeNull();
+  expect(emu.end.cycles).toBeGreaterThan(emu.start.cycles);
+}
+
 // ---- the programs
 
 const program = (body: string): string => `\tORG\t7000H\n${body}\n\tEND\tSTART\n`;
@@ -311,21 +332,7 @@ for (const [what, source] of Object.entries(PROGRAMS)) {
       const r = assembled(source, model);
 
       it(`runs to its RET on ${name} as on emu: registers, F, R, MEMPTR, Q, T-states and the 64K equal`, async () => {
-        const emu = onEmu(toCmd(r), model);
-        const p = portOk(r, model);
-        const mod = await importPort(p.js);
-        const z = zAtEntry(model, emu);
-        // Each block starts at an instruction emu starts at the same T-state, with the same R
-        const starts: string[] = [];
-        z.at = (addr: number): void => {
-          const at = emu.boundaries.get(z.cycles);
-          if (at?.pc !== addr || at.r !== z.r) starts.push(`block $${hex(addr, 4)} at T-state ${z.cycles}, R $${hex(z.r, 2)}: emu ${at === undefined ? 'starts no instruction then' : `is at $${hex(at.pc, 4)}, R $${hex(at.r, 2)}`}`);
-        };
-        expect(runPort(z, mod)).toEqual({ reason: 'returned' });
-        expect(starts.slice(0, 3)).toEqual([]);
-        expect(zState(z)).toEqual(emu.end);
-        expect(firstDifference(model, z.mem, emu.endMem)).toBeNull();
-        expect(emu.end.cycles).toBeGreaterThan(emu.start.cycles);
+        await expectSameAsEmu(r, model, portOk(r, model).js);
       });
 
       it(`carries none of its code bytes on ${name}: DATA is its DB bytes, and load writes them alone`, async () => {
@@ -392,6 +399,84 @@ describe('the module', () => {
     const p = port(cmd, { model: 3, runtimeImport: RUNTIME, hints });
     if (!p.ok) throw new Error(p.errors.join(' '));
     expect(p.js).toMatch(/\/\*\*[^/]*Doubles A and adds one, twice over\.[^/]*\*\/\nexport function DOUBLE\(z, ret\)/);
+  });
+});
+
+describe("names, notes and comments, whatever they hold, change nothing the module does", () => {
+  const nested = assembled(PROGRAMS['nested CALL and RET three deep']!, 3);
+  const at = (n: string): number => nested.symbol(n)!.value;
+  /** Every JavaScript line terminator but the module's own LF, and the other control characters. */
+  const BREAKS = /[\u0000-\u0009\u000B-\u001F\u007F-\u009F\u2028\u2029]/;
+  const PWN = 'throw new Error("pwn");';
+  /** A line of the module that carries `PWN` outside a comment: before any `//`, and not a JSDoc line. */
+  const live = (js: string): string[] => js.split('\n').filter((l) => l.includes(PWN) && !/^\s*\*/.test(l) && !l.slice(0, l.indexOf(PWN)).includes('//'));
+
+  it('ends no comment early at U+2028, U+2029, CR or a control character in a name, a hint note or comment, or the source, nor at */', async () => {
+    const cmd = toCmd(nested);
+    const names = namesOf(nested);
+    // A block's name (a // comment), a routine's (its identifier and JSDoc), and the operand text of the CALLs to it
+    names.set(at('ONE') + 4, `AFTER\u2028${PWN}//`);
+    names.set(at('TWO'), `TWO\u2029${PWN}*/ ${PWN}`);
+    names.set(at('THREE'), `THREE\r${PWN}\u0007`);
+    const offset = (a: number): string => `block 0:$${hex(a - 0x7000, 4)}`;
+    const hints = `${writeHints(skeletonHints(loadCmd(cmd), cmd))}` +
+      `${offset(at('ONE'))} note One\u2028${PWN} */ ${PWN}\n` +
+      `${offset(at('ONE') + 1)} note Inside\u2029${PWN}\n` +
+      `${offset(at('ONE') + 1)} comment Said\u2028${PWN}\n`;
+    const p = port(cmd, { model: 3, names, hints, runtimeImport: RUNTIME, source: `x.cmd */\u2028${PWN}` });
+    if (!p.ok) throw new Error(p.errors.join(' '));
+    expect(p.js.match(/pwn/g)?.length ?? 0, 'every injected text is in the module, in a comment').toBeGreaterThanOrEqual(8);
+    expect(p.js).not.toMatch(BREAKS);
+    expect(live(p.js)).toEqual([]);
+    // Each */ is written so it cannot close a JSDoc block
+    for (const block of p.js.match(/\/\*\*[\s\S]*?\*\//g) ?? []) expect(block.slice(3, -2)).not.toContain('*/');
+    await expectSameAsEmu(nested, 3, p.js);
+  });
+
+  it("writes the runtime's import path as a string literal that nothing ends early", async () => {
+    const p = portOk(nested, 3, { runtimeImport: `${RUNTIME}?x='\u2028\\` });
+    expect(p.js).not.toMatch(BREAKS);
+    const imported = /^import \* as o from (.*);$/m.exec(p.js)![1]!;
+    expect(JSON.parse(`"${imported.slice(1, -1).replace(/\\'/g, "'").replace(/"/g, '\\"')}"`)).toBe(`${RUNTIME}?x='\u2028\\`);
+  });
+
+  it('never names a routine after a global or binding the module uses: a routine called Uint8Array', async () => {
+    const r = assembled(program(`
+START:  CALL    READ
+        RET
+READ:   LD      HL,TABLE
+        LD      A,(HL)
+        LD      (5000H),A
+        RET
+TABLE:  DB      7`), 3);
+    for (const taken of ['Uint8Array', 'MODEL', 'DATA', 'ENTRY', 'o', 'z', 'ret', 'b']) {
+      const names = namesOf(r);
+      names.set(r.symbol('READ')!.value, taken);
+      const p = portOk(r, 3, { names });
+      expect(p.report.routines.map((x) => x.name)).toEqual(['START', `${taken}_`]);
+      const mod = await importPort(p.js);
+      expect(mod.DATA[0]![1]).toBeInstanceOf(Uint8Array);
+      await expectSameAsEmu(r, 3, p.js);
+    }
+  });
+
+  it('gives each routine its own name when names collide, even after a suffix, and SUB_XXXX for an empty one', async () => {
+    const names = namesOf(nested);
+    // THREE's X takes the suffix X_<THREE>, which TWO's name already is
+    names.set(at('ONE'), 'X');
+    names.set(at('TWO'), `X_${hex(at('THREE'), 4)}`);
+    names.set(at('THREE'), 'X');
+    const p = portOk(nested, 3, { names });
+    const got = p.report.routines.map((x) => x.name);
+    expect(new Set(got).size).toBe(4);
+    expect(got).toEqual(['START', 'X', `X_${hex(at('THREE'), 4)}`, `X_${hex(at('THREE'), 4)}_2`]);
+    await expectSameAsEmu(nested, 3, p.js);
+
+    const empty = namesOf(nested);
+    empty.set(at('ONE'), '');
+    const q = portOk(nested, 3, { names: empty });
+    expect(q.report.routines.map((x) => x.name)[1]).toBe(`SUB_${hex(at('ONE'), 4)}`);
+    await expectSameAsEmu(nested, 3, q.js);
   });
 });
 
