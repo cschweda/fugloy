@@ -32,6 +32,7 @@
     "@fugloy/asm": "workspace:*",
     "@fugloy/disasm": "workspace:*",
     "@fugloy/emu": "workspace:*",
+    "@fugloy/runtime": "workspace:*",
     "@fugloy/z80": "workspace:*",
     "@nuxt/ui": "^4.12.0",
     "nuxt": "^4.6.4",

@@ -1,12 +1,14 @@
 // Glyph provenance: the screen's characters are the TRS-80's own character generators, from xtrs's
-// trs_chars.c at a pinned commit, converted once by scripts/build-glyphs.ts. The converter checks
-// the file's SHA-256 and the licence's notice; the generated table names its source and carries
-// the notice.
-import { readFileSync } from 'node:fs';
+// trs_chars.c at a pinned commit, converted by scripts/build-glyphs.mjs. The converter checks the
+// file's SHA-256 and the licence's notice; the generated table names its source and carries the
+// notice. (M2 Task 8 moved this test here from apps/web/test/glyphs.test.ts, with the converter and
+// the table, and added the staleness check, which runs where `pnpm xtrs:install` has put xtrs's
+// source in tools/xtrs/src.)
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { buildTable, parseTrsChars, toGlyphSet } from '../scripts/build-glyphs';
-import { CG_MODEL1, CG_MODEL1_LOWERCASE, CG_MODEL3, CG_MODEL4, GLYPH_SOURCE } from '../app/utils/emulator/glyphs.generated';
-import type { GlyphSet } from '../app/utils/emulator/glyphs.generated';
+import { buildTable, parseTrsChars, TARGET, toGlyphSet, XTRS_SRC } from '../scripts/build-glyphs.mjs';
+import { CG_MODEL1, CG_MODEL1_LOWERCASE, CG_MODEL3, CG_MODEL4, GLYPH_SOURCE } from '../src/glyphs.generated.js';
 
 /** Two charsets in trs_chars.c's syntax: two characters, then one. */
 const SNIPPET = `
@@ -25,8 +27,10 @@ char trs_char_data[][MAXCHARS][TRS_CHAR_HEIGHT] = {
 };
 `;
 
-const cell = (set: GlyphSet, code: number): number[] => [...set.rows.subarray(code * 12, code * 12 + 12)];
-const empty = (set: GlyphSet, code: number): boolean => cell(set, code).every((b) => b === 0);
+/** @param {import('../src/glyphs.generated.js').GlyphSet} set @param {number} code */
+const cell = (set, code) => [...set.rows.subarray(code * 12, code * 12 + 12)];
+/** @param {import('../src/glyphs.generated.js').GlyphSet} set @param {number} code */
+const empty = (set, code) => cell(set, code).every((b) => b === 0);
 
 describe('the glyph converter', () => {
   it("parses trs_chars.c's charsets, skipping comments", () => {
@@ -75,7 +79,7 @@ describe('the generated table', () => {
     expect(GLYPH_SOURCE.url).toBe('https://raw.githubusercontent.com/TimothyPMann/xtrs/3a2180c063811a715faa28d39a94739c33e0abd0/trs_chars.c');
     expect(GLYPH_SOURCE.sha256).toBe('1b8bbb9d63a8d598e58f64e831fc11a08f61a82e5c2eb0f631e5cc7be1464166');
     expect(GLYPH_SOURCE.sets).toEqual({ model1: 1, model1Lowercase: 2, model3: 4, model4: 8 });
-    const text = readFileSync(new URL('../app/utils/emulator/glyphs.generated.ts', import.meta.url), 'utf8');
+    const text = readFileSync(TARGET, 'utf8');
     const header = text.slice(0, text.indexOf('export'));
     expect(header).toContain('Copyright (C) 1992 Clarendon Hill Software.');
     expect(header).toContain('Copyright (c) 1996-2020, Timothy P. Mann');
@@ -112,5 +116,14 @@ describe('the generated table', () => {
     expect(cell(CG_MODEL1_LOWERCASE, 0x41)[0]).not.toBe(0);
     expect(cell(CG_MODEL1, 0x41)[0]).toBe(0);
     expect(empty(CG_MODEL1_LOWERCASE, 0x61)).toBe(false);
+  });
+});
+
+const xtrs = existsSync(join(XTRS_SRC, 'trs_chars.c')) && existsSync(join(XTRS_SRC, 'LICENSE'));
+
+describe('the committed table', () => {
+  it.skipIf(!xtrs)("is what the converter writes from xtrs's files at the pinned commit (tools/xtrs/src)", () => {
+    const want = buildTable(readFileSync(join(XTRS_SRC, 'trs_chars.c')), readFileSync(join(XTRS_SRC, 'LICENSE')));
+    expect(readFileSync(TARGET, 'utf8') === want, 'src/glyphs.generated.js is stale: run node packages/runtime/scripts/build-glyphs.mjs').toBe(true);
   });
 });

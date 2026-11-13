@@ -12,6 +12,8 @@ export const fugloyAliases: Record<string, string> = {
   '@fugloy/asm': src('asm'),
   // Plain JavaScript; its types are app/types/fugloy-emu.d.ts, the subset the site uses.
   '@fugloy/emu': pkg('emu/src/index.js'),
+  // Plain JavaScript; the screen renderer and glyph tables, with its types in app/types/fugloy-runtime.d.ts.
+  '@fugloy/runtime/screen': pkg('runtime/src/screen.js'),
   // asm's example programs, read as text (`?raw`): the starter for a new source.
   '@fugloy/asm-examples': pkg('asm/examples'),
 };

@@ -76,14 +76,52 @@ holds what emu's video RAM holds.
 
 `'flat'` has no ports: they float high and a write is lost.
 
+## The screen
+
+```js
+import { renderScreen, screenOf, screenSize } from '@fugloy/runtime/screen';
+
+const view = screenOf(z);                         // 64 or 32 columns by 16 rows, the model's character generator
+const { width, height } = screenSize(view);       // 512x192 on the Model III, 384x192 on the Model I
+const pixels = new Uint8ClampedArray(width * height * 4);
+renderScreen(z.mem.subarray(0x3c00, 0x4000), view, pixels, width); // false when nothing changed since the last call
+ctx.putImageData(new ImageData(pixels, width, height), 0, 0);      // the host's part
+```
+
+`@fugloy/runtime/screen` is the TRS-80's screen drawn into an RGBA buffer, with no DOM: the one renderer
+Fugløy's workbench (`apps/web`, whose `utils/emulator/screen.ts` re-exports it beside its own
+`screenView(m)` for an emulator) and a port's player share (M2). It draws each byte as the hardware does,
+in the machine's own character generator, one pixel a generator pixel: 00H–1FH folded to 40H–5FH, 80H–BFH as
+2×3 blocks, C0H–FFH as the alternate set on the Model III and 4 while port `$EC` bit 3 selects it and as
+blocks otherwise, the 32- and 40-column modes two cells wide, and the Model 4's 80×24 and inverse video. It
+exports `SCREEN_FG`, `SCREEN_BG`, `screenSize`, `MODEL3_ASPECT`, `MODEL1_ASPECT` (the picture's shapes,
+4:3 and about 0.952:1), `tubeAspect`, `tubeFit` and `panelFit` (the tube's size in a space, by whole rows),
+`renderScreen`, `renderNotice` (lines of text drawn as video RAM holding them would show), `screenOf(z)`,
+and the glyph tables `CG_MODEL1`, `CG_MODEL1_LOWERCASE`, `CG_MODEL3`, `CG_MODEL4` and `GLYPH_SOURCE`, with
+JSDoc types (`ScreenView`, `ScreenFont`, `GlyphSet`).
+
+`screenOf(z)` is a port's view, as the workbench's `screenView(m)` gives an emulator's: the runtime's
+`columns32`, the Model I's stock generator (its video RAM has no bit 6, so no lowercase kit) or the Model
+III's, with the alternate set from the mode register's bit 3. A flat `Z` has no screen, and `screenOf` says so.
+
+The glyphs are the TRS-80's character generators from xtrs's `trs_chars.c` at a pinned commit (CG 1, the
+Model I's; CG 2, its lowercase kit; CG 4, the Model III's; CG 8, the Model 4's), under xtrs's licence
+(`NOTICE.md`). `src/glyphs.generated.js` is written by `scripts/build-glyphs.mjs`, never by hand:
+`pnpm --filter @fugloy/runtime build-glyphs` reads `tools/xtrs/src` (where `pnpm xtrs:install` clones
+xtrs at that commit), or a directory given, and refuses files whose SHA-256 is not the pinned one.
+`test/screen.test.js` pins the renderer's pixels for every byte value on each model and mode to the
+workbench's before the move, and `screenOf` to emu's view and pixels after the same writes;
+`test/glyphs.test.js` checks the converter and, where `tools/xtrs/src` is present, that the committed table
+is what it writes.
+
 ## What it does not model
 
 Interrupts (a port takes none), the ROM (but for the stand-ins above and the ROM bytes a port carries, its
 `ROM`), the cassette, the disk controller, the printer, the Model I's Expansion
 Interface (its interrupt latch, drive select, printer and disk controller at `$37E0`–`$37EF`), the Model I's
-RAM sizes other than 48K, the Model 4, and any drawing or sound output: a program's writes to video RAM and
-to port `$FF` are all there is, and showing or playing them is a host's work. What the port cannot follow
-fails loud with a sentence naming it.
+RAM sizes other than 48K, the Model 4, and any sound output or display: a program's writes to video RAM and
+to port `$FF` are all there is, and playing them, or putting the pixels `@fugloy/runtime/screen` draws on a
+canvas, is a host's work. What the port cannot follow fails loud with a sentence naming it.
 
 ## How it is checked
 

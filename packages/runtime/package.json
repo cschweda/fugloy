@@ -6,13 +6,16 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
-    "./ops": "./src/ops.js"
+    "./ops": "./src/ops.js",
+    "./screen": "./src/screen.js"
   },
   "files": [
-    "src"
+    "src",
+    "NOTICE.md"
   ],
   "scripts": {
-    "check:no-dom": "node --experimental-vm-modules ../emu/scripts/check-no-dom.mjs src/index.js"
+    "check:no-dom": "node --experimental-vm-modules ../emu/scripts/check-no-dom.mjs src/index.js",
+    "build-glyphs": "node scripts/build-glyphs.mjs"
   },
   "devDependencies": {
     "@fugloy/emu": "workspace:*"
