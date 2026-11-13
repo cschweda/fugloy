@@ -35,6 +35,8 @@ export interface EmitInput {
   /** What the program is, for the module's first comment (a file name, not a path). */
   source?: string;
   entry: number;
+  /** With a relocating hint file, the file's transfer routine that moves the program, which is not translated. */
+  loader?: { addr: number; length: number };
   routines: Routines;
   /** The IR: its symbols name what the caller's names do not, and its notes become JSDoc and comments. */
   ir: Ir;
@@ -163,6 +165,14 @@ export function emit(input: EmitInput): Emitted {
   w.doc(`${input.source ?? 'A TRS-80 program'}, ported to JavaScript for the Model ${input.model === 1 ? 'I' : 'III'}`, [
     'by @fugloy/recomp. Generated: never edit it by hand. It runs on @fugloy/runtime:',
     '`load(z, port)`, then `runPort(z, port)`.',
+    ...(input.loader === undefined
+      ? []
+      : [
+          '',
+          `The file's loader at ${addr(input.loader.addr)} (${input.loader.length} bytes), which moves the program to where it`,
+          `runs, is not translated: ENTRY is the program's own entry, ${addr(input.entry)}, and DATA is at the addresses`,
+          'the program runs at, as the loader leaves it.',
+        ]),
   ]);
   w.line(0, `import * as o from ${stringLiteral(input.runtimeImport)};`);
   w.line(0, '');

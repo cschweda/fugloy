@@ -81,11 +81,12 @@ describe('fugloy port', () => {
     const text = formatReport(
       {
         entry: 'START',
+        entryAddr: 0x7000,
         routines: [
           { name: 'START', addr: 0x7000, blocks: 3, labelled: true },
           { name: 'SHOW', addr: 0x7010, blocks: 1, labelled: false },
         ],
-        data: [{ addr: 0x7020, length: 5 }],
+        data: [{ addr: 0x7020, length: 5, kind: 'data' }],
         refused: ['the transfer at $7002 goes to $0060, where no block of the program starts.'],
       },
       { source: 'game.cmd', model: 3, module: 'game.port.js' },

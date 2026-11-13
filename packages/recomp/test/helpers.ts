@@ -113,6 +113,19 @@ export function setZ(z: Z, s: State, mem: Uint8Array): void {
 
 export const memOf = (m: Machine): Uint8Array => m.mem.read(0, 0x10000);
 
+/**
+ * Step emu until its PC is `pc`, at most `limit` instructions; true when it got there (at once when it
+ * is there already). For a relocated program, the loader runs this way to the program's own entry.
+ */
+export function runTo(m: Machine, pc: number, limit: number): boolean {
+  const cpu = cpuOf(m);
+  for (let n = 0; cpu.registers.PC !== pc; n++) {
+    if (n >= limit) return false;
+    m.step();
+  }
+  return true;
+}
+
 // ---- a port module
 
 /** The runtime's helpers by absolute URL: a data: module resolves only absolute specifiers. */

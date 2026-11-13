@@ -33,8 +33,8 @@ The module imports the runtime's helpers as `o` from `opts.runtimeImport` and ex
 | Export | |
 |---|---|
 | `MODEL` | 1 or 3 |
-| `DATA` | every non-code region of the loaded program as `[address, Uint8Array]`, in address order. No code byte is in it, and nothing in the port decodes Z80. |
-| `ENTRY` | the entry routine |
+| `DATA` | every non-code region of the loaded program as `[address, Uint8Array]`, in address order, at the addresses the program runs at. No code byte is in it, and nothing in the port decodes Z80. |
+| `ENTRY` | the entry routine: the file's transfer address, or for a relocated program the hint file's entry (below) |
 | each routine, by name | `NAME(z, ret)`: a routine is the entry or a CALL or RST target; its blocks are those reached from its start by jumps and falling through (the address after a CALL included) without entering another routine's start. Named from `opts.names`, else the disassembler's symbols, else `SUB_XXXX`, made a JavaScript identifier; a hint note at its start is its JSDoc. |
 
 Inside a routine the blocks are structured code where the control flow allows (see *Structure* below):
@@ -56,12 +56,25 @@ iteration that repeats itself. Where the block goes:
 | HALT | `throw o.halt(z, 0x7003);`, listed in `report.refused` |
 
 A `JP (HL)`, `JP (IX)` or `JP (IY)` refuses the port (`ok: false`, a sentence naming its address), as does
-an instruction `@fugloy/z80` decodes only as `DB`, a hint file that does not parse or apply or relocates a
-region, and an entry that is not code.
+an instruction `@fugloy/z80` decodes only as `DB`, a hint file that does not parse or apply, and an entry
+that is not code.
 
-`report`: `entry` (the entry routine's name), `routines` (`name`, `addr`, `blocks`, and `labelled`: true
-when the blocks are a `switch`, false when the routine is structured), `data` (`DATA`'s addresses and lengths) and `refused` (each place that
-throws when it runs, one sentence each).
+**A relocated program.** When the file loads a program at one address and a loader moves it to where it
+runs (Sea Dragon's `seadrg01.cmd`: loaded at `$5200`, moved to `$497F` by 15 bytes at `$8881`), the hint
+file's `relocate` line has `@fugloy/disasm` analyse it at its run addresses. `ENTRY` is then the routine at
+the hint file's `entry` inside the relocated range (none there, or more than one, refuses the port with a
+sentence saying so), `DATA` is sliced from the analysis image at the run addresses, and the loader, the
+file's transfer routine and the blocks it reaches outside the relocated range, is not translated: the port
+starts at the program's own entry with its data already where the loader would have put it, and the
+module's first comment and `report.loader` say so. What the loader leaves in the registers is the host's
+business, as any port's start state is.
+
+`report`: `entry` (the entry routine's name), `entryAddr` (its address), `loader` (only for a relocated
+program: the loader's `addr`, `length` in bytes and a one-line `note`), `routines` (`name`, `addr`,
+`blocks`, and `labelled`: true when the blocks are a `switch`, false when the routine is structured),
+`data` (`DATA`'s `addr`, `length` and `kind`: `data` for a region the hint file types as data, `unknown` for
+one the analysis did not reach, the string heuristic's guesses included, since the disassembler types no
+data from the code's references) and `refused` (each place that throws when it runs, one sentence each).
 
 `@fugloy/runtime`'s `load(z, port)` writes `DATA` into memory and `runPort(z, port)` runs `ENTRY` until it
 returns (see its README).
@@ -188,7 +201,7 @@ A port is proved the same program by running it beside `@fugloy/emu`: `test/refe
 is a devDependency) exports
 
 ```ts
-const result = await referee({ cmd, model: 3, names, steps: check.steps });
+const result = await referee({ cmd, model: 3, names, hints, steps: check.steps });
 // { ok: true, cycles, blocks, frames }
 // { ok: false, report, at: { routine, block, cycles }, field }
 ```
@@ -197,15 +210,23 @@ const result = await referee({ cmd, model: 3, names, steps: check.steps });
 assembled program's own labels so): `port()` names each address by the first, and a `pcIn` step finds its
 label among all of them, so a label that shares its address with another is found.
 
-It boots emu on Fugløy's stub ROM (never the user's ROM), loads the program, ports it with `names`, and gives
-the port's `Z` emu's registers and 64K, but with every byte the `.CMD` loads put back as a standalone port has
-it: none of the code bytes (they read as `load` leaves them, 0 in RAM), and `DATA` written by `load`. Then
+It boots emu on Fugløy's stub ROM (never the user's ROM), loads the program, ports it with `names` (and the
+hint file's text in `hints`, if given), runs emu until its PC first equals `report.entryAddr` (at once, but
+for a relocated program, whose loader runs first), and there gives the port's `Z` emu's registers and 64K,
+but with every byte the `.CMD` loads, and every byte of the program's code and `DATA` at its run addresses,
+put back as a standalone port has it: none of the code bytes (they read as `load` leaves them, 0 in RAM), and
+`DATA` written by `load`. The program's code is the IR's code regions at the run addresses (from `prepare`
+in `src/port.ts`, which `port()` is built on), less the loader's. Then
 the port runs with `z.at` replaced. At each block start emu is stepped until its T-states reach the port's,
 and there must be equal: the T-states, emu's PC and the block's address, every register, F, R, MEMPTR, the
 interrupt state and Q, and every byte either machine wrote since the block before. At the first block start
 of each frame (1/60 s of emu's `clockHz`) video RAM is compared, and at the end the 64K, the keyboard as each
 reads it from the keys held; the one address range never compared is the Model I's Expansion Interface,
-`$37E0`–`$37EF`, whose 40 Hz latch emu sets with time and which the runtime refuses to touch.
+`$37E0`–`$37EF`, whose 40 Hz latch emu sets with time and which the runtime refuses to touch. For a relocated
+program the end's compare also leaves out the bytes the loader left behind (what the `.CMD` loads that is
+neither the program's code nor its `DATA` at its run addresses: the file's copy outside the run range, and
+the loader), which are no part of the port; a read of one still differs at the next block start, and a
+write to one is compared as any other.
 
 `steps` are a `check.json`'s (`run`, `press`, `release`, `row`, `cell`, `pcIn`, as
 `packages/asm/test/lessons.test.ts` documents them). Each applies at the first block start at or after its
@@ -227,6 +248,7 @@ routine `''` and block `RETURNED`):
 | `code` | `self-modifying code: $XXXX written by the instruction at $YYYY (M1 does not translate it)`: emu wrote into a byte of the program's code, by any instruction, whether or not the byte runs again |
 | `refusal` | what the port refused as it ran, in the port's sentence; for a device, emu is stepped through the block to the same access, which names the instruction |
 | `port` | `port()` refused the program: its sentences |
+| `entry` | emu did not reach `report.entryAddr` within 10 million instructions of the load |
 | `row N`, `cell $XXXX`, `pcIn` | a check step that does not hold, on either machine |
 
 It does not compare the port's sound or cassette records (writes to port `$FF`, `z.sound`) with emu's: no
@@ -273,6 +295,13 @@ state, the T-states and the 64K must be equal. It also checks that `DATA` is exa
 and `load` writes nothing else, that the module is the same when ported twice, that two routines jumping into
 each other leave the JavaScript stack as deep as it was, and the sentences for a `JP (HL)`, an unknown target,
 a RET to the wrong address and a device the runtime does not model.
+
+`test/relocate.test.ts` (M2) ports relocated programs: a body that runs at `$6000`, loaded at `$7000` behind
+a mover, with a hint file of disasm's own skeleton plus its `relocate` and `entry` lines, ports from `$6000`
+with its table in `DATA` at its run address and nothing in the file range, and passes the referee; the hint
+file with no entry in the range, or two, is refused with a sentence. Sea Dragon with `seadrg01.hints` ports
+from `$497F` with 27 routines, none labelled, and refuses only its six `CALL 0060H`; with no hint file its 15
+data regions are all `unknown`.
 
 `test/structure.test.ts` checks the shapes: the straight line, DJNZ, diamond and nested-loop programs have
 no `switch`, every routine structured, and pass the referee on both models; the loops, the diamond's

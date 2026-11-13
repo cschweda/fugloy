@@ -139,7 +139,8 @@ for (const [what, source] of Object.entries(PROGRAMS)) {
         for (const [addr, bytes] of mod.DATA) bytes.forEach((_, k) => inData.add(addr + k));
         expect([...inData].filter((a) => code.has(a)), 'code addresses in DATA').toEqual([]);
         expect([...inData].sort((x, y) => x - y)).toEqual([...data].sort((x, y) => x - y));
-        expect(p.report.data).toEqual(mod.DATA.map(([addr, bytes]) => ({ addr, length: bytes.length })));
+        // M2 Task 1 added `kind`: with no hint file to type them, the analysis reached none of the DB bytes
+        expect(p.report.data).toEqual(mod.DATA.map(([addr, bytes]) => ({ addr, length: bytes.length, kind: 'unknown' })));
 
         const emu = onEmu(toCmd(r), model);
         const z = createZ({ model });

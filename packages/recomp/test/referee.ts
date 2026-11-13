@@ -6,13 +6,17 @@
  *
  * How it runs (the plan's Task 4; the design's "The referee for the port"):
  *   - emu boots Fugløy's stub ROM (apps/web/app/utils/emulator/stub-rom.z, as lessons.test.ts builds it),
- *     which clears the screen, pushes its RETURNED and halts; the .CMD is loaded. Never the user's ROM.
- *   - The port's `Z` takes emu's registers and 64K at that moment, so the stub's bytes, the screen and
- *     RETURNED on the stack are the same on both. Then every address the .CMD loads is put back to what
- *     a new `Z` holds and the runtime's `load` writes the port's DATA: the port runs on the memory a
- *     standalone port would have, with none of the program's code bytes (they read as `load` leaves
- *     them, 0 in RAM). A program that reads its own code as data therefore reads something else on the
- *     port, and the first register or byte that read changes stops the run, with the code byte named.
+ *     which clears the screen, pushes its RETURNED and halts; the .CMD is loaded, and emu runs until its
+ *     PC first equals the port's entry (`report.entryAddr`): at once, unless a hint file relocates the
+ *     program, when the file's loader runs first and moves it to where it runs. Never the user's ROM.
+ *   - The port's `Z` takes emu's registers and 64K at that moment, so the stub's bytes, the screen,
+ *     RETURNED on the stack and whatever the loader left in the registers are the same on both. Then
+ *     every address the .CMD loads, and every address of the program's code and DATA (its run
+ *     addresses, from the IR), is put back to what a new `Z` holds and the runtime's `load` writes the
+ *     port's DATA: the port runs on the memory a standalone port would have, with none of the program's
+ *     code bytes (they read as `load` leaves them, 0 in RAM). A program that reads its own code as data
+ *     therefore reads something else on the port, and the first register or byte that read changes
+ *     stops the run, with the code byte named.
  *   - The port runs with `z.at` replaced. At each block start emu is stepped, an instruction at a time,
  *     until its T-states reach the port's; then emu's T-states must equal the port's, emu's PC the
  *     block's address, and every register, F, R, MEMPTR, the interrupt state and Q must be equal, and
@@ -34,14 +38,16 @@
  * The memory compared is the whole 64K, the keyboard ($3800-$3BFF) as each machine reads it from the
  * keys held, with one exception: the Model I's Expansion Interface, $37E0-$37EF, whose 40 Hz interrupt
  * latch emu sets as time passes. The runtime does not model it and throws a sentence at any read or
- * write there, so no port can differ there silently.
+ * write there, so no port can differ there silently. A relocated program's end-of-run compare also
+ * leaves out the bytes its loader left behind (see `leftBehind` below), and nothing else.
  */
 import { Machine, parseCmd } from '@fugloy/emu';
 import { decodeAt, formatInstruction } from '@fugloy/z80';
 import { createZ, load, runPort } from '@fugloy/runtime';
 import type { Z } from '@fugloy/runtime';
 import { port } from '../src/index.js';
-import { RUNTIME, cpuOf, emuState, hex, importPort, memOf, setZ, stub, zState } from './helpers.js';
+import { prepare } from '../src/port.js';
+import { RUNTIME, cpuOf, emuState, hex, importPort, memOf, runTo, setZ, stub, zState } from './helpers.js';
 import type { Model, State } from './helpers.js';
 
 /** A step of a lesson's `check.json`, as packages/asm/test/lessons.test.ts documents them. */
@@ -63,6 +69,8 @@ export interface RefereeOptions {
    * its address with another is found.
    */
   names?: ReadonlyMap<number, string | readonly string[]>;
+  /** A hint file's text, given to `port()`; one that relocates the program makes the referee start at the port's entry. */
+  hints?: string;
   steps: readonly Step[];
   /** For the referee's own tests: rewrites the port's module text before it runs, to plant a bug. */
   transform?: (js: string) => string;
@@ -75,7 +83,8 @@ export interface RefereeOptions {
  * the referee stopped (`routine` is the port's routine running it; after the program returned, '' and
  * the stub's RETURNED); `field`, what differed: a register as the runtime names it (`a` … `hl_`, `wz`,
  * `iff1`, `q`), `pc`, `cycles`, `mem[$XXXX]`, `code` (self-modifying code), `refusal`, `port` (no port
- * could be made), or a step's `row N`, `cell $XXXX` or `pcIn`.
+ * could be made), `entry` (emu never reached the port's entry), or a step's `row N`, `cell $XXXX` or
+ * `pcIn`.
  */
 export type RefereeResult =
   | { ok: true; cycles: number; blocks: number; frames: number }
@@ -99,6 +108,8 @@ const KEYBOARD = { start: 0x3800, end: 0x3bff };
 const EXPANSION = { start: 0x37e0, end: 0x37ef };
 /** How far emu is stepped looking for the access or instruction a refusal names. */
 const SEARCH_LIMIT = 1_000_000;
+/** How far emu is stepped from the load looking for the port's entry (a relocated program's loader runs first). */
+const ENTRY_LIMIT = 10_000_000;
 
 /** The trampoline's suffix on an error thrown in a routine (@fugloy/runtime's ops.js, `call`). */
 const PLACED = / \(in ([A-Za-z0-9_$]+), in the block at \$([0-9A-F]{4})\)$/;
@@ -170,35 +181,55 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
   }
   checkSteps(steps, labels);
 
-  const p = port(cmd, { model, names, runtimeImport: RUNTIME });
-  if (!p.ok) return { ok: false, report: p.errors.join(' '), at: { routine: '', block: parseCmd(cmd).entry, cycles: 0 }, field: 'port' };
+  const portOptions = { model, names, runtimeImport: RUNTIME, ...(opts.hints === undefined ? {} : { hints: opts.hints }) };
+  const p = port(cmd, portOptions);
+  const prepared = prepare(cmd, portOptions);
+  if (!p.ok || !prepared.ok) return { ok: false, report: (p.ok ? [] : p.errors).join(' '), at: { routine: '', block: parseCmd(cmd).entry, cycles: 0 }, field: 'port' };
   const mod = await importPort(opts.transform === undefined ? p.js : opts.transform(p.js));
 
-  // ---- emu: the stub booted, the program loaded
+  // ---- emu: the stub booted, the program loaded, and run to the port's entry (through the loader, if any)
   const { rom, returned } = stub(model);
   const m = new Machine({ model, roms: { level2: rom } });
   if (m.run({ until: 'halt', cycles: m.clockHz }).reason !== 'halt') throw new Error('the stub ROM did not start and halt');
   m.load.cmd(cmd);
   const cpu = cpuOf(m);
+  if (!runTo(m, p.report.entryAddr, ENTRY_LIMIT)) {
+    return {
+      ok: false,
+      report: `emu did not reach the port's entry, ${$4(p.report.entryAddr)}, in ${ENTRY_LIMIT.toLocaleString('en-US')} instructions after the load; its PC is ${$4(cpu.registers.PC!)}`,
+      at: { routine: p.report.entry, block: p.report.entryAddr, cycles: 0 },
+      field: 'entry',
+    };
+  }
   const emuMem = m.system.memory;
   const start = emuState(m);
   const startMem = memOf(m);
 
-  // The program's code: every byte the .CMD loads that is not in the port's DATA. `length` holds each
-  // code byte's instruction length, so a read of an instruction's own bytes (its fetch) is told from
-  // a read of code as data.
+  // The program's code: the IR's code regions, at the addresses the program runs at, but a relocated
+  // program's loader, which the port does not translate. `length` holds each code byte's instruction
+  // length, so a read of an instruction's own bytes (its fetch) is told from a read of code as data.
   const loaded = new Uint8Array(0x10000);
   for (const b of parseCmd(cmd).blocks) for (let k = 0; k < b.data.length; k++) loaded[(b.addr + k) & 0xffff] = 1;
-  const code = loaded.slice();
-  for (const d of p.report.data) for (let k = 0; k < d.length; k++) code[(d.addr + k) & 0xffff] = 0;
+  const code = new Uint8Array(0x10000);
+  for (const r of prepared.prepared.code) code.fill(1, r.start, r.end + 1);
+  const inData = new Uint8Array(0x10000);
+  for (const d of p.report.data) for (let k = 0; k < d.length; k++) inData[(d.addr + k) & 0xffff] = 1;
   const length = new Uint8Array(0x10000);
   for (let a = 0; a < 0x10000; a++) if (code[a]) length[a] = decodeAt(startMem, a).length;
+  // The bytes a relocated program's loader left behind: what the .CMD loads that is neither the program's
+  // code nor its DATA at the addresses it runs at (the file's copy of the moved program outside the run
+  // range, and the loader itself). They are not part of the port, which holds what a new `Z` holds there,
+  // so the end-of-run compare leaves them out; nothing else does. A read of one by the program still
+  // shows up at the next block start, as a register (or a byte written) that differs. For a program
+  // nothing relocates, the .CMD loads exactly its code and DATA, and there are none.
+  const leftBehind = new Uint8Array(0x10000);
+  for (let a = 0; a < 0x10000; a++) if (loaded[a] && !code[a] && !inData[a]) leftBehind[a] = 1;
 
   // ---- the port: emu's registers and 64K, but the program's bytes as a standalone port has them
   const z = createZ({ model });
   const fresh = z.mem.slice();
   setZ(z, start, startMem);
-  for (let a = 0; a < 0x10000; a++) if (loaded[a]) z.mem[a] = fresh[a]!;
+  for (let a = 0; a < 0x10000; a++) if (loaded[a] || code[a] || inData[a]) z.mem[a] = fresh[a]!;
   load(z, mod);
 
   // ---- watching both machines' writes, and emu's reads of code as data
@@ -299,6 +330,10 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
   const compareRange = (from: number, to: number): void => {
     for (let a = from; a < to; a++) compareByte(a);
   };
+  /** The end-of-run compare: the 64K, but the bytes a relocated program's loader left behind (see `leftBehind`). */
+  const compareEnd = (): void => {
+    for (let a = 0; a < 0x10000; a++) if (!leftBehind[a]) compareByte(a);
+  };
 
   // ---- the steps, at their T-states from the entry
   const due: { t: number; step: Exclude<Step, { run: number }>; index: number }[] = [];
@@ -360,7 +395,7 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
     }
     applyDue(z.cycles);
     if (next === due.length && z.cycles >= endT) {
-      compareRange(0, 0x10000);
+      compareEnd();
       throw END;
     }
     prevBlock = addr;
@@ -453,7 +488,7 @@ export async function referee(opts: RefereeOptions): Promise<RefereeResult> {
     compareCpu(returned);
     compareWritten();
     applyDue(Infinity);
-    compareRange(0, 0x10000);
+    compareEnd();
   } catch (e) {
     if (!(e instanceof Stop)) throw e;
     return stopped(e.field, explain(e, `after the program returned to the stub's RETURNED (${$4(returned)}), T-state ${since(z.cycles)} from the entry`), '', returned);
