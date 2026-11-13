@@ -136,11 +136,21 @@ function waitForRow(m: Machine, text: string, seconds: number, what: string): vo
   record(m, { row, text: rows[row]!.trimEnd() });
 }
 
-/** Runs to the first start of one of the port's blocks, unless the PC is at one now. */
+/**
+ * The longest `toBlockStart` runs looking for a block start: two seconds of the clock. The longest stretch
+ * the game spends outside its blocks is a $DELAY of BC = 0, 1,966,095 T-states, under one second.
+ */
+const BLOCK_START_LIMIT_S = 2;
+
+/** Runs to the first start of one of the port's blocks, unless the PC is at one now; a sentence if none comes. */
 function toBlockStart(m: Machine): void {
   const { blockStart } = analysis();
   const cpu = m.system.cpu;
-  if (blockStart[cpu.registers.PC!] !== 1) m.run({ until: () => blockStart[cpu.registers.PC!] === 1 });
+  if (blockStart[cpu.registers.PC!] === 1) return;
+  const r = m.run({ cycles: second(m, BLOCK_START_LIMIT_S), until: () => blockStart[cpu.registers.PC!] === 1 });
+  if (r.reason !== 'predicate') {
+    throw new Error(`no block of the port started in ${BLOCK_START_LIMIT_S} s of the clock (the run stopped for ${r.reason}); emu's PC is $${cpu.registers.PC!.toString(16).toUpperCase().padStart(4, '0')}`);
+  }
 }
 
 /** Runs to `t` (from the entry), or on at once when it has passed. */
@@ -181,7 +191,7 @@ function answer(m: Machine, key: string): void {
 /** The screen shows `text`. */
 const shows = (m: Machine, text: string): boolean => screen(m).includes(text);
 
-/** The longest a game may take from its first chord to GAME OVER before the session gives up. */
+/** The longest a game may take from its first chord to GAME OVER before the session gives up, by default. */
 const GAME_LIMIT_S = 180;
 /** How long a chord is held. */
 const CHORD_S = 0.2;
@@ -189,9 +199,15 @@ const CHORD_S = 0.2;
 /**
  * A session: the title, ENTER, the number of players and each player's skill, then `pattern` (a list of
  * chords, each a list of keys) over and over, each chord held 0.2 s, until the screen reads
- * `Game Over Player <last>`; then every key let go, and on until the title returns.
+ * `Game Over Player <last>`; then every key let go, and on until the title returns. A game that has not
+ * ended `gameLimit` seconds after its first chord (180 by default) throws a sentence saying so.
  */
-function session(name: string, skills: readonly ('0' | '1')[], pattern: readonly (readonly string[])[]): Session {
+export function seaDragonSession(
+  name: string,
+  skills: readonly ('0' | '1')[],
+  pattern: readonly (readonly string[])[],
+  { gameLimit = GAME_LIMIT_S }: { gameLimit?: number } = {},
+): Session {
   return {
     name,
     play(m: Machine): void {
@@ -210,7 +226,7 @@ function session(name: string, skills: readonly ('0' | '1')[], pattern: readonly
       const chord = second(m, CHORD_S);
       const tick = second(m, 1 / 60);
       for (let k = 0; ; k++) {
-        if (k * CHORD_S >= GAME_LIMIT_S) throw new Error(`${what}: no "${gameOver}" on the screen within ${GAME_LIMIT_S} s of play:\n${screen(m)}`);
+        if (k * CHORD_S >= gameLimit) throw new Error(`${what}: no "${gameOver}" on the screen within ${gameLimit} s of play:\n${screen(m)}`);
         runTo(m, start + k * chord);
         hold(m, pattern[k % pattern.length]!);
         const until = start + (k + 1) * chord;
@@ -224,11 +240,11 @@ function session(name: string, skills: readonly ('0' | '1')[], pattern: readonly
   };
 }
 
-/** The three games, with the key patterns measured before the plan. */
+/** The three games, with the key patterns measured before the plan; two players at Novice and Expert, as measured. */
 export const SESSIONS: readonly Session[] = [
-  session('novice', ['0'], [['UP', 'SPACE'], ['UP']]),
-  session('expert', ['1'], [['RIGHT'], ['UP'], ['SPACE'], ['DOWN', 'SPACE'], ['ENTER'], ['UP', 'SPACE'], [], ['LEFT']]),
-  session('two-players', ['0', '0'], [['SPACE'], [], ['UP', 'ENTER'], ['DOWN'], ['SHIFT', 'UP'], ['RIGHT', 'SPACE']]),
+  seaDragonSession('novice', ['0'], [['UP', 'SPACE'], ['UP']]),
+  seaDragonSession('expert', ['1'], [['RIGHT'], ['UP'], ['SPACE'], ['DOWN', 'SPACE'], ['ENTER'], ['UP', 'SPACE'], [], ['LEFT']]),
+  seaDragonSession('two-players', ['0', '1'], [['SPACE'], [], ['UP', 'ENTER'], ['DOWN'], ['SHIFT', 'UP'], ['RIGHT', 'SPACE']]),
 ];
 
 /**

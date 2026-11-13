@@ -295,12 +295,22 @@ runs it on the game stub ROM (`test/game-rom.ts`) and writes the trace; the file
 sessions are in `test/sessions/sea-dragon.ts`: `novice`, `expert` and `two-players`, each from the title
 (`BY: Wayne`), ENTER, the number of players and each player's skill, then a repeating pattern of key chords
 held 0.2 s each until `Game Over Player 1` (`Player 2`) and on until the title returns: 84,124,477,
-57,536,697 and 113,034,001 T-states on the game stub ROM. `recordSession(rom, session)` plays one and
+57,536,697 and 131,821,072 T-states on the game stub ROM (two players: player 1 at Novice, player 2 at
+Expert). `recordSession(rom, session)` plays one and
 returns it as the referee's steps (each key pressed and released at the start of one of the port's blocks,
 so the referee applies it at the same instruction; a `row` check at the title, each prompt and GAME OVER; a
 last `run` to the session's end). Sea Dragon's trace: nine rewritten cells at eight sites (`$49C1`, `$4F41`,
 `$509B`–`$509C`, `$5174`, `$525E`, `$5AD0`, `$5ADD`, `$5AEA`), `$50C1`–`$50E9` entered (behind the rewritten
-`JP` at `$509A`), one drop (`$4BAC POP AF`) and two ROM reads (`$0000`, `$0003`).
+`JP` at `$509A`), one drop (`$4BAC POP AF`) and two ROM reads (`$0000`, `$0003`). What the census does not
+see (a return address removed other than by `POP`, an address `POP`ped and pushed back, an interrupt's push)
+is listed in the format's "What the census does not detect".
+
+The census and the sessions both read the hint file: `entered` is what ran and is not code in the hinted IR,
+and every key a session presses (and every row it checks) waits for the start of one of the IR's blocks. So a
+change to `seadrg01.hints` that changes its code (hinting `$50C1`–`$50E9` as code, as Task 4 does, empties
+`entered` and adds block starts, which can move a key press and so a session's length) makes
+`census.test.ts`'s `entered` and staleness checks fail on purpose: update the `entered` assertion and run
+`pnpm census` again to rewrite the trace.
 
 ## The Learn programs
 

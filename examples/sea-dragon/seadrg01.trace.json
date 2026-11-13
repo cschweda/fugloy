@@ -6,7 +6,7 @@
   "sessions": [
     {"name":"novice","cycles":84124477},
     {"name":"expert","cycles":57536697},
-    {"name":"two-players","cycles":113034001}
+    {"name":"two-players","cycles":131821072}
   ],
   "patches": [
     {"addr":18881,"writers":[18876],"values":[0,1,2,3,4,7,9,11,12]},

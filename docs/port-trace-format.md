@@ -45,4 +45,14 @@ The sessions start at the program's entry (for a relocated program, the first ti
 
 **What a reader refuses**, each with a sentence: text that is not JSON or not an object; a `fugloy-trace` other than `1`; a `program` whose `sha256` is not the program's given; a key missing or of the wrong shape (an address or a byte out of range, an empty `writers` or `values`, a `count` below 1, a range whose `first` is past its `last`); and a list out of order, with an address twice, or ranges that overlap.
 
+## What the census does not detect
+
+The census watches the stack through emu's memory hooks: a `CALL` or `RST`'s two writes mark the return address it pushed, any other write over a marked byte unmarks it, a `RET` or a `POP` that reads a marked byte unmarks it, and only a `POP` outside the ROM's space that reads one is a `drop` (a `POP` in the ROM's space is the ROM's business, and unmarks it without a report). So `drops` is only the `POP`s, and these go unreported:
+
+- **A return address taken off the stack another way**: by `EX (SP),HL` (or `EX (SP),IX`, `EX (SP),IY`, which read it and write over it, so the write unmarks it), by `INC SP` twice, by `LD SP,HL` or `LD SP,nn` past it, or by a `PUSH` and a `RET` that returns somewhere else and leaves it behind.
+- **A `POP` whose address is pushed back**: `POP HL` … `PUSH HL` (to read an inline parameter after a `CALL`, say) is reported as a drop although the address returns to the stack.
+- **An interrupt's push**: an interrupt's two writes carry the address of the instruction it interrupted, so when that instruction is a `CALL` the pushed address is marked as a CALL's; the `RETI` or `RET` that returns from the interrupt unmarks it again.
+
+A port meeting a dropped address the trace does not list runs on with that address still expected, and its next `RET` finds another address on the stack and stops with a sentence naming it (`@fugloy/runtime`'s `o.ret`), as any `RET` to the wrong address does: the census needs a session that takes that path, or the program another way to say it.
+
 `pnpm census <program.cmd> --hints <file> --model 3 --sessions sea-dragon -o <trace.json>` takes a census on the game stub ROM and writes the file; M2 knows one set of sessions, Sea Dragon's (`packages/recomp/test/sessions/sea-dragon.ts`).

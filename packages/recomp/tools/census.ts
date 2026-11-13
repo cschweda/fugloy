@@ -9,9 +9,11 @@
  *   - coverage: every byte an instruction ran from (its opcode and operands, emu's EXEC and OPERAND bits);
  *   - a write hook: each byte written, by which instruction and with what value; a CALL's (or RST's) two
  *     writes mark the return address it pushed, and any other write over a marked byte unmarks it;
- *   - a read hook: a `POP` that reads a marked byte took that CALL's return address off the stack (a drop),
- *     a `POP` or a `RET` that reads one unmarks it, and a read of the ROM's space by an instruction outside
- *     it is a ROM byte read as data.
+ *   - a read hook: a `POP` outside the ROM's space that reads a marked byte took that CALL's return address
+ *     off the stack (a drop), a `POP` in the ROM's space or a `RET` that reads one unmarks it
+ *     (`markedRead`), and a read of the ROM's space by an instruction outside it is a ROM byte read as data.
+ * What it does not see (a return address taken off another way, a `POP` whose address is pushed back, an
+ * interrupt's push) is listed in docs/port-trace-format.md, "What the census does not detect".
  * A code byte is one inside the hinted IR's code (at run addresses, the loader's left out) or one that ran
  * in a session. The ROM's space ($0000-$37FF on the Model III, $0000-$2FFF on the Model I) is never a
  * code byte here: what runs there is the ROM's, or the stub's stand-ins.
@@ -56,6 +58,18 @@ const isCall = (op: number): boolean => op === 0xcd || (op <= 0xff && ((op & 0xc
 const isPop = (op: number): boolean => (op <= 0xff && (op & 0xcf) === 0xc1) || op === 0xdde1 || op === 0xfde1;
 /** RET, RET cc, RETN and RETI. */
 const isRet = (op: number): boolean => op === 0xc9 || (op <= 0xff && (op & 0xc7) === 0xc0) || (op >> 8 === 0xed && (op & 0xc7) === 0x45);
+
+/**
+ * What a read of a stack byte holding a CALL's return address means, by the instruction making it (its
+ * opcode as `opcodeAt` gives it, and its address): `drop`, a `POP` of the program's took the address off
+ * the stack; `unmark`, the address is gone from the stack but not by the program's doing (a `RET`, which
+ * returns to it, or a `POP` in the ROM's space, below `romEnd`, which is the ROM's business, not a port's);
+ * `keep`, any other read, which leaves it there.
+ */
+export function markedRead(op: number, pc: number, romEnd: number): 'drop' | 'unmark' | 'keep' {
+  if (isPop(op)) return pc >= romEnd ? 'drop' : 'unmark';
+  return isRet(op) ? 'unmark' : 'keep';
+}
 
 /** `on` (1 where set) as inclusive ranges, by address. */
 function ranges(on: Uint8Array): [number, number][] {
@@ -109,13 +123,12 @@ export function census(opts: CensusOptions): PortTrace {
       if (addr < romEnd && pc >= romEnd) romReads.set(addr, value);
       const call = pushedBy[addr]!;
       if (call === 0) return;
-      const op = opcodeAt(m, pc);
-      if (isPop(op)) {
-        // One drop per return address, whichever of its bytes the POP reads first.
-        if (call !== lastDrop) drops.set(pc, (drops.get(pc) ?? 0) + 1);
-        lastDrop = call;
-        pushedBy[addr] = 0;
-      } else if (isRet(op)) pushedBy[addr] = 0;
+      const kind = markedRead(opcodeAt(m, pc), pc, romEnd);
+      if (kind === 'keep') return;
+      // One drop per return address, whichever of its bytes the POP reads first.
+      if (kind === 'drop' && call !== lastDrop) drops.set(pc, (drops.get(pc) ?? 0) + 1);
+      if (kind === 'drop') lastDrop = call;
+      pushedBy[addr] = 0;
     };
     m.debug.coverage.enable();
     s.play(m);

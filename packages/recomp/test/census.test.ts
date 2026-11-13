@@ -13,10 +13,10 @@ import { programHash } from '@fugloy/disasm';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { parseTrace } from '../src/index.js';
 import type { PortTrace } from '../src/index.js';
-import { census } from '../tools/census.js';
+import { census, markedRead } from '../tools/census.js';
 import { gameStubRom } from './game-rom.js';
 import type { Step } from './referee.js';
-import { SEA_DRAGON, SEA_DRAGON_HINTS, SESSIONS, recordSession } from './sessions/sea-dragon.js';
+import { SEA_DRAGON, SEA_DRAGON_HINTS, SESSIONS, recordSession, seaDragonSession } from './sessions/sea-dragon.js';
 
 const TRACE = new URL('../../../examples/sea-dragon/seadrg01.trace.json', import.meta.url);
 /** How long `beforeAll` may take: the three games played three times, once with the census's hooks. */
@@ -63,6 +63,14 @@ describe("Sea Dragon's three games on the game stub ROM", () => {
   });
 });
 
+describe('a session that never reaches GAME OVER', () => {
+  it('throws a sentence when its game has not ended within its limit', () => {
+    // No key at all, for two seconds of play: far too soon for the game to end
+    const idle = seaDragonSession('idle', ['0'], [[]], { gameLimit: 2 });
+    expect(() => recordSession('game', idle)).toThrow(/^Sea Dragon's idle session: no "Game Over Player 1" on the screen within 2 s of play/);
+  });
+});
+
 describe("Sea Dragon's census", () => {
   it('finds the eight sites the game rewrites (nine cells), with their writers, and the opcode cells with two values each', () => {
     const writers = Object.fromEntries(trace.patches.map((p) => [p.addr, p.writers]));
@@ -104,6 +112,24 @@ describe("Sea Dragon's census", () => {
   });
 });
 
+describe("the census's reading of a CALL's return address on the stack", () => {
+  // The game stub ROM's code (the stub and the $DELAY stand-in) has no POP, so a POP in the ROM's space
+  // cannot be played on it: the census's predicate is tested directly. $3800 is the Model III ROM's end.
+  it.each([
+    ['POP AF at $4BAC, the game\'s drop', 0xf1, 0x4bac, 'drop'],
+    ['POP IX in the program', 0xdde1, 0x6000, 'drop'],
+    ['POP HL in the ROM ($0100): not reported, only unmarked', 0xe1, 0x0100, 'unmark'],
+    ['POP BC at $37FF, the ROM\'s last byte', 0xc1, 0x37ff, 'unmark'],
+    ['RET', 0xc9, 0x5000, 'unmark'],
+    ['RET NZ', 0xc0, 0x5000, 'unmark'],
+    ['RETI', 0xed4d, 0x5000, 'unmark'],
+    ['LD A,(IX+d)', 0xdd7e, 0x5000, 'keep'],
+    ['EX (SP),HL (its write unmarks it; see the format document)', 0xe3, 0x5000, 'keep'],
+  ] as const)('%s', (_, op, pc, kind) => {
+    expect(markedRead(op, pc, 0x3800)).toBe(kind);
+  });
+});
+
 describe('parseTrace', () => {
   const text = (): string => readFileSync(TRACE, 'utf8');
 
@@ -118,5 +144,48 @@ describe('parseTrace', () => {
     const t = JSON.parse(text()) as PortTrace;
     t.patches.reverse();
     expect(() => parseTrace(JSON.stringify(t), sha)).toThrow(/^the trace is not a port trace: "patches" is not sorted by address/);
+  });
+
+  // Each change to a good trace (the committed one) that a reader refuses: an address past $FFFF, a byte
+  // past $FF, a number as a string, a fraction, a null, a missing key, an empty list, a count of 0, a
+  // backward range
+  const set = (path: (string | number)[], value: unknown) => (t: Record<string, unknown>): void => {
+    let o = t as Record<string | number, unknown>;
+    for (const k of path.slice(0, -1)) o = o[k] as Record<string | number, unknown>;
+    if (value === undefined) delete o[path.at(-1)!];
+    else o[path.at(-1)!] = value;
+  };
+  it.each([
+    ['a patch address of 65536', set(['patches', 0, 'addr'], 65536), /"patches" item 1 is not/],
+    ['a patch value of 256', set(['patches', 0, 'values'], [0, 256]), /"patches" item 1 is not/],
+    ['a writer as a string', set(['patches', 0, 'writers'], ['18876']), /"patches" item 1 is not/],
+    ['a patch address of 1.5', set(['patches', 0, 'addr'], 1.5), /"patches" item 1 is not/],
+    ['a patch with no values', set(['patches', 0, 'values'], []), /"patches" item 1 is not/],
+    ['writers out of order', set(['patches', 2, 'writers'], [19770, 19712]), /"patches" item 3 is not/],
+    ['an entered range of null', set(['entered', 0], null), /"entered" item 1 is not/],
+    ['an entered range backward', set(['entered', 0], [20713, 20673]), /"entered" item 1 is not/],
+    ['an entered end of 65536', set(['entered', 0], [20673, 65536]), /"entered" item 1 is not/],
+    ['a drop count of 0', set(['drops', 0, 'count'], 0), /"drops" item 1 is not/],
+    ['a drop at "19372"', set(['drops', 0, 'at'], '19372'), /"drops" item 1 is not/],
+    ['a ROM read value of 256', set(['romReads', 0, 'value'], 256), /"romReads" item 1 is not/],
+    ['a ROM read value of null', set(['romReads', 0, 'value'], null), /"romReads" item 1 is not/],
+    ['no romReads', set(['romReads'], undefined), /"romReads" is not a list/],
+    ['a session of 1.5 T-states', set(['sessions', 0, 'cycles'], 1.5), /"sessions" is not a list/],
+    ['a model of "3"', set(['model'], '3'), /"model" is not 1 or 3/],
+    ['a rom of null', set(['rom'], null), /"rom" is not "stub" or "user"/],
+    ['an uppercase SHA-256', set(['program', 'sha256'], 'A'.repeat(64)), /"program" is not a name and a SHA-256/],
+  ])('refuses %s', (_, change, why) => {
+    const t = JSON.parse(text()) as Record<string, unknown>;
+    change(t);
+    const refusal = ((): string => {
+      try {
+        parseTrace(JSON.stringify(t), programHash(SEA_DRAGON));
+        return 'accepted';
+      } catch (e) {
+        return (e as Error).message;
+      }
+    })();
+    expect(refusal).toMatch(/^the trace is not a port trace: /);
+    expect(refusal).toMatch(why);
   });
 });
