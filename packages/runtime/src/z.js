@@ -108,6 +108,8 @@ export class Z {
 
     /** T-states since the start; `tick` adds to it, and a port $FF write is stamped with it. */
     this.cycles = 0;
+    /** The address the last block started at (`at` records it), for a refusal's sentence. */
+    this.block = 0;
 
     /**
      * The 64K the CPU sees, as bytes: the ROM image and the program's data go in by the host, directly
@@ -210,11 +212,14 @@ export class Z {
   }
 
   /**
-   * Called at the start of each block, with the block's address. It does nothing, unless the referee
-   * replaces it to watch the port run beside emu.
+   * Called at the start of each block, with the block's address. It records the address in `block`,
+   * where a refusal finds the block it happened in; the referee replaces it to watch the port run
+   * beside emu (a replacement that wants refusals to name the block sets `block` too).
    * @param {number} addr
    */
-  at(addr) {}
+  at(addr) {
+    this.block = addr;
+  }
 
   // ---- memory
 

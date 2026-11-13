@@ -43,7 +43,7 @@ z.out(0xff, 1);                      // z.sound is [{ t: 7, v: 1 }]
 | `sound` | every write to port `$FF`, as `{ t, v }`: `t` is `cycles` at the call. The host drains it |
 | `columns32` | true in the 32-column mode |
 | `cycles`, `tick(t, r)` | T-states since the start; `tick` adds `t` and adds `r` to R's low seven bits, keeping bit 7 |
-| `at(addr)` | called at each block's start; does nothing unless the referee replaces it |
+| `at(addr)`, `block` | called at each block's start; it records `addr` in `block`, where a refusal finds the block it happened in. The referee replaces it (a replacement that wants refusals to name the block sets `block` too) |
 | `keys`, `press(name)` `release(name)` | the matrix (one byte a row, a set bit a key down) and the keys held; the names are `KEY_TABLE`'s |
 | `model`, `clockHz` | 1, 3 or `'flat'`; 1,774,080 Hz (Model I), 2,027,520 Hz (Model III) |
 
@@ -91,6 +91,28 @@ key table for every name emu's `m.keyboard.press` accepts. `pnpm --filter @fuglo
 and loads the package in an empty `node:vm` context (emu's check), and a test scans the source for a browser or
 Node global.
 
+## Running a port
+
+```js
+import { createZ, load, runPort } from '@fugloy/runtime';
+import * as port from './invaders.port.js';   // what @fugloy/recomp's port() wrote
+
+const z = createZ({ model: port.MODEL });
+load(z, port);                                // DATA, through z.write
+runPort(z, port);                             // { reason: 'returned' }
+```
+
+`load(z, port)` writes the port's `DATA` through `z.write`, as emu's `.CMD` loader writes a program through
+its memory, so the Model I's video RAM takes its bit 6 here too. `runPort(z, port)` runs `ENTRY` until it
+returns to the address on top of the stack as it starts: the one Fugløy's stub ROM pushes (its `RETURNED`)
+before it hands over to a program, so the runtime needs none of the stub's bytes. Both refuse a port for the
+other model.
+
+Anything a port cannot follow throws a sentence naming the address: a RET to an address other than the one
+after its CALL, a transfer to an address no block starts, a HALT, a device the runtime does not model. The
+trampoline (`o.call`) adds the routine and the block it happened in, once:
+`the port does not model $FE (an I/O port; …) (in READ, in the block at $7006)`.
+
 ## The helpers
 
 `@fugloy/runtime/ops` holds the helpers a port's statements call, imported as `o`
@@ -110,6 +132,9 @@ Node global.
 | `rld rrd (z)` | the nibble rotates through `(HL)` |
 | `ldi ldd cpi cpd ini ind outi outd (z)` | one iteration of a block instruction (a translated LDIR loops `ldi`) |
 | `push (z, v)`, `pop (z)`, `exsp (z, v)`, `exx (z)` | the stack (PUSH writes the high byte first; EX (SP),rr writes `(SP+1)` before `(SP)`) and EXX |
+| `call (z, routine, ret)` | CALL: runs `routine`, whose RET must return to `ret`, then each routine it returns (jumps into) in turn, until one returns nothing: a trampoline, so routines that jump into each other never grow the JavaScript stack |
+| `ret (z, expected, at)` | RET: throws a sentence when the popped address (in `z.wz`) is not `expected` |
+| `unknown (z, target, from)`, `halt (z, at)` | the sentences (as `Error`s, which the port throws) for a transfer to an address no block starts and for a HALT |
 
 `@fugloy/recomp`'s translator writes the calls, and its test runs every instruction both as translated
 statements here and on emu's core, and requires the two equal.

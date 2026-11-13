@@ -1,8 +1,9 @@
 /**
  * The helpers a port's generated statements call (`z.a = o.add8(z, z.a, z.b);`): the Z80's flag and
- * arithmetic routines, which a port imports as `@fugloy/runtime/ops`. @fugloy/recomp's `translate`
- * writes the calls; its test runs every instruction both ways, here and on @fugloy/emu's core, and
- * requires the two equal.
+ * arithmetic routines, which a port imports as `@fugloy/runtime/ops`, and at the end the control a
+ * port's routines share (CALL's trampoline, RET's check, the sentences for what a port cannot follow).
+ * @fugloy/recomp's `translate` writes the calls; its test runs every instruction both ways, here and on
+ * @fugloy/emu's core, and requires the two equal.
  *
  * Each helper does what emu's core does (packages/emu/src/cpu/z80cpu.js, cited by line), and where emu
  * differs from a textbook Z80, emu wins: the port must match the machine it is refereed against. A
@@ -615,4 +616,92 @@ export function exx(z) {
   z.bc_ = bc;
   z.de_ = de;
   z.hl_ = hl;
+}
+
+// ---- control: the routines of a port, how one calls another, and what a port cannot follow
+
+/**
+ * A routine of a port: one function per routine of the original program. It runs until the
+ * original's RET, and returns nothing, or until it jumps into another routine's start, and returns
+ * that routine, which `call` then runs in its place with the same return address.
+ * @typedef {(z: Machine, ret: number) => (Routine | undefined)} Routine
+ */
+
+/**
+ * Marks an error `call` has already said where it happened, so an outer `call` adds nothing more. A
+ * registered symbol, so two copies of this module (a port that imports the helpers by another path
+ * than its host's) still agree.
+ */
+const PLACED = Symbol.for('@fugloy/runtime: placed');
+
+/** @param {number} n */
+const hex4 = (n) => `$${n.toString(16).toUpperCase().padStart(4, '0')}`;
+
+/**
+ * CALL: run `routine`, whose RET must return to `ret` (the CALL has already pushed it), and every
+ * routine it jumps into, one after another, until one returns: a trampoline, so routines that jump
+ * into each other (a game loop) never grow the JavaScript stack. An error thrown inside gets, once,
+ * the routine it was running and the block it was in (the address `z.at` was last given) added to
+ * its sentence.
+ * @param {Machine} z
+ * @param {Routine} routine
+ * @param {number} ret the address after the CALL
+ */
+export function call(z, routine, ret) {
+  /** @type {Routine | undefined} */
+  let next = routine;
+  /** @type {Routine} */
+  let running = routine;
+  try {
+    while (next !== undefined) {
+      running = next;
+      next = next(z, ret);
+    }
+  } catch (e) {
+    if (e instanceof Error && !Object.hasOwn(e, PLACED)) {
+      Object.defineProperty(e, PLACED, { value: true });
+      e.message += ` (in ${running.name}, in the block at ${hex4(z.block)})`;
+    }
+    throw e;
+  }
+}
+
+/**
+ * RET: the instruction's statements have popped the address into MEMPTR (`z.wz`), as emu does; a port
+ * follows a RET only back to the address after the CALL that ran its routine, so any other address
+ * is refused with a sentence.
+ * @param {Machine} z
+ * @param {number} expected the address after the CALL
+ * @param {number} at the RET's address
+ */
+export function ret(z, expected, at) {
+  if (z.wz !== expected) {
+    throw new Error(
+      `the RET at ${hex4(at)} returns to ${hex4(z.wz)}, not to ${hex4(expected)}, the address after the CALL that ran its routine (a port follows a RET only back to its CALL)`,
+    );
+  }
+}
+
+/**
+ * The sentence for a transfer to an address where no block of the port starts: an address the
+ * disassembly did not find as code (outside the program, such as a ROM routine, or inside its data).
+ * The port's statement throws it.
+ * @param {Machine} z
+ * @param {number} target
+ * @param {number} from the transfer's address
+ * @returns {Error}
+ */
+export function unknown(z, target, from) {
+  return new Error(`the transfer at ${hex4(from)} goes to ${hex4(target)}, where no block of the port starts (the disassembly found no code there)`);
+}
+
+/**
+ * The sentence for a HALT, which waits for an interrupt; a port takes none. The port's statement
+ * throws it.
+ * @param {Machine} z
+ * @param {number} at the HALT's address
+ * @returns {Error}
+ */
+export function halt(z, at) {
+  return new Error(`the HALT at ${hex4(at)} waits for an interrupt, which a port does not take`);
 }

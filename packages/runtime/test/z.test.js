@@ -139,12 +139,14 @@ describe('time', () => {
     expect(bad).toEqual([]);
   });
 
-  it('at is a no-op a referee can replace', () => {
+  it('at records the block it was given, for a refusal to name, changes nothing else, and a referee can replace it', () => {
     const z = createZ({ model: 3 });
-    // Every number and flag the machine holds: registers, time, mode register
-    const state = () => JSON.stringify(Object.entries(z).filter(([, v]) => typeof v === 'number' || typeof v === 'boolean'));
+    // Every number and flag the machine holds but `block`: registers, time, mode register
+    const state = () => JSON.stringify(Object.entries(z).filter(([k, v]) => k !== 'block' && (typeof v === 'number' || typeof v === 'boolean')));
     const before = state();
+    expect(z.block).toBe(0);
     expect(z.at(0x7000)).toBeUndefined();
+    expect(z.block).toBe(0x7000);
     expect(state()).toBe(before);
     const seen = [];
     z.at = (addr) => seen.push(addr);

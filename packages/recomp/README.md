@@ -10,8 +10,60 @@ TypeScript compiled to plain ESM, with no DOM, no Node APIs, and no runtime depe
 [`docs/superpowers/specs/2026-10-23-part2-port-and-remake-design.md`](https://github.com/cschweda/fugloy/blob/main/docs/superpowers/specs/2026-10-23-part2-port-and-remake-design.md);
 milestone M1's plan:
 [`docs/superpowers/plans/2026-10-23-part2-m1-port-pipeline.md`](https://github.com/cschweda/fugloy/blob/main/docs/superpowers/plans/2026-10-23-part2-m1-port-pipeline.md)).
-Version 0.1.0, built in the repository and **not published** in M1. So far it translates single
-instructions; grouping them into blocks, routines and a module comes in the plan's next task.
+Version 0.1.0, built in the repository and **not published** in M1.
+
+## port
+
+```ts
+import { port } from '@fugloy/recomp';
+
+const result = port(cmdBytes, { model: 3, names, runtimeImport: '@fugloy/runtime/ops', source: 'invaders.cmd' });
+if (result.ok) writeFile('invaders.port.js', result.js);   // and result.report
+else console.error(result.errors.join('\n'));               // sentences: why it cannot be ported
+```
+
+`port(cmd, opts)` ports a `.CMD` program: `@fugloy/disasm` loads and analyses it (a hint file's text in
+`opts.hints` applied; `opts.names`, a map from address to name, given to its addresses, over the hint
+file's), its IR's blocks are grouped into routines, and each instruction is translated. The result is
+`{ ok: true, js, report }` or `{ ok: false, errors }`. The same program, model, names and hints give the
+same module, byte for byte.
+
+The module imports the runtime's helpers as `o` from `opts.runtimeImport` and exports:
+
+| Export | |
+|---|---|
+| `MODEL` | 1 or 3 |
+| `DATA` | every non-code region of the loaded program as `[address, Uint8Array]`, in address order. No code byte is in it, and nothing in the port decodes Z80. |
+| `ENTRY` | the entry routine |
+| each routine, by name | `NAME(z, ret)`: a routine is the entry or a CALL or RST target; its blocks are those reached from its start by jumps and falling through (the address after a CALL included) without entering another routine's start. Named from `opts.names`, else the disassembler's symbols, else `SUB_XXXX`, made a JavaScript identifier; a hint note at its start is its JSDoc. |
+
+Inside a routine the blocks are the labelled cases of `for (;;) switch (b)`, in address order (structured
+code replaces them in a later task). One instruction is one statement, with its address and assembly as a
+comment. Each block begins `z.at(addr);` and ends with `z.tick(t, r); z.q = 0|1;`: its T-states and R
+increments, on each path a conditional transfer takes (`cyclesNotTaken` when not taken), and Q, whether its
+last instruction wrote the flags. A block also ticks just before an instruction that reads the time
+(`readsTime`), so `z.cycles` and `z.r` there are its own start; a repeating instruction's loop ticks each
+iteration that repeats itself. Where the block goes:
+
+| Transfer | Statement |
+|---|---|
+| to a block of the same routine (its own start included) | `b = 0x7006; continue;` |
+| into another routine's start | `return OTHER;` (the trampoline runs `OTHER` next, with the same `ret`) |
+| a CALL or RST of a routine | the push of the return address, the tick, then `o.call(z, CALLEE, 0x7005);` and on to the block after it |
+| a RET | the pop (into MEMPTR, as emu), the tick, then `o.ret(z, ret, 0x7010); return;`: a sentence if it popped anything but `ret` |
+| to an address no block starts (a ROM routine, data) | `throw o.unknown(z, 0x0060, 0x7002);`, listed in `report.refused` |
+| HALT | `throw o.halt(z, 0x7003);`, listed in `report.refused` |
+
+A `JP (HL)`, `JP (IX)` or `JP (IY)` refuses the port (`ok: false`, a sentence naming its address), as does
+an instruction `@fugloy/z80` decodes only as `DB`, a hint file that does not parse or apply or relocates a
+region, and an entry that is not code.
+
+`report`: `entry` (the entry routine's name), `routines` (`name`, `addr`, `blocks`, and `labelled`: true
+while the blocks are a `switch`), `data` (`DATA`'s addresses and lengths) and `refused` (each place that
+throws when it runs, one sentence each).
+
+`@fugloy/runtime`'s `load(z, port)` writes `DATA` into memory and `runPort(z, port)` runs `ENTRY` until it
+returns (see its README).
 
 ## translate
 
@@ -70,6 +122,17 @@ high byte before the low.
 - What the runtime does not model (interrupts, the devices it lists).
 
 ## How it is checked
+
+`test/port.test.ts` assembles programs with `@fugloy/asm` (a straight line, a DJNZ count, conditional JP
+and JR both ways, CALL and RET three deep with CALL cc and RET cc both ways, two routines jumping into each
+other a thousand times, a table read with `LD A,(HL)`, a `.CMD` of two blocks) and runs each on emu (the stub
+ROM booted and the program loaded, as the Learn checks do) and as its port on the runtime, from emu's
+registers and 64K at the entry, on the Model III and the Model I. Every block must start where emu starts an
+instruction at the same T-state with the same R; at the end every register, F, R, MEMPTR, Q, the interrupt
+state, the T-states and the 64K must be equal. It also checks that `DATA` is exactly the program's `DB` bytes
+and `load` writes nothing else, that the module is the same when ported twice, that two routines jumping into
+each other leave the JavaScript stack as deep as it was, and the sentences for a `JP (HL)`, an unknown target,
+a RET to the wrong address and a device the runtime does not model.
 
 `test/translate.test.ts` runs every one of the 800 instructions from 64 seeded states each (four of them
 edges where SP and the operands wrap at `$FFFF`/`$0000`) on emu's core over a flat 64K bus and its

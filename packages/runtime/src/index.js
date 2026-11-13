@@ -5,3 +5,4 @@
 export { createZ, Z } from './z.js';
 export { FLAT, MODEL_I, MODEL_III, MODELS, modelOf } from './model.js';
 export { KEY_TABLE } from './keys.js';
+export { load, runPort } from './run.js';

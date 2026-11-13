@@ -24,6 +24,11 @@ declare module '@fugloy/emu' {
     reset(): void;
     executeInstruction(): number;
   }
+  /** Merges with the Machine packages/asm/test/fugloy-emu.d.ts declares: its system and step. */
+  export interface Machine {
+    readonly system: { readonly cpu: Z80CPU };
+    step(n?: number): { cycles: number; halted: boolean };
+  }
 }
 
 declare module '@fugloy/runtime' {
@@ -35,13 +40,27 @@ declare module '@fugloy/runtime' {
     iff1: boolean; iff2: boolean; im: number; q: number;
     cycles: number;
     mem: Uint8Array;
+    /** The address the last block began with (the default `at` records it). */
+    block: number;
+    at(addr: number): void;
     tick(t: number, r: number): void;
     read(addr: number): number;
     write(addr: number, v: number): void;
+    read16(addr: number): number;
+    write16(addr: number, v: number): void;
     in(port: number): number;
     out(port: number, v: number): void;
   }
   export function createZ(opts: { model: 1 | 3 | 'flat' }): Z;
+  /** A port module, as @fugloy/recomp's port() writes it. */
+  export type Routine = (z: Z, ret: number) => Routine | undefined;
+  export interface PortModule {
+    readonly MODEL: 1 | 3;
+    readonly DATA: readonly (readonly [number, Uint8Array])[];
+    readonly ENTRY: Routine;
+  }
+  export function load(z: Z, mod: PortModule): void;
+  export function runPort(z: Z, mod: PortModule): { reason: 'returned' };
 }
 
 declare module '@fugloy/runtime/ops' {
