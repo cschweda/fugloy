@@ -46,6 +46,13 @@ declare module '@fugloy/emu' {
       };
       readonly coverage: { enable(): void; disable(): void; readonly bits: Uint8Array };
     };
+    /** Every write to port $FF, raw, in a ring of the newest 65,536 (devices/sound.js), which the referee compares. */
+    readonly sound: {
+      events(sinceCycle?: number): { cycle: number; value: number }[];
+      clear(): void;
+      /** Writes lost to wrap-around since the last clear. */
+      readonly overflowed: number;
+    };
   }
 }
 
@@ -60,6 +67,8 @@ declare module '@fugloy/runtime' {
     mem: Uint8Array;
     /** The write guard `load` installs: 1 at each code byte a write throws at; null when none is installed. */
     guard: Uint8Array | null;
+    /** Every write to port $FF, as { t: the T-state, v: the byte }; the host drains it. */
+    sound: { t: number; v: number }[];
     /** The address the last block began with (the default `at` records it). */
     block: number;
     at(addr: number): void;
@@ -86,6 +95,8 @@ declare module '@fugloy/runtime' {
     readonly CODE?: readonly (readonly [number, number])[];
     /** The code bytes the program rewrites, as [address, byte as loaded]. */
     readonly CELLS?: readonly (readonly [number, number])[];
+    /** The ROM bytes the program reads as data, as [address, byte]: `load` puts them in memory. */
+    readonly ROM?: readonly (readonly [number, number])[];
     readonly ENTRY: Routine;
   }
   export function load(z: Z, mod: PortModule): void;

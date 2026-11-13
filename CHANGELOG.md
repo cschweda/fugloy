@@ -164,6 +164,37 @@ creates and pushes the tag.
   cassette writes, and self-modifying code (refused); a block reached from two routines is
   translated in each.
 
+- Part 2's milestone M2, Sea Dragon's port (plan
+  `docs/superpowers/plans/2026-11-13-part2-m2-sea-dragon-port.md`, Tasks 1–7 of 9, branch
+  `part2-m2`; in the repository only, nothing published). `examples/sea-dragon/seadrg01.cmd`, the
+  Model III, ports with its hint file and a **port trace** (`docs/port-trace-format.md`): a census
+  (`pnpm census`, `packages/recomp/tools/census.ts`) plays three scripted games on `@fugloy/emu`
+  (Novice, Expert, and two players, from the title to GAME OVER and back, on Fugløy's game stub ROM)
+  and writes what the game does that its bytes do not say, committed as `seadrg01.trace.json`. From
+  it `port()` reads the four rewritten displacements and the rewritten `JP` target from memory as
+  they run, makes each of the three swapped opcodes a choice between the two instructions the census
+  saw, follows the title loop's dropped return address (`$4BAC POP AF`) by leaving the routine the
+  game left, and carries the two ROM bytes the game reads as data (`$0000`, `$0003`) in the module's
+  `ROM`; a jump back to an entry whose first block loads SP with a constant discards the stack. The
+  runtime gains Fugløy's own stand-in for the ROM's `$DELAY` (`$0060`), a write guard that stops a
+  standalone port at a write into code the trace does not name, and `load`'s `ROM` bytes. The port is
+  430,623 bytes: 28 routines, none labelled, 846 blocks over them (110 of the 736 translated in more
+  than one routine), nothing refused. The referee now also compares the sound (every write to port
+  `$FF`, its T-state and byte, at every frame), and `packages/recomp/test/sea-dragon.test.ts` referees
+  the port through all three games in CI with no difference: 84,124,477, 57,536,697 and 131,821,072
+  T-states (about 2¼ minutes of play), refereed in 3.8, 2.4 and 5.3 s locally, about 22 to 25 million
+  T-states a second; locally, on the Model III ROM booted to READY, the same three games pass too.
+  The CLI gains `--trace` (`fugloy port <program.cmd> --model 1|3 [--hints <file>] [--trace <file>]
+  [-o <dir>]`; a trace of another program, or a malformed one, exits 1 with its sentence), and its
+  report lists the loader left out, each data region's kind, the rewritten code, the drops, the
+  resets, the stand-ins and the ROM bytes, and says that a write into code the trace does not name
+  stops the port. Limits: `seadrg01.cmd` on the Model III only; a port takes no interrupts (Sea
+  Dragon enables none); the three games are the paths those sessions take, not every path through
+  the game, and what the census cannot see is listed in the trace format's document; a block
+  reached from two routines is translated in each. Release coupling: the CLI depends on the
+  unpublished `@fugloy/recomp` and now `@fugloy/runtime` too. Still to come in M2: playing the port
+  in a browser.
+
 - A Full screen button in Run ▶'s machine row; Esc leaves it (and the browser's own exit); keys keep
   reaching the TRS-80, and focus is kept. The first screen is 252,262 B gzip of its 252,775 B budget.
 

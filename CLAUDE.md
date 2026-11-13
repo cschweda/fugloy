@@ -17,10 +17,15 @@ done criterion is met (2026-11-13, branch `part2-m1`, plan
 every Learn lesson and chapter's port matches the emulator for its check run, in
 the suite CI runs, and Task 6, loops and conditionals in the emitted code, is done
 on the same branch. The branch goes to `staging` by pull request; `main`
-is merged only on the user's word. If a task seems to need machinery from a
-later step, stop and say so.
+is merged only on the user's word. Milestone M2, Sea Dragon's port (plan
+`docs/superpowers/plans/2026-11-13-part2-m2-sea-dragon-port.md`, branch `part2-m2`,
+for `staging` by pull request), has its port proved (Tasks 1–7, 2026-11-13):
+`seadrg01.cmd`'s port matches the emulator through three recorded games from the
+title to GAME OVER, in CI. Tasks 8 and 9, one screen renderer in the runtime and
+the port playable in a browser, remain; M2 is not done until they are. If a task
+seems to need machinery from a later step, stop and say so.
 
-Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.3.0 on npm (2026-10-19), `@fugloy/emu` 0.6.0 and `@fugloy/mcp` 0.1.3 (2026-10-23, emu first); emu phases 5–7 released in emu 0.3.0; the Model 4 (emu phase 6b) done for Model III mode and the native hardware, merged to main (2026-10-18); emu 0.4.0 and mcp 0.1.2 published 2026-10-18; a version 6 DOS boot still needs an LS-DOS 6 / TRSDOS 6 disk. Plan phase 5A, the assembler (`@fugloy/asm` and `fugloy asm`), merged to main (2026-10-18; plan `docs/superpowers/plans/2026-10-18-phase5a-assembler.md`), released in core 1.3.0 (2026-10-19). 5B, the workbench's Source ✎ and Run ▶ (CodeMirror 6 editor with inline errors and one-click fixes; one press assembles and runs on a fresh machine, on the user's ROM, stored per model in the browser, or on Fugløy's stub ROM; Open as source ✎ turns a disassembly into a source that reassembles byte for byte), merged to main (2026-10-19), all five tasks done (plan `docs/superpowers/plans/2026-10-18-phase5b-source-run.md`). 5C, the running line (the line a program is on lit live in Source ✎ and in a listing of the same program, with a fading trail; breakpoints by gutter click or F9, saved with the source; Continue, Step, Step Over and Run to Here; the registers and flags; debug keys F5–F11; a screen-text mirror), merged to main (2026-10-19), all five tasks done (plan `docs/superpowers/plans/2026-10-19-phase5c-running-line.md`); with it phase 5's deliverable is met. 5D, the TRS-80 on screen (the screen's glyphs from xtrs's character generators on a black tube; a TRS-80 that powers on when Run ▶ opens with a ROM, with Power, Reset and Pause; Programs to try: Sea Dragon, Rear Guard, Eliminator; the debugger in a disclosure; `m.video.altCharset` in emu), merged to main (2026-10-19), all five tasks done (plan `docs/superpowers/plans/2026-10-19-phase5d-real-machine.md`). Phase 6A, the screen's true shape (Model III and Model 4 at 4:3, the Model I at about 0.952:1 from the video timing, rows by whole screen pixels, never narrower than its dots across where space allows; a Full screen button in Run ▶; plan `docs/superpowers/plans/2026-10-19-phase6a-screen-shape.md`), merged to main (2026-10-19). 6B, the Learn page and lessons 1–7 (a header link first in the Site nav; lesson | program | TRS-80 in three columns, always on the stub ROM; each lesson self-contained, building on the last, runnable on the Model III; edits and done marks kept in the browser; plan `docs/superpowers/plans/2026-10-19-phase6b-learn-page.md`), merged to main (2026-10-19), all eight tasks done. 6C, Build Space Invaders (twelve filled-in chapters in `apps/web/content/learn/invaders/` from a blank loop to a game with a base, marching and descending invaders, a BCD score, bombs, lives, GAME OVER and faster waves; new, changed and removed lines marked; served at `/learn/invaders/<slug>/`; the lesson list shows both courses; plan `docs/superpowers/plans/2026-10-19-phase6c-invaders.md`), merged to main (2026-10-19), all five tasks done; with it phase 6 is done. Emu phase 7's Model I half, the differential harness against xtrs in lockstep and MAME 0.289 by a trace our machine follows (plan `docs/superpowers/plans/2026-10-19-emu-phase7-model1-differential.md`), merged to main (2026-10-23), all five tasks done: thirteen Model I sessions of 10 million instructions with no divergence the known classes do not explain against either reference, three core fixes it found (EX (SP),rr's write order, a repeating block instruction's flags 3 and 5, SCF and CCF's flags 3 and 5 after an instruction that left the flags alone), and the 20 cps key drop settled as the Level II 1.3 ROM's. Its Model I sweep, every other `.CMD` against both references (plan `docs/superpowers/plans/2026-10-23-emu-phase7-model1-sweep.md`), merged to main (2026-10-23), all four tasks done: the 50 programs here (21 in `examples/`, 29 in `fixtures/real/`) of 10 million instructions each under one generic script, 45 passing against xtrs and 44 against MAME with no divergence the known classes do not explain, and Eliminator b, d, f, g and h (Asylum 1d too, against MAME) standing Open because they take the 40 Hz interrupt in IM 0 without ever reading the `$37E0` latch, which neither reference can follow (xtrs has no IM 0 response; MAME's recorder decodes only IM 1 and its request is gone after one response); a fourth core fix it found (a Model I HALT raises the reset switch's NMI, as the machine is wired); and, outside emu, a Model I Run on the stub ROM that stops at its program's HALT with a sentence, a debugger and MCP that say what a Model I HALT does, and Programs to try running Eliminator's Model I cassette build. Part 2's milestone M1 (plan `docs/superpowers/plans/2026-10-23-part2-m1-port-pipeline.md`, branch `part2-m1`, all six tasks done 2026-11-13; for `staging` by pull request, `main` only on the user's word): `@fugloy/runtime` and `@fugloy/recomp` at 0.1.0, unpublished; the referee; every Learn lesson and Build Space Invaders chapter (19 programs on the Model III and the Model I, 38 runs) ported and refereed against emu in CI, all matching, which is the design's done criterion for M1; and `fugloy port`. Task 6 writes the ports as loops and conditionals: all 129 routines on each model across the Learn ports are structured, none labelled. The NVDA and VoiceOver hand checks wait for the project's final phase.**
+Current phase: **v1 released as 1.0.0 (2026-10-17), core 1.3.0 on npm (2026-10-19), `@fugloy/emu` 0.6.0 and `@fugloy/mcp` 0.1.3 (2026-10-23, emu first); emu phases 5–7 released in emu 0.3.0; the Model 4 (emu phase 6b) done for Model III mode and the native hardware, merged to main (2026-10-18); emu 0.4.0 and mcp 0.1.2 published 2026-10-18; a version 6 DOS boot still needs an LS-DOS 6 / TRSDOS 6 disk. Plan phase 5A, the assembler (`@fugloy/asm` and `fugloy asm`), merged to main (2026-10-18; plan `docs/superpowers/plans/2026-10-18-phase5a-assembler.md`), released in core 1.3.0 (2026-10-19). 5B, the workbench's Source ✎ and Run ▶ (CodeMirror 6 editor with inline errors and one-click fixes; one press assembles and runs on a fresh machine, on the user's ROM, stored per model in the browser, or on Fugløy's stub ROM; Open as source ✎ turns a disassembly into a source that reassembles byte for byte), merged to main (2026-10-19), all five tasks done (plan `docs/superpowers/plans/2026-10-18-phase5b-source-run.md`). 5C, the running line (the line a program is on lit live in Source ✎ and in a listing of the same program, with a fading trail; breakpoints by gutter click or F9, saved with the source; Continue, Step, Step Over and Run to Here; the registers and flags; debug keys F5–F11; a screen-text mirror), merged to main (2026-10-19), all five tasks done (plan `docs/superpowers/plans/2026-10-19-phase5c-running-line.md`); with it phase 5's deliverable is met. 5D, the TRS-80 on screen (the screen's glyphs from xtrs's character generators on a black tube; a TRS-80 that powers on when Run ▶ opens with a ROM, with Power, Reset and Pause; Programs to try: Sea Dragon, Rear Guard, Eliminator; the debugger in a disclosure; `m.video.altCharset` in emu), merged to main (2026-10-19), all five tasks done (plan `docs/superpowers/plans/2026-10-19-phase5d-real-machine.md`). Phase 6A, the screen's true shape (Model III and Model 4 at 4:3, the Model I at about 0.952:1 from the video timing, rows by whole screen pixels, never narrower than its dots across where space allows; a Full screen button in Run ▶; plan `docs/superpowers/plans/2026-10-19-phase6a-screen-shape.md`), merged to main (2026-10-19). 6B, the Learn page and lessons 1–7 (a header link first in the Site nav; lesson | program | TRS-80 in three columns, always on the stub ROM; each lesson self-contained, building on the last, runnable on the Model III; edits and done marks kept in the browser; plan `docs/superpowers/plans/2026-10-19-phase6b-learn-page.md`), merged to main (2026-10-19), all eight tasks done. 6C, Build Space Invaders (twelve filled-in chapters in `apps/web/content/learn/invaders/` from a blank loop to a game with a base, marching and descending invaders, a BCD score, bombs, lives, GAME OVER and faster waves; new, changed and removed lines marked; served at `/learn/invaders/<slug>/`; the lesson list shows both courses; plan `docs/superpowers/plans/2026-10-19-phase6c-invaders.md`), merged to main (2026-10-19), all five tasks done; with it phase 6 is done. Emu phase 7's Model I half, the differential harness against xtrs in lockstep and MAME 0.289 by a trace our machine follows (plan `docs/superpowers/plans/2026-10-19-emu-phase7-model1-differential.md`), merged to main (2026-10-23), all five tasks done: thirteen Model I sessions of 10 million instructions with no divergence the known classes do not explain against either reference, three core fixes it found (EX (SP),rr's write order, a repeating block instruction's flags 3 and 5, SCF and CCF's flags 3 and 5 after an instruction that left the flags alone), and the 20 cps key drop settled as the Level II 1.3 ROM's. Its Model I sweep, every other `.CMD` against both references (plan `docs/superpowers/plans/2026-10-23-emu-phase7-model1-sweep.md`), merged to main (2026-10-23), all four tasks done: the 50 programs here (21 in `examples/`, 29 in `fixtures/real/`) of 10 million instructions each under one generic script, 45 passing against xtrs and 44 against MAME with no divergence the known classes do not explain, and Eliminator b, d, f, g and h (Asylum 1d too, against MAME) standing Open because they take the 40 Hz interrupt in IM 0 without ever reading the `$37E0` latch, which neither reference can follow (xtrs has no IM 0 response; MAME's recorder decodes only IM 1 and its request is gone after one response); a fourth core fix it found (a Model I HALT raises the reset switch's NMI, as the machine is wired); and, outside emu, a Model I Run on the stub ROM that stops at its program's HALT with a sentence, a debugger and MCP that say what a Model I HALT does, and Programs to try running Eliminator's Model I cassette build. Part 2's milestone M1 (plan `docs/superpowers/plans/2026-10-23-part2-m1-port-pipeline.md`, branch `part2-m1`, all six tasks done 2026-11-13; for `staging` by pull request, `main` only on the user's word): `@fugloy/runtime` and `@fugloy/recomp` at 0.1.0, unpublished; the referee; every Learn lesson and Build Space Invaders chapter (19 programs on the Model III and the Model I, 38 runs) ported and refereed against emu in CI, all matching, which is the design's done criterion for M1; and `fugloy port`. Task 6 writes the ports as loops and conditionals: all 129 routines on each model across the Learn ports are structured, none labelled. Part 2's milestone M2, Sea Dragon's port (plan `docs/superpowers/plans/2026-11-13-part2-m2-sea-dragon-port.md`, branch `part2-m2`, for `staging` by pull request, `main` only on the user's word), Tasks 1–7 done (2026-11-13): the port trace and its census (`pnpm census`), the `$DELAY` stand-in, rewritten operands, swapped opcodes, a dropped return address and the stack reset, the module's ROM bytes, the referee's sound compare, and `fugloy port --trace`; `seadrg01.cmd`'s port (430,623 bytes, 28 routines, none labelled) matches emu through three recorded games, Novice, Expert and two players, from the title to GAME OVER, 273 million T-states in all, in CI on the game stub ROM and locally on the Model III ROM. Tasks 8 (one screen renderer, in the runtime) and 9 (Sea Dragon in a browser) remain. The NVDA and VoiceOver hand checks wait for the project's final phase.**
 v1 is disassembler phases 1–4: the core decoder and loaders (v0.1.0), Pass 1
 and Pass 2 (v0.2.0), the cited symbol tables (phase 3: eight JSON tables, 634
 entries, in `packages/disasm/data/symbols/`, compiled by `pnpm symbols`), and
@@ -191,13 +196,17 @@ references waits (emu spec §12).
   is in `packages/asm/README.md`. The starter is
   `packages/asm/examples/clear-screen.z`.
 - `packages/cli` — Node wrapper over disasm, asm and recomp (`fugloy asm`;
-  `fugloy port <program.cmd> --model 1|3 [--hints <file>] [-o <dir>]`, which
-  writes `<name>.port.js`, importing `@fugloy/runtime/ops`, and its report
-  `<name>.port.txt`, and exits 1 with port()'s sentences when it cannot port).
+  `fugloy port <program.cmd> --model 1|3 [--hints <file>] [--trace <file>] [-o <dir>]`,
+  which writes `<name>.port.js`, importing `@fugloy/runtime/ops`, and its report
+  `<name>.port.txt` (one line an item: the loader left out, the routines, the
+  data and their kinds, the rewritten code, drops, resets, stand-ins and ROM
+  bytes, and the refusals), and exits 1 with port()'s sentences when it cannot
+  port, or with `parseTrace`'s when the trace is malformed or of another
+  program; the runtime's stand-ins are passed for the model).
   The only package that touches `fs`. Release coupling: it depends on
-  `@fugloy/recomp`, which M1 does not publish, so `./publish.sh check core`
-  refuses the core set until recomp is released with it or the dependency is
-  settled.
+  `@fugloy/recomp` and, from M2, `@fugloy/runtime`, which neither M1 nor M2
+  publishes, so `./publish.sh check core` refuses the core set until they are
+  released with it or the dependencies are settled.
 - `apps/web` — Nuxt 4 + Nuxt UI, static generation, no server routes (phase 4).
   The folder is `apps/web` (package `@fugloy/web`); the emu spec's
   `apps/workbench` means the same app. Its tests run with `pnpm test:web`,
@@ -279,7 +288,7 @@ references waits (emu spec §12).
   `packages/mcp/prompts/` (shipped in the package; the root `prompts/` is a
   README pointing there); the dev config is `.mcp.json.example` (copy to the
   gitignored `.mcp.json`).
-- `packages/runtime` — `@fugloy/runtime` 0.1.0 (Part 2, M1; not published):
+- `packages/runtime` — `@fugloy/runtime` 0.1.0 (Part 2, M1 and M2; not published):
   the machine a port runs on. Plain JavaScript ESM with JSDoc types, no
   dependencies, no DOM, no Node APIs (it runs in a page and in a Web Worker).
   `createZ({ model: 1 | 3 | 'flat' })`: the registers, the 64K with the model's
@@ -290,7 +299,14 @@ references waits (emu spec §12).
   helpers in `@fugloy/runtime/ops`, the subpath a port imports, each mirroring
   emu's core and citing its lines. emu is the oracle: the tests build emu beside
   a `Z` and compare them; `pnpm --filter @fugloy/runtime check:no-dom`. It
-  models no interrupts, cassette, disk, printer or Model 4.
+  models no interrupts, cassette, disk, printer or Model 4. M2 adds Fugløy's own
+  stand-ins for ROM routines (`src/rom.js`: `standins(model)`, the Model III's
+  `$DELAY` at `$0060`, called by `o.standin`; `STANDINS_Z`, the same as Z80
+  source for the referee's game stub ROM; no Tandy byte), `load`'s write guard
+  over the module's `CODE` (a write into code that is not one of its `CELLS`
+  throws), the module's `ROM` bytes stored straight into memory by `load`, and
+  `o.unwind`/`o.reset` with the top-level trampoline `o.top` for a dropped return
+  address and a jump back to an entry that reloads SP.
 - `packages/recomp` — `@fugloy/recomp` 0.1.0 (Part 2, M1; not published;
   design `docs/superpowers/specs/2026-10-23-part2-port-and-remake-design.md`).
   `port(cmd, { model, names, hints, runtimeImport })` turns a `.CMD` into one
@@ -308,14 +324,36 @@ references waits (emu spec §12).
   must catch) and `learn.test.ts`: every Learn lesson and chapter on each model
   its `check.json` names, refereed through its steps (38 runs, about 61 s, in
   the root suite and CI, needing no zmac or ROM). Known limits: EI's
-  one-instruction delay is not modelled; the referee does not compare sound or
-  cassette writes; self-modifying code is refused, found only by the referee; a
-  block reached from two routines is translated in each. From M1's Task 6 a
+  one-instruction delay is not modelled; self-modifying code the trace does not
+  name is refused (by the referee, and from M2 in a standalone port by `load`'s
+  write guard); a block reached from two routines is translated in each. (M1's
+  referee compared no sound; M2's compares every port `$FF` write.) From M1's Task 6 a
   routine is structured code (`while (true)`, `if`/`else`, `break` and
   `continue`; `src/structure.ts`, dominators and natural loops) where its
   control flow allows, and a labelled `switch` over its blocks otherwise (an
   irreducible loop); all 129 routines on each model across the Learn ports
-  are structured, none labelled.
+  are structured, none labelled. M2 (Tasks 1–7): `port()` takes a hint file
+  that relocates the program (it starts at the hinted entry, the loader left
+  out), `standins` (a CALL to one is `o.standin`) and a **port trace**
+  (`opts.trace`, `src/trace.ts`'s `parseTrace`; format
+  `docs/port-trace-format.md`): a rewritten operand is read from memory, a
+  rewritten `JP nn` goes to each target seen, a swapped opcode is a `switch` on
+  its cell over the instructions seen, a dropped return address ends its block
+  with `o.unwind` and starts a continuation routine, and the trace's ROM reads
+  are the module's `ROM`; an entry whose first block loads SP with a constant
+  (not a trace cell) makes a jump back to it `o.reset`. The census
+  (`tools/census.ts`, `pnpm census <cmd> --hints … --model 3 --sessions
+  sea-dragon -o <trace.json>`; test code, it needs emu) plays scripted
+  sessions (`test/sessions/sea-dragon.ts`: `novice`, `expert`, `two-players`,
+  `recordSession`) on the game stub ROM (`test/game-rom.ts`: the stub plus
+  `STANDINS_Z`) and writes the trace; Sea Dragon's is committed as
+  `examples/sea-dragon/seadrg01.trace.json`, and `census.test.ts` fails when it
+  is stale. The referee also compares the sound (port `$FF` writes) at every
+  frame, starts a user's ROM booted to READY with `boot: 'ready'`, and holds a
+  carried ROM byte to the module's value. `test/sea-dragon.test.ts` referees
+  Sea Dragon's port through the three games in CI (about 12 s of refereeing),
+  and locally on the Model III ROM too. Limits: `seadrg01.cmd` on the Model III
+  only, no interrupts in a port, the three sessions' paths only.
 - `docs/label-format.md` — the label and coverage file shared by emu, mcp,
   and disasm (§8 of the emu spec).
 - `fixtures/synthetic` — committed, generated by the test suite's writers.

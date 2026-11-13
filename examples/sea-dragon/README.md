@@ -41,7 +41,39 @@ pnpm fugloy examples/sea-dragon/seadrg01.cmd --hints examples/sea-dragon/seadrg0
 pnpm fugloy examples/sea-dragon/seadrg01.cmd --hints examples/sea-dragon/seadrg01.hints --labels examples/sea-dragon/seadrg01.labels.json
                                                          # the same, with what the emulator saw run as roots and comments
 pnpm fugloy examples/sea-dragon/seadrg06.cmd --color    # a build that loads in place, in color on a terminal
+pnpm fugloy port examples/sea-dragon/seadrg01.cmd --model 3 --hints examples/sea-dragon/seadrg01.hints --trace examples/sea-dragon/seadrg01.trace.json -o out
+                                                         # the game ported to JavaScript: out/seadrg01.port.js and its report
 ```
 
 The test suite runs on these files too, so its real-program tests cover a
 real game on every machine and in CI.
+
+## The port (Part 2, milestone M2)
+
+`fugloy port` turns `seadrg01.cmd`, with its hint file and trace, into one
+JavaScript module on `@fugloy/runtime` (430,623 bytes): 28 routines, none of
+them a labelled `switch`, one statement per instruction, the game's data and
+none of its code bytes. The trace's eight rewritten sites (nine bytes) are read
+from memory as the game runs: four index displacements (`$49C1`, `$4F41`,
+`$5AD0`, `$5ADD`), the target of the `JP` at `$509A` (to `$509D` or `$50C1`),
+and three swapped opcodes, each a choice between the instructions the census
+saw (`$5174` `NOP` or `LD (HL),A`, `$525E` `JP NZ` or `JP Z`, `$5AEA` `RET` or
+`CALL`). The title loop's dropped return address (`$4BAC POP AF`) leaves the
+routine the game left, its three jumps back to `$497F` discard the stack as the
+game does, its six calls of the ROM's `$DELAY` run the runtime's stand-in, and
+the two ROM bytes it reads as data (`$0000`, `$0003`) are in the module, so the
+port needs no ROM.
+
+`packages/recomp/test/sea-dragon.test.ts` referees the port against
+`@fugloy/emu` through the three recorded games, Novice, Expert and two
+players, from the title to GAME OVER and back to the title, on Fugløy's game
+stub ROM in CI: every block's registers, flags, T-states, R and MEMPTR, every
+byte written, video RAM and the sound at every frame, with no difference
+(273,482,246 T-states in all, about 2 minutes 15 seconds of play, refereed in
+about 12 seconds). Locally the same games pass on the Model III ROM too. What
+that does not cover: `seadrg01.cmd` on the Model III only (not the other builds
+or the Model I); no interrupts (the game enables none); the paths the three
+games take, not every path through the game, so a path they never take may
+write into code, drop a return address or read a ROM byte the trace does not
+name, and the port then stops with a sentence. Playing the port in a browser
+comes next.

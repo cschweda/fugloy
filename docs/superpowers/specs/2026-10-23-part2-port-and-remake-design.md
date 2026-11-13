@@ -244,6 +244,30 @@ later choice; until then "upgraded and updated" means presentation and feel, not
   the referee, not by `port()`; a block reached from two routines is translated in each.
 - **M2 — Sea Dragon's port.** The `$DELAY` stand-in, the self-modification census and its sites,
   sound, the keyboard; the scripted sessions above with no difference; playable in the browser.
+  **The port and its proof are done (2026-11-13, plan
+  `docs/superpowers/plans/2026-11-13-part2-m2-sea-dragon-port.md`, Tasks 1–7 of 9, branch
+  `part2-m2`); the browser is not.** A census (`pnpm census`) plays three scripted games on emu,
+  Novice, Expert and two players (Novice, then Expert), from the title to GAME OVER and back, on
+  Fugløy's game stub ROM, and writes a port trace (`docs/port-trace-format.md`), committed as
+  `examples/sea-dragon/seadrg01.trace.json`: eight rewritten sites (nine bytes), one dropped return
+  address (`$4BAC`), two ROM bytes read as data. `seadrg01.cmd` with its hint file and that trace
+  ports to one module of 430,623 bytes: 28 routines, every one structured (none labelled), 846
+  blocks over them (110 of the 736 translated in more than one routine), the four rewritten
+  displacements and the rewritten `JP` target read from memory, the three swapped opcodes each a
+  `switch` between the two instructions seen (the design's call 1), the drop an unwind to a
+  continuation routine, the three jumps back to the entry a stack reset, the six `$DELAY` calls on
+  the runtime's stand-in, the two ROM bytes in the module, and none of the game's code bytes. The
+  referee, which now also compares the sound (every port `$FF` write, its T-state and byte) at every
+  frame, finds no difference in any of the three games (84,124,477, 57,536,697 and 131,821,072
+  T-states; refereed in 3.8, 2.4 and 5.3 s locally) in the suite CI runs
+  (`packages/recomp/test/sea-dragon.test.ts`), and none locally on the user's Model III ROM booted
+  to READY (where the ROM's `$0003` differs from the module's, and no register depends on it). The
+  keyboard is the referee's: each key a session presses reaches both machines at the same block.
+  Limits: `seadrg01.cmd` on the Model III only; a port takes no interrupts (Sea Dragon enables
+  none); the three games are the paths those sessions take, not every path through the game, and
+  the census cannot see what `docs/port-trace-format.md` lists. **Remaining:** one screen renderer
+  in the runtime and the port playable in a browser, paced by the emulated clock, with keys and
+  sound (Tasks 8 and 9).
 - **M3 — The bundle and the arcade.** The plan's bundler: a per-game manifest (name, authors,
   year, machine, files, hints, rights), one static folder or `<trs80-game>` element, an arcade page
   listing the public-domain ports; Sea Dragon first.

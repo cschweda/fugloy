@@ -649,10 +649,10 @@ const UNWIND = Symbol.for('@fugloy/runtime: unwind');
 /**
  * What a port throws to leave routines the program left: not an Error, so no trampoline adds a place to
  * it and none mistakes it for a refusal. `levels` trampolines rethrow it, one fewer each; the next goes
- * on with `to` (Infinity: only the top-level trampoline does). `at` is the POP that dropped the return
- * address (for the sentence when no routine is left to leave), `from` the routine that threw it, set
- * by the first trampoline to catch it.
- * @typedef {{ [UNWIND]: true, levels: number, to: Routine, at: number, from: string | undefined }} Unwind
+ * on with `to` (Infinity: only the top-level trampoline does). `pops` are the addresses of the POPs that
+ * dropped the return addresses, in the order they ran (for the sentence when no routine is left to leave:
+ * the one that took the entry's), `from` the routine that threw it, set by the first trampoline to catch it.
+ * @typedef {{ [UNWIND]: true, levels: number, to: Routine, pops: readonly number[], from: string | undefined }} Unwind
  */
 
 /**
@@ -663,11 +663,11 @@ const UNWIND = Symbol.for('@fugloy/runtime: unwind');
  * would have. Each POP more leaves one trampoline more.
  * @param {number} levels how many return addresses were dropped, 1 or more
  * @param {Routine} to the continuation
- * @param {number} at the (last) POP's address
+ * @param {...number} pops each POP's address, in the order they ran (one per level)
  * @returns {Unwind}
  */
-export function unwind(levels, to, at) {
-  return { [UNWIND]: true, levels, to, at, from: undefined };
+export function unwind(levels, to, ...pops) {
+  return { [UNWIND]: true, levels, to, pops, from: undefined };
 }
 
 /**
@@ -679,7 +679,7 @@ export function unwind(levels, to, at) {
  * @returns {Unwind}
  */
 export function reset(to) {
-  return { [UNWIND]: true, levels: Infinity, to, at: 0, from: undefined };
+  return { [UNWIND]: true, levels: Infinity, to, pops: [], from: undefined };
 }
 
 /**
@@ -737,8 +737,11 @@ function trampoline(z, routine, ret, isTop) {
         continue;
       }
       if (isTop) {
+        // Each trampoline below took one level, one POP's, in the order they ran: the POP that took the
+        // entry's return address is the first of those left (not the run's last when more are left)
+        const pop = e.pops[e.pops.length - e.levels] ?? e.pops[e.pops.length - 1] ?? 0;
         const error = new Error(
-          `the POP at ${hex4(e.at)} drops a return address that no CALL of the port's pushed (the one the port's entry was started with, or one below it), which a port cannot follow`,
+          `the POP at ${hex4(pop)} drops a return address that no CALL of the port's pushed (the one the port's entry was started with, or one below it), which a port cannot follow`,
         );
         place(error, e.from, z);
         throw error;

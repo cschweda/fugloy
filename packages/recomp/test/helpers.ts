@@ -127,6 +127,35 @@ export function runTo(m: Machine, pc: number, limit: number): boolean {
   return true;
 }
 
+/**
+ * Boot the ROM in `m` (the user's Model III ROM) to BASIC's READY, as a user does before loading a program:
+ * ENTER at Cass? and at Memory Size?, then a quarter of a second more. Sea Dragon's sessions start this way
+ * on the user's ROM (controller Ruling 5: interrupts are off when the .CMD loads, and its first instruction
+ * is DI), for the census's sessions and the referee alike. Throws a sentence when a prompt does not come.
+ */
+export function bootToReady(m: Machine): void {
+  const second = (s: number): number => Math.round(s * m.clockHz);
+  const wait = (text: string): void => {
+    for (let k = 0; !m.video.text().join('\n').includes(text); k++) {
+      if (k >= 2 * 60) throw new Error(`booting the ROM: no "${text}" on the screen within 2 s:\n${m.video.text().join('\n')}`);
+      m.run({ cycles: second(1 / 60) });
+    }
+  };
+  // ENTER held 50 ms of emulated time at a ROM prompt, as `m.keyboard.type` holds a key at its 10 cps
+  const enter = (): void => {
+    m.keyboard.press('ENTER');
+    m.run({ cycles: second(0.05) });
+    m.keyboard.release('ENTER');
+    m.run({ cycles: second(0.05) });
+  };
+  wait('Cass?');
+  enter();
+  wait('Memory Size?');
+  enter();
+  wait('READY');
+  m.run({ cycles: second(1 / 4) });
+}
+
 // ---- a port module
 
 /** The runtime's helpers by absolute URL: a data: module resolves only absolute specifiers. */

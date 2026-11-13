@@ -50,7 +50,7 @@ export interface Io {
 
 export const USAGE = `Usage: fugloy <file> [--base <hex> | --rebase <hex>] [--entry <hex>]... [--hints <path> | --write-hints <path>] [--labels <path>] [--machine 1|3|4] [--dos trsdos|ldos|none] [--format listing|zmac|ir] [--sweep] [--color] [-o <path>]
        fugloy asm <source> [-o <out.cmd>] [--model 1|3|4] [--dos trsdos|ldos|none] [--listing]
-       fugloy port <program.cmd> --model 1|3 [--hints <file>] [-o <dir>]
+       fugloy port <program.cmd> --model 1|3 [--hints <file>] [--trace <file>] [-o <dir>]
 
 Prints a listing of a TRS-80 .CMD load module, raw binary, or tokenized Level
 II .BAS program. The format is detected from the file's content, never its

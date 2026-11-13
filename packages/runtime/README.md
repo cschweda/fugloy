@@ -78,7 +78,8 @@ holds what emu's video RAM holds.
 
 ## What it does not model
 
-Interrupts (a port takes none), the ROM (but for the stand-ins above), the cassette, the disk controller, the printer, the Model I's Expansion
+Interrupts (a port takes none), the ROM (but for the stand-ins above and the ROM bytes a port carries, its
+`ROM`), the cassette, the disk controller, the printer, the Model I's Expansion
 Interface (its interrupt latch, drive select, printer and disk controller at `$37E0`–`$37EF`), the Model I's
 RAM sizes other than 48K, the Model 4, and any drawing or sound output: a program's writes to video RAM and
 to port `$FF` are all there is, and showing or playing them is a host's work. What the port cannot follow
@@ -91,7 +92,9 @@ beside a `Z` and compare the two: every address after the same writes, the video
 the keyboard reads, the ports and the 32-column bit for every value, the R counter, the sound stamps, and the
 key table for every name emu's `m.keyboard.press` accepts, and port `$00`'s read. `test/guard.test.js` holds `load`'s write guard to its rule: a cell takes a write, any other code byte
 throws its sentence (a word write and a push at the byte they write first), data and the rest of memory take
-writes, and a `Z` with no port loaded has no guard. `test/rom.test.js` holds
+writes, and a `Z` with no port loaded has no guard; and `load` stores a module's `ROM` bytes straight into the
+ROM's space, where a write through the map would be lost, on both models, and a module with none changes no
+ROM byte. `test/rom.test.js` holds
 `$DELAY`'s stand-in to its measured time and registers for BC = 1, 2, 3, 256, 8192 and 0 (from four R
 values, bit 7 kept), and `o.standin` to the CALL's push and the RET's pop; `@fugloy/recomp`'s
 `test/standin.test.ts` runs the same calls beside emu on the game stub ROM and, locally, the user's ROM.
@@ -105,7 +108,7 @@ import { createZ, load, runPort } from '@fugloy/runtime';
 import * as port from './invaders.port.js';   // what @fugloy/recomp's port() wrote
 
 const z = createZ({ model: port.MODEL });
-load(z, port);                                // DATA and CELLS, through z.write; the write guard over CODE
+load(z, port);                                // ROM into z.mem; DATA and CELLS, through z.write; the write guard over CODE
 runPort(z, port);                             // { reason: 'returned' }
 ```
 
@@ -114,7 +117,10 @@ runPort(z, port);                             // { reason: 'returned' }
 Space Invaders chapter, ported for the Model III and the Model I, runs on this runtime block for block as
 `@fugloy/emu` runs the original through its `check.json` (`@fugloy/recomp`'s `test/learn.test.ts`).
 
-`load(z, port)` writes the port's `DATA` through `z.write`, as emu's `.CMD` loader writes a program through
+`load(z, port)` first stores the port's `ROM` (M2: the ROM bytes its program reads as data, from its trace's
+ROM reads, each `[address, byte]`; Sea Dragon's `$0000` and `$0003`) straight into `z.mem`, since a write
+through the map to ROM is lost, so the program reads there what it read in the census and the port needs no
+ROM of anyone's. Then it writes the port's `DATA` through `z.write`, as emu's `.CMD` loader writes a program through
 its memory, so the Model I's video RAM takes its bit 6 here too, and its `CELLS` (M2: the code bytes the
 program rewrites, each with its byte as loaded, which the instructions they are operands of read when they
 run). Then it installs the write guard over the port's `CODE` (its code's `[first, last]` ranges, none of
@@ -128,7 +134,7 @@ before it hands over to a program, so the runtime needs none of the stub's bytes
 other model.
 
 A program that drops a return address (M2: a `POP` its trace lists) leaves routines the port is running: the
-port throws `o.unwind(n, CONTINUATION, at)`, which is not an `Error`. Each trampoline it reaches with levels
+port throws `o.unwind(n, CONTINUATION, ...pops)` (each `POP`'s address, in order), which is not an `Error`. Each trampoline it reaches with levels
 left rethrows it with one fewer (its routine is one the program left); the next, at none, goes on with
 `CONTINUATION` in place of the routine it was running, with its own return address. `o.reset(ENTRY)` (a jump
 back to an entry that reloads SP) passes every trampoline but the top-level one, which runs `ENTRY` again.
@@ -137,7 +143,8 @@ Neither gets a place added, and neither is caught as an error.
 Anything a port cannot follow throws a sentence naming the address: a RET to an address other than the one
 after its CALL (`… (a port follows a RET only back to its CALL) (if a POP dropped a return address here, the
 census needs a session that reaches it)`), an unwind that reaches the top-level trampoline with levels left
-(`the POP at $XXXX drops a return address that no CALL of the port's pushed …`), a transfer to an address no block starts, a rewritten JP holding a target its trace did not
+(`the POP at $XXXX drops a return address that no CALL of the port's pushed …`, naming the `POP` that took the
+entry's return address: of a run of several, the first the top-level trampoline was left with), a transfer to an address no block starts, a rewritten JP holding a target its trace did not
 see, a HALT, a device the runtime does not model, a write into the port's code that its trace does not name. The
 trampoline (`o.call`) adds the routine and the block it happened in, once:
 `the port does not model $FE (an I/O port; …) (in READ, in the block at $7006)`.
@@ -163,7 +170,7 @@ trampoline (`o.call`) adds the routine and the block it happened in, once:
 | `push (z, v)`, `pop (z)`, `exsp (z, v)`, `exx (z)` | the stack (PUSH writes the high byte first; EX (SP),rr writes `(SP+1)` before `(SP)`) and EXX |
 | `call (z, routine, ret)` | CALL: runs `routine`, whose RET must return to `ret`, then each routine it returns (jumps into) in turn, until one returns nothing: a trampoline, so routines that jump into each other never grow the JavaScript stack. An unwind it catches with levels left goes on up with one fewer; at none it runs the unwind's routine next |
 | `top (z, routine, ret)` | the top-level trampoline `runPort` runs `ENTRY` in: `call`'s, but a reset ends here and runs its routine, and an unwind with levels left throws a sentence |
-| `unwind (levels, to, at)`, `reset (to)` | what a port throws to leave routines (M2): `levels` return addresses dropped by the `POP`(s) ending at `at`, going on with `to`; or a jump back to an entry that reloads SP, leaving every routine but the top-level trampoline's. Not `Error`s |
+| `unwind (levels, to, ...pops)`, `reset (to)` | what a port throws to leave routines (M2): `levels` return addresses dropped by the `POP`s at `pops`, in order, going on with `to`; or a jump back to an entry that reloads SP, leaving every routine but the top-level trampoline's. Not `Error`s |
 | `ret (z, expected, at)` | RET: throws a sentence when the popped address (in `z.wz`) is not `expected`; it says the census may need a session that reaches a `POP` that dropped one |
 | `standin (z, addr, ret)` | a CALL to a ROM routine the runtime stands in for (below): pushes `ret` as the CALL does, runs the stand-in, pops `ret` into MEMPTR as the RET does, and leaves Q 0; the two stack bytes stay written, as on emu. A sentence for an address with no stand-in on the model |
 | `unknown (z, target, from[, known, cell])`, `halt (z, at)` | the sentences (as `Error`s, which the port throws) for a transfer to an address no block starts and for a HALT. With `known` and `cell` (M2), a JP whose target the program rewrites: the targets the trace saw and the address of the byte rewritten, named with the value it holds instead |

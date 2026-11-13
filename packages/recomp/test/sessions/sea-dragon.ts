@@ -20,6 +20,7 @@ import { readFileSync } from 'node:fs';
 import { Machine } from '@fugloy/emu';
 import { prepare } from '../../src/port.js';
 import { gameStubRom } from '../game-rom.js';
+import { bootToReady } from '../helpers.js';
 import type { Step } from '../referee.js';
 
 export const SEA_DRAGON = new Uint8Array(readFileSync(new URL('../../../../examples/sea-dragon/seadrg01.cmd', import.meta.url)));
@@ -80,31 +81,19 @@ function waitForScreen(m: Machine, text: string, seconds: number, what: string):
   }
 }
 
-/** ENTER held 50 ms of emulated time at a ROM prompt, as `m.keyboard.type` holds a key at its 10 cps. */
-function enter(m: Machine): void {
-  m.keyboard.press('ENTER');
-  m.run({ cycles: second(m, 0.05) });
-  m.keyboard.release('ENTER');
-  m.run({ cycles: second(m, 0.05) });
-}
-
 /**
  * A fresh Model III at a program's entry (by default Sea Dragon's). On 'game' the game stub ROM starts
- * and halts, as the referee boots it; on a ROM's bytes the ROM is booted to READY (ENTER at Cass? and
- * at Memory Size?; controller Ruling 5: interrupts are off when the .CMD loads, and Sea Dragon's first
- * instruction is DI). Then the .CMD is loaded and run, through its loader, to `entry`.
+ * and halts, as the referee boots it; on a ROM's bytes the ROM is booted to READY (helpers.ts,
+ * `bootToReady`: ENTER at Cass? and at Memory Size?; controller Ruling 5: interrupts are off when the
+ * .CMD loads, and Sea Dragon's first instruction is DI). Then the .CMD is loaded and run, through its
+ * loader, to `entry`.
  */
 export function machineAtEntry(rom: SessionRom, cmd: Uint8Array = SEA_DRAGON, entry: number = seaDragonEntry()): Machine {
   const m = new Machine({ model: 3, roms: { level2: rom === 'game' ? gameStubRom(3) : rom } });
   if (rom === 'game') {
     if (m.run({ until: 'halt', cycles: m.clockHz }).reason !== 'halt') throw new Error('the game stub ROM did not start and halt');
   } else {
-    waitForScreen(m, 'Cass?', 2, 'booting the ROM');
-    enter(m);
-    waitForScreen(m, 'Memory Size?', 2, 'booting the ROM');
-    enter(m);
-    waitForScreen(m, 'READY', 2, 'booting the ROM');
-    m.run({ cycles: second(m, 1 / 4) });
+    bootToReady(m);
   }
   m.load.cmd(cmd);
   const cpu = m.system.cpu;

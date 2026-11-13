@@ -2,7 +2,8 @@
  * A program's routines as the text of one JavaScript module: its port. The module imports the
  * runtime's helpers as `o` and exports `MODEL`, `DATA` (the program's non-code bytes), `CODE` (its code's
  * address ranges, none of whose bytes it carries), `CELLS` (the code bytes the program rewrites, each with
- * its byte as loaded), `ENTRY`, and one function per routine, named from the caller's names, else the disassembler's symbols; a note at
+ * its byte as loaded), `ROM` (the ROM bytes the program reads as data, from its trace), `ENTRY`, and one
+ * function per routine, named from the caller's names, else the disassembler's symbols; a note at
  * a routine's start is its JSDoc. Each instruction is one statement (a line, with its address and its
  * assembly as a comment); each block begins `z.at(addr);` and ends with its tick and `z.q`.
  *
@@ -22,7 +23,8 @@
  * `o.call`, and a RET checks with `o.ret` that it returns where its CALL said. A CALL to a ROM routine
  * the runtime stands in for (`standins`) is `o.standin`. A POP that drops a return address (`drops`, the
  * last of several in a row) ends its block: its statements, the block's tick and Q, then `throw
- * o.unwind(n, CONTINUATION, at)`, the routine the port goes on with n routines up. With `reset`, a
+ * o.unwind(n, CONTINUATION, ...pops)`, the routine the port goes on with n routines up (`pops`, each POP's
+ * address in order, name the one a sentence needs). With `reset`, a
  * transfer into the entry's start from another routine is `throw o.reset(ENTRY)`.
  *
  * Time (Ruling 3): a block ticks its instructions' T-states and R at its end, on each path a
@@ -68,6 +70,8 @@ export interface EmitInput {
   code: readonly (readonly [number, number])[];
   /** The code bytes the program rewrites, each with its byte as loaded, in address order (`CELLS`). */
   cells: readonly (readonly [number, number])[];
+  /** The ROM bytes the program reads as data (its trace's ROM reads), as [address, byte], in address order (`ROM`). */
+  rom: readonly (readonly [number, number])[];
   /** By instruction address: the operands it reads from memory, and for a rewritten JP nn the targets it may hold. */
   patched: ReadonlyMap<number, { cells: Cells; targets?: number[] }>;
   /** By instruction address: the instructions whose opcode the program rewrites, each the start and whole of its block. */
@@ -104,7 +108,7 @@ const addr = (n: number): string => `$${hex(n & 0xffff, 4)}`;
 
 /**
  * Names a module cannot give a routine: JavaScript's reserved words and the globals it may not shadow,
- * every binding the module itself uses (the `o` import, `MODEL`, `DATA`, `CODE`, `CELLS`, `ENTRY`, the global
+ * every binding the module itself uses (the `o` import, `MODEL`, `DATA`, `CODE`, `CELLS`, `ROM`, `ENTRY`, the global
  * `Uint8Array` `DATA` is built with), and the parameters and local of a routine (`z`, `ret`, `b`).
  */
 const RESERVED = new Set([
@@ -113,7 +117,7 @@ const RESERVED = new Set([
   'let', 'new', 'null', 'package', 'private', 'protected', 'public', 'return', 'static', 'super', 'switch', 'this', 'throw',
   'true', 'try', 'typeof', 'var', 'void', 'while', 'with', 'yield', 'arguments', 'eval', 'undefined', 'NaN', 'Infinity',
   'globalThis', 'Uint8Array', 'then',
-  'o', 'MODEL', 'DATA', 'CODE', 'CELLS', 'ENTRY', 'z', 'ret', 'b',
+  'o', 'MODEL', 'DATA', 'CODE', 'CELLS', 'ROM', 'ENTRY', 'z', 'ret', 'b',
 ]);
 
 /**
@@ -241,6 +245,11 @@ export function emit(input: EmitInput): Emitted {
   w.doc("The code bytes the program rewrites (its trace's cells), as [address, byte as loaded]: their instructions read them as they run.");
   w.line(0, 'export const CELLS = [');
   for (const [at, v] of input.cells) w.line(2, `[${word(at)}, 0x${hex(v, 2)}],`, nameOf(at) === undefined ? undefined : `${addr(at)} ${nameOf(at)!}`);
+  w.line(0, '];');
+  w.line(0, '');
+  w.doc("The ROM bytes the program reads as data (its trace's ROM reads), as [address, byte]: `load` puts them in memory, so the port needs no ROM.");
+  w.line(0, 'export const ROM = [');
+  for (const [at, v] of input.rom) w.line(2, `[${word(at)}, 0x${hex(v, 2)}],`);
   w.line(0, '];');
   w.line(0, '');
   w.doc('The routine the program starts at.');
@@ -402,7 +411,7 @@ export function emit(input: EmitInput): Emitted {
           if (drop !== undefined) {
             // The POP dropped the return address of the CALL that ran this routine (of each, for several)
             const levels = drop.levels === 1 ? 'a routine' : `${drop.levels} routines`;
-            const leave: Stmt = { k: 'line', code: `throw o.unwind(${drop.levels}, ${routineNames.get(drop.continuation)!}, ${word(at)});`, comment: `a return address dropped: on at ${addr(drop.continuation)}, ${levels} up`, leaves: true };
+            const leave: Stmt = { k: 'line', code: `throw o.unwind(${drop.levels}, ${routineNames.get(drop.continuation)!}, ${drop.pops.map(word).join(', ')});`, comment: `a return address dropped: on at ${addr(drop.continuation)}, ${levels} up`, leaves: true };
             out.push(...statements(tr.lines, comment), tick(tr.cycles), leave);
             break;
           }

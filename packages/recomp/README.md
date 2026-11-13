@@ -9,8 +9,10 @@ TypeScript compiled to plain ESM, with no DOM, no Node APIs, and no runtime depe
 `@fugloy/z80` and `@fugloy/disasm`. It is part of Fugløy's Part 2, the port and the remake (design:
 [`docs/superpowers/specs/2026-10-23-part2-port-and-remake-design.md`](https://github.com/cschweda/fugloy/blob/main/docs/superpowers/specs/2026-10-23-part2-port-and-remake-design.md);
 milestone M1's plan:
-[`docs/superpowers/plans/2026-10-23-part2-m1-port-pipeline.md`](https://github.com/cschweda/fugloy/blob/main/docs/superpowers/plans/2026-10-23-part2-m1-port-pipeline.md)).
-Version 0.1.0, built in the repository and **not published** in M1.
+[`docs/superpowers/plans/2026-10-23-part2-m1-port-pipeline.md`](https://github.com/cschweda/fugloy/blob/main/docs/superpowers/plans/2026-10-23-part2-m1-port-pipeline.md);
+M2's, Sea Dragon's port:
+[`docs/superpowers/plans/2026-11-13-part2-m2-sea-dragon-port.md`](https://github.com/cschweda/fugloy/blob/main/docs/superpowers/plans/2026-11-13-part2-m2-sea-dragon-port.md)).
+Version 0.1.0, built in the repository and **not published** in M1 or M2.
 
 ## port
 
@@ -133,15 +135,18 @@ disassembler's symbols, else `SUB_XXXX`; Sea Dragon's is `SUB_4BAD`); the `POP`'
 o.unwind(1, SUB_4BAD, 0x4BAC);` after its tick. The trampoline running the routine is the one whose return
 address the program dropped: it rethrows the unwind with one level fewer, and the trampoline above it, with
 none left, goes on with the continuation, with its own `ret`, as the Z80 goes on a level up. `POP`s in a row
-that each drop one end one block after the last, `o.unwind(2, …)`, and leave two trampolines. A drop the
-trace names where the port translates no `POP` (another instruction, a swapped opcode's site, the loader)
-refuses the port with a sentence; one that reaches the top-level trampoline with levels left (the program
-popped the address the port was started with) throws a sentence as the port runs. A drop the trace does not
+that each drop one end one block after the last, `o.unwind(2, CONTINUATION, 0x5509, 0x550A)` (each `POP`'s
+address, in order), and leave two trampolines. A drop the trace names where the port translates no `POP`
+(another instruction, a swapped opcode's site, the loader) refuses the port with a sentence; one that reaches
+the top-level trampoline with levels left (the program popped the address the port was started with) throws
+a sentence as the port runs, naming the `POP` that took that address (of a run, not always the last). A drop the trace does not
 list (Sea Dragon's two `POP AF` at `$550A`/`$550B` never ran) leaves the port expecting the address, and its
 next `RET` throws `o.ret`'s sentence, which says the census may need a session that reaches the `POP`.
 
 The entry needs no trace for its own case (Ruling 10): when its first block loads SP with a constant before
-any CALL, RET, PUSH or POP (Sea Dragon's `DI / LD SP,4495H` at `$497F`), a transfer back to it from another
+any CALL, RET, PUSH or POP (Sea Dragon's `DI / LD SP,4495H` at `$497F`; an `LD SP,nn` whose operand is one of
+the trace's cells loads whatever the program last wrote there, an SP it saved, say, so it makes no reset), a
+transfer back to it from another
 routine discards the whole Z80 stack, so it is `throw o.reset(ENTRY)`, which every trampoline but the
 top-level one passes on, and that one runs the entry with the return address the port started with. Sea
 Dragon goes back to `$497F` at GAME OVER (`$6042`), on SHIFT+BREAK from inside nested calls (`$4CC6`) and at
@@ -173,11 +178,13 @@ its `addr`, the `instruction` it is a byte of, its `kind`, `disp`, `imm`, `word`
 as assembly, by value; `CELLS` holds each one's initial byte), `drops` (M2: each of the trace's drops, in
 address order: the `POP`'s `at` and the `continuation` routine's name, the same for `POP`s in a row) and
 `resets` (each transfer back to an entry that reloads SP, written `o.reset`, in address order: its `at` and a
-one-sentence `note`). A rewritten JP's unseen target and a swapped opcode's unseen value throw only if they
+one-sentence `note`) and `rom` (M2: the trace's ROM reads, the ROM bytes the program reads as data, by
+address, each its `addr` and `value`; the module exports them as `ROM`, `[address, byte]`, and the runtime's
+`load` puts them in memory, so a port needs no ROM of anyone's; one past the model's ROM refuses the port). A rewritten JP's unseen target and a swapped opcode's unseen value throw only if they
 are ever reached, so they are not in `refused`.
 
-`@fugloy/runtime`'s `load(z, port)` writes `DATA` and `CELLS` into memory and installs the write guard over
-`CODE`, and `runPort(z, port)` runs `ENTRY` until it returns (see its README).
+`@fugloy/runtime`'s `load(z, port)` stores `ROM` straight into memory, writes `DATA` and `CELLS` and installs
+the write guard over `CODE`, and `runPort(z, port)` runs `ENTRY` until it returns (see its README).
 
 ### Structure
 
@@ -302,6 +309,10 @@ high byte before the low.
   `load`'s write guard, which throws `self-modifying code: $XXXX written (the trace does not name it; run the
   census over a session that reaches this)` at the write, so a port never runs on with stale code. A path
   the census's sessions never took may rewrite a byte the trace does not name; a longer session finds it.
+- **A ROM byte the trace does not name.** A standalone port's ROM space holds only its module's `ROM`
+  bytes (M2, from the census's sessions); any other ROM byte reads as `$00`, so a path the sessions never
+  took that reads another ROM byte as data reads something else (the referee, with the ROM in emu, shows it
+  as a difference).
 - **A block reached from two routines** is translated in each, so its statements appear twice.
 - What the runtime does not model (interrupts, the devices it lists).
 
@@ -329,12 +340,16 @@ put back as a standalone port has it: none of the code bytes (they read as `load
 in `src/port.ts`, which `port()` is built on), less the loader's. That is set straight into the port's
 memory before `load`, so the write guard `load` installs never fires on the referee's own set-up. `trace`
 (M2), given to `port()` too, names the code bytes the program rewrites: `load` puts their initial values in,
-emu may write them, and each is compared with the port's like any byte written. Then
+emu may write them, and each is compared with the port's like any byte written. `load` also puts the
+module's `ROM` (the trace's ROM reads, taken on the game stub ROM) over emu's bytes: on the game stub they are
+emu's; on the user's ROM one may differ (Sea Dragon reads `$0003`, `$00` on the stub and `$15` on the ROM
+here), and the port runs on the module's byte, as a standalone port does, so a register or byte that byte
+reached would stop the run; the byte itself must hold the module's value. Then
 the port runs with `z.at` replaced. At each block start emu is stepped until its T-states reach the port's,
 and there must be equal: the T-states, emu's PC and the block's address, every register, F, R, MEMPTR, the
 interrupt state and Q, and every byte either machine wrote since the block before. At the first block start
-of each frame (1/60 s of emu's `clockHz`) video RAM is compared, and at the end the 64K, the keyboard as each
-reads it from the keys held; the one address range never compared is the Model I's Expansion Interface,
+of each frame (1/60 s of emu's `clockHz`) video RAM and the sound are compared, and at the end the 64K and the
+sound, the keyboard as each reads it from the keys held; the one address range never compared is the Model I's Expansion Interface,
 `$37E0`–`$37EF`, whose 40 Hz latch emu sets with time and which the runtime refuses to touch. For a relocated
 program the end's compare also leaves out the bytes the loader left behind (what the `.CMD` loads that is
 neither the program's code nor its `DATA` at its run addresses: the file's copy outside the run range, and
@@ -345,9 +360,11 @@ write to one is compared as any other.
 Fugløy's stub and no stand-ins, as the Learn checks run; `'game'`, the game stub ROM (`test/game-rom.ts`'s
 `gameStubRom(model)`: the stub's source with `@fugloy/runtime`'s `STANDINS_Z` appended, Fugløy's own Z80
 for the stand-ins at the ROM's addresses, so emu runs a call to `$0060` through code that takes the ROM's
-time), booted as the stub is, and the runtime's stand-ins; or a ROM's bytes, locally the user's, which emu
-does not boot (the program is loaded into a machine just reset, and returns, if it does, to the word the
-reset stack holds), and the stand-ins. A game is refereed on `'game'` in CI, never on the user's ROM.
+time), booted as the stub is, and the runtime's stand-ins; or a ROM's bytes, locally the user's, and the
+stand-ins: emu does not boot it (the program is loaded into a machine just reset, and returns, if it does, to
+the word the reset stack holds), or, with `boot: 'ready'`, boots it to BASIC's READY first (`bootToReady` in
+`test/helpers.ts`: ENTER at Cass? and Memory Size?), as Sea Dragon's sessions start on the user's ROM. A game
+is refereed on `'game'` in CI, never on the user's ROM.
 
 `steps` are a `check.json`'s (`run`, `press`, `release`, `row`, `cell`, `pcIn`, as
 `packages/asm/test/lessons.test.ts` documents them). Each applies at the first block start at or after its
@@ -366,14 +383,18 @@ routine `''` and block `RETURNED`):
 |---|---|
 | `cycles`, `pc`, `a` … `hl_`, `wz`, `iff1`, `iff2`, `im`, `q` | a difference at a block start: both values, the block before and emu's last instruction in it, and the first byte of the program's code emu read as data, if any (a port has no code bytes, so a program that reads its own code is stopped at the first register or byte that read changes) |
 | `mem[$XXXX]` | a byte either machine wrote that differs, or one the end's compare finds |
+| `sound` | a write to port `$FF` that differs (M2): `sound: write N to port $FF since the last compare (of E on emu, P on the port): port $XX at T-state T, emu …`, at a frame's first block start or at the end |
 | `code` | `self-modifying code: $XXXX written by the instruction at $YYYY (M1 does not translate it)`: emu wrote into a byte of the program's code that is not one of the trace's cells, by any instruction, whether or not the byte runs again. When the port's write guard refuses the write first, emu is stepped through the block to its own write, which this sentence names. |
 | `refusal` | what the port refused as it ran, in the port's sentence; for a device, emu is stepped through the block to the same access, which names the instruction |
 | `port` | `port()` refused the program: its sentences |
 | `entry` | emu did not reach `report.entryAddr` within 10 million instructions of the load |
 | `row N`, `cell $XXXX`, `pcIn` | a check step that does not hold, on either machine |
 
-It does not compare the port's sound or cassette records (writes to port `$FF`, `z.sound`) with emu's: no
-Learn program uses IN or OUT. Milestone M2 adds the comparison for Sea Dragon's sound.
+The sound (M2) is every write to port `$FF`, the cassette port, which is the machine's only sound: emu's
+`m.sound` and the runtime's `z.sound` record each with its T-state and byte. At each compare the writes since
+the last must be the same list on both, and both are emptied. emu's ring keeps the newest 65,536 and counts
+what it drops; between two compares a program makes a few thousand writes at most, and if it ever dropped one
+the compare would stop, not miss it. The boot's and the loader's writes, before the entry, are not compared.
 
 ## The trace and the census
 
@@ -406,7 +427,7 @@ so the referee applies it at the same instruction; a `row` check at the title, e
 last `run` to the session's end). Sea Dragon's trace: nine rewritten cells at eight sites (`$49C1`, `$4F41`,
 `$509B`–`$509C`, `$5174`, `$525E`, `$5AD0`, `$5ADD`, `$5AEA`), nothing entered (`$50C1`–`$50E9`, which only the
 rewritten `JP` at `$509A` reaches, ran in every game and was `entered` until the hint file's `entry` at
-`$50C1` decoded it), one drop (`$4BAC POP AF`) and two ROM reads (`$0000`, `$0003`). What the census does not
+`$50C1` decoded it), one drop (`$4BAC POP AF`) and two ROM reads (`$0000`, `$0003`, which the port carries as `ROM`). What the census does not
 see (a return address removed other than by `POP`, an address `POP`ped and pushed back, an interrupt's push)
 is listed in the format's "What the census does not detect".
 
@@ -433,8 +454,8 @@ Task 6), 486,570 bytes of JavaScript in all (572,788 when every routine was a `s
 largest is chapter 12's, 38,481 bytes (976 lines, 18 routines). No port lists a place that refuses as it runs, and no
 program writes into its own code (the referee would have stopped it).
 
-`fugloy port <program.cmd> --model 1|3 [--hints <file>] [-o <dir>]` (`packages/cli`) writes a port and its
-report from the command line.
+`fugloy port <program.cmd> --model 1|3 [--hints <file>] [--trace <file>] [-o <dir>]` (`packages/cli`) writes
+a port and its report from the command line.
 
 ## How it is checked
 
@@ -445,7 +466,11 @@ store, a block move and a push into the program's code and a write into code tha
 refused as self-modifying), a program that reads its own code into a register and one into memory, a key
 pressed by a step (the wait loop ends at the same T-state on both), the check steps (a `pcIn` on a label that
 shares its address with another included), the refusals, and the steps it refuses to judge by (none with a
-`run`, a malformed step, a `pcIn` label not given).
+`run`, a malformed step, a `pcIn` label not given). M2 adds the sound, on both models: two writes to port
+`$FF` pass; an OUT whose write is stamped one T-state late, another byte written, and a write too many are
+each stopped in `sound` at the next frame, naming the write; and the ROM bytes a port carries: a trace that
+says `$0003` read `$55` (the stub holds `$00`) passes where the program only reads it and writes it back
+(`SET 0,(IX+3)`, Sea Dragon's `$5168`), stops in A where it loads it, and one past the ROM refuses the port.
 
 `test/port.test.ts` assembles programs with `@fugloy/asm` (a straight line, a DJNZ count, conditional JP
 and JR both ways, CALL and RET three deep with CALL cc and RET cc both ways, two routines jumping into each
@@ -508,10 +533,35 @@ with a trace its census took: its report lists the drop and the continuation, it
 thousand times round, and run alone the JavaScript stack is as deep at the continuation every time, as deep as
 the routine whose caller it returns to; without the trace its `RET` throws `o.ret`'s sentence. Two `POP`s in
 a row unwind two trampolines and continue after the second; a drop with no routine left throws as the port
-runs; a drop where there is no `POP` refuses the port. A program that jumps back to an entry that reloads SP
-from three calls deep, ten thousand times, passes the referee and runs the entry at the same depth each time;
-an entry that touches the stack first gets no reset. Sea Dragon's port lists its drop (`$4BAC`, continuing in
+runs, and three `POP`s that unwind past the top name the second, which took the entry's return address; a
+drop where there is no `POP` refuses the port. A program that jumps back to an entry that reloads SP from
+three calls deep, ten thousand times, passes the referee and runs the entry at the same depth each time; an
+entry that touches the stack first gets no reset, nor one whose `LD SP,nn` operand the program rewrites with
+the SP it saved (which then returns through the frame it saved, passing the referee). Sea Dragon's port lists its drop (`$4BAC`, continuing in
 `SUB_4BAD`) and its three resets, with no routine labelled.
+
+`test/sea-dragon.test.ts` (M2) is the milestone's proof: Sea Dragon (`seadrg01.cmd`, the Model III) with
+its hint file and committed trace ports the same module twice (430,623 bytes, 28 routines, none labelled,
+846 blocks over them, 110 of the 736 translated in more than one routine), with eight rewritten sites (nine
+cells), one drop, the `$DELAY` stand-in at six sites, the two ROM bytes and nothing refused, and no byte of
+the IR's code in `DATA`. Each of the three recorded games then passes the referee on the game stub ROM from
+the title to GAME OVER and back to the title, every block start, frame and the end compared, the title,
+prompt and GAME OVER rows checked on both machines:
+
+| Session | T-states | Block starts | Frames | Refereed (s) |
+|---|---:|---:|---:|---:|
+| `novice` | 84,124,477 | 2,412,594 | 2,146 | 3.8 |
+| `expert` | 57,536,697 | 1,278,453 | 1,358 | 2.4 |
+| `two-players` | 131,821,072 | 2,268,787 | 2,212 | 5.3 |
+
+about 22 to 25 million T-states a second (11 to 12 times the Model III's 2.03 MHz), on an Apple-silicon Mac,
+the file alone; recording each session on emu first takes 0.8 to 3.9 s. An OUT stamped one T-state late is
+stopped in `sound` at the first frame after the game's first write. Locally, when `fugloy.mcp.json` names a
+Model III ROM, the same three games, recorded on that ROM booted to READY, pass on it too (94,494,841,
+60,696,396 and 124,397,798 T-states there), with the module's `$0003` (`$00`) where the ROM holds `$15`: no
+register depends on it. The three games are the paths the recorded sessions take, not every path through the
+game: a path they never take may rewrite a byte, drop a return address or read a ROM byte the trace does not
+name, and the port then stops with a sentence (see *What it does not model*).
 
 `test/structure.test.ts` checks the shapes: the straight line, DJNZ, diamond and nested-loop programs have
 no `switch`, every routine structured, and pass the referee on both models; the loops, the diamond's

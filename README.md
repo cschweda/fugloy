@@ -447,7 +447,7 @@ on `main`, the emulator's `emu-vX.Y.Z`, and the MCP server's `mcp-vX.Y.Z`.
 | `packages/z80` | Z80 opcode tables generated from the x/y/z/p/q decomposition (unprefixed, `CB`, `ED`, `DD`/`FD`, `DDCB`/`FDCB`) with length, operands, cycle counts, and control-flow effect; a decoder; an exhaustion test against an independently typed reference. No I/O. |
 | `packages/disasm` | 64K memory image with a load bitmap and block log, `.CMD` and `.BAS` loaders, content-based format detection, raw loader, a Level II BASIC parser and entry-point miner, pass 1 recursive descent, labels, the hint file, string and proposal heuristics, rebasing, relocation, the cited symbol tables (`data/symbols`, compiled by `pnpm symbols`), zmac emitter, JSON IR, linear sweep, plain-text listings. No Node or DOM APIs, so it runs in a browser. |
 | `packages/asm` | The Z80 assembler (`@fugloy/asm`): an encoder inverted from the z80 tables, two passes with errors as sentences on the right line, the directives zmac has, ROM, hardware, and DOS names per model, the Model I/III note, a source map by run address, and `.CMD` output. No Node or DOM APIs. Usage in its [README](packages/asm/README.md). |
-| `packages/cli` | `fugloy <file> [--base <hex> \| --rebase <hex>] [--entry <hex>]... [--hints <path> \| --write-hints <path>] [--labels <path>] [--machine 1\|3\|4] [--dos trsdos\|ldos\|none] [--format listing\|zmac\|ir] [--sweep] [--color] [-o <path>]`, `fugloy asm <source> [-o <out.cmd>] [--model 1\|3\|4] [--dos trsdos\|ldos\|none] [--listing]`, and `fugloy port <program.cmd> --model 1\|3 [--hints <file>] [-o <dir>]`, the only package that touches the file system. |
+| `packages/cli` | `fugloy <file> [--base <hex> \| --rebase <hex>] [--entry <hex>]... [--hints <path> \| --write-hints <path>] [--labels <path>] [--machine 1\|3\|4] [--dos trsdos\|ldos\|none] [--format listing\|zmac\|ir] [--sweep] [--color] [-o <path>]`, `fugloy asm <source> [-o <out.cmd>] [--model 1\|3\|4] [--dos trsdos\|ldos\|none] [--listing]`, and `fugloy port <program.cmd> --model 1\|3 [--hints <file>] [--trace <file>] [-o <dir>]`, the only package that touches the file system. |
 | `packages/emu` | The headless, deterministic TRS-80 Model I, Model III, and Model 4 emulator, built on the core of trs80-emulator: a Z80 CPU that passes ZEXALL, the `Machine` facade (`step`, `run`, registers, memory, video text, sound events, keyboard), `.CMD`, `.BAS`, and `.CAS` loaders with manifests, and the debugger `m.debug`, which writes the label and coverage file. No DOM, no Node APIs. Design in [docs/fugloy-emu-spec.md](docs/fugloy-emu-spec.md); usage in its [README](packages/emu/README.md). |
 | `packages/mcp` | The stdio MCP server that lets an AI assistant drive the emulator (`bin/fugloy-mcp.js`, plain JavaScript): MCP phases A–F, 29 tools for loading, running, typing, inspecting, breakpoints and watches, callers and callees, a disassembly with coverage marks, snapshots and diffs, search, labels, coverage, and `suggest`, with the `<program>.fugloy.json` sidecar, plus resources and prompts. Design in [docs/fugloy-mcp-spec.md](docs/fugloy-mcp-spec.md); setup in its [README](packages/mcp/README.md). |
 | `apps/web` | The web workbench (`@fugloy/web`, Nuxt 4 and Nuxt UI, static, deployed to Netlify), running the disassembler in the browser, and, from 5B, the assembler and emulator in Source ✎ and Run ▶, loaded on first use. |
@@ -519,14 +519,19 @@ pnpm fugloy asm game.z --model 1 --listing       # with Model I ROM names, print
 
 pnpm fugloy port game.cmd --model 3              # port to JavaScript: game.port.js and its report, game.port.txt (see packages/recomp/README.md)
 pnpm fugloy port game.cmd --model 1 --hints game.hints -o out   # for the Model I, the hint file's names and notes, written into out/
+pnpm fugloy port examples/sea-dragon/seadrg01.cmd --model 3 --hints examples/sea-dragon/seadrg01.hints --trace examples/sea-dragon/seadrg01.trace.json
+                                                 # Sea Dragon, with the trace its census took: the code it rewrites, the return address it drops, the ROM bytes it reads
 ```
 
 `fugloy asm` exits 0 when the program assembled, 1 on an error in the source
 or a file it cannot read or write, and 2 for a usage error. `fugloy port`
-(Part 2, milestone M1; in the repository, not yet in the published CLI)
+(Part 2, milestones M1 and M2; in the repository, not yet in the published CLI)
 exits 0 when it ported, 1 when the program cannot be ported (the sentences
-on stderr, nothing written) or a file cannot be read or written, and 2 for a
-usage error. For the
+on stderr, nothing written), the `--trace` file is malformed or was taken of
+another program (its sentence), or a file cannot be read or written, and 2
+for a usage error. A port trace
+([format](docs/port-trace-format.md)) is what a census of the program's
+sessions saw it do that its bytes do not say; `pnpm census` takes one. For the
 disassembler, the exit code is 0 on success, 1 when a file cannot be read or written, and 2
 for a usage error, a file that is neither a load module nor tokenized BASIC,
 a hint-file error, a label file written for another program, or a relocation

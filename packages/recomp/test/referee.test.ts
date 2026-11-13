@@ -11,7 +11,9 @@ import { toCmd } from '@fugloy/asm';
 import type { AsmResult } from '@fugloy/asm';
 import { createZ, load } from '@fugloy/runtime';
 import { describe, expect, it } from 'vitest';
+import { programHash } from '@fugloy/disasm';
 import { port } from '../src/index.js';
+import type { PortTrace } from '../src/index.js';
 import { PROGRAMS, RUNTIME, allNamesOf, assembled, cpuOf, emuState, hex, importPort, memOf, namesOf, program, setZ, stub } from './helpers.js';
 import type { Model } from './helpers.js';
 import { referee } from './referee.js';
@@ -124,6 +126,97 @@ PARK:   JR      PARK`), 3);
     expect(res.field).toBe('mem[$3C00]');
     expect(res.at.block).toBe(show.symbol('PARK')!.value);
     expect(res.report).toContain('$3C00: port $42, emu $41');
+  });
+});
+
+describe('the sound: every write to port $FF, compared at each frame (M2 Task 7)', () => {
+  // Two writes, then a wait long enough to cross two frames: the writes are compared at the first frame
+  const beeps = (model: Model): AsmResult => assembled(program(`
+START:  LD      A,1
+        OUT     (0FFH),A
+        LD      A,2
+        OUT     (0FFH),A
+PARK:   JR      PARK`), model);
+  const late = (js: string): string => {
+    const out = /z\.out\(0xFF, z\.a\);/g;
+    expect(js.match(out)).toHaveLength(2);
+    // A test-only out that stamps its write one T-state late, and leaves the clock as it was
+    return js.replace(out, 'z.cycles += 1; z.out(0xFF, z.a); z.cycles -= 1;');
+  };
+
+  for (const model of MODELS) {
+    it(`passes when both machines make the same writes at the same T-states, on ${modelName(model)}`, async () => {
+      const res = passed(await judge(beeps(model), model, [{ run: 100_000 }]));
+      expect(res.frames).toBeGreaterThan(1);
+    });
+
+    it(`stops a port whose OUT stamps its write one T-state late, in the sound, at the frame after it, on ${modelName(model)}`, async () => {
+      const r = beeps(model);
+      const res = failed(await judge(r, model, [{ run: 100_000 }], late));
+      expect(res.field).toBe('sound');
+      expect(res.at.block).toBe(r.symbol('PARK')!.value);
+      // LD A,1 is 7 T-states: the first OUT writes at T-state 7 on emu, 8 on the port
+      expect(res.report).toMatch(/^sound: write 1 to port \$FF since the last compare \(of 2 on emu, 2 on the port\): port \$01 at T-state 8, emu \$01 at T-state 7, at the start of the block at /);
+    });
+  }
+
+  it('stops a port that writes another byte, or one write too many, naming the write', async () => {
+    const r = beeps(3);
+    // The second OUT writes $03 where A holds $02: no register differs, only the sound
+    const other = failed(await judge(r, 3, [{ run: 100_000 }], (js) => {
+      let n = 0;
+      return js.replace(/z\.out\(0xFF, z\.a\);/g, (out) => (++n === 2 ? 'z.out(0xFF, 0x03);' : out));
+    }));
+    expect(other.field).toBe('sound');
+    expect(other.report).toMatch(/^sound: write 2 to port \$FF since the last compare \(of 2 on emu, 2 on the port\): port \$03 at T-state (\d+), emu \$02 at T-state \1,/);
+    const extra = failed(await judge(r, 3, [{ run: 100_000 }], (js) => js.replace(/(z\.out\(0xFF, z\.a\);)/, '$1 z.sound.push({ t: z.cycles, v: 0x55 });')));
+    expect(extra.field).toBe('sound');
+    expect(extra.report).toMatch(/^sound: write 2 to port \$FF since the last compare \(of 2 on emu, 3 on the port\): port \$55 at T-state 7, emu \$02 at T-state \d+/);
+  });
+});
+
+describe("the ROM bytes a port carries (its module's ROM, from the trace; M2 Task 7)", () => {
+  // A trace that says the program read $0003 as $55, where the stub ROM holds $00: as a trace taken on
+  // one ROM reads on another (Sea Dragon's, taken on the game stub, on the user's ROM, which holds $15)
+  const traced = (r: AsmResult): PortTrace => ({
+    'fugloy-trace': 1, program: { name: 'p.cmd', sha256: programHash(toCmd(r)) }, model: 3, rom: 'stub',
+    sessions: [], patches: [], entered: [], drops: [], romReads: [{ addr: 0x0003, value: 0x55 }],
+  });
+
+  it("lets the port hold the module's byte there, whatever emu's ROM holds, when nothing the program keeps depends on it", async () => {
+    // SET 0,(IX+3) reads the byte and writes it back, which the ROM ignores (Sea Dragon's $5168)
+    const r = assembled(program(`
+START:  LD      IX,0
+        SET     0,(IX+3)
+        RET`), 3);
+    passed(await referee({ cmd: toCmd(r), model: 3, names: namesOf(r), trace: traced(r), steps: [{ run: 1000 }] }));
+    // The port holds $55 at $0003, from load; emu $00
+    const p = port(toCmd(r), { model: 3, runtimeImport: RUNTIME, trace: traced(r) });
+    if (!p.ok) throw new Error(p.errors.join(' '));
+    expect(p.report.rom).toEqual([{ addr: 0x0003, value: 0x55 }]);
+    const z = createZ({ model: 3 });
+    load(z, await importPort(p.js));
+    expect(z.read(0x0003)).toBe(0x55);
+  });
+
+  it('is refused by port() at an address past the ROM, where load would overwrite RAM', () => {
+    const r = assembled(program(`
+START:  RET`), 3);
+    const trace = { ...traced(r), romReads: [{ addr: 0x0003, value: 0x55 }, { addr: 0x3800, value: 0 }] };
+    expect(port(toCmd(r), { model: 3, runtimeImport: RUNTIME, trace })).toEqual({
+      ok: false,
+      errors: ["$3800: the trace says the program read this byte of the ROM, but the Model III's ROM ends at $37FF."],
+    });
+  });
+
+  it('stops the run at the first register the byte reaches', async () => {
+    const r = assembled(program(`
+START:  LD      A,(0003H)
+        INC     A
+PARK:   JR      PARK`), 3);
+    const res = failed(await referee({ cmd: toCmd(r), model: 3, names: namesOf(r), trace: traced(r), steps: [{ run: 1000 }] }));
+    expect(res.field).toBe('a');
+    expect(res.report).toMatch(/^A: port \$56, emu \$01, at the start of the block at \$7004/);
   });
 });
 

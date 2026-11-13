@@ -7,8 +7,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { assemble, toCmd } from '@fugloy/asm';
-import { loadCmd, skeletonHints, writeHints } from '@fugloy/disasm';
-import { port } from '@fugloy/recomp';
+import { loadCmd, programHash, skeletonHints, writeHints } from '@fugloy/disasm';
+import { parseTrace, port } from '@fugloy/recomp';
 import { run } from '../src/index.js';
 import type { Io } from '../src/index.js';
 import { formatReport, outputsOf } from '../src/port.js';
@@ -20,6 +20,12 @@ async function chapter1(model: 1 | 3): Promise<Uint8Array> {
   const r = assemble(await readFile(chapter1Source, 'utf8'), { model });
   if (!r.ok) throw new Error('chapter 1 did not assemble');
   return toCmd(r);
+}
+
+/** Sea Dragon's program, hint file and trace (examples/sea-dragon/), as files by name. */
+async function seaDragon(): Promise<{ 'seadrg01.cmd': Uint8Array; 'seadrg01.hints': Uint8Array; 'seadrg01.trace.json': Uint8Array }> {
+  const read = async (name: string): Promise<Uint8Array> => new Uint8Array(await readFile(fileURLToPath(new URL(`../../../examples/sea-dragon/${name}`, import.meta.url))));
+  return { 'seadrg01.cmd': await read('seadrg01.cmd'), 'seadrg01.hints': await read('seadrg01.hints'), 'seadrg01.trace.json': await read('seadrg01.trace.json') };
 }
 
 /** An Io over in-memory files, capturing output and what is written. */
@@ -92,6 +98,7 @@ describe('fugloy port', () => {
         cells: [],
         drops: [],
         resets: [],
+        rom: [],
       },
       { source: 'game.cmd', model: 3, module: 'game.port.js' },
     );
@@ -100,14 +107,14 @@ describe('fugloy port', () => {
         'game.cmd, ported for the Model III by @fugloy/recomp 0.1.0',
         'Module: game.port.js (imports @fugloy/runtime/ops)',
         'Entry: START',
-        'This port was not compared with the emulator. Self-modifying code is not detected here: a program that changes its own code will run wrong.',
+        "This port was not compared with the emulator. It was made with no trace, so a write into the program's code stops it with a sentence.",
         '',
         'Routines: 2 (1 labelled)',
         '  $7000  START  3 blocks  labelled',
         '  $7010  SHOW   1 block   structured',
         '',
-        'Data: 1 region, 5 bytes',
-        '  $7020  5 bytes',
+        'Data: 1 region, 5 bytes (data: the hint file types it; unknown: the analysis did not reach it)',
+        '  $7020  5 bytes  data',
         '',
         'Refused if they run: 1',
         '  the transfer at $7002 goes to $0060, where no block of the program starts.',
@@ -155,6 +162,58 @@ describe('fugloy port', () => {
     expect(m1.written.get('seadrg01.port.txt')).toContain('Refused if they run: 6');
   });
 
+  it("ports Sea Dragon with its hint file and trace: the module imports the runtime, and the report lists what the trace let it follow", async () => {
+    const files = await seaDragon();
+    const { io, out, err, written } = capture(files);
+    expect(await run(['port', 'seadrg01.cmd', '--model', '3', '--hints', 'seadrg01.hints', '--trace', 'seadrg01.trace.json'], io)).toBe(0);
+    expect(err.join('')).toBe('');
+    const js = written.get('seadrg01.port.js')!;
+    expect(js).toMatch(/^import \* as o from '@fugloy\/runtime\/ops';$/m);
+    // The module port() writes for the program, its hints and its trace
+    const trace = parseTrace(new TextDecoder().decode(files['seadrg01.trace.json']), programHash(files['seadrg01.cmd']));
+    const p = port(files['seadrg01.cmd'], {
+      model: 3, runtimeImport: '@fugloy/runtime/ops', source: 'seadrg01.cmd', hints: new TextDecoder().decode(files['seadrg01.hints']), trace,
+      standins: new Map([[0x0060, 'DELAY']]),
+    });
+    if (!p.ok) throw new Error(p.errors.join(' '));
+    expect(js).toBe(p.js);
+    const report = written.get('seadrg01.port.txt')!;
+    expect(report).toBe(formatReport(p.report, { source: 'seadrg01.cmd', model: 3, module: 'seadrg01.port.js', trace: 'seadrg01.trace.json' }));
+    expect(report).toContain('\nLoader: The file\'s transfer routine at $8881 (15 bytes) moves the program to where it runs; the port does not translate it, and starts at $497F with its data already at its run addresses.\n');
+    expect(report).toContain('\nTrace: seadrg01.trace.json\n');
+    expect(report).toContain("\nThis port was not compared with the emulator. A write into the program's code that the trace does not name stops it with a sentence.\n");
+    expect(report).toMatch(/\nRoutines: \d+ \(0 labelled\)\n/);
+    expect(report).toContain('\nCode the program rewrites, read as it runs: 8 sites, 9 bytes\n');
+    expect(report).toContain('\n  $49C1  displacement of the instruction at $49BF; 9 values seen\n');
+    expect(report).toContain('\n  $509B  word operand of the instruction at $509A; 2 values seen\n');
+    expect(report).toContain('\n  $5174  opcode, a choice between NOP and LD (HL),A; 2 values seen\n');
+    expect(report).toContain('\nPOPs that drop a return address: 1\n  $4BAC  goes on in SUB_4BAD\n');
+    expect(report).toMatch(/\nJumps back to the entry that discard the stack: 3\n  \$4CC6: .+\n  \$602D: .+\n  \$6042: .+\n/);
+    expect(report).toContain('\nROM bytes the program reads, carried in the module: 2\n  $0000  $F3\n  $0003  $00\n');
+    expect(report).toContain('Refused if they run: none');
+    expect(report).toMatch(/\n  \$[0-9A-F]{4}  \d+ bytes? +unknown\n/);
+    expect(out.join('')).toMatch(/^seadrg01\.port\.js: \d+ routines \(0 labelled\), entry L497F; the report is seadrg01\.port\.txt\n$/);
+  });
+
+  it('refuses a trace taken of another program, or one that is not a trace, with the sentence, writing nothing', async () => {
+    const files = await seaDragon();
+    const other = capture({ ...files, 'blank.cmd': await chapter1(3) });
+    expect(await run(['port', 'blank.cmd', '--model', '3', '--trace', 'seadrg01.trace.json'], other.io)).toBe(1);
+    expect(other.written.size).toBe(0);
+    expect(other.err.join('')).toMatch(/^fugloy port: seadrg01\.trace\.json: the trace was taken of another program \(seadrg01\.cmd, SHA-256 [0-9a-f]{64}\), not this one \(SHA-256 [0-9a-f]{64}\); take a census of this program\nfugloy port: nothing written\n$/);
+    const bad = capture({ ...files, 'bad.json': '{"fugloy-trace": 1' });
+    expect(await run(['port', 'seadrg01.cmd', '--model', '3', '--trace', 'bad.json'], bad.io)).toBe(1);
+    expect(bad.written.size).toBe(0);
+    expect(bad.err.join('')).toMatch(/^fugloy port: bad\.json: the trace is not a port trace: it is not JSON/);
+    const gone = capture(files);
+    expect(await run(['port', 'seadrg01.cmd', '--model', '3', '--trace', 'gone.json'], gone.io)).toBe(1);
+    expect(gone.err.join('')).toMatch(/^fugloy port: cannot read gone\.json: ENOENT/);
+    // A trace taken on the Model III, for a Model I port: port()'s sentence
+    const model1 = capture(files);
+    expect(await run(['port', 'seadrg01.cmd', '--model', '1', '--hints', 'seadrg01.hints', '--trace', 'seadrg01.trace.json'], model1.io)).toBe(1);
+    expect(model1.err.join('')).toContain('the trace was taken on the Model III, and the port is for the Model I.');
+  });
+
   it("exits 1 with port()'s sentences, writing nothing, when the program cannot be ported", async () => {
     const { io, out, err, written } = capture({ 'jp.cmd': jpHl(), 'text.cmd': 'not a program' });
     expect(await run(['port', 'jp.cmd', '--model', '3'], io)).toBe(1);
@@ -196,10 +255,10 @@ describe('fugloy port', () => {
   it('--help prints the usage and the main help mentions fugloy port', async () => {
     const a = capture();
     expect(await run(['port', '--help'], a.io)).toBe(0);
-    expect(a.out.join('')).toMatch(/^Usage: fugloy port <program\.cmd> --model 1\|3 \[--hints <file>\] \[-o <dir>\]/);
+    expect(a.out.join('')).toMatch(/^Usage: fugloy port <program\.cmd> --model 1\|3 \[--hints <file>\] \[--trace <file>\] \[-o <dir>\]/);
     const b = capture();
     expect(await run(['--help'], b.io)).toBe(0);
-    expect(b.out.join('')).toContain('fugloy port <program.cmd> --model 1|3 [--hints <file>] [-o <dir>]');
+    expect(b.out.join('')).toContain('fugloy port <program.cmd> --model 1|3 [--hints <file>] [--trace <file>] [-o <dir>]');
   });
 
   it('outputsOf puts the two files in the directory, named after the program', () => {

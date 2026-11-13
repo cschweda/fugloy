@@ -21,9 +21,13 @@
  * throws `o.unwind`, and the instruction after it starts a routine (a continuation), which the port goes
  * on with a routine up.
  *
+ * The trace's ROM reads (the ROM bytes the program reads as data) are the module's `ROM`, which the
+ * runtime's `load` puts in memory, so a port needs no ROM of anyone's.
+ *
  * With or without a trace, when the entry's first block loads SP with a constant before any CALL, RET, PUSH
- * or POP, a transfer back to the entry discards the program's whole stack: the port throws `o.reset`, which
- * leaves every routine running and runs the entry from the top-level trampoline.
+ * or POP (an `LD SP,nn` whose operand is not one of the trace's cells), a transfer back to the entry
+ * discards the program's whole stack: the port throws `o.reset`, which leaves every routine running and
+ * runs the entry from the top-level trampoline.
  */
 import { analyze, applyHints, buildIr, detectFormat, emptyAnnotations, endsPath, loadCmd, parseHints, programHash, renderInstruction, targetOf } from '@fugloy/disasm';
 import type { Analysis, Annotations, BasicBlock, Ir, Successor } from '@fugloy/disasm';
@@ -119,6 +123,8 @@ export interface PortReport {
    * routine running and runs the entry from the top.
    */
   resets: { at: number; note: string }[];
+  /** The ROM bytes the program reads as data (the trace's ROM reads), by address: the module's `ROM`, which `load` puts in memory. */
+  rom: { addr: number; value: number }[];
 }
 
 /** A POP that drops a return address, or the last of several in a row: its block ends with it. */
@@ -420,6 +426,12 @@ export function prepare(cmd: Uint8Array, opts: PortOptions): { ok: true; prepare
   if (trace !== undefined && trace.model !== opts.model) {
     return { ok: false, errors: [`the trace was taken on the Model ${trace.model === 1 ? 'I' : 'III'}, and the port is for the Model ${opts.model === 1 ? 'I' : 'III'}.`] };
   }
+  // A ROM read the module carries is stored straight into memory by `load`: it must be in the ROM's space
+  const romTop = opts.model === 1 ? 0x3000 : 0x3800;
+  const outside = (trace?.romReads ?? []).filter((r) => r.addr >= romTop);
+  if (outside.length > 0) {
+    return { ok: false, errors: outside.map((r) => `${addr(r.addr)}: the trace says the program read this byte of the ROM, but the Model ${opts.model === 1 ? 'I' : 'III'}'s ROM ends at ${addr(romTop - 1)}.`) };
+  }
   const mod = loadCmd(cmd);
 
   let annotations: Annotations = emptyAnnotations();
@@ -546,7 +558,7 @@ export function prepare(cmd: Uint8Array, opts: PortOptions): { ok: true; prepare
   if (!cut.ok) return { ok: false, errors: cut.errors };
   const ported = cut.blocks;
   const routines = routinesOf({ ...ir, blocks: ported }, entry, [...cut.drops.values()].map((d) => d.continuation));
-  const reset = variants.has(entry) ? undefined : reloadsSp(blocks.get(entry)!, analysis.pass1.instructions);
+  const reset = variants.has(entry) ? undefined : reloadsSp(blocks.get(entry)!, analysis.pass1.instructions, rewritten);
   // The regions are run addresses, so their bytes come from the analysis image, not the file's.
   const bytes = analysis.space.image.bytes;
   // What the analysis reached as data: the bytes the hint file types (bytes, words, string, a table). The
@@ -639,14 +651,19 @@ function cutDrops(
 
 /**
  * The address of the `LD SP,nn` in the block `b` (the entry's first) when it comes before any instruction
- * that touches the stack (a CALL, RST, RET, PUSH, POP or EX (SP),rr); undefined otherwise.
+ * that touches the stack (a CALL, RST, RET, PUSH, POP or EX (SP),rr); undefined otherwise, and undefined
+ * when a byte of its operand is one of the trace's cells (`rewritten`): the program then loads SP with
+ * whatever it last wrote there (an SP it saved, say), not a constant, and need not discard its stack.
  */
-function reloadsSp(b: BasicBlock, instructions: ReadonlyMap<number, Instruction>): number | undefined {
+function reloadsSp(b: BasicBlock, instructions: ReadonlyMap<number, Instruction>, rewritten: ReadonlySet<number>): number | undefined {
   for (let a = b.start; a <= b.end; ) {
     const ins = instructions.get(a);
     if (ins === undefined) return undefined;
     const [to, from] = ins.operands;
-    if (ins.mnemonic === 'LD' && to?.kind === 'reg16' && to.reg === 'SP' && from?.kind === 'imm16') return a;
+    if (ins.mnemonic === 'LD' && to?.kind === 'reg16' && to.reg === 'SP' && from?.kind === 'imm16') {
+      for (let k = 1; k < ins.length; k++) if (rewritten.has((a + k) & 0xffff)) return undefined;
+      return a;
+    }
     if (ins.flow.kind === 'call' || ins.flow.kind === 'return' || ins.mnemonic === 'PUSH' || ins.mnemonic === 'POP' || ins.operands.some((o) => o.kind === 'ind' && o.reg === 'SP')) return undefined;
     a += ins.length;
   }
@@ -689,6 +706,7 @@ export function port(cmd: Uint8Array, opts: PortOptions): PortResult {
     data: data.map((d) => [d.addr, d.bytes] as const),
     code: code.map((r) => [r.start, r.end] as const),
     cells: cells.map((c) => [c.addr, bytes[c.addr]!] as const),
+    rom: (opts.trace?.romReads ?? []).map((r) => [r.addr, r.value] as const),
     patched,
     variants,
     drops,
@@ -713,6 +731,7 @@ export function port(cmd: Uint8Array, opts: PortOptions): PortResult {
         .flatMap((d) => d.pops.map((at) => ({ at, continuation: out.routineNames.get(d.continuation)! })))
         .sort((x, y) => x.at - y.at),
       resets: out.resets,
+      rom: (opts.trace?.romReads ?? []).map((r) => ({ addr: r.addr, value: r.value })),
     },
   };
 }

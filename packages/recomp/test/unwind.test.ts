@@ -243,7 +243,8 @@ describe('two POPs in a row, each dropping a return address', () => {
     expect(p.report.drops).toEqual([{ at: three, continuation: cont }, { at: three + 1, continuation: cont }]);
     expect(p.report.routines.map((r) => r.addr)).not.toContain(three + 1);
     expect(p.report.routines.map((r) => r.addr)).toContain(three + 2);
-    expect(p.js).toContain(`throw o.unwind(2, ${cont}, ${w4(three + 1)});`);
+    // Each POP's address, in order (Task 7, Ruling 12: the sentence for a drop past the top names one of them)
+    expect(p.js).toContain(`throw o.unwind(2, ${cont}, ${w4(three)}, ${w4(three + 1)});`);
     expect(count(p.js, 'throw o.unwind(')).toBe(1);
     const res = await referee({ cmd: s.cmd, model: 3, names: namesOf(s.r), hints: s.hints, trace: s.trace, rom: 'game', steps: [{ run: 1_000_000 }] });
     if (!res.ok) throw new Error(`the referee stopped: ${res.report}`);
@@ -266,6 +267,30 @@ SUB:    POP     HL
     expect(top.trace.drops).toEqual([{ at: sub, count: 1 }]);
     const trace = { ...top.trace, drops: [...top.trace.drops, { at: sub + 1, count: 1 }] };
     const mod = await importPort(ok(port(top.cmd, options(top, trace))).js);
+    expect(thrown(() => runPort(standalone(mod), mod))).toBe(
+      `the POP at ${$4(sub + 1)} drops a return address that no CALL of the port's pushed (the one the port's entry was started with, or one below it), which a port cannot follow (in SUB, in the block at ${$4(sub)})`,
+    );
+  });
+
+  it('names, for a run of POPs that unwinds past the top, the POP that took the entry\'s return address, not the run\'s last', async () => {
+    // SUB's first POP takes START's CALL's return address; its second, the stub's RETURNED (the entry's);
+    // its third, the word below it. A trace that says all three drop one: SUB's trampoline takes the
+    // first, the top-level trampoline is left with two, and the POP that took the entry's is the second
+    const past = synthetic(program(`
+START:  CALL    SUB
+        RET
+SUB:    POP     HL
+        POP     DE
+        POP     BC
+        PUSH    BC
+        PUSH    DE
+        RET`));
+    const sub = past.at('SUB');
+    expect(past.trace.drops).toEqual([{ at: sub, count: 1 }]);
+    const trace = { ...past.trace, drops: [{ at: sub, count: 1 }, { at: sub + 1, count: 1 }, { at: sub + 2, count: 1 }] };
+    const p = ok(port(past.cmd, options(past, trace)));
+    expect(p.js).toContain(`throw o.unwind(3, SUB_${hex(sub + 3, 4)}, ${w4(sub)}, ${w4(sub + 1)}, ${w4(sub + 2)});`);
+    const mod = await importPort(p.js);
     expect(thrown(() => runPort(standalone(mod), mod))).toBe(
       `the POP at ${$4(sub + 1)} drops a return address that no CALL of the port's pushed (the one the port's entry was started with, or one below it), which a port cannot follow (in SUB, in the block at ${$4(sub)})`,
     );
@@ -341,6 +366,41 @@ describe('a jump back to an entry whose first block loads SP with a constant', (
     const atStart = seen.get(at('START'))!;
     expect(atStart).toHaveLength(ROUNDS + 1);
     expect(new Set(atStart), 'the same depth every time round').toEqual(new Set([atStart[0]]));
+  });
+
+  it("is not made when the program rewrites the LD SP's operand: it then loads an SP the program saved, not a constant", async () => {
+    // SAVE stores SP (pointing at its own return address) in START's LD SP,nn and jumps back to START, which
+    // reloads it and returns through SAVE's frame: a reset would have discarded the frame the RET needs
+    const saved = synthetic(program(`
+START:  LD      SP,STACK        ; rewritten by SAVE
+        LD      A,(ROUND)
+        OR      A
+        JR      NZ,AGAIN
+        INC     A
+        LD      (ROUND),A
+        CALL    SAVE
+        LD      A,42
+        LD      (RESULT),A
+        RET                     ; to the stub's RETURNED, which STACK holds
+AGAIN:  RET                     ; to SAVE's caller, through the frame the saved SP points at
+SAVE:   LD      (START+1),SP
+        JP      START
+        DS      16
+STACK:  DW      ${RETURNED}
+ROUND:  DB      0
+RESULT: DB      0`));
+    const start = saved.at('START');
+    expect(saved.trace.patches.map((x) => x.addr)).toEqual([start + 1, start + 2]);
+    const p = ok(port(saved.cmd, options(saved)));
+    expect(p.report.resets).toEqual([]);
+    expect(p.js).not.toContain('o.reset(');
+    expect(p.js).toContain('return START;');
+    const res = await referee({ cmd: saved.cmd, model: 3, names: namesOf(saved.r), hints: saved.hints, trace: saved.trace, rom: 'game', steps: [{ run: 1_000_000 }] });
+    if (!res.ok) throw new Error(`the referee stopped: ${res.report}`);
+    const mod = await importPort(p.js);
+    const z = standalone(mod);
+    expect(runPort(z, mod)).toEqual({ reason: 'returned' });
+    expect(z.mem[saved.at('RESULT')]).toBe(42);
   });
 
   it('is not made for an entry that touches the stack first, or never loads SP', () => {

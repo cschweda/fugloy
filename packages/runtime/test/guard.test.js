@@ -85,3 +85,30 @@ describe("load's write guard", () => {
     expect(z.mem[0x7001]).toBe(0xc9);
   });
 });
+
+describe("load's ROM bytes (M2 Task 7)", () => {
+  // A module whose program reads three ROM bytes as data, as Sea Dragon reads $0000 and $0003
+  const reads = { MODEL: 3, DATA: [], CODE: [], CELLS: [], ROM: [[0x0000, 0xf3], [0x0003, 0x15], [0x37ff, 0xa5]], ENTRY: () => undefined };
+
+  it('stores each byte straight into memory, where a write through the map would be lost, and the program reads it', () => {
+    const z = createZ({ model: 3 });
+    // The map loses a write to ROM: z.write could not have put them there
+    z.write(0x0003, 0x15);
+    expect(z.read(0x0003)).toBe(0);
+    load(z, reads);
+    expect([z.read(0x0000), z.read(0x0003), z.read(0x37ff)]).toEqual([0xf3, 0x15, 0xa5]);
+    // The rest of the ROM space stays as a new machine has it, and a write there is still lost
+    expect([z.read(0x0001), z.read(0x0002)]).toEqual([0, 0]);
+    z.write(0x0003, 0x16);
+    expect(z.read(0x0003)).toBe(0x15);
+  });
+
+  it('on the Model I too, and a module with no ROM changes no ROM byte', () => {
+    const z = createZ({ model: 1 });
+    load(z, { ...reads, MODEL: 1, ROM: [[0x0003, 0x15]] });
+    expect(z.read(0x0003)).toBe(0x15);
+    const plain = createZ({ model: 3 });
+    load(plain, mod);
+    expect(plain.mem.subarray(0, 0x3800).every((v) => v === 0)).toBe(true);
+  });
+});
