@@ -12,7 +12,7 @@ milestone M1's plan:
 A port is a module with one function per routine of the original program; each statement of those functions
 reads and writes a `Z`, the machine state this package builds. A port holds no Z80 interpreter and none of
 the program's code bytes. Version 0.1.0, built in the repository and **not published** in M1; the
-recompiler that writes ports, `@fugloy/recomp`, comes in the plan's next tasks.
+recompiler that writes ports is [`@fugloy/recomp`](../recomp/README.md).
 
 ## Using it
 
@@ -91,7 +91,27 @@ key table for every name emu's `m.keyboard.press` accepts. `pnpm --filter @fuglo
 and loads the package in an empty `node:vm` context (emu's check), and a test scans the source for a browser or
 Node global.
 
-`@fugloy/runtime/ops` is where the helpers a port's statements call (the flag and arithmetic routines) will
-live; it exports nothing yet.
+## The helpers
+
+`@fugloy/runtime/ops` holds the helpers a port's statements call, imported as `o`
+(`z.a = o.add8(z, z.a, z.b);`): the Z80's flag and arithmetic routines, each doing what emu's core does
+(`packages/emu/src/cpu/z80cpu.js`, cited by line), F's bits 5 and 3 included.
+
+| Helpers | |
+|---|---|
+| `add8 adc8 sub8 sbc8 and8 xor8 or8 (z, a, v)`, `cp8 (z, a, v)` | 8-bit arithmetic: the result, and F; CP takes bits 5 and 3 from the operand |
+| `inc8 dec8 neg (z, v)` | INC and DEC of a byte (C kept), NEG |
+| `daa cpl rlca rrca rla rra (z)` | the accumulator's own instructions, on `z.a` |
+| `scf ccf (z, keep)` | `keep` is 0x28 when the instruction before left the flags alone, else 0 (Q) |
+| `add16 adc16 sbc16 (z, a, v)` | 16-bit arithmetic; MEMPTR becomes `a + 1` |
+| `rlc rrc rl rr sla sra sll srl (z, v)` | the CB rotates and shifts |
+| `bit (z, n, v, xy)` | BIT n: bits 5 and 3 from `xy` (the register, or MEMPTR's high byte for a memory operand) |
+| `ldair (z, v)`, `inr (z, v)` | the flags of LD A,I / LD A,R and of IN r,(C); return `v` |
+| `rld rrd (z)` | the nibble rotates through `(HL)` |
+| `ldi ldd cpi cpd ini ind outi outd (z)` | one iteration of a block instruction (a translated LDIR loops `ldi`) |
+| `push (z, v)`, `pop (z)`, `exsp (z, v)`, `exx (z)` | the stack (PUSH writes the high byte first; EX (SP),rr writes `(SP+1)` before `(SP)`) and EXX |
+
+`@fugloy/recomp`'s translator writes the calls, and its test runs every instruction both as translated
+statements here and on emu's core, and requires the two equal.
 
 MIT, as the rest of Fugløy.

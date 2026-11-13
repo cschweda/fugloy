@@ -176,6 +176,25 @@ importers:
         specifier: 4.6.5
         version: 4.6.5
 
+  packages/recomp:
+    dependencies:
+      '@fugloy/disasm':
+        specifier: workspace:^
+        version: link:../disasm
+      '@fugloy/z80':
+        specifier: workspace:^
+        version: link:../z80
+    devDependencies:
+      '@fugloy/asm':
+        specifier: workspace:*
+        version: link:../asm
+      '@fugloy/emu':
+        specifier: workspace:*
+        version: link:../emu
+      '@fugloy/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+
   packages/runtime:
     devDependencies:
       '@fugloy/emu':
