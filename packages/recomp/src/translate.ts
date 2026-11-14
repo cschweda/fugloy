@@ -10,13 +10,36 @@
 import { TABLES, formatInstruction } from '@fugloy/z80';
 import type { Cond, FlowKind, Instruction, Operand, Reg16, Reg8 } from '@fugloy/z80';
 
-/** What the translator knows of the instructions before this one in its block. */
+/** The addresses of an instruction's operand bytes the program rewrites (its trace's cells, port.ts). */
+export interface Cells {
+  /** An index displacement's byte: (IX+d) and (IY+d) read d from it, sign-extended. */
+  disp?: number;
+  /** An 8-bit immediate's byte. */
+  imm?: number;
+  /** A word operand's low byte (its high byte follows it), whether one or both of its bytes are rewritten. */
+  word?: number;
+  /**
+   * When only one byte of the word is rewritten, which: the other is a byte of code, which the port does
+   * not carry, so it stays the constant the program was loaded with. Absent when both are.
+   */
+  half?: 'lo' | 'hi';
+}
+
+/** What the translator knows of the instructions before this one in its block, and of this one's operands. */
 export interface TranslateContext {
   /**
    * Q for SCF and CCF: 1 when the previous instruction in the same block wrote the flags (its
    * `writesFlags`), 0 when it did not, null at a block's start, where the statement reads `z.q`.
    */
   qPrev: 0 | 1 | null;
+  /**
+   * The operands the program rewrites, by where they are: each is read from memory (`z.mem`) when the
+   * instruction runs, in place of the value its bytes held when the program was loaded. An instruction
+   * that has one its lines cannot read so is refused with a sentence.
+   */
+  cells?: Cells;
+  /** For a JP nn whose word is in `cells`: every target the trace saw it hold, each a block of the port. */
+  targets?: readonly number[];
 }
 
 /** One instruction's JavaScript. README.md gives the contract each field keeps. */
@@ -34,6 +57,8 @@ export interface Translation {
   target?: number;
   /** For a transfer whose address is computed: a JavaScript expression for it, evaluated after `lines` (and `taken`). */
   targetExpr?: string;
+  /** For a JP nn whose target the program rewrites: `targetExpr` reads it, and these are the targets it may hold. */
+  targets?: number[];
   /** T-states the tick after the instruction adds: a transfer's when taken, or the final iteration's for a repeating instruction. */
   cycles: number;
   /** T-states when `cond` is false; present exactly when `cond` is. */
@@ -71,47 +96,95 @@ interface Lines {
   taken?: string[];
   target?: number;
   targetExpr?: string;
+  targets?: number[];
   r?: number;
   repeats?: true;
   readsTime?: true;
 }
 
-type Rule = (ops: readonly Operand[], ins: Instruction, at: number, ctx: TranslateContext) => Lines | undefined;
+/**
+ * An instruction's operand values as expressions: the number its bytes held when the program was loaded,
+ * or, for an operand the program rewrites (`cells`), a read of its byte in memory. `used` records which
+ * cells a rule read, so an instruction whose rewritten operand its lines do not read is refused.
+ */
+class Operands {
+  readonly used = new Set<keyof Cells>();
+  constructor(readonly cells: Cells) {}
+
+  /** (IX+d)'s or (IY+d)'s address, 16 bits; a rewritten d sign-extended as the decoder does it. */
+  indexed(reg: Reg16, disp: number): string {
+    const ix = reg16(reg);
+    if (this.cells.disp !== undefined) {
+      this.used.add('disp');
+      return `(${ix} + ((z.mem[${word(this.cells.disp)}] ^ 0x80) - 0x80)) & 0xffff`;
+    }
+    return disp === 0 ? ix : `(${ix} ${disp < 0 ? '-' : '+'} ${Math.abs(disp)}) & 0xffff`;
+  }
+
+  /** An 8-bit immediate. */
+  imm8(value: number): string {
+    if (this.cells.imm === undefined) return byte(value);
+    this.used.add('imm');
+    return `z.mem[${word(this.cells.imm)}]`;
+  }
+
+  /** A word operand (an immediate, or an address in memory), low byte first; a byte not rewritten, a constant. */
+  word(value: number): string {
+    const lo = this.cells.word;
+    if (lo === undefined) return word(value);
+    this.used.add('word');
+    if (this.cells.half === 'lo') return `z.mem[${word(lo)}] | ${word(value & 0xff00)}`;
+    if (this.cells.half === 'hi') return `z.mem[${word(lo + 1)}] << 8 | ${byte(value)}`;
+    return `z.mem[${word(lo)}] | z.mem[${word(lo + 1)}] << 8`;
+  }
+
+  /** A word operand plus one, 16 bits (MEMPTR after LD A,(nn) and the 16-bit loads). */
+  wordPlus1(value: number): string {
+    return this.cells.word === undefined ? word(value + 1) : `((${this.word(value)}) + 1) & 0xffff`;
+  }
+
+  /** A word operand's low byte plus one, 8 bits (MEMPTR's low byte after LD (nn),A). */
+  lowPlus1(value: number): string {
+    if (this.cells.word === undefined || this.cells.half === 'hi') return byte(value + 1);
+    this.used.add('word');
+    return `(z.mem[${word(this.cells.word)}] + 1) & 0xff`;
+  }
+}
+
+type Rule = (ops: readonly Operand[], ins: Instruction, at: number, ctx: TranslateContext, k: Operands) => Lines | undefined;
 
 /**
  * The address of a memory operand, after any statement that sets it up: (IX+d) and (IY+d) set MEMPTR
  * to the address first, as emu's indexedAddr does for every indexed form (:2651-2655) and DD/FD CB
  * does (:2778), and the instruction then reads `z.wz`. Null for an operand in no memory.
  */
-function addressOf(op: Operand, pre: string[]): string | null {
+function addressOf(op: Operand, pre: string[], k: Operands): string | null {
   switch (op.kind) {
     case 'ind':
       return op.reg === 'C' ? null : reg16(op.reg);
-    case 'idx': {
-      const ix = reg16(op.reg);
-      pre.push(`z.wz = ${op.disp === 0 ? ix : `(${ix} ${op.disp < 0 ? '-' : '+'} ${Math.abs(op.disp)}) & 0xffff`};`);
+    case 'idx':
+      pre.push(`z.wz = ${k.indexed(op.reg, op.disp)};`);
       return 'z.wz';
-    }
     case 'mem':
-      return word(op.addr);
+      return k.word(op.addr);
     default:
       return null;
   }
 }
 
 /** The expression that reads an 8-bit operand. */
-function read8(op: Operand, pre: string[]): string | undefined {
+function read8(op: Operand, pre: string[], k: Operands): string | undefined {
   if (op.kind === 'reg') return reg8(op.reg);
-  if (op.kind === 'imm8') return byte(op.value);
-  const addr = addressOf(op, pre);
+  if (op.kind === 'imm8') return k.imm8(op.value);
+  const addr = addressOf(op, pre, k);
   return addr === null ? undefined : `z.read(${addr})`;
 }
 
 /** The statements that replace an 8-bit operand by `f` of its value (INC (HL), RLC B, SET 3,(IX+d)). */
-function modify(op: Operand, f: (v: string) => string): string[] | undefined {
+function modify(op: Operand, f: (v: string) => string, k: Operands): string[] | undefined {
   if (op.kind === 'reg') return [`${reg8(op.reg)} = ${f(reg8(op.reg))};`];
   const pre: string[] = [];
-  const addr = addressOf(op, pre);
+  const addr = addressOf(op, pre, k);
   return addr === null ? undefined : [...pre, `z.write(${addr}, ${f(`z.read(${addr})`)});`];
 }
 
@@ -143,32 +216,32 @@ const REPEAT: Record<string, [string, string]> = {
 const relTarget = (op: Operand, ins: Instruction, at: number): number | undefined =>
   op.kind === 'rel' ? (at + ins.length + op.disp) & 0xffff : undefined;
 
-const alu: Rule = ([a, b], ins) => {
+const alu: Rule = ([a, b], ins, _, __, k) => {
   if (a?.kind === 'reg16' && b?.kind === 'reg16') {
     const fn = ALU16[ins.mnemonic];
     return fn === undefined ? undefined : { lines: [`${reg16(a.reg)} = o.${fn}(z, ${reg16(a.reg)}, ${reg16(b.reg)});`], writesFlags: true };
   }
   const src = b ?? a;
   const pre: string[] = [];
-  const v = src && read8(src, pre);
+  const v = src && read8(src, pre, k);
   if (v === undefined) return undefined;
   if (ins.mnemonic === 'CP') return { lines: [...pre, `o.cp8(z, z.a, ${v});`], writesFlags: true };
   return { lines: [...pre, `z.a = o.${ALU8[ins.mnemonic]!}(z, z.a, ${v});`], writesFlags: true };
 };
 
-const incDec: Rule = ([op], ins) => {
+const incDec: Rule = ([op], ins, _, __, k) => {
   if (op?.kind === 'reg16') return { lines: [`${reg16(op.reg)} = (${reg16(op.reg)} ${ins.mnemonic === 'INC' ? '+' : '-'} 1) & 0xffff;`] };
   const fn = ins.mnemonic === 'INC' ? 'inc8' : 'dec8';
-  const lines = op && modify(op, (v) => `o.${fn}(z, ${v})`);
+  const lines = op && modify(op, (v) => `o.${fn}(z, ${v})`, k);
   return lines && { lines, writesFlags: true };
 };
 
-const ld: Rule = ([dst, src]) => {
+const ld: Rule = ([dst, src], _, __, ___, k) => {
   if (!dst || !src) return undefined;
   // 16-bit (LD rr,nn :636-669, LD HL,(nn) :684, LD (nn),HL :672, the ED forms :2986-3097, LD SP,HL :1690)
-  if (dst.kind === 'reg16' && src.kind === 'imm16') return { lines: [`${reg16(dst.reg)} = ${word(src.value)};`] };
-  if (dst.kind === 'reg16' && src.kind === 'mem') return { lines: [`${reg16(dst.reg)} = z.read16(${word(src.addr)});`, `z.wz = ${word(src.addr + 1)};`] };
-  if (dst.kind === 'mem' && src.kind === 'reg16') return { lines: [`z.write16(${word(dst.addr)}, ${reg16(src.reg)});`, `z.wz = ${word(dst.addr + 1)};`] };
+  if (dst.kind === 'reg16' && src.kind === 'imm16') return { lines: [`${reg16(dst.reg)} = ${k.word(src.value)};`] };
+  if (dst.kind === 'reg16' && src.kind === 'mem') return { lines: [`${reg16(dst.reg)} = z.read16(${k.word(src.addr)});`, `z.wz = ${k.wordPlus1(src.addr)};`] };
+  if (dst.kind === 'mem' && src.kind === 'reg16') return { lines: [`z.write16(${k.word(dst.addr)}, ${reg16(src.reg)});`, `z.wz = ${k.wordPlus1(dst.addr)};`] };
   if (dst.kind === 'reg16' && src.kind === 'reg16') return { lines: [`${reg16(dst.reg)} = ${reg16(src.reg)};`] };
   // I and R (:1882-1905). LD A,R reads R after this instruction's two fetches have counted; LD R,A
   // replaces R after them, so the tick after it adds none.
@@ -177,26 +250,32 @@ const ld: Rule = ([dst, src]) => {
   if (src.kind === 'reg' && src.reg === 'I' && dst.kind === 'reg') return { lines: ['z.a = o.ldair(z, z.i);'], writesFlags: true };
   // 8-bit
   const pre: string[] = [];
-  const v = read8(src, pre);
+  const v = read8(src, pre, k);
   if (v === undefined) return undefined;
   const lines = [...pre];
   if (dst.kind === 'reg') lines.push(`${reg8(dst.reg)} = ${v};`);
   else {
-    const addr = addressOf(dst, lines);
+    const addr = addressOf(dst, lines, k);
     if (addr === null) return undefined;
     lines.push(`z.write(${addr}, ${v});`);
   }
   // MEMPTR: LD A,(BC) and (DE) :718-729, LD (BC),A and (DE),A :732-743, LD A,(nn) :707, LD (nn),A :696
   if (src.kind === 'ind' && (src.reg === 'BC' || src.reg === 'DE')) lines.push(`z.wz = (${reg16(src.reg)} + 1) & 0xffff;`);
   if (dst.kind === 'ind' && (dst.reg === 'BC' || dst.reg === 'DE')) lines.push(`z.wz = ((${reg16(dst.reg)} + 1) & 0xff) | (z.a << 8);`);
-  if (src.kind === 'mem') lines.push(`z.wz = ${word(src.addr + 1)};`);
-  if (dst.kind === 'mem') lines.push(`z.wz = (z.a << 8) | ${byte(dst.addr + 1)};`);
+  if (src.kind === 'mem') lines.push(`z.wz = ${k.wordPlus1(src.addr)};`);
+  if (dst.kind === 'mem') lines.push(`z.wz = (z.a << 8) | ${k.lowPlus1(dst.addr)};`);
   return { lines };
 };
 
 // Transfers. MEMPTR is the target for JP, CALL and RST whether taken or not (:478-546, :1268-1414),
 // for JR and DJNZ only when taken (:1088-1161), and the popped address for RET (:521-528, :1164-1265).
-const jp: Rule = ([a, b]) => {
+// A JP nn whose target the program rewrites reads it into MEMPTR and goes to whichever of the trace's
+// targets it is (emit.ts writes the choice).
+const jp: Rule = ([a, b], ins, at, ctx, k) => {
+  if (a?.kind === 'imm16' && k.cells.word !== undefined) {
+    if (ctx.targets === undefined) throw new Error(`$${hex(at, 4)}: ${formatInstruction(ins)} has its target rewritten, but no targets were given for it.`);
+    return { lines: [`z.wz = ${k.word(a.value)};`], targetExpr: 'z.wz', targets: [...ctx.targets] };
+  }
   if (a?.kind === 'imm16') return { lines: [`z.wz = ${word(a.value)};`], target: a.value };
   if (a?.kind === 'cc' && b?.kind === 'imm16') return { lines: [`z.wz = ${word(b.value)};`], cond: COND[a.cond], target: b.value };
   if (a?.kind === 'ind') return { lines: [], targetExpr: reg16(a.reg as Reg16) }; // JP (HL), (IX), (IY): MEMPTR untouched
@@ -250,23 +329,23 @@ const scfCcf: Rule = (_, ins, __, ctx) => {
   return { lines: [`o.${ins.mnemonic.toLowerCase()}(z, ${keep});`], writesFlags: true };
 };
 
-const rotate: Rule = ([op], ins) => {
-  const lines = op && modify(op, (v) => `o.${ROTATE[ins.mnemonic]!}(z, ${v})`);
+const rotate: Rule = ([op], ins, _, __, k) => {
+  const lines = op && modify(op, (v) => `o.${ROTATE[ins.mnemonic]!}(z, ${v})`, k);
   return lines && { lines, writesFlags: true };
 };
 
-const bit: Rule = ([n, op]) => {
+const bit: Rule = ([n, op], _, __, ___, k) => {
   if (n?.kind !== 'bit' || !op) return undefined;
   if (op.kind === 'reg') return { lines: [`o.bit(z, ${n.bit}, ${reg8(op.reg)}, ${reg8(op.reg)});`], writesFlags: true };
   const pre: string[] = [];
-  const v = read8(op, pre);
+  const v = read8(op, pre, k);
   return v === undefined ? undefined : { lines: [...pre, `o.bit(z, ${n.bit}, ${v}, z.wz >> 8);`], writesFlags: true };
 };
 
-const resSet: Rule = ([n, op], ins) => {
+const resSet: Rule = ([n, op], ins, _, __, k) => {
   if (n?.kind !== 'bit' || !op) return undefined;
   const mask = 1 << n.bit;
-  const lines = modify(op, (v) => (ins.mnemonic === 'RES' ? `${v} & ${byte(~mask)}` : `${v} | ${byte(mask)}`));
+  const lines = modify(op, (v) => (ins.mnemonic === 'RES' ? `${v} & ${byte(~mask)}` : `${v} | ${byte(mask)}`), k);
   return lines && { lines };
 };
 
@@ -346,6 +425,9 @@ const RULES: Record<string, Rule> = {
 
 const bytesOf = (ins: Instruction): string => ins.bytes.map((b) => hex(b, 2)).join(' ');
 
+/** What a rewritten operand is, for a sentence. */
+const OPERAND_NAME: Record<'disp' | 'imm' | 'word', string> = { disp: 'displacement', imm: 'immediate', word: 'word operand' };
+
 /**
  * Translate the instruction `ins`, decoded at `at`, into JavaScript statements. Every byte sequence
  * @fugloy/z80 decodes to an instruction is translated, documented or not; one it decodes only as a
@@ -357,8 +439,16 @@ export function translate(ins: Instruction, at: number, ctx: TranslateContext): 
       `$${hex(at, 4)}: ${bytesOf(ins)} is not an instruction @fugloy/z80 decodes (it reads ${ins.bytes.length === 1 ? 'that byte' : 'those bytes'} only as DB), so it cannot be translated.`,
     );
   }
-  const made = RULES[ins.mnemonic]?.(ins.operands, ins, at, ctx);
+  const k = new Operands(ctx.cells ?? {});
+  const made = RULES[ins.mnemonic]?.(ins.operands, ins, at, ctx, k);
   if (made === undefined) throw new Error(`$${hex(at, 4)}: no line template for ${formatInstruction(ins)} (${bytesOf(ins)}).`);
+  // A rewritten operand the lines do not read from memory would run as the constant it was loaded with
+  for (const cell of ['disp', 'imm', 'word'] as const) {
+    const where = k.cells[cell];
+    if (where !== undefined && !k.used.has(cell)) {
+      throw new Error(`$${hex(at, 4)}: the program rewrites the ${OPERAND_NAME[cell]} of ${formatInstruction(ins)} (${bytesOf(ins)}) at $${hex(where, 4)}, which a port does not read from memory in this instruction.`);
+    }
+  }
 
   const t: Translation = { lines: made.lines, writesFlags: made.writesFlags ?? false, flow: ins.flow.kind, cycles: ins.cycles, r: made.r ?? fetches(ins) };
   if (made.repeats) {
@@ -372,6 +462,7 @@ export function translate(ins: Instruction, at: number, ctx: TranslateContext): 
   if (made.taken) t.taken = made.taken;
   if (made.target !== undefined) t.target = made.target;
   if (made.targetExpr !== undefined) t.targetExpr = made.targetExpr;
+  if (made.targets !== undefined) t.targets = made.targets;
   if (made.readsTime) t.readsTime = true;
   return t;
 }

@@ -18,7 +18,8 @@ export const hex = (n: number, width: number): string => n.toString(16).toUpperC
 const HALT = 0x76;
 /** Where each model's ROM space ends: the stub is padded with HALT to it, as the site pads it. */
 const ROM_END: Readonly<Record<Model, number>> = { 1: 0x3000, 3: 0x3800 };
-const stubSource = readFileSync(new URL('../../../apps/web/app/utils/emulator/stub-rom.z', import.meta.url), 'utf8');
+/** The stub ROM's source, which game-rom.ts extends with the runtime's stand-ins. */
+export const stubSource = readFileSync(new URL('../../../apps/web/app/utils/emulator/stub-rom.z', import.meta.url), 'utf8');
 
 /** `source` assembled for `model`, or an error naming the lines that did not assemble. */
 export function assembled(source: string, model: Model): AsmResult {
@@ -67,12 +68,17 @@ export function allNamesOf(r: AsmResult): Map<number, string[]> {
 
 // ---- the CPU state, on emu and on the runtime
 
-/** Every register, F, R, MEMPTR, the interrupt state, Q and the T-states: what a port and emu must agree on. */
+/**
+ * Every register, F, R, MEMPTR, the interrupt state, Q, the T-states and the mode register (`mode`: port
+ * $EC's latch on the Model III, port $FF's D0-D3 on the Model I; emu's io.js `modeRegister`, the runtime's
+ * `z.modeRegister`): what a port and emu must agree on.
+ */
 export interface State {
   a: number; f: number; b: number; c: number; d: number; e: number; h: number; l: number;
   ix: number; iy: number; sp: number; i: number; r: number; wz: number;
   af_: number; bc_: number; de_: number; hl_: number;
   iff1: boolean; iff2: boolean; im: number; q: number; cycles: number;
+  mode: number;
 }
 
 export const cpuOf = (m: Machine): Z80CPU => m.system.cpu;
@@ -89,6 +95,7 @@ export function emuState(m: Machine): State {
     // emu's Q: the instruction just run wrote the flags (z80cpu.js, executeInstruction)
     q: cpu.flagsWritten ? 1 : 0,
     cycles: cpu.cycles,
+    mode: m.system.io.modeRegister,
   };
 }
 
@@ -98,20 +105,64 @@ export function zState(z: Z): State {
     ix: z.ix, iy: z.iy, sp: z.sp, i: z.i, r: z.r, wz: z.wz,
     af_: z.af_, bc_: z.bc_, de_: z.de_, hl_: z.hl_,
     iff1: z.iff1, iff2: z.iff2, im: z.im, q: z.q, cycles: z.cycles,
+    mode: z.modeRegister,
   };
 }
 
-/** Give `z` the state `s` and the 64K `mem`. */
+/** Give `z` the state `s` (the mode register too) and the 64K `mem`. */
 export function setZ(z: Z, s: State, mem: Uint8Array): void {
   Object.assign(z, { a: s.a, f: s.f, b: s.b, c: s.c, d: s.d, e: s.e, h: s.h, l: s.l });
   z.ix = s.ix;
   z.iy = s.iy;
   Object.assign(z, { sp: s.sp, i: s.i, r: s.r, wz: s.wz, af_: s.af_, bc_: s.bc_, de_: s.de_, hl_: s.hl_ });
   Object.assign(z, { iff1: s.iff1, iff2: s.iff2, im: s.im, q: s.q, cycles: s.cycles });
+  z.modeRegister = s.mode;
   z.mem.set(mem);
 }
 
 export const memOf = (m: Machine): Uint8Array => m.mem.read(0, 0x10000);
+
+/**
+ * Step emu until its PC is `pc`, at most `limit` instructions; true when it got there (at once when it
+ * is there already). For a relocated program, the loader runs this way to the program's own entry.
+ */
+export function runTo(m: Machine, pc: number, limit: number): boolean {
+  const cpu = cpuOf(m);
+  for (let n = 0; cpu.registers.PC !== pc; n++) {
+    if (n >= limit) return false;
+    m.step();
+  }
+  return true;
+}
+
+/**
+ * Boot the ROM in `m` (the user's Model III ROM) to BASIC's READY, as a user does before loading a program:
+ * ENTER at Cass? and at Memory Size?, then a quarter of a second more. Sea Dragon's sessions start this way
+ * on the user's ROM (controller Ruling 5: interrupts are off when the .CMD loads, and its first instruction
+ * is DI), for the census's sessions and the referee alike. Throws a sentence when a prompt does not come.
+ */
+export function bootToReady(m: Machine): void {
+  const second = (s: number): number => Math.round(s * m.clockHz);
+  const wait = (text: string): void => {
+    for (let k = 0; !m.video.text().join('\n').includes(text); k++) {
+      if (k >= 2 * 60) throw new Error(`booting the ROM: no "${text}" on the screen within 2 s:\n${m.video.text().join('\n')}`);
+      m.run({ cycles: second(1 / 60) });
+    }
+  };
+  // ENTER held 50 ms of emulated time at a ROM prompt, as `m.keyboard.type` holds a key at its 10 cps
+  const enter = (): void => {
+    m.keyboard.press('ENTER');
+    m.run({ cycles: second(0.05) });
+    m.keyboard.release('ENTER');
+    m.run({ cycles: second(0.05) });
+  };
+  wait('Cass?');
+  enter();
+  wait('Memory Size?');
+  enter();
+  wait('READY');
+  m.run({ cycles: second(1 / 4) });
+}
 
 // ---- a port module
 

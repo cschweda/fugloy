@@ -11,7 +11,9 @@ import { toCmd } from '@fugloy/asm';
 import type { AsmResult } from '@fugloy/asm';
 import { createZ, load } from '@fugloy/runtime';
 import { describe, expect, it } from 'vitest';
+import { programHash } from '@fugloy/disasm';
 import { port } from '../src/index.js';
+import type { PortTrace } from '../src/index.js';
 import { PROGRAMS, RUNTIME, allNamesOf, assembled, cpuOf, emuState, hex, importPort, memOf, namesOf, program, setZ, stub } from './helpers.js';
 import type { Model } from './helpers.js';
 import { referee } from './referee.js';
@@ -70,7 +72,7 @@ describe("Task 3's programs", () => {
       it(`${what}: passes on ${modelName(model)}, compared at every block it starts`, async () => {
         const r = assembled(source, model);
         const res = passed(await judge(r, model, [{ run: 1_000_000 }]));
-        expect(res).toEqual({ ok: true, ...(await counted(r, model)), frames: expect.any(Number) });
+        expect(res).toEqual({ ok: true, ...(await counted(r, model)), frames: expect.any(Number), sounds: 0 });
         expect(res.blocks).toBeGreaterThan(0);
       });
     }
@@ -127,9 +129,162 @@ PARK:   JR      PARK`), 3);
   });
 });
 
+describe('the sound: every write to port $FF, compared at each frame (M2 Task 7)', () => {
+  // Two writes, then a wait long enough to cross two frames: the writes are compared at the first frame
+  const beeps = (model: Model): AsmResult => assembled(program(`
+START:  LD      A,1
+        OUT     (0FFH),A
+        LD      A,2
+        OUT     (0FFH),A
+PARK:   JR      PARK`), model);
+  const late = (js: string): string => {
+    const out = /z\.out\(0xFF, z\.a\);/g;
+    expect(js.match(out)).toHaveLength(2);
+    // A test-only out that stamps its write one T-state late, and leaves the clock as it was
+    return js.replace(out, 'z.cycles += 1; z.out(0xFF, z.a); z.cycles -= 1;');
+  };
+
+  for (const model of MODELS) {
+    it(`passes when both machines make the same writes at the same T-states, on ${modelName(model)}`, async () => {
+      const res = passed(await judge(beeps(model), model, [{ run: 100_000 }]));
+      expect(res.frames).toBeGreaterThan(1);
+    });
+
+    it(`stops a port whose OUT stamps its write one T-state late, in the sound, at the frame after it, on ${modelName(model)}`, async () => {
+      const r = beeps(model);
+      const res = failed(await judge(r, model, [{ run: 100_000 }], late));
+      expect(res.field).toBe('sound');
+      expect(res.at.block).toBe(r.symbol('PARK')!.value);
+      // LD A,1 is 7 T-states: the first OUT writes at T-state 7 on emu, 8 on the port
+      expect(res.report).toMatch(/^sound: write 1 to port \$FF since the last compare \(of 2 on emu, 2 on the port\): port \$01 at T-state 8, emu \$01 at T-state 7, at the start of the block at /);
+    });
+  }
+
+  it('stops a port that writes another byte, or one write too many, naming the write', async () => {
+    const r = beeps(3);
+    // The second OUT writes $03 where A holds $02: no register differs, only the sound
+    const other = failed(await judge(r, 3, [{ run: 100_000 }], (js) => {
+      let n = 0;
+      return js.replace(/z\.out\(0xFF, z\.a\);/g, (out) => (++n === 2 ? 'z.out(0xFF, 0x03);' : out));
+    }));
+    expect(other.field).toBe('sound');
+    expect(other.report).toMatch(/^sound: write 2 to port \$FF since the last compare \(of 2 on emu, 2 on the port\): port \$03 at T-state (\d+), emu \$02 at T-state \1,/);
+    const extra = failed(await judge(r, 3, [{ run: 100_000 }], (js) => js.replace(/(z\.out\(0xFF, z\.a\);)/, '$1 z.sound.push({ t: z.cycles, v: 0x55 });')));
+    expect(extra.field).toBe('sound');
+    expect(extra.report).toMatch(/^sound: write 2 to port \$FF since the last compare \(of 2 on emu, 3 on the port\): port \$55 at T-state 7, emu \$02 at T-state \d+/);
+  });
+});
+
+describe("the ROM space: the port's is a standalone port's, its module's ROM and $00 elsewhere (M2 Task 7, Ruling 13)", () => {
+  // A trace that says the program read $0003 as $55, where the stub ROM holds $00: as a trace taken on
+  // one ROM reads on another (Sea Dragon's, taken on the game stub, on the user's ROM, which holds $15)
+  const traced = (r: AsmResult): PortTrace => ({
+    'fugloy-trace': 1, program: { name: 'p.cmd', sha256: programHash(toCmd(r)) }, model: 3, rom: 'stub',
+    sessions: [], patches: [], entered: [], drops: [], romReads: [{ addr: 0x0003, value: 0x55 }],
+  });
+
+  it("runs the port on the module's byte, whatever emu's ROM holds, and passes when nothing the program keeps depends on it", async () => {
+    // SET 0,(IX+3) reads the byte and writes it back, which the ROM ignores (Sea Dragon's $5168)
+    const r = assembled(program(`
+START:  LD      IX,0
+        SET     0,(IX+3)
+        RET`), 3);
+    passed(await referee({ cmd: toCmd(r), model: 3, names: namesOf(r), trace: traced(r), steps: [{ run: 1000 }] }));
+    // The port holds $55 at $0003, from load; emu $00
+    const p = port(toCmd(r), { model: 3, runtimeImport: RUNTIME, trace: traced(r) });
+    if (!p.ok) throw new Error(p.errors.join(' '));
+    expect(p.report.rom).toEqual([{ addr: 0x0003, value: 0x55 }]);
+    const z = createZ({ model: 3 });
+    load(z, await importPort(p.js));
+    expect(z.read(0x0003)).toBe(0x55);
+  });
+
+  it('is refused by port() at an address past the ROM, where load would overwrite RAM', () => {
+    const r = assembled(program(`
+START:  RET`), 3);
+    const trace = { ...traced(r), romReads: [{ addr: 0x0003, value: 0x55 }, { addr: 0x3800, value: 0 }] };
+    expect(port(toCmd(r), { model: 3, runtimeImport: RUNTIME, trace })).toEqual({
+      ok: false,
+      errors: ["$3800: the trace says the program read this byte of the ROM, but the Model III's ROM ends at $37FF."],
+    });
+  });
+
+  it('stops the run at the first register the byte reaches', async () => {
+    const r = assembled(program(`
+START:  LD      A,(0003H)
+        INC     A
+PARK:   JR      PARK`), 3);
+    const res = failed(await referee({ cmd: toCmd(r), model: 3, names: namesOf(r), trace: traced(r), steps: [{ run: 1000 }] }));
+    expect(res.field).toBe('a');
+    expect(res.report).toMatch(/^A: port \$56, emu \$01, at the start of the block at \$7004/);
+  });
+
+  it('stops a program that reads a ROM byte its trace does not name at the register that received it: the port reads $00', async () => {
+    // The stub ROM's first byte is DI ($F3); with no trace the port carries no ROM byte
+    expect(stub(3).rom[0x0000]).toBe(0xf3);
+    const r = assembled(program(`
+START:  LD      A,(0000H)
+PARK:   JR      PARK`), 3);
+    const res = failed(await judge(r, 3, [{ run: 1000 }]));
+    expect(res.field).toBe('a');
+    expect(res.at.block).toBe(r.symbol('PARK')!.value);
+    expect(res.report).toMatch(/^A: port \$00, emu \$F3, at the start of the block at \$7003/);
+  });
+
+  it('never compares the ROM space: a write there is lost on both machines', async () => {
+    const r = assembled(program(`
+START:  LD      A,42H
+        LD      (0003H),A
+        LD      HL,0010H
+        LD      (HL),A
+        RET`), 3);
+    passed(await judge(r, 3, [{ run: 1000 }]));
+  });
+});
+
+describe("the mode register: port $EC's latch on the Model III, port $FF's low bits on the Model I", () => {
+  // The 32-column bit set: bit 2 of port $EC on the Model III, bit 3 (MODESEL) of port $FF on the Model I
+  const modes = (model: Model): AsmResult => assembled(program(model === 3 ? `
+START:  LD      A,04H
+        OUT     (0ECH),A
+PARK:   JR      PARK` : `
+START:  LD      A,08H
+        OUT     (0FFH),A
+PARK:   JR      PARK`), model);
+  // A port whose OUT writes one wrong bit: the alternate character set (bit 3) on the Model III, the
+  // cassette motor (bit 2) on the Model I; no register differs
+  const wrong = (model: Model) => (js: string): string => {
+    const out = model === 3 ? 'z.out(0xEC, z.a);' : 'z.out(0xFF, z.a);';
+    expect(js).toContain(out);
+    return js.replace(out, model === 3 ? 'z.out(0xEC, z.a | 0x08);' : 'z.out(0xFF, z.a | 0x04);');
+  };
+
+  for (const model of MODELS) {
+    it(`passes a program that sets it, on ${modelName(model)}`, async () => {
+      passed(await judge(modes(model), model, [{ run: 100_000 }]));
+    });
+
+    it(`stops a port whose OUT writes a wrong bit into it, in the mode, at the block after the write, on ${modelName(model)}`, async () => {
+      const r = modes(model);
+      const res = failed(await judge(r, model, [{ run: 100_000 }], wrong(model)));
+      expect(res.field).toBe('mode');
+      expect(res.at.block).toBe(r.symbol('PARK')!.value);
+      expect(res.report).toMatch(model === 3 ? /^mode register: port \$0C, emu \$04, at the start of the block at \$7004/ : /^mode register: port \$0C, emu \$08, at the start of the block at \$7004/);
+    });
+  }
+
+  it("starts the port with emu's at the entry, as it does the registers", () => {
+    const m = new Machine({ model: 3, roms: { level2: stub(3).rom } });
+    m.system.io.modeRegister = 0x0c;
+    const z = createZ({ model: 3 });
+    setZ(z, emuState(m), memOf(m));
+    expect(z.modeRegister).toBe(0x0c);
+  });
+});
+
 describe('self-modifying code', () => {
   const sentence = (written: number, by: number): string =>
-    `self-modifying code: $${hex(written, 4)} written by the instruction at $${hex(by, 4)} (M1 does not translate it)`;
+    `self-modifying code: $${hex(written, 4)} written by the instruction at $${hex(by, 4)} (the trace does not name it; run the census over a session that reaches this)`;
 
   for (const model of MODELS) {
     it(`a store into its own next instruction is refused, naming both addresses, on ${modelName(model)}`, async () => {

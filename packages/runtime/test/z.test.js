@@ -439,18 +439,23 @@ describe('ports', () => {
     expect(createZ({ model }).in(0xff)).toBe(emu(model).io.in(0xff));
   });
 
-  it.each([1, 3])("models port $FF and, on the Model III, $EC-$EF; any other port throws a sentence naming it (model %i)", (model) => {
+  it.each([1, 3])("models port $FF and, on the Model III, $EC-$EF and a read of $00; any other port throws a sentence naming it (model %i)", (model) => {
     const z = createZ({ model });
-    const modelled = (p) => p === 0xff || (model === 3 && p >= 0xec && p <= 0xef);
+    const modelled = (p, what) => p === 0xff || (model === 3 && p >= 0xec && p <= 0xef) || (model === 3 && p === 0x00 && what === 'in');
     const bad = [];
     for (let p = 0; p < 256; p++) {
       for (const [what, call] of [['in', () => z.in(p)], ['out', () => z.out(p, 0)]]) {
         const msg = thrown(call);
-        const ok = modelled(p) ? msg === null : msg !== null && msg.startsWith(`the port does not model $${hex(p, 2)} `);
+        const ok = modelled(p, what) ? msg === null : msg !== null && msg.startsWith(`the port does not model $${hex(p, 2)} `);
         if (!ok) bad.push(`${what} $${hex(p, 2)}: ${msg}`);
       }
     }
     expect(bad).toEqual([]);
+  });
+
+  it("reads port $00 on the Model III as emu does: no device answers it, so $FF (Sea Dragon's joystick read)", () => {
+    expect(createZ({ model: 3 }).in(0x00)).toBe(emu(3).io.in(0x00));
+    expect(createZ({ model: 3 }).in(0x00)).toBe(0xff);
   });
 
   it('names $84 on the Model III, and $EC on the Model I, in a sentence', () => {

@@ -83,7 +83,7 @@ describe('the mnemonic and operand grid', () => {
     // Warnings are fine here (`ADD A,(12H)` warns that the parentheses only group); errors are not.
     expect(errorsOf(a)).toEqual([]);
     expectSameImage(a.image!, z.image!);
-  });
+  }, 60_000); // it assembles a file per mnemonic with zmac: about 5 s on a busy CI runner, over Vitest's default limit
 });
 
 /** Whole programs zmac rejects, beyond the single-line probes in zmac-probes.test.ts. */

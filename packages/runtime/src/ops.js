@@ -1,7 +1,8 @@
 /**
  * The helpers a port's generated statements call (`z.a = o.add8(z, z.a, z.b);`): the Z80's flag and
  * arithmetic routines, which a port imports as `@fugloy/runtime/ops`, and at the end the control a
- * port's routines share (CALL's trampoline, RET's check, the sentences for what a port cannot follow).
+ * port's routines share (CALL's trampoline, RET's check, a CALL to a ROM routine the runtime stands in
+ * for, the sentences for what a port cannot follow).
  * @fugloy/recomp's `translate` writes the calls; its test runs every instruction both ways, here and on
  * @fugloy/emu's core, and requires the two equal.
  *
@@ -11,6 +12,8 @@
  * leaves the rest of F alone. Values in are 8- or 16-bit as the registers hold them; values out are
  * masked to their width.
  */
+
+import { standins } from './rom.js';
 
 // F's bits (z80cpu.js:17-22; bits 5 and 3 are the undocumented Y and X, `_xy`, :171-174)
 const S = 0x80;
@@ -638,32 +641,142 @@ const PLACED = Symbol.for('@fugloy/runtime: placed');
 const hex4 = (n) => `$${n.toString(16).toUpperCase().padStart(4, '0')}`;
 
 /**
+ * Marks what `unwind` and `reset` return, so a trampoline tells it from an error (a registered symbol, as
+ * PLACED is, so two copies of this module agree).
+ */
+const UNWIND = Symbol.for('@fugloy/runtime: unwind');
+
+/**
+ * What a port throws to leave routines the program left: not an Error, so no trampoline adds a place to
+ * it and none mistakes it for a refusal. `levels` trampolines rethrow it, one fewer each; the next goes
+ * on with `to` (Infinity: only the top-level trampoline does). `pops` are the addresses of the POPs that
+ * dropped the return addresses, in the order they ran (for the sentence when no routine is left to leave:
+ * the one that took the entry's), `from` the routine that threw it, set by the first trampoline to catch it.
+ * @typedef {{ [UNWIND]: true, levels: number, to: Routine, pops: readonly number[], from: string | undefined }} Unwind
+ */
+
+/**
+ * A POP (or `levels` POPs in a row) took the return address of the CALL that ran this routine off the
+ * stack: the port's statement throws what this returns. The trampoline running the routine is the one
+ * whose return address the program dropped, so it is left, as the Z80 left it; the trampoline that called
+ * it goes on with `to`, the routine that starts after the POP (its continuation), returning where it
+ * would have. Each POP more leaves one trampoline more.
+ * @param {number} levels how many return addresses were dropped, 1 or more
+ * @param {Routine} to the continuation
+ * @param {...number} pops each POP's address, in the order they ran (one per level)
+ * @returns {Unwind}
+ */
+export function unwind(levels, to, ...pops) {
+  return { [UNWIND]: true, levels, to, pops, from: undefined };
+}
+
+/**
+ * A transfer back to the port's entry, whose first block loads SP with a constant before it touches the
+ * stack: the program discards its whole stack, so the port leaves every routine running, and the top-level
+ * trampoline (`top`, which runPort runs) runs `to` with the return address the port was started with.
+ * The port's statement throws what this returns.
+ * @param {Routine} to the entry
+ * @returns {Unwind}
+ */
+export function reset(to) {
+  return { [UNWIND]: true, levels: Infinity, to, pops: [], from: undefined };
+}
+
+/**
+ * @param {unknown} e
+ * @returns {e is Unwind}
+ */
+const isUnwind = (e) => typeof e === 'object' && e !== null && Object.hasOwn(e, UNWIND);
+
+/**
+ * Add, once, the routine running and the block it was in (the address `z.at` was last given) to an
+ * error's sentence.
+ * @param {unknown} e
+ * @param {string} routine
+ * @param {Machine} z
+ */
+function place(e, routine, z) {
+  if (e instanceof Error && !Object.hasOwn(e, PLACED)) {
+    Object.defineProperty(e, PLACED, { value: true });
+    e.message += ` (in ${routine}, in the block at ${hex4(z.block)})`;
+  }
+}
+
+/**
+ * The trampoline `call` and `top` share: run `routine`, and each routine it returns, until one returns
+ * nothing. An unwind (`unwind`, `reset`) thrown inside is caught: with levels left it is rethrown with one
+ * fewer (this trampoline's routine is one the program left); at none it goes on with the unwind's routine.
+ * The top-level trampoline (`isTop`) also goes on with a reset's routine, and refuses an unwind that still
+ * has levels left with a sentence. Any other error gets its place (`place`) and goes on up.
+ * @param {Machine} z
+ * @param {Routine} routine
+ * @param {number} ret
+ * @param {boolean} isTop
+ */
+function trampoline(z, routine, ret, isTop) {
+  /** @type {Routine | undefined} */
+  let next = routine;
+  /** @type {Routine} */
+  let running = routine;
+  for (;;) {
+    try {
+      while (next !== undefined) {
+        running = next;
+        next = next(z, ret);
+      }
+      return;
+    } catch (e) {
+      if (!isUnwind(e)) {
+        place(e, running.name, z);
+        throw e;
+      }
+      e.from ??= running.name;
+      if (e.levels === 0 || (isTop && e.levels === Infinity)) {
+        e.levels = 0;
+        next = e.to;
+        continue;
+      }
+      if (isTop) {
+        // Each trampoline below took one level, one POP's, in the order they ran: the POP that took the
+        // entry's return address is the first of those left (not the run's last when more are left)
+        const pop = e.pops[e.pops.length - e.levels] ?? e.pops[e.pops.length - 1] ?? 0;
+        const error = new Error(
+          `the POP at ${hex4(pop)} drops a return address that no CALL of the port's pushed (the one the port's entry was started with, or one below it), which a port cannot follow`,
+        );
+        place(error, e.from, z);
+        throw error;
+      }
+      e.levels--;
+      throw e;
+    }
+  }
+}
+
+/**
  * CALL: run `routine`, whose RET must return to `ret` (the CALL has already pushed it), and every
  * routine it jumps into, one after another, until one returns: a trampoline, so routines that jump
  * into each other (a game loop) never grow the JavaScript stack. An error thrown inside gets, once,
  * the routine it was running and the block it was in (the address `z.at` was last given) added to
- * its sentence.
+ * its sentence. An unwind (`unwind`, M2) passes through it with one level fewer, or, with none left,
+ * it goes on with the unwind's routine in place of the one it was running.
  * @param {Machine} z
  * @param {Routine} routine
  * @param {number} ret the address after the CALL
  */
 export function call(z, routine, ret) {
-  /** @type {Routine | undefined} */
-  let next = routine;
-  /** @type {Routine} */
-  let running = routine;
-  try {
-    while (next !== undefined) {
-      running = next;
-      next = next(z, ret);
-    }
-  } catch (e) {
-    if (e instanceof Error && !Object.hasOwn(e, PLACED)) {
-      Object.defineProperty(e, PLACED, { value: true });
-      e.message += ` (in ${running.name}, in the block at ${hex4(z.block)})`;
-    }
-    throw e;
-  }
+  trampoline(z, routine, ret, false);
+}
+
+/**
+ * The top-level trampoline, which runPort runs the port's entry in: `call`'s, but a reset (`reset`) ends
+ * here, which runs the entry again with the same `ret`, and an unwind that reaches it with levels left
+ * (the program dropped a return address no CALL of the port's pushed) throws a sentence.
+ * @param {Machine} z
+ * @param {Routine} routine
+ * @param {number} ret the address the entry returns to
+ */
+export function top(z, routine, ret) {
+  trampoline(z, routine, ret, true);
 }
 
 /**
@@ -677,22 +790,74 @@ export function call(z, routine, ret) {
 export function ret(z, expected, at) {
   if (z.wz !== expected) {
     throw new Error(
-      `the RET at ${hex4(at)} returns to ${hex4(z.wz)}, not to ${hex4(expected)}, the address after the CALL that ran its routine (a port follows a RET only back to its CALL)`,
+      `the RET at ${hex4(at)} returns to ${hex4(z.wz)}, not to ${hex4(expected)}, the address after the CALL that ran its routine (a port follows a RET only back to its CALL) (if a POP dropped a return address here, the census needs a session that reaches it)`,
     );
   }
 }
 
 /**
+ * A CALL to a ROM routine the runtime stands in for (rom.js): push `returnAddr` as the CALL does (its
+ * T-states are the block's), run the stand-in, which ticks the routine's T-states and R, its RET's
+ * included, and pop the address as the RET does, into MEMPTR (emu's RET, z80cpu.js:521-528). The two
+ * bytes the push wrote stay in memory, as on emu, and Q is 0: a RET writes no flags. The port writes
+ * the call only for an address port() was given as a stand-in; on a machine that has none there, a
+ * sentence.
+ * @param {Machine} z
+ * @param {number} addr the routine's address
+ * @param {number} returnAddr the address after the CALL
+ */
+export function standin(z, addr, returnAddr) {
+  const routine = z.model === 1 || z.model === 3 ? standins(z.model).get(addr) : undefined;
+  if (routine === undefined) {
+    const model = z.model === 1 ? 'the Model I' : z.model === 3 ? 'the Model III' : `the ${String(z.model)} machine`;
+    throw new Error(`the runtime has no stand-in for the ROM routine at ${hex4(addr)} on ${model} (called to return to ${hex4(returnAddr)})`);
+  }
+  push(z, returnAddr);
+  routine.run(z);
+  z.wz = pop(z);
+  z.q = 0;
+}
+
+/**
  * The sentence for a transfer to an address where no block of the port starts: an address the
  * disassembly did not find as code (outside the program, such as a ROM routine, or inside its data).
- * The port's statement throws it.
+ * The port's statement throws it. For a JP whose target the program rewrites, `known` and `cell` are
+ * given: the targets the trace saw it hold, each a block of the port, and the byte of its target the
+ * program rewrites (the low byte when both are); the sentence names the value it holds now, which is none of them.
  * @param {Machine} z
  * @param {number} target
  * @param {number} from the transfer's address
+ * @param {readonly number[]} [known] the targets the trace saw a rewritten JP hold
+ * @param {number} [cell] the address of the byte of that JP's target the program rewrites
  * @returns {Error}
  */
-export function unknown(z, target, from) {
+export function unknown(z, target, from, known, cell) {
+  if (known !== undefined && cell !== undefined) {
+    const saw = known.length === 1 ? hex4(known[0]) : `${known.slice(0, -1).map(hex4).join(', ')} and ${hex4(known[known.length - 1])}`;
+    return new Error(
+      `the transfer at ${hex4(from)} goes to ${hex4(target)}: the program rewrote its target at ${hex4(cell)} to a value the trace did not see (it saw ${saw}); run the census over a session that reaches this`,
+    );
+  }
   return new Error(`the transfer at ${hex4(from)} goes to ${hex4(target)}, where no block of the port starts (the disassembly found no code there)`);
+}
+
+/**
+ * The sentence for an instruction whose opcode the program rewrites (a variant site, M2) holding a value
+ * the port has no translation for: the port knows the values the trace saw written there and the value
+ * as loaded, one translated instruction each. The port's `switch` on the cell throws it.
+ * @param {Machine} z
+ * @param {number} cell the opcode's address
+ * @param {readonly number[]} known the values the port translates, by value
+ * @param {string} instruction the instruction as loaded, as assembly
+ * @returns {Error}
+ */
+export function variant(z, cell, known, instruction) {
+  /** @param {number} n */
+  const hex2 = (n) => `$${n.toString(16).toUpperCase().padStart(2, '0')}`;
+  const knows = known.length === 1 ? hex2(known[0]) : `${known.slice(0, -1).map(hex2).join(', ')} and ${hex2(known[known.length - 1])}`;
+  return new Error(
+    `the opcode at ${hex4(cell)} (of ${instruction} as loaded) is ${hex2(z.mem[cell])}, which the trace did not see there (the port knows ${knows}); run the census over a session that reaches this`,
+  );
 }
 
 /**

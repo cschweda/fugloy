@@ -1,14 +1,17 @@
 # Notice
 
-`app/utils/emulator/glyphs.generated.ts`, the TRS-80 screen's glyphs in the Run tab, is converted
-by `scripts/build-glyphs.ts` from `trs_chars.c` of [xtrs](https://github.com/TimothyPMann/xtrs),
-Timothy P. Mann's TRS-80 emulator, at commit 3a2180c063811a715faa28d39a94739c33e0abd0
+The TRS-80 screen's glyphs in the Run tab and on the Learn page come from `@fugloy/runtime`
+(`packages/runtime/src/glyphs.generated.js`, drawn by its `src/screen.js`), which the site bundles.
+They are converted by `packages/runtime/scripts/build-glyphs.mjs` from `trs_chars.c` of
+[xtrs](https://github.com/TimothyPMann/xtrs), Timothy P. Mann's TRS-80 emulator, at commit
+3a2180c063811a715faa28d39a94739c33e0abd0
 (SHA-256 `1b8bbb9d63a8d598e58f64e831fc11a08f61a82e5c2eb0f631e5cc7be1464166`). That file holds the
 TRS-80 character generators; the Model III sets were read from real character generator ROMs by
 Todd P. Cromwell III. Fugløy keeps four of them: CG 1 (the Model I's stock generator), CG 2 (the
 Model I's lowercase kit), CG 4 (the Model III's, katakana alternates), and CG 8 (the Model 4's,
 international alternates), with each pixel row's bits reversed so the leftmost pixel is in bit 7.
-`trs_chars.c` is not committed. It is under xtrs's licence, its `LICENSE` file at the same commit:
+`trs_chars.c` is not committed. It is under xtrs's licence, its `LICENSE` file at the same commit
+(also in `packages/runtime/NOTICE.md`):
 
 ```text
 Copyright (C) 1992 Clarendon Hill Software.

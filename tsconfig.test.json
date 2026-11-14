@@ -9,5 +9,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["packages/*/test/**/*.ts", "packages/*/scripts/**/*.ts", "vitest.config.ts"]
+  "include": ["packages/*/test/**/*.ts", "packages/*/scripts/**/*.ts", "packages/*/tools/**/*.ts", "vitest.config.ts"]
 }

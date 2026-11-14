@@ -62,3 +62,6 @@ apps/web/dist
 
 # Tarballs staged by ./publish.sh check
 .release/
+
+# The browser player's folders, written by pnpm play (packages/recomp/tools/play.ts)
+.play/

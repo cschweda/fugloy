@@ -1,11 +1,11 @@
 // renderScreen: video RAM into an RGBA buffer, a canvas's ImageData, with no DOM. Each model's own
-// character generator (glyphs.generated.ts, from xtrs): 6x12 cells on the Model I, 8x12 on the
+// character generator (@fugloy/runtime's glyphs.generated.js, from xtrs): 6x12 cells on the Model I, 8x12 on the
 // Model III and 4, 8x10 at the Model 4's 80x24; 80H-BFH as 2x3 blocks at the cell's width; the
 // Model III/4 alternate set in C0H-FFH when the machine selects it; 32-column doubling; inverse
 // video; and renderNotice's text drawn as video RAM would show it.
 import { describe, expect, it } from 'vitest';
-import { CG_MODEL1, CG_MODEL1_LOWERCASE, CG_MODEL3, CG_MODEL4 } from '../app/utils/emulator/glyphs.generated';
-import type { GlyphSet } from '../app/utils/emulator/glyphs.generated';
+import { CG_MODEL1, CG_MODEL1_LOWERCASE, CG_MODEL3, CG_MODEL4 } from '@fugloy/runtime/screen';
+import type { GlyphSet } from '@fugloy/runtime/screen';
 import { Machine } from '@fugloy/emu';
 import { SCREEN_BG, SCREEN_FG, renderNotice, renderScreen, screenSize, screenView, tubeAspect, tubeFit, panelFit, MODEL1_ASPECT, MODEL3_ASPECT } from '../app/utils/emulator/screen';
 import type { ScreenView } from '../app/utils/emulator/screen';

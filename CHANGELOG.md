@@ -150,7 +150,7 @@ creates and pushes the tag.
   `DATA` and none of its code bytes. A referee (`packages/recomp/test/referee.ts`) runs a port
   beside emu on Fugløy's stub ROM and compares the two at every block start (the T-states, PC,
   every register, F, R, MEMPTR, Q and the interrupt state, every byte written), video RAM every
-  frame and the 64K at the end; it refuses self-modifying code and names the first difference's
+  frame and the 64K at the end (from M2, below, every byte above the ROM space); it refuses self-modifying code and names the first difference's
   block, field and instruction. Every Learn lesson and Build Space Invaders chapter, 19 programs on
   the Model III and the Model I (38 runs), is ported and refereed through its `check.json` in CI
   (`packages/recomp/test/learn.test.ts`, about 61 s locally): all match. Their ports hold 129
@@ -163,6 +163,83 @@ creates and pushes the tag.
   program cannot be ported. Not yet: EI's one-instruction delay, a comparison of sound and
   cassette writes, and self-modifying code (refused); a block reached from two routines is
   translated in each.
+
+- Part 2's milestone M2, Sea Dragon's port (plan
+  `docs/superpowers/plans/2026-11-13-part2-m2-sea-dragon-port.md`, all nine tasks, branch
+  `part2-m2`; in the repository only, nothing published). `examples/sea-dragon/seadrg01.cmd`, the
+  Model III, ports with its hint file and a **port trace** (`docs/port-trace-format.md`): a census
+  (`pnpm census`, `packages/recomp/tools/census.ts`) plays three scripted games on `@fugloy/emu`
+  (Novice, Expert, and two players, from the title to GAME OVER and back, on Fugløy's game stub ROM)
+  and writes what the game does that its bytes do not say, committed as `seadrg01.trace.json`. From
+  it `port()` reads the four rewritten displacements and the rewritten `JP` target from memory as
+  they run, makes each of the three swapped opcodes a choice between the two instructions the census
+  saw, follows the title loop's dropped return address (`$4BAC POP AF`) by leaving the routine the
+  game left, and carries the two ROM bytes the game reads as data (`$0000`, `$0003`) in the module's
+  `ROM` (the report's `romFrom` names the ROM the trace read them on); a trace whose `entered` names
+  code the hinted disassembly does not decode is refused, naming each range and the `entry` hint to
+  add, rather than carried as data; a jump back to an entry whose first block loads SP with a constant discards the stack. The
+  runtime gains Fugløy's own stand-in for the ROM's `$DELAY` (`$0060`), a write guard that stops a
+  standalone port at a write into code the trace does not name, and `load`'s `ROM` bytes. The port is
+  430,623 bytes: 28 routines, none labelled, 846 blocks over them (110 of the 736 translated in more
+  than one routine), nothing refused. The referee now also compares the sound (every write to port
+  `$FF`, its T-state and byte, at every frame) and the mode register (port `$EC`'s latch, which the
+  player draws the screen from) at every block start, and `packages/recomp/test/sea-dragon.test.ts` referees
+  the port through all three games in CI with no difference: 84,124,477, 57,536,697 and 131,821,072
+  T-states (about 2¼ minutes of play), refereed in 3.8, 2.4 and 5.3 s locally, about 22 to 25 million
+  T-states a second; locally, on the Model III ROM booted to READY, the same three games pass too.
+  The CLI gains `--trace` (`fugloy port <program.cmd> --model 1|3 [--hints <file>] [--trace <file>]
+  [-o <dir>]`; a trace of another program, or a malformed one, exits 1 with its sentence), and its
+  report lists the loader left out, each data region's kind, the rewritten code, the drops, the
+  resets, the stand-ins and the ROM bytes with the ROM they were read on, and says that a write into
+  code the trace does not name stops the port, while a read of its own code (but a byte it rewrites)
+  or of a ROM byte the trace does not name reads `$00` without stopping; `-o` makes its directory. The referee gives a port the ROM space a standalone port has (the module's `ROM`,
+  `$00` elsewhere) and counts the sound it compared. Limits: `seadrg01.cmd` on the Model III only; a port takes no interrupts (Sea
+  Dragon enables none); the three games are the paths those sessions take, not every path through
+  the game, and what the census cannot see is listed in the trace format's document; a block
+  reached from two routines is translated in each. Release coupling: the CLI depends on the
+  unpublished `@fugloy/recomp` and now `@fugloy/runtime` too.
+
+  The screen renderer and the TRS-80's glyph tables moved from the workbench into the runtime
+  (`@fugloy/runtime/screen`), which the workbench re-exports, so the workbench and a port draw the
+  screen with one renderer (the pixels pinned before the move are unchanged).
+
+  **Sea Dragon plays in a browser** (`pnpm play examples/sea-dragon/seadrg01.cmd --model 3 --hints
+  examples/sea-dragon/seadrg01.hints --trace examples/sea-dragon/seadrg01.trace.json`). The port runs
+  in a Web Worker (`@fugloy/runtime/player`): a port's functions never yield, so the worker blocks
+  with `Atomics.wait` to keep the original's speed (the emulated clock against real time; more than a
+  quarter of a second behind, after a background tab or a stall, it moves its origin instead of
+  running fast to catch up, as it does for a clock that goes backwards, and it never waits more than
+  two seconds at once), reads the keyboard matrix from memory it shares with the page, and posts
+  each 1/60 s of the model's clock the 1K of video RAM and the frame's writes to port `$FF`. The page
+  draws the screen on a canvas with the runtime's renderer, maps keys as the workbench does (a key let
+  go early is held for nine frames, 150 ms, from its first press (a key-down the browser repeats is not
+  a new press), so a quick tap is still seen by a game that
+  reads its keys once a pass of its loop: Sea Dragon's reads of its controls in play are up to 127 ms
+  apart at Novice, 92 ms at Expert; Shift with `;` types the TRS-80's `:`), and plays the cassette port's levels as a square wave through WebAudio, quietly, from the
+  first key or click, dropping a frame of sound rather than letting the delay grow. `pnpm play` writes
+  `.play/<name>/` (gitignored: the port, the runtime's files, `index.html` and a manifest with the
+  game's name, authors, public-domain line, keys and start state) and serves it on localhost with
+  `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`, which
+  shared memory needs; the folder is plain static files any host sending those two headers can serve.
+  The port starts with the registers the original has at its entry on Fugløy's game stub ROM (the
+  game reads R for its random numbers before it sets it; from the reset registers it goes another way
+  once play starts). Checked by test: the clock, the sound and the keys without a browser, and the
+  worker's loop over Sea Dragon's port for 600 frames (the title, ENTER, one player, Novice, and play)
+  posting 600 screens, each equal to the emulator's video RAM at the same T-state, with the same sound
+  (`packages/recomp/test/player.test.ts`, in CI). Checked in headless Chromium: the page is
+  cross-origin isolated; 10.135 s of emulated time in 10.131 s of real time (100.0%); the title
+  animates; ENTER, `1`, `0` start a game, typed as instant taps too; the sub moves left and right,
+  held and on instant taps of the arrows, and a held arrow let go stops it within one of the game's
+  polls (the shared key row clears at the key-up, the browser's repeats notwithstanding); SPACE fires,
+  on an instant tap too (a shot runs right along the surface row, and in a headless A/B run of the port
+  a second of SPACE adds the shot to the screen and writes to port `$FF` that the same run with no key
+  does not); a game played to
+  GAME OVER returns to the title; after the page and its worker were stopped for a minute the game
+  went on at normal speed (0.25 s of game in the first 0.257 s); audio buffers with sound in them were
+  scheduled and none dropped; no console errors. Not checked: anyone listening to the sound, and a
+  tab in a real browser's background (headless Chromium kept the page visible, so the minute was a
+  stopped process instead). A second, independent look at the page, in another headless browser, saw the title drawn. The player is not on
+  the site: the bundle, the arcade page and the site's headers are M3.
 
 - A Full screen button in Run ▶'s machine row; Esc leaves it (and the browser's own exit); keys keep
   reaching the TRS-80, and focus is kept. The first screen is 252,262 B gzip of its 252,775 B budget.

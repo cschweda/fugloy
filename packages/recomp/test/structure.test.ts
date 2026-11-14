@@ -157,7 +157,7 @@ describe('the Learn ports', () => {
     });
   }
 
-  it("say truthfully which routines are labelled: labelled exactly when the routine's text has a switch", () => {
+  it("say truthfully which routines are labelled: labelled exactly when the routine's text has a switch on its blocks (`switch (b)`)", () => {
     const folders = [
       ...readdirSync(learn).filter((d) => /^\d\d-/.test(d)),
       ...readdirSync(new URL('invaders/', learn)).filter((d) => /^\d\d-/.test(d)).map((d) => `invaders/${d}`),
@@ -168,7 +168,7 @@ describe('the Learn ports', () => {
       const p = port(toCmd(r), { model: 3, names: namesOf(r), runtimeImport: RUNTIME });
       if (!p.ok) throw new Error(`${folder}: ${p.errors.join(' ')}`);
       const fns = functionsOf(p.js);
-      for (const x of p.report.routines) expect(x.labelled, `${folder} ${x.name}`).toBe(fns.get(x.name)!.includes('switch'));
+      for (const x of p.report.routines) expect(x.labelled, `${folder} ${x.name}`).toBe(fns.get(x.name)!.includes('switch (b)'));
     }
   });
 });

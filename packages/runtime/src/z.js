@@ -20,12 +20,16 @@
  *     $3C00-$3FFF  video RAM: `mem`. The stock Model I's has no bit 6, so a byte is stored as it will read
  *                  and show, bit 6 = NOT (bit 5 OR bit 7): the gate is on the WRITE (:185; the Technical
  *                  Reference Handbook, p. 34, as :23-31 cite it), and `mem` holds what emu's video RAM holds
- *     $4000-$FFFF  RAM: `mem` (48K, emu's default on both models)
+ *     $4000-$FFFF  RAM: `mem` (48K, emu's default on both models); with a port loaded, a write to a byte of
+ *                  its code that is not a rewritten operand throws a sentence (`guard`, which `load` installs)
  *   'flat' has none of this: all 64K is RAM.
  *
  *   Ports (machine/io.js; the port number is its low 8 bits, as readPort and writePort take it, :476-489):
  *     Model III $EC-$EF  read: $FF (the RTC acknowledge, :174-180; no interrupts are modelled);
  *                        write: the mode register (:183), bit 2 the 32-column mode (:74)
+ *     Model III $00      read: $FF, as emu's Model III reads it: no device is on port $00, and a port no
+ *                        handler answers reads $FF (readPort, :476-480); Sea Dragon reads it as a joystick.
+ *                        A write to it is not modelled
  *     Model III $FF      read: $40 | mode register & $3E (:308, with no tape in the deck);
  *                        write: the raw byte to `sound` (:313); the mode register is untouched
  *     Model I $FF        read: $7F, or $3F with the 32-column bit set (:351-355, no tape);
@@ -54,12 +58,19 @@ const hex = (n, width) => n.toString(16).toUpperCase().padStart(width, '0');
 const expansionError = (addr) => new Error(`the port does not model $${hex(addr, 4)} (the Model I's Expansion Interface)`);
 
 /**
+ * The sentence for a write into a port's code that its trace does not name (the write guard, `load`).
+ * @param {number} addr
+ */
+const codeWriteError = (addr) =>
+  new Error(`self-modifying code: $${hex(addr, 4)} written (the trace does not name it; run the census over a session that reaches this)`);
+
+/**
  * The sentence for an I/O port the port does not model.
  * @param {1 | 3} model
  * @param {number} port
  */
 const portError = (model, port) =>
-  new Error(`the port does not model $${hex(port, 2)} (an I/O port; on the ${model === 1 ? 'Model I it models $FF' : 'Model III it models $FF and $EC-$EF'})`);
+  new Error(`the port does not model $${hex(port, 2)} (an I/O port; on the ${model === 1 ? 'Model I it models $FF' : 'Model III it models $FF, $EC-$EF and a read of $00'})`);
 
 /** The machine state a port runs on; `createZ` builds one. The fields and methods are described above and in README.md. */
 export class Z {
@@ -119,6 +130,14 @@ export class Z {
      */
     this.mem = new Uint8Array(0x10000);
     this.mem.fill(0x20, VIDEO_BASE, model.ramBase);
+
+    /**
+     * The write guard `load` installs from a port's `CODE` and `CELLS` (run.js): 1 at each byte of the
+     * program's code that is not a rewritten operand, where `write` throws, since the port carries none of
+     * the code and a write there would leave it running stale code. Null, the default, guards nothing.
+     * @type {Uint8Array | null}
+     */
+    this.guard = null;
 
     /**
      * Every write to port $FF, raw, as { t, v }: `t` is `cycles` at the call (emu stamps the CPU's
@@ -248,6 +267,8 @@ export class Z {
     addr &= 0xffff;
     v &= 0xff;
     if (addr >= this.ramBase) {
+      // A port's code is in RAM: `load`'s guard refuses a write into it but at a rewritten operand
+      if (this.guard !== null && this.guard[addr] === 1) throw codeWriteError(addr);
       this.mem[addr] = v;
       return;
     }
@@ -292,6 +313,7 @@ export class Z {
       case 3:
         if (port === 0xff) return 0x40 | (this.modeRegister & 0x3e); // io.js:308
         if (port >= 0xec && port <= 0xef) return 0xff; // io.js:177-180
+        if (port === 0x00) return 0xff; // io.js:476-480: no handler for $00, so the read floats high
         break;
       case 1:
         if (port === 0xff) return (this.modeRegister & this.modeBit ? 0x00 : 0x40) | 0x3f; // io.js:351-355

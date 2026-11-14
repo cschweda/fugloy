@@ -159,7 +159,11 @@ export function TITLE_LOOP(z) {
   write updates and the instruction reads. Sea Dragon's `LD A,(IY+n)` at `$49BF` has its
   displacement `n` (the byte `DATA_49C1`) rewritten for each column, so it becomes
   `z.a = z.mem[(z.iy + signed(z.mem[0x49C1])) & 0xffff]`: the displacement is read at run time.
-  A site the recompiler cannot express this way is an error naming it, with a hint to add.
+  As M2 built it: a rewritten operand (a displacement, an immediate, a word, a `JP`'s target) is
+  read from memory when its instruction runs; a swapped opcode (Sea Dragon swaps three) is a choice
+  between the instructions the trace saw there, each translated ahead of time, as
+  `switch (z.mem[site])`, and a value the trace did not see stops the port with a sentence. Anything
+  else is still an error naming the site, with a hint to add.
 - Interrupts: a program that enables them gets a check at each block end for a pending heartbeat,
   as the plan says. Sea Dragon runs with interrupts off, so its port has none.
 
@@ -178,9 +182,10 @@ The hardware half of an emulator without the instruction interpreter:
 - **Sound**: writes to the cassette port (`$FF`) with their T-state, turned into a square wave
   (WebAudio), as `@fugloy/emu`'s `m.sound` ring records them.
 - **Ports**: `$EC` (the Model III's mode: 32/64 columns), `$FF`, and the rest as the program needs.
-- **ROM stand-ins**: Fugløy's own code for each ROM routine a program calls, written from the
-  routine's documented behaviour (`packages/disasm/data/symbols`' citations), with the same effect
-  on registers, memory and T-states. Sea Dragon needs one: `$0060` (`$DELAY`, a BC-counted delay).
+- **ROM stand-ins**: Fugløy's own code for each ROM routine a program calls, with the same effect
+  on registers, memory and T-states. Sea Dragon needs one: `$0060` (`$DELAY`, a BC-counted delay),
+  as built in M2 the same short delay loop the ROM has, at the ROM's addresses, written to match the
+  routine's timing measured on the emulator.
   The same stand-ins, assembled as Z80 by `@fugloy/asm` into a stub ROM at the same addresses, let
   the emulator run the original in CI without the user's ROM, so the referee runs everywhere; the
   real ROM is the referee locally as well.
@@ -194,7 +199,8 @@ The hardware half of an emulator without the instruction interpreter:
 
 - The same scripted keys, delivered at the same emulated T-state, to `@fugloy/emu` running the
   original and to the port. At every block end the port's registers and the memory it wrote are
-  compared with the emulator stepped to the same point; at every frame boundary, video RAM. The
+  compared with the emulator stepped to the same point (from M2 the mode register too, port `$EC`'s
+  latch, which the player draws the screen from); at every frame boundary, video RAM. The
   first difference names the block, the instruction and the field, as `pnpm diff` names a step.
 - This reuses the differential harness's ideas (`packages/emu/test/diff/`) but not its code:
   that harness compares two emulators instruction by instruction; this compares an emulator with
@@ -244,6 +250,54 @@ later choice; until then "upgraded and updated" means presentation and feel, not
   the referee, not by `port()`; a block reached from two routines is translated in each.
 - **M2 — Sea Dragon's port.** The `$DELAY` stand-in, the self-modification census and its sites,
   sound, the keyboard; the scripted sessions above with no difference; playable in the browser.
+  **Done (2026-11-13, plan `docs/superpowers/plans/2026-11-13-part2-m2-sea-dragon-port.md`, all
+  nine tasks, branch `part2-m2`).** A census (`pnpm census`) plays three scripted games on emu,
+  Novice, Expert and two players (Novice, then Expert), from the title to GAME OVER and back, on
+  Fugløy's game stub ROM, and writes a port trace (`docs/port-trace-format.md`), committed as
+  `examples/sea-dragon/seadrg01.trace.json`: eight rewritten sites (nine bytes), one dropped return
+  address (`$4BAC`), two ROM bytes read as data. `seadrg01.cmd` with its hint file and that trace
+  ports to one module of 430,623 bytes: 28 routines, every one structured (none labelled), 846
+  blocks over them (110 of the 736 translated in more than one routine), the four rewritten
+  displacements and the rewritten `JP` target read from memory, the three swapped opcodes each a
+  `switch` between the two instructions seen (the M2 plan's first "Claude's call"), the drop an unwind to a
+  continuation routine, the three jumps back to the entry a stack reset, the six `$DELAY` calls on
+  the runtime's stand-in, the two ROM bytes in the module, and none of the game's code bytes. The
+  referee, which now also compares the sound (every port `$FF` write, its T-state and byte) at every
+  frame and the mode register at every block, finds no difference in any of the three games (84,124,477, 57,536,697 and 131,821,072
+  T-states; refereed in 3.8, 2.4 and 5.3 s locally) in the suite CI runs
+  (`packages/recomp/test/sea-dragon.test.ts`), and none locally on the user's Model III ROM booted
+  to READY (where the ROM's `$0003` differs from the module's, and no register depends on it). The
+  keyboard is the referee's: each key a session presses reaches both machines at the same block.
+  Limits: `seadrg01.cmd` on the Model III only; a port takes no interrupts (Sea Dragon enables
+  none); the three games are the paths those sessions take, not every path through the game, and
+  the census cannot see what `docs/port-trace-format.md` lists. The screen renderer and its glyphs
+  are the runtime's (`@fugloy/runtime/screen`), shared with the workbench (Task 8). **Playable in
+  the browser** (Task 9): the port runs in a Web Worker (`@fugloy/runtime/player`), which blocks
+  with `Atomics.wait` to keep the emulated clock with real time (more than a quarter of a second
+  behind, it moves its origin rather than run fast), reads the key matrix from memory shared with
+  the page, and posts video RAM and the port `$FF` writes each 1/60 s of the clock; the page draws
+  with the runtime's renderer and plays the cassette port's levels through WebAudio. `pnpm play`
+  writes the static folder and serves it locally with `Cross-Origin-Opener-Policy: same-origin` and
+  `Cross-Origin-Embedder-Policy: require-corp` (the plan's calls 4 and 5: not on the site until M3).
+  The port starts with emu's registers at the entry on the game stub ROM, since the game reads R
+  before it sets it. Checked by test, in CI: the clock (a wait when ahead, none when behind, no
+  catching up after a two-second stall), the sound (a square wave at absolute sample positions) and
+  the keys (the workbench's Shift rule; a key's repeated key-downs not restarting its hold; a key
+  pressed and released at once held for nine frames,
+  150 ms, above the longest gap measured between Sea Dragon's reads of its controls in play, 127 ms
+  at Novice), and the worker's loop over Sea Dragon's port for 600 frames, each screen and each
+  frame's sound equal to emu's at the same T-state with the same keys, from the first frame.
+  Checked in headless Chromium (a script, not a person): the page is cross-origin isolated; it ran
+  at 100.0% of the Model III's clock over ten seconds; the title animates; ENTER, `1`, `0` start a
+  game, typed as instant taps too; the sub moves, held and on instant taps of the arrows, and stops
+  within one of the game's polls of a held arrow's key-up; SPACE fires, on an instant tap too (a shot
+  runs right along the surface row; a headless A/B run of the port shows the shot and its sound
+  appear with SPACE and not without); a game
+  reaches GAME OVER and returns to the title; with the page and its worker stopped for a minute
+  (SIGSTOP of the browser's renderer: a stall, not a background tab), the game went on at normal
+  speed; sound buffers were scheduled with sound in them, none dropped; no console errors. A second,
+  independent look at the page, in another headless browser, saw the title drawn. Not checked:
+  anyone listening, and a tab in a real browser's background.
 - **M3 — The bundle and the arcade.** The plan's bundler: a per-game manifest (name, authors,
   year, machine, files, hints, rights), one static folder or `<trs80-game>` element, an arcade page
   listing the public-domain ports; Sea Dragon first.
@@ -274,6 +328,8 @@ later choice; until then "upgraded and updated" means presentation and feel, not
 3. The port comes before the remake, as the referee for it — rather than a remake written by hand
    from the listing.
 4. Sea Dragon is the first real game, after M1's own programs.
-5. ROM stand-ins are Fugløy's own code, also assembled into a stub ROM so CI can run the original.
+5. ROM stand-ins are Fugløy's own code, also assembled into a stub ROM so CI can run the original
+   (`$DELAY`'s Z80 form, used only for that stub ROM, assembles to the same ten bytes the ROM has: a
+   `JP` and a five-instruction count-down loop; a port carries none of it).
 6. "Upgraded" means presentation and feel until the user asks for rule changes.
 7. BASIC programs and text adventures are out of scope for now.

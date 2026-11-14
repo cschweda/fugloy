@@ -19,15 +19,31 @@ emulator, a label-and-coverage file
 
 `fugloy asm game.z` assembles Z80 source into `game.cmd` (see `fugloy asm --help`).
 
-`fugloy port game.cmd --model 3` ports a `.CMD` program to JavaScript (Part 2 of Fugløy, milestone
-M1, in the repository only): it writes `game.port.js`, one function per routine and one statement
-per instruction, which imports `@fugloy/runtime/ops` and runs on `@fugloy/runtime`, and
-`game.port.txt`, its report (the entry, each routine and its blocks, the data regions, and the
-places that refuse if they run, with a line saying the port was not compared with the emulator, so
-self-modifying code is not detected). `--model 1` ports for the Model I; `--hints <file>` applies a hint
-file, whose names name the routines and whose notes become their comments; `-o <dir>` writes the two
-files there. A program it cannot follow (a `JP (HL)`, bytes that are no instruction) is refused,
-with a sentence naming the address, exit code 1, and nothing written.
+`fugloy port game.cmd --model 3` ports a `.CMD` program to JavaScript (Part 2 of Fugløy, milestones
+M1 and M2, in the repository only): it writes `game.port.js`, one function per routine and one
+statement per instruction, which imports `@fugloy/runtime/ops` and runs on `@fugloy/runtime`, and
+`game.port.txt`, its report, one line an item: the entry; the loader it left out, for a program its
+hint file relocates; the trace, if given; a line saying the port was not compared with the emulator
+and that a write into the program's code the trace does not name (with no trace, any) stops it with a
+sentence, while a read of the program's own code reads `$00` without stopping (except at a byte the
+program rewrites, which holds its byte), and so does a read of a ROM byte the trace does not name and, for
+a relocated program, of the bytes its loader left behind; each routine and its blocks; the data regions
+and their kinds (`data`, typed by the hint file, or `unknown`); the code the program rewrites (each cell's kind, and an opcode's choice of
+instructions); the `POP`s that drop a return address; the jumps back to the entry that discard the
+stack; the ROM routines `@fugloy/runtime` stands in for and where they are called (on the Model III,
+`$DELAY` at `$0060`); the ROM bytes the module carries, and the ROM the trace read them on
+(Fugløy's game stub ROM, or the user's ROM, whose bytes a module then carries, so it is not for
+publishing); and the places that refuse if they run. `--model 1` ports for the Model I; `--hints <file>` applies a hint file, whose names name the
+routines and whose notes become their comments; `--trace <file>` reads a port trace, the census's
+([format](https://github.com/cschweda/fugloy/blob/main/docs/port-trace-format.md)), which must be
+of this program (a trace of another program, or one that is malformed, exits 1 with its sentence,
+and one whose `entered` names code the hint file does not decode is refused, naming the range and the
+`entry` hint to add); `-o <dir>` writes the two files there, making the directory if it is not
+there. Sea Dragon, with its hint file and trace
+(`fugloy port examples/sea-dragon/seadrg01.cmd --model 3 --hints examples/sea-dragon/seadrg01.hints
+--trace examples/sea-dragon/seadrg01.trace.json`), ports this way. A program it cannot follow (a
+`JP (HL)`, bytes that are no instruction) is refused, with a sentence naming the address, exit code
+1, and nothing written.
 
 MIT licensed; the full documentation is in the
 [repository README](https://github.com/cschweda/fugloy/blob/main/README.md).

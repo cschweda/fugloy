@@ -125,10 +125,14 @@ block 0:$06D6 note
 block 0:$06D6 note MAIN_LOOP calls it twice a frame and rewrites the JP at $509A before
 block 0:$06D6 note each call. First to L509D: draw the sub, mark its cells with bit 6,
 block 0:$06D6 note and set PLAYER_HIT if a pixel lands on rock already drawn. Then, after
-block 0:$06D6 note the objects are drawn, to DATA_50C1: code that only this jump reaches,
-block 0:$06D6 note so Fugløy has left it undecoded. It probably checks whether an object
-block 0:$06D6 note was drawn over the sub (setting PLAYER_HIT), redraws the sub, and
+block 0:$06D6 note the objects are drawn, to L50C1: code that only this jump reaches, which
+block 0:$06D6 note the entry line at $50C1 has Fugløy decode. It probably checks whether an
+block 0:$06D6 note object was drawn over the sub (setting PLAYER_HIT), redraws the sub, and
 block 0:$06D6 note clears the marks.
+block 0:$0742 entry
+block 0:$0742 note Reached only through the JP at $509A, whose target the game rewrites
+block 0:$0742 note (to here for DRAW_PLAYER's second call each frame): no instruction names
+block 0:$0742 note this address, so the entry line above decodes it. It runs to $50E9.
 block 0:$076B name DRAW_OBJECT
 block 0:$076B note Draws one object, from the record IX points to: +0 is its kind (low
 block 0:$076B note six bits), +1 its frame, +2 its row, +3 flags. DE holds its column, as
