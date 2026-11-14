@@ -231,10 +231,15 @@ names (`opts.standins`) and lists the calls in its report.
 | III | `$0060` | `DELAY` | pause for BC counts, BC 0 counting 65,536: 30 T-states a count and 15 more after the CALL, 5 R increments a count and 2 more; A 0, F `$44`, BC 0, nothing else changed (measured on emu with the Model III ROM) |
 | I | — | — | none in M2 |
 
-`STANDINS_Z` is the same routines as Z80 source for `@fugloy/asm`, Fugløy's own code at the ROM's addresses
-(`ORG 0060H` / `JP 01FBH`, and the loop at `01FBH`), so a CALL takes the ROM's time on it, and with no END:
-`@fugloy/recomp`'s referee appends it to Fugløy's stub ROM to run a game on emu in CI, where a call to the
-routine runs that code beside the port's stand-in. No byte of Tandy's ROM is in the runtime.
+`STANDINS_Z` is the same routines as Z80 source for `@fugloy/asm`, at the ROM's addresses (`ORG 0060H` /
+`JP 01FBH`, and the loop at `01FBH`), so a CALL takes the ROM's time on it, and with no END: `@fugloy/recomp`'s
+referee appends it to Fugløy's stub ROM to run a game on emu in tests, where a call to the routine runs that
+code beside the port's stand-in. It is used only to build that stub ROM. For `$DELAY` it is a ten-byte delay
+loop that assembles to the same bytes the ROM has at `$0060` and `$01FB`: a `JP` and a five-instruction
+count-down loop, which is what any routine with that entry, that timing and those exit values comes to. A port,
+and the folder the player serves, carry none of it and no other byte of the ROM's code: the port calls the
+JavaScript stand-in above (its only ROM-space bytes are the trace's ROM reads, the module's `ROM`, taken on
+Fugløy's stub ROM). No ROM image, and nothing else of the ROM, is in the repository.
 
 ## The player
 

@@ -328,6 +328,8 @@ later choice; until then "upgraded and updated" means presentation and feel, not
 3. The port comes before the remake, as the referee for it — rather than a remake written by hand
    from the listing.
 4. Sea Dragon is the first real game, after M1's own programs.
-5. ROM stand-ins are Fugløy's own code, also assembled into a stub ROM so CI can run the original.
+5. ROM stand-ins are Fugløy's own code, also assembled into a stub ROM so CI can run the original
+   (`$DELAY`'s Z80 form, used only for that stub ROM, assembles to the same ten bytes the ROM has: a
+   `JP` and a five-instruction count-down loop; a port carries none of it).
 6. "Upgraded" means presentation and feel until the user asks for rule changes.
 7. BASIC programs and text adventures are out of scope for now.

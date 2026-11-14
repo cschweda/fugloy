@@ -322,6 +322,9 @@ high byte before the low.
   never took that reads another ROM byte as data goes on with `$00`. The referee gives its port the same ROM
   space, so there the read stops the run at the first register or byte it changes, against emu's ROM.
 - **A block reached from two routines** is translated in each, so its statements appear twice.
+- **An `entry` hint in a program the hint file does not relocate** marks code (it is in `CODE`, not `DATA`)
+  but does not start a routine, so no routine translates code only that entry reaches, and reaching it (by a
+  `RET` to an address the program pushed, say) stops the port with `o.ret`'s sentence.
 - What the runtime does not model (interrupts, the devices it lists).
 
 ## The referee
@@ -372,9 +375,9 @@ differs at the next block start, and a write to one is compared as any other.
 
 `rom` (M2) chooses the ROM emu runs and with it the stand-ins `port()` is given: `'stub'`, the default,
 Fugløy's stub and no stand-ins, as the Learn checks run; `'game'`, the game stub ROM (`test/game-rom.ts`'s
-`gameStubRom(model)`: the stub's source with `@fugloy/runtime`'s `STANDINS_Z` appended, Fugløy's own Z80
-for the stand-ins at the ROM's addresses, so emu runs a call to `$0060` through code that takes the ROM's
-time), booted as the stub is, and the runtime's stand-ins; or a ROM's bytes, locally the user's, and the
+`gameStubRom(model)`: the stub's source with `@fugloy/runtime`'s `STANDINS_Z` appended, the stand-ins as Z80
+at the ROM's addresses, for `$DELAY` a ten-byte loop that assembles to the same bytes the ROM has there, so emu
+runs a call to `$0060` through code that takes the ROM's time), booted as the stub is, and the runtime's stand-ins; or a ROM's bytes, locally the user's, and the
 stand-ins: emu boots it to BASIC's READY before the load (`bootToReady` in `test/helpers.ts`: ENTER at Cass?
 and Memory Size?), as a user loads a program, and the program returns, if it does, to the word on the stack
 at its entry. A game is refereed on `'game'` in CI, never on the user's ROM.
