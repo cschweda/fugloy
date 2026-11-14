@@ -156,13 +156,14 @@ describe('applyEdit', () => {
 describe('applyHintLines', () => {
   it("adds a proposal's lines to the hint file", () => {
     const s = openProgram(new Uint8Array(readFileSync(repo('examples/sea-dragon/seadrg01.cmd'))), { name: 'seadrg01.cmd', selection: MODEL3 });
-    const r = applyHintLines(s, ['block 0:$0000 relocate $497F $3681', 'block 0:$0000 entry']);
+    // The hint file's relocation and its two entries: the game's, and $50C1, which only a rewritten JP reaches
+    const r = applyHintLines(s, ['block 0:$0000 relocate $497F $3681', 'block 0:$0000 entry', 'block 0:$0742 entry']);
     if ('error' in r) throw new Error(r.error);
     expect(writeHints(r.file)).toBe(writeHints(seaDragon().hintFile));
     // Applying them twice adds nothing.
     const twice = applyHintLines(withHintFile(s, r.file), ['block 0:$0000 entry']);
     if ('error' in twice) throw new Error(twice.error);
-    expect(twice.file.hints).toHaveLength(2);
+    expect(twice.file.hints).toHaveLength(3);
   });
 
   it('says why a line does not parse', () => {

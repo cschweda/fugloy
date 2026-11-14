@@ -12,8 +12,8 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -b packages/z80 packages/disasm packages/asm packages/cli && tsc -p tsconfig.test.json",
-    "build": "tsc -b packages/z80 packages/disasm packages/asm packages/cli",
+    "typecheck": "tsc -b packages/z80 packages/disasm packages/asm packages/recomp packages/cli && tsc -p tsconfig.test.json",
+    "build": "tsc -b packages/z80 packages/disasm packages/asm packages/recomp packages/cli",
     "clean": "rm -rf packages/*/dist",
     "fixtures": "tsx packages/disasm/scripts/write-fixtures.ts && node packages/emu/scripts/write-label-fixture.mjs && node packages/emu/scripts/write-disk-fixtures.mjs && node packages/emu/scripts/write-model3-state-fixture.mjs",
     "symbols": "tsx packages/disasm/scripts/write-symbols.ts",
@@ -28,7 +28,9 @@
     "xtrs:install": "bash scripts/install-xtrs.sh",
     "mame:install": "bash scripts/install-mame.sh",
     "mame:trace": "node packages/emu/scripts/mame-trace.mjs",
-    "diff": "node packages/emu/scripts/diff.mjs"
+    "diff": "node packages/emu/scripts/diff.mjs",
+    "census": "tsx packages/recomp/tools/census-cli.ts",
+    "play": "tsx packages/recomp/tools/play.ts"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

@@ -114,8 +114,8 @@ describe.skipIf(rom === null)('the Sea Dragon session on the Model III ROM', { t
     const hinted = withHintText(base, hintText, 'seadrg01.hints');
     // With the hints: the copy wrote every byte of the game, so no read-only run cuts the descent short.
     const both = withLabelFile(hinted, file);
-    expect(hinted.analysis.pass1.instructions.size).toBe(2896);
-    expect(both.analysis.pass1.instructions.size).toBe(2896);
+    expect(hinted.analysis.pass1.instructions.size).toBe(2921);
+    expect(both.analysis.pass1.instructions.size).toBe(2921);
     for (const addr of hinted.analysis.pass1.instructions.keys()) expect(both.analysis.pass1.instructions.has(addr), `$${addr.toString(16)}`).toBe(true);
     expect(both.analysis.labels.warnings).toEqual([]);
     // Without them: every decoded instruction's bytes are the bytes that ran there, and one warning says what was skipped.

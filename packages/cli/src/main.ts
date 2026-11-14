@@ -1,4 +1,4 @@
-import { access, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { run } from './index.js';
 import { readerGone } from './pipes.js';
 
@@ -20,6 +20,7 @@ process.exitCode = await run(process.argv.slice(2), {
   readFile: async (path) => new Uint8Array(await readFile(path)),
   writeFile: async (path, text) => { await writeFile(path, text); },
   writeBytes: async (path, bytes) => { await writeFile(path, bytes); },
+  makeDirectory: async (path) => { await mkdir(path, { recursive: true }); },
   fileExists: async (path) => { try { await access(path); return true; } catch { return false; } },
   stdoutIsTerminal: process.stdout.isTTY === true,
   env: process.env,

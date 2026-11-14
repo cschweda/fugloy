@@ -47,6 +47,9 @@ importers:
       '@fugloy/emu':
         specifier: workspace:*
         version: link:../../packages/emu
+      '@fugloy/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
       '@fugloy/z80':
         specifier: workspace:*
         version: link:../../packages/z80
@@ -139,6 +142,12 @@ importers:
       '@fugloy/disasm':
         specifier: workspace:*
         version: link:../disasm
+      '@fugloy/recomp':
+        specifier: workspace:*
+        version: link:../recomp
+      '@fugloy/runtime':
+        specifier: workspace:*
+        version: link:../runtime
       '@fugloy/z80':
         specifier: workspace:*
         version: link:../z80
@@ -175,6 +184,31 @@ importers:
       zod:
         specifier: 4.6.5
         version: 4.6.5
+
+  packages/recomp:
+    dependencies:
+      '@fugloy/disasm':
+        specifier: workspace:^
+        version: link:../disasm
+      '@fugloy/z80':
+        specifier: workspace:^
+        version: link:../z80
+    devDependencies:
+      '@fugloy/asm':
+        specifier: workspace:*
+        version: link:../asm
+      '@fugloy/emu':
+        specifier: workspace:*
+        version: link:../emu
+      '@fugloy/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+
+  packages/runtime:
+    devDependencies:
+      '@fugloy/emu':
+        specifier: workspace:*
+        version: link:../emu
 
   packages/z80: {}
 
